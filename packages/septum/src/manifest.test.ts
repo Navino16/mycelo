@@ -53,7 +53,7 @@ describe('parseManifest', () => {
 
   it('rejects an unknown kind and names the offending path', () => {
     expect(() => parseManifest({ kind: 'fungus', name: 'x', septum: '^1.0' }))
-      .toThrowError(ManifestError)
+      .toThrow(ManifestError)
     try {
       parseManifest({ kind: 'fungus', name: 'x', septum: '^1.0' })
     } catch (e) {
