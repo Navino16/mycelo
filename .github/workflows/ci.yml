@@ -1,0 +1,31 @@
+name: ci
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+# A new push to the same branch cancels the previous run: on a solo project the
+# older result is never interesting.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          # Read from .nvmrc so the pinned version lives in one place and cannot
+          # drift from what engines.node requires.
+          node-version-file: .nvmrc
+          cache: npm
+
+      # `npm ci` rather than `npm install`: it fails when the lockfile disagrees
+      # with package.json, which is exactly what CI should catch.
+      - run: npm ci
+
+      - run: npm run ci
