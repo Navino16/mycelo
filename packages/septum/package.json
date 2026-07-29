@@ -1,0 +1,15 @@
+{
+  "name": "@mycelo/septum",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./conformance": "./dist/conformance/index.js"
+  },
+  "files": ["dist"],
+  "dependencies": {
+    "zod": "^4.0.0"
+  }
+}
