@@ -2,13 +2,20 @@ name: ci
 
 on:
   push:
-    branches: [main, develop]
+    # feature/** matters: a phase is developed on a branch for days before its PR
+    # is opened, and a workflow that never runs looks exactly like one that passes.
+    branches: [main, develop, 'feature/**']
   pull_request:
 
-# A new push to the same branch cancels the previous run: on a solo project the
-# older result is never interesting.
+# Only contents: read is needed. Declared explicitly rather than inheriting the
+# repository default, which is broader.
+permissions:
+  contents: read
+
+# Keyed on the PR number when there is one, so a push to a branch with an open PR
+# produces one run rather than two. Falls back to the ref for plain pushes.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -28,4 +35,9 @@ jobs:
       # with package.json, which is exactly what CI should catch.
       - run: npm ci
 
-      - run: npm run ci
+      # The three checks are separate steps so the Actions UI names which one
+      # failed. They are the same commands `npm run ci` chains locally — a CI
+      # running something different from the developer is a CI that lies.
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
