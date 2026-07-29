@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { stripTypeScriptTypes } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -49,4 +49,37 @@ export function assertErasable(source: string): void {
   if (reason !== null) {
     throw new Error(`source is not erasable: ${reason}`)
   }
+}
+
+/**
+ * Runs the erasability check over a plugin's own source files.
+ *
+ * This is what connects the check to the harnesses. Without it the kit would
+ * verify a plugin's contract while staying silent about the one failure this
+ * package exists to prevent: source that works bundled by esbuild and breaks
+ * when the `local` driver loads it unbundled — a failure that only appears in
+ * development, never in production.
+ *
+ * Paths are the plugin's own files. Omitting them skips the check, which is
+ * correct for a harness testing an in-memory module with no file on disk.
+ */
+export async function sourceErasabilityFailures(
+  paths: readonly string[] | undefined,
+): Promise<string[]> {
+  if (paths === undefined || paths.length === 0) return []
+  const failures: string[] = []
+  for (const path of paths) {
+    let source: string
+    try {
+      source = readFileSync(path, 'utf8')
+    } catch (e) {
+      failures.push(`cannot read source ${path}: ${(e as Error).message}`)
+      continue
+    }
+    const reason = erasabilityError(source)
+    if (reason !== null) {
+      failures.push(`${path} is not erasable: ${reason}`)
+    }
+  }
+  return failures
 }

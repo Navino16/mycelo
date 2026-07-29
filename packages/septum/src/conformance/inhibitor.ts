@@ -1,3 +1,4 @@
+import { sourceErasabilityFailures } from './erasability.js'
 import { parseManifest } from '../manifest.js'
 import type { Inhibitor, InhibitorModule, Verdict } from '../inhibitor.js'
 import type { InhibitorContext } from '../context.js'
@@ -8,6 +9,8 @@ export interface InhibitorHarness {
   manifest: unknown
   /** See the note on HyphaHarness.module for why the config is `unknown`. */
   module: InhibitorModule<unknown>
+  /** Absolute paths to the plugin's own source files. See sourceErasabilityFailures. */
+  sourcePaths?: readonly string[]
   validConfig?: unknown
   invalidConfig?: unknown
   context(): InhibitorContext<unknown>
@@ -17,7 +20,7 @@ export interface InhibitorHarness {
 }
 
 export async function inhibitorChecks(harness: InhibitorHarness): Promise<string[]> {
-  const failures: string[] = []
+  const failures: string[] = [...(await sourceErasabilityFailures(harness.sourcePaths))]
 
   let manifest
   try {

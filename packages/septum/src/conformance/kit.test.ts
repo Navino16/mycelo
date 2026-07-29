@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { enzymeChecks } from './enzyme.js'
@@ -6,6 +9,8 @@ import { hyphaChecks } from './hypha.js'
 import type { HyphaHarness } from './hypha.js'
 import { inhibitorChecks } from './inhibitor.js'
 import type { InhibitorHarness } from './inhibitor.js'
+import { rhizaChecks } from './rhiza.js'
+import type { RhizaHarness } from './rhiza.js'
 import type { EnzymeContext, InhibitorContext } from '../context.js'
 import type { IncomingMessage } from '../message.js'
 
@@ -261,5 +266,107 @@ describe('inhibitor conformance checks', () => {
       module: { create: () => ({ async inspect() { return { allow: true } as const } }) },
     })
     expect(failures.join(' ')).toContain('expected to be denied')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// rhiza
+// ---------------------------------------------------------------------------
+
+const goodRhiza: RhizaHarness = {
+  name: 'radarr',
+  manifest: { kind: 'rhiza', name: 'radarr', septum: '^1.0' },
+  module: {
+    create: () => ({
+      async start() {},
+      async stop() {},
+      async health() {
+        return { state: 'healthy' as const, checkedAt: new Date(0) }
+      },
+      api: { search: () => [] },
+    }),
+  },
+}
+
+describe('rhiza conformance checks', () => {
+  it('passes a correct implementation', async () => {
+    expect(await rhizaChecks(goodRhiza)).toEqual([])
+  })
+
+  it('catches a missing api — enzymes would resolve undefined through ctx.rhiza()', async () => {
+    const failures = await rhizaChecks({
+      ...goodRhiza,
+      module: {
+        create: () =>
+          ({
+            async start() {}, async stop() {},
+            async health() { return { state: 'healthy' as const, checkedAt: new Date(0) } },
+          }) as never,
+      },
+    })
+    expect(failures.join(' ')).toContain('no api')
+  })
+
+  it('catches an invalid health state', async () => {
+    const failures = await rhizaChecks({
+      ...goodRhiza,
+      module: {
+        create: () => ({
+          async start() {}, async stop() {},
+          async health() { return { state: 'fine' as never, checkedAt: new Date(0) } },
+          api: {},
+        }),
+      },
+    })
+    expect(failures.join(' ')).toContain("state 'fine'")
+  })
+
+  it('catches health() throwing instead of reporting a degraded state', async () => {
+    const failures = await rhizaChecks({
+      ...goodRhiza,
+      module: {
+        create: () => ({
+          async start() {}, async stop() {},
+          async health(): Promise<never> { throw new Error('ECONNREFUSED') },
+          api: {},
+        }),
+      },
+    })
+    expect(failures.join(' ')).toContain('threw instead of reporting')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// erasability wired into the harnesses
+// ---------------------------------------------------------------------------
+
+describe('source erasability through a harness', () => {
+  it('reports a source file the local driver could not load', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mycelo-kit-'))
+    const file = join(dir, 'plugin.ts')
+    try {
+      writeFileSync(file, 'export enum Bad { A }\n', 'utf8')
+      const failures = await rhizaChecks({ ...goodRhiza, sourcePaths: [file] })
+      expect(failures.join(' ')).toContain('is not erasable')
+      expect(failures.join(' ')).toContain('enum')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('stays silent on conforming source', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mycelo-kit-'))
+    const file = join(dir, 'plugin.ts')
+    try {
+      writeFileSync(file, 'export const K = ["a"] as const\nexport type K = (typeof K)[number]\n', 'utf8')
+      expect(await rhizaChecks({ ...goodRhiza, sourcePaths: [file] })).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('reports an unreadable path rather than throwing', async () => {
+    const failures = await rhizaChecks({ ...goodRhiza, sourcePaths: ['/nonexistent/x.ts'] })
+    expect(failures.join(' ')).toContain('cannot read source')
   })
 })

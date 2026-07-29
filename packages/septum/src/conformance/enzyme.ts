@@ -1,3 +1,4 @@
+import { sourceErasabilityFailures } from './erasability.js'
 import { parseManifest } from '../manifest.js'
 import type { EnzymeModule } from '../enzyme.js'
 import type { EnzymeContext, Invocation } from '../context.js'
@@ -8,6 +9,8 @@ export interface EnzymeHarness {
   manifest: unknown
   /** See the note on HyphaHarness.module for why the config is `unknown`. */
   module: EnzymeModule<unknown>
+  /** Absolute paths to the plugin's own source files. See sourceErasabilityFailures. */
+  sourcePaths?: readonly string[]
   validConfig?: unknown
   invalidConfig?: unknown
   /** Builds the context the enzyme will receive. The author supplies stubs for
@@ -29,7 +32,7 @@ function stubMessage(): IncomingMessage {
 }
 
 export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
-  const failures: string[] = []
+  const failures: string[] = [...(await sourceErasabilityFailures(harness.sourcePaths))]
 
   let manifest
   try {

@@ -1,3 +1,4 @@
+import { sourceErasabilityFailures } from './erasability.js'
 import { parseManifest } from '../manifest.js'
 import type { HyphaModule } from '../hypha.js'
 
@@ -13,6 +14,8 @@ export interface HyphaHarness {
    */
   module: HyphaModule<unknown>
   /** A config the schema must accept. */
+  /** Absolute paths to the plugin's own source files. See sourceErasabilityFailures. */
+  sourcePaths?: readonly string[]
   validConfig: unknown
   /** A config the schema must reject. Omit only if every input is valid. */
   invalidConfig?: unknown
@@ -23,7 +26,7 @@ export interface HyphaHarness {
  * used inside a describe() block or asserted directly in a test.
  */
 export async function hyphaChecks(harness: HyphaHarness): Promise<string[]> {
-  const failures: string[] = []
+  const failures: string[] = [...(await sourceErasabilityFailures(harness.sourcePaths))]
 
   let manifest
   try {
