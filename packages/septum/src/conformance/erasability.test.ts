@@ -31,9 +31,11 @@ describe('erasabilityError', () => {
     })
   }
 
-  it('reports the four TypeScript-only constructs at strip time', () => {
+  it('reports three of the TypeScript-only constructs by name at strip time', () => {
     // These fail before any JavaScript is parsed, so the message comes from Node's
-    // stripper and names the construct.
+    // stripper and names the construct. `const enum` is deliberately absent: Node
+    // reports it with the byte-identical message as plain `enum`, so it cannot be
+    // distinguished here. Its rejection is covered by the loop above.
     expect(erasabilityError(BANNED.enum)).toContain('enum')
     expect(erasabilityError(BANNED.namespace)).toContain('namespace')
     expect(erasabilityError(BANNED['parameter property'])).toContain('parameter property')
