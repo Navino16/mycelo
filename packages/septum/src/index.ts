@@ -1,1 +1,5 @@
+export * from './capabilities.js'
+export * from './errors.js'
+export * from './logger.js'
 export * from './manifest.js'
+export * from './message.js'
