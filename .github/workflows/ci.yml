@@ -12,10 +12,13 @@ on:
 permissions:
   contents: read
 
-# Keyed on the PR number when there is one, so a push to a branch with an open PR
-# produces one run rather than two. Falls back to the ref for plain pushes.
+# head_ref is the source branch on a pull_request and empty on a push; ref_name is
+# the branch on a push. Both resolve to the same string, so a push to a branch with
+# an open PR lands in one group and the duplicate run is cancelled rather than run
+# twice on the same commit. Keying on pull_request.number does NOT work: it is empty
+# on the push event, so the two events end up in different groups.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
