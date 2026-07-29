@@ -75,6 +75,16 @@ const upcomingModule: EnzymeModule = {
     return {
       async start(ctx) {
         ctx.on('radarr', 'ready', () => ctx.logger.info('radarr ready'))
+        // start() gets the restricted context. These three exist only once a
+        // message has arrived, and @ts-expect-error is what keeps that true:
+        // if any of them is ever added back to EnzymeStartContext, the unused
+        // directive becomes an error and this test fails.
+        // @ts-expect-error principal does not exist before a message arrives
+        void ctx.principal
+        // @ts-expect-error reply has no conversation to answer into
+        void ctx.reply
+        // @ts-expect-error capabilities are relative to a conversation
+        void ctx.capabilities
       },
       async handle(inv, ctx) {
         // Adapting to a channel that cannot take attachments (spec §3.2).

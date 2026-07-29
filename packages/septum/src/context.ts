@@ -60,8 +60,18 @@ export interface InhibitorContext<TConfig = unknown> extends BaseContext<TConfig
   has(name: string): boolean
 }
 
-export interface EnzymeContext<TConfig = unknown> extends BaseContext<TConfig> {
-  reply(content: OutgoingContent): Promise<void>
+/**
+ * What an enzyme gets during start(), before any message exists.
+ *
+ * Deliberately excludes everything that only makes sense in response to a
+ * message: there is no sender to attribute, no conversation to reply into, and
+ * no channel whose capabilities could be reported. A single context type
+ * covering both moments would have to promise those and then hand start() a
+ * fabricated principal and a reply() that throws — a green build with a broken
+ * runtime, which is the failure mode this project refuses.
+ */
+export interface EnzymeStartContext<TConfig = unknown> extends BaseContext<TConfig> {
+  /** Proactive send to an explicitly named target. */
   push(target: PushTarget, content: OutgoingContent): Promise<void>
   /**
    * A germinated rhiza's public API. TApi comes from importing the rhiza's own
@@ -70,9 +80,18 @@ export interface EnzymeContext<TConfig = unknown> extends BaseContext<TConfig> {
   rhiza<TApi>(name: string): TApi
   /** Whether an optional or any_of dependency resolved. */
   has(name: string): boolean
-  readonly capabilities: Capabilities
   capabilitiesOf(target: PushTarget): Capabilities
-  readonly principal: Principal
-  /** Subscribe to a rhiza event. Only valid inside start(). */
+  /** Subscribe to a rhiza event. */
   on(rhiza: string, event: string, handler: (payload: unknown) => void): void
+}
+
+/**
+ * What an enzyme gets while handling a command. Adds what only exists once a
+ * message has arrived: who sent it, where to answer, and what that channel can do.
+ */
+export interface EnzymeContext<TConfig = unknown> extends EnzymeStartContext<TConfig> {
+  reply(content: OutgoingContent): Promise<void>
+  /** Capabilities of the conversation being answered. */
+  readonly capabilities: Capabilities
+  readonly principal: Principal
 }

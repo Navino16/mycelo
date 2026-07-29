@@ -1,4 +1,4 @@
-import type { EnzymeContext, Invocation } from './context.js'
+import type { EnzymeContext, EnzymeStartContext, Invocation } from './context.js'
 import type { SporeModule } from './spore.js'
 
 /**
@@ -8,8 +8,11 @@ import type { SporeModule } from './spore.js'
  */
 export interface Enzyme<TConfig = unknown> {
   handle(invocation: Invocation, ctx: EnzymeContext<TConfig>): Promise<void>
-  /** Optional. For subscribing to rhiza events or scheduling proactive pushes. */
-  start?(ctx: EnzymeContext<TConfig>): Promise<void>
+  /**
+   * Optional. For subscribing to rhiza events or scheduling proactive pushes.
+   * Receives the restricted context: no message has arrived yet.
+   */
+  start?(ctx: EnzymeStartContext<TConfig>): Promise<void>
   stop?(): Promise<void>
 }
 
