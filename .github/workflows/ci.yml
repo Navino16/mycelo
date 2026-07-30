@@ -11,6 +11,9 @@ on:
   push:
     branches: [main, develop]
   pull_request:
+  # Lets a run be triggered by hand from the Actions tab, which is the only way
+  # to re-run a check without pushing an empty commit.
+  workflow_dispatch:
 
 # Only contents: read is needed. Declared explicitly rather than inheriting the
 # repository default, which is broader.
