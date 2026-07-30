@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Attachment, IncomingMessage, OutgoingContent } from './message.js'
+import type { Attachment, IncomingMessage, OutgoingContent } from '../src/message.js'
 
 describe('message model', () => {
   it('accepts a complete inbound message', () => {

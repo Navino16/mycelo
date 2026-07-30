@@ -2,10 +2,10 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    // The conformance kit lives under src/, so one pattern covers everything.
-    // A packages/*/conformance/** pattern would make a misplaced kit appear to
-    // work while the published entry points pointed at paths that never exist.
-    include: ['packages/*/src/**/*.test.ts', 'fixtures/*/src/**/*.test.ts'],
+    // Tests live in test/, mirroring src/. Keeping them out of src/ makes the
+    // published boundary structural: everything under src/ ships, with no
+    // exclude to remember. A test file cannot end up in dist/ by omission.
+    include: ['packages/*/test/**/*.test.ts', 'fixtures/*/test/**/*.test.ts'],
     environment: 'node',
   },
 })

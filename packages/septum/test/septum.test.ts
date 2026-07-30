@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import type { EnzymeModule } from './enzyme.js'
-import type { HyphaModule } from './hypha.js'
-import type { InhibitorModule } from './inhibitor.js'
-import type { RhizaModule } from './rhiza.js'
-import type { ConfigSchema } from './spore.js'
+import type { EnzymeModule } from '../src/enzyme.js'
+import type { HyphaModule } from '../src/hypha.js'
+import type { InhibitorModule } from '../src/inhibitor.js'
+import type { RhizaModule } from '../src/rhiza.js'
+import type { ConfigSchema } from '../src/spore.js'
 
 // ---- A hypha with a real Zod config schema ------------------------------
 const signalConfig = z.object({

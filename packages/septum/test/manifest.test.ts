@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ManifestError, parseManifest } from './manifest.js'
+import { ManifestError, parseManifest } from '../src/manifest.js'
 
 describe('parseManifest', () => {
   it('accepts a minimal enzyme manifest', () => {

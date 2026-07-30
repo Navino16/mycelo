@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CapabilityMissingError, RhizaUnreachableError, ScopeDeniedError } from './errors.js'
+import { CapabilityMissingError, RhizaUnreachableError, ScopeDeniedError } from '../src/errors.js'
 
 describe('errors', () => {
   it('RhizaUnreachableError names the rhiza and keeps the cause', () => {

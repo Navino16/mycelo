@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assertErasable, erasabilityError } from './erasability.js'
+import { assertErasable, erasabilityError } from '../../src/conformance/erasability.js'
 
 const BANNED = {
   enum: 'export enum K { A }',
