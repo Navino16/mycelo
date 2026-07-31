@@ -1,6 +1,27 @@
 {
   "name": "@mycelo/septum",
   "version": "0.1.0",
+  "description": "The plugin contract for Mycelo: the interfaces every hypha, rhiza, enzyme and inhibitor implements.",
+  "license": "MIT",
+  "author": "Nathan Jaunet",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Navino16/mycelo.git",
+    "directory": "packages/septum"
+  },
+  "homepage": "https://github.com/Navino16/mycelo#readme",
+  "bugs": {
+    "url": "https://github.com/Navino16/mycelo/issues"
+  },
+  "keywords": [
+    "mycelo",
+    "bot",
+    "plugin",
+    "contract",
+    "signal",
+    "discord",
+    "self-hosted"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -17,6 +38,12 @@
   "files": [
     "dist"
   ],
+  "scripts": {
+    "prepublishOnly": "rm -rf dist && tsc -b --force"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "zod": "^4.4.3"
   }
