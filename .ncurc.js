@@ -6,7 +6,7 @@
 // `ncu -u`.
 export default {
   reject: [
-    // Must track the major of the Node runtime, currently >=24.18.0.
+    // Must track the major of the Node runtime, currently >=24.19.0.
     // Types from Node 26 describe APIs the Node 24 runtime does not have: the
     // compiler accepts the code and it crashes at runtime. Raise this only
     // together with engines.node.
