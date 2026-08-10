@@ -100,3 +100,57 @@ it('warns when germination produces zero spores, even though the directory exist
   expect(registry.enzymes).toEqual([])
   expect(warnings.some((w) => w.includes('zero spores'))).toBe(true)
 })
+
+const HYPHA_BODY = 'start: async () => {}, stop: async () => {}, send: async () => {}'
+
+it('sends the second of two hyphae sharing a manifest name dormant, naming both directories', async () => {
+  spore('first-copy', {
+    'spore.yaml': 'kind: hypha\nname: duplicated\nseptum: "^1.0"\n',
+    'src/index.ts': `export default { create: () => ({ ${HYPHA_BODY} }) }\n`,
+  })
+  spore('second-copy', {
+    'spore.yaml': 'kind: hypha\nname: duplicated\nseptum: "^1.0"\n',
+    'src/index.ts': `export default { create: () => ({ ${HYPHA_BODY} }) }\n`,
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.hyphae.map((h) => h.name)).toEqual(['duplicated'])
+  const dormant = registry.dormant.find((d) => d.name === 'duplicated')
+  expect(dormant?.reason).toContain('first-copy')
+  expect(dormant?.reason).toContain('second-copy')
+})
+
+it('sends the second of two enzymes sharing a manifest name dormant, naming both directories', async () => {
+  spore('alpha-enzyme', {
+    'spore.yaml': 'kind: enzyme\nname: shared\nseptum: "^1.0"\ncommands:\n  - name: a\n    description: x\n',
+    'enzyme.yaml': 'responses:\n  a: from-alpha\n',
+  })
+  spore('beta-enzyme', {
+    'spore.yaml': 'kind: enzyme\nname: shared\nseptum: "^1.0"\ncommands:\n  - name: b\n    description: x\n',
+    'enzyme.yaml': 'responses:\n  b: from-beta\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.enzymes.map((e) => e.name)).toEqual(['shared'])
+  const dormant = registry.dormant.find((d) => d.name === 'shared')
+  expect(dormant?.reason).toContain('alpha-enzyme')
+  expect(dormant?.reason).toContain('beta-enzyme')
+})
+
+it('sends a hypha dormant when it declares group_membership but has no listGroupMembers(), matching the conformance kit', async () => {
+  spore('deceptive', {
+    'spore.yaml': 'kind: hypha\nname: deceptive\nseptum: "^1.0"\ncapabilities:\n  - group_membership\n',
+    'src/index.ts': `export default { create: () => ({ ${HYPHA_BODY} }) }\n`,
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.hyphae).toEqual([])
+  expect(registry.dormant[0]?.reason).toContain('no listGroupMembers()')
+})
+
+it('sends a hypha dormant when it has listGroupMembers() but does not declare group_membership, matching the conformance kit', async () => {
+  spore('secretive', {
+    'spore.yaml': 'kind: hypha\nname: secretive\nseptum: "^1.0"\n',
+    'src/index.ts': `export default { create: () => ({ ${HYPHA_BODY}, listGroupMembers: async () => [] }) }\n`,
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.hyphae).toEqual([])
+  expect(registry.dormant[0]?.reason).toContain('does not declare group_membership')
+})

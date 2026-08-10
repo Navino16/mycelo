@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import type { Enzyme, Hypha, Logger } from '@mycelo/septum'
+import type { Enzyme, Hypha, HyphaManifest, Logger } from '@mycelo/septum'
 import { discover } from './discover.js'
 import { loadModule } from './load.js'
 import { isFailure, readManifest } from './manifest.js'
@@ -27,6 +27,25 @@ function shapeError(instance: unknown, kind: 'hypha' | 'enzyme'): string | null 
 }
 
 /**
+ * Matches packages/septum/src/conformance/hypha.ts exactly, in both directions: the
+ * core must not accept a plugin its own published kit would reject. Without this, a
+ * hypha could declare group_membership with no listGroupMembers(), and
+ * ctx.capabilities.has('group_membership') would answer true for a channel that
+ * cannot honour it.
+ */
+function capabilityShapeError(instance: Record<string, unknown>, manifest: HyphaManifest): string | null {
+  const declaresMembership = manifest.capabilities.includes('group_membership')
+  const implementsMembership = typeof instance.listGroupMembers === 'function'
+  if (declaresMembership && !implementsMembership) {
+    return 'manifest declares group_membership but there is no listGroupMembers()'
+  }
+  if (!declaresMembership && implementsMembership) {
+    return 'listGroupMembers() exists but the manifest does not declare group_membership'
+  }
+  return null
+}
+
+/**
  * Walks the spores directory. A spore that fails goes dormant with a reason; only a
  * command collision halts the whole phase (spec §8).
  */
@@ -42,6 +61,10 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
   const hyphae: GerminatedHypha[] = []
   const enzymes: GerminatedEnzyme[] = []
   const dormant: Dormant[] = []
+  // Names are unique across every kind, not per kind: createBus and buildRoutes both
+  // key by name, so two spores sharing one silently overwrite each other with no
+  // signal — a reply typed into the first channel would be delivered to the second.
+  const claimedBy = new Map<string, string>()
 
   for (const location of discover(sporesDir)) {
     const read = readManifest(location)
@@ -68,6 +91,25 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
         dormant.push({ name: manifest.name, reason: problem })
         continue
       }
+      if (manifest.kind === 'hypha') {
+        const capProblem = capabilityShapeError(instance as Record<string, unknown>, manifest)
+        if (capProblem !== null) {
+          dormant.push({ name: manifest.name, reason: capProblem })
+          continue
+        }
+      }
+      // Checked last, once we know the spore would otherwise actually germinate: an
+      // earlier failure (bad shape, unresolved requires) already frees the name, so
+      // it must not be reported as a collision against a spore that never ran.
+      const claimant = claimedBy.get(manifest.name)
+      if (claimant !== undefined) {
+        dormant.push({
+          name: manifest.name,
+          reason: `name '${manifest.name}' is already claimed by the spore at '${claimant}' (duplicate at '${location.directory}')`,
+        })
+        continue
+      }
+      claimedBy.set(manifest.name, location.directory)
       if (manifest.kind === 'hypha') {
         hyphae.push({ name: manifest.name, manifest, instance: instance as Hypha })
       } else {
