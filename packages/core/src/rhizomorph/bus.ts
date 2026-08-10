@@ -66,34 +66,50 @@ export function createBus({ registry, prefix, logger, onUnrouted }: BusOptions):
 
   return {
     async deliver(channel, raw) {
-      const message = normalize(channel, raw)
-      const parsed = parseCommand(message.text, prefix)
-      if (parsed === null) {
-        await onUnrouted?.(message, null)
-        return
-      }
-      const route = registry.routes.get(parsed.command)
-      if (route === undefined) {
-        await onUnrouted?.(message, parsed.command)
-        return
-      }
-      const spec = route.enzyme.manifest.commands.find((c) => c.name === parsed.command)
-      const invocation: Invocation = {
-        command: parsed.command,
-        args: bindArgs(parsed.rest, spec?.args ?? []),
-        rest: parsed.rest,
-        message,
-      }
+      // Everything below can reject: a malformed message, onUnrouted, the handler, even
+      // the recovery send. None of it may escape — deliver() is invoked as fire-and-forget
+      // (bus.deliver(...).catch(...) at the call site), so an uncaught rejection here was
+      // observed to become a process-fatal unhandled rejection, not merely a lost message.
       try {
-        await route.enzyme.instance.handle(invocation, contextFor(message))
+        const message = normalize(channel, raw)
+        const parsed = parseCommand(message.text, prefix)
+        if (parsed === null) {
+          await onUnrouted?.(message, null)
+          return
+        }
+        const route = registry.routes.get(parsed.command)
+        if (route === undefined) {
+          await onUnrouted?.(message, parsed.command)
+          return
+        }
+        const spec = route.enzyme.manifest.commands.find((c) => c.name === parsed.command)
+        const invocation: Invocation = {
+          command: parsed.command,
+          args: bindArgs(parsed.rest, spec?.args ?? []),
+          rest: parsed.rest,
+          message,
+        }
+        try {
+          await route.enzyme.instance.handle(invocation, contextFor(message))
+        } catch (e) {
+          // A handler that throws is contained: clean error on the channel, trace logged.
+          logger.error(`enzyme '${route.plugin}' threw handling '${route.qualified}'`, {
+            error: (e as Error).message,
+          })
+          try {
+            await send(message.channel, message.conversationId, {
+              text: `command '${parsed.command}' failed`,
+            })
+          } catch (sendError) {
+            // The channel that failed is the same one we would answer on: there is
+            // nowhere left to report to but the log.
+            logger.error(`could not report the failure of '${route.qualified}' on '${channel}'`, {
+              error: (sendError as Error).message,
+            })
+          }
+        }
       } catch (e) {
-        // A handler that throws is contained: clean error on the channel, trace logged.
-        logger.error(`enzyme '${route.plugin}' threw handling '${route.qualified}'`, {
-          error: (e as Error).message,
-        })
-        await send(message.channel, message.conversationId, {
-          text: `command '${parsed.command}' failed`,
-        })
+        logger.error(`delivery on '${channel}' failed`, { error: (e as Error).message })
       }
     },
   }
