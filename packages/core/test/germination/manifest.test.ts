@@ -34,4 +34,9 @@ it('reports a schema violation with the offending field', () => {
   spore('nameless', 'kind: enzyme\nseptum: "^1.0"\ncommands: []\n')
   const read = readManifest(discover(dir)[0]!)
   expect(isFailure(read)).toBe(true)
+  // Zod's message text ("Invalid input: expected string, received undefined") is
+  // identical whichever required string field is missing, so the field name has to
+  // come from the path, not the message — this is what distinguishes the assertion
+  // from one that would pass against any generic schema-violation reason.
+  if (isFailure(read)) expect(read.reason).toContain("'name'")
 })

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { parse as parseYaml } from 'yaml'
-import { parseManifest } from '@mycelo/septum'
+import { ManifestError, parseManifest } from '@mycelo/septum'
 import type { Manifest } from '@mycelo/septum'
 import type { SporeLocation } from './discover.js'
 
@@ -25,7 +25,13 @@ export function readManifest(location: SporeLocation): ReadManifest | ManifestFa
   try {
     return { location, manifest: parseManifest(raw) }
   } catch (e) {
-    return { location, reason: (e as Error).message }
+    // ManifestError.message alone is Zod's generic text ("Invalid input: expected
+    // string, received undefined"), identical for any missing string field. Naming
+    // .path is what lets a plugin author find the actual offending line.
+    const reason = e instanceof ManifestError
+      ? `invalid manifest at '${e.path}': ${e.message}`
+      : (e as Error).message
+    return { location, reason }
   }
 }
 
