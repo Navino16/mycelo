@@ -33,6 +33,11 @@ it('binds positional arguments, the last absorbing the remainder', () => {
   })
 })
 
+it('binds a single argument absorbing the whole remainder', () => {
+  const specs = [{ name: 'query', description: 'q', required: true }]
+  expect(bindArgs('the big lebowski', specs)).toEqual({ query: 'the big lebowski' })
+})
+
 it('binds nothing when the command declares no arguments', () => {
   expect(bindArgs('whatever', [])).toEqual({})
 })

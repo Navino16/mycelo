@@ -6,7 +6,7 @@ import type { IncomingMessage } from '@mycelo/septum'
  * nothing reads them yet: retrofitting either means rewriting every hypha.
  */
 export function normalize(channel: string, raw: IncomingMessage): IncomingMessage {
-  if (raw.conversationId === '') throw new Error(`hypha '${channel}' emitted a message with no conversationId`)
-  if (raw.messageId === '') throw new Error(`hypha '${channel}' emitted a message with no messageId`)
+  if (typeof raw.conversationId !== 'string' || raw.conversationId === '') throw new Error(`hypha '${channel}' emitted a message with no conversationId`)
+  if (typeof raw.messageId !== 'string' || raw.messageId === '') throw new Error(`hypha '${channel}' emitted a message with no messageId`)
   return { ...raw, channel }
 }
