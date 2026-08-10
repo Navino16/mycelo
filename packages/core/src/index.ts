@@ -1,32 +1,9 @@
 import { createInterface } from 'node:readline/promises'
 import { resolve } from 'node:path'
-import { loadBootstrap } from './config.js'
-import { germinate } from './germination/germinate.js'
-import { createBus } from './rhizomorph/bus.js'
-import { createLogger } from './support/logger.js'
+import { bootstrap } from './mycelium.js'
 
-const logger = createLogger()
-const bootstrap = loadBootstrap(resolve(process.cwd(), 'mycelo.yaml'))
-const registry = await germinate(bootstrap.sporesDir, logger)
-
-const bus = createBus({
-  registry,
-  prefix: bootstrap.prefix,
-  logger,
-  onUnrouted: async (message, command) => {
-    if (command === null) return
-    const hypha = registry.hyphae.find((h) => h.name === message.channel)
-    await hypha?.instance.send(message.conversationId, { text: `unknown command '${command}'` })
-  },
-})
-
-for (const hypha of registry.hyphae) {
-  await hypha.instance.start({
-    config: {},
-    logger: logger.child({ hypha: hypha.name }),
-    emit: (message) => { void bus.deliver(hypha.name, message) },
-  })
-}
+const configFile = resolve(process.cwd(), 'mycelo.yaml')
+const { registry } = await bootstrap(configFile)
 
 const names = [...registry.hyphae, ...registry.enzymes].map((s) => s.name).join(', ')
 console.log(`mycelium: germinated ${String(registry.hyphae.length + registry.enzymes.length)} spores (${names})`)
