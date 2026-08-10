@@ -22,6 +22,8 @@ function entryPoint(sporePath: string): string | null {
 export async function loadModule(read: ReadManifest): Promise<SporeModule<unknown, unknown>> {
   const { location, manifest } = read
 
+  // Declarative entries (enzyme.yaml) take precedence over code entries (src/index.ts).
+  // A plugin author must not assume their src/index.ts runs.
   if (manifest.kind === 'enzyme' && hasDeclarativeEntry(location.path)) {
     return loadDeclarative(location.path, manifest.commands.map((c) => c.name))
   }
