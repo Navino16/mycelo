@@ -33,7 +33,7 @@ export default defineConfig(
     },
   },
   {
-    files: ['**/*.ts'],
+    files: ['packages/**/*.ts'],
     ignores: ['**/*.test.ts', 'vitest.config.ts'],
     languageOptions: {
       parser: tseslint.parser,
@@ -42,6 +42,16 @@ export default defineConfig(
     rules: {
       // The compiler cannot enforce this: erasableSyntaxOnly accepts decorators,
       // but Node rejects them at load time when type-stripping.
+      ...noDecorators,
+    },
+  },
+  {
+    files: ['fixtures/**/*.ts'],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: { project: './tsconfig.spec.json', tsconfigRootDir: import.meta.dirname },
+    },
+    rules: {
       ...noDecorators,
     },
   },
