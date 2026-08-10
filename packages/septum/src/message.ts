@@ -9,9 +9,9 @@ export interface ChannelIdentity {
  * A file travelling in either direction. `url` avoids buffering large media;
  * `bytes` is for content the plugin already holds.
  *
- * `Uint8Array` rather than `Buffer`: this is the public contract, and keeping it
- * free of Node-specific types means a plugin author needs no @types/node to
- * typecheck against it. A Node `Buffer` is assignable here — verified.
+ * `Uint8Array` rather than `Buffer`: keeping the public contract free of
+ * Node-specific types means a plugin author needs no @types/node to typecheck
+ * against it. A Node `Buffer` is assignable here.
  */
 export type Attachment =
   | { kind: 'url'; url: string; mime?: string; filename?: string }

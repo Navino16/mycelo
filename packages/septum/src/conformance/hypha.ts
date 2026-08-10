@@ -21,10 +21,7 @@ export interface HyphaHarness {
   invalidConfig?: unknown
 }
 
-/**
- * Runs every contract check and returns the failures, so the same logic can be
- * used inside a describe() block or asserted directly in a test.
- */
+/** Returns the failures, so the same logic serves a describe() block or a bare assertion. */
 export async function hyphaChecks(harness: HyphaHarness): Promise<string[]> {
   const failures: string[] = [...(await sourceErasabilityFailures(harness.sourcePaths))]
 
@@ -40,10 +37,9 @@ export async function hyphaChecks(harness: HyphaHarness): Promise<string[]> {
     return failures
   }
 
-  // Each sub-check is gated on its own input, not on validConfig: an author who
-  // only wants to assert that the schema rejects bad input should not have to
-  // invent a valid config, and safeParse(undefined) would fail against any
-  // z.object(), reporting a conformant plugin as broken.
+  // Each sub-check is gated on its own input: safeParse(undefined) fails against
+  // any z.object(), so an ungated check would punish an author who declares only
+  // an invalidConfig.
   const schema = harness.module.configSchema
   if (schema !== undefined) {
     if (harness.validConfig !== undefined && !schema.safeParse(harness.validConfig).success) {
@@ -75,14 +71,13 @@ export async function hyphaChecks(harness: HyphaHarness): Promise<string[]> {
     failures.push('listGroupMembers() exists but the manifest does not declare group_membership')
   }
 
-  // stop() must be safe after a start() that never ran, because the core calls
-  // stop() during shutdown regardless of how germination went (spec §8). Guarded:
-  // a missing stop() is already reported above, and calling it anyway would add a
-  // second failure blaming a shutdown path that does not exist.
+  // stop() must be safe after a start() that never ran: the core calls it during
+  // shutdown regardless of how germination went (spec §8). Guarded, because a
+  // missing stop() is already reported above.
   //
-  // start() is not called here, unlike in the enzyme and inhibitor kits. A hypha's
-  // start() opens the channel connection itself rather than through a context the
-  // author stubs, so invoking it would make the conformance suite dial Signal.
+  // start() is not called here, unlike in the enzyme and inhibitor kits: a hypha
+  // opens its channel connection directly, not through a context the author stubs,
+  // so calling it would make the conformance suite dial Signal.
   if (typeof instance.stop === 'function') {
     try {
       await instance.stop()

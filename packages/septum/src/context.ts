@@ -63,12 +63,10 @@ export interface InhibitorContext<TConfig = unknown> extends BaseContext<TConfig
 /**
  * What an enzyme gets during start(), before any message exists.
  *
- * Deliberately excludes everything that only makes sense in response to a
- * message: there is no sender to attribute, no conversation to reply into, and
- * no channel whose capabilities could be reported. A single context type
- * covering both moments would have to promise those and then hand start() a
- * fabricated principal and a reply() that throws — a green build with a broken
- * runtime, which is the failure mode this project refuses.
+ * Excludes everything that only makes sense in response to a message: no sender
+ * to attribute, no conversation to reply into, no channel capabilities. A single
+ * context for both moments would have to hand start() a fabricated principal and
+ * a reply() that throws.
  */
 export interface EnzymeStartContext<TConfig = unknown> extends BaseContext<TConfig> {
   /** Proactive send to an explicitly named target. */

@@ -20,11 +20,8 @@ export interface InhibitorHarness {
 }
 
 /**
- * Renders a value for a failure message without ever throwing.
- *
- * JSON.stringify throws on a circular structure and on a BigInt — and those are
- * exactly the values a confused plugin returns instead of a Verdict, so using it
- * bare would crash the kit at the one place written to prevent a crash.
+ * Renders a value for a failure message without ever throwing. JSON.stringify
+ * throws on circular structures and on BigInt, both plausible here.
  */
 function render(value: unknown): string {
   try {
@@ -76,9 +73,8 @@ export async function inhibitorChecks(harness: InhibitorHarness): Promise<string
     }
   }
 
-  // start() runs before inspect(), as it does at germination: an inhibitor that
-  // loads its allowlist in start() is correct, and inspecting first would report
-  // it as broken.
+  // start() before inspect(), as at germination: an inhibitor that loads its
+  // allowlist in start() would otherwise be reported as broken.
   if (typeof instance.start === 'function') {
     try {
       await instance.start(harness.context())
@@ -88,12 +84,9 @@ export async function inhibitorChecks(harness: InhibitorHarness): Promise<string
   }
 
   /**
-   * Calls inspect() and validates the shape of what comes back.
-   *
-   * The shape check matters because a plugin written in JavaScript gets no help
-   * from the type: an inhibitor that returns `{ allow: false }` with no reason,
-   * or nothing at all, would otherwise crash the kit with a TypeError instead of
-   * producing the failure message the kit exists to give its author.
+   * Calls inspect() and validates the shape of what comes back. A JavaScript
+   * plugin gets no help from the type, so a missing `reason` — or no verdict at
+   * all — must become a failure message rather than a TypeError.
    */
   async function verdictOf(message: IncomingMessage): Promise<Verdict | string> {
     let raw: unknown
@@ -135,8 +128,7 @@ export async function inhibitorChecks(harness: InhibitorHarness): Promise<string
     }
   }
 
-  // Whatever start() opened is closed again, so the author's test process does not
-  // outlive the check with a timer or a watcher still running.
+  // Closes whatever start() opened, so no watcher outlives the check.
   if (typeof instance.stop === 'function') {
     try {
       await instance.stop()

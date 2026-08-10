@@ -70,18 +70,16 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
   if ((instance.start === undefined) !== (instance.stop === undefined)) {
     failures.push('start() and stop() must be both present or both absent')
   }
-  // Presence is not callability. A JavaScript enzyme can export a `start` that is
-  // not a function; the core calls it at germination and the bot fails to boot on
-  // a plugin the kit would otherwise have certified.
+  // Presence is not callability: a JavaScript enzyme can export a non-callable
+  // `start`, which the core would invoke at germination.
   for (const method of ['start', 'stop'] as const) {
     if (instance[method] !== undefined && typeof instance[method] !== 'function') {
       failures.push(`${method} is present but not callable`)
     }
   }
 
-  // start() runs before handle(), as it does at germination. An enzyme that
-  // memoises a rhiza client in start() is correct, and calling handle() first
-  // would report it as broken — the kit punishing the right behaviour again.
+  // start() before handle(), as at germination: an enzyme that memoises a rhiza
+  // client in start() would otherwise be reported as broken.
   if (typeof instance.start === 'function') {
     try {
       await instance.start(harness.context())
@@ -90,11 +88,9 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
     }
   }
 
-  // Only commands with no required arguments are invoked. The kit cannot invent a
-  // value for `--title` that the enzyme would accept, so calling handle() with empty
-  // args would report a correctly-validating enzyme as non-conformant — the kit
-  // punishing the right behaviour. Commands with required args are the author's to
-  // test, with inputs only they know.
+  // Only commands with no required arguments are invoked: the kit cannot invent a
+  // value the enzyme would accept, so a correctly-validating one would fail here.
+  // Commands with required args are the author's to test.
   for (const command of manifest.commands) {
     if (command.args?.some((a) => a.required) === true) continue
     const invocation: Invocation = {
@@ -110,8 +106,7 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
     }
   }
 
-  // Whatever start() opened is closed again, so the author's test process does not
-  // outlive the check with a timer or a subscription still running.
+  // Closes whatever start() opened, so no timer outlives the check.
   if (typeof instance.stop === 'function') {
     try {
       await instance.stop()

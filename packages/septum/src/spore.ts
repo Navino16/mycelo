@@ -1,10 +1,9 @@
 /**
  * A validator for a plugin's configuration, described structurally.
  *
- * Deliberately NOT typed as a Zod schema: a spore is bundled with its own copy of
- * Zod, so a schema arriving from a plugin is not an instance of the core's ZodType.
- * Any object with a compatible `safeParse` satisfies this — which is exactly the
- * duck-typing rule the core must follow (see the frame's global constraints).
+ * Not typed as a Zod schema: a spore is bundled with its own copy of Zod, so a
+ * schema arriving from a plugin is not an instance of the core's ZodType. Any
+ * object with a compatible `safeParse` satisfies this.
  */
 export interface ConfigSchema<T> {
   safeParse(input: unknown):

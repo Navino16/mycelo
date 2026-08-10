@@ -12,9 +12,6 @@ import { join } from 'node:path'
  * Decorators survive stripping — TypeScript treats them as future JavaScript — and
  * are only caught when the resulting module is parsed.
  *
- * This does not guess what Node accepts, it asks Node. If a future Node widens what
- * it can strip, this follows with no rule to update.
- *
  * @returns null when loadable, otherwise a one-line reason.
  */
 export function erasabilityError(source: string): string | null {
@@ -42,9 +39,7 @@ export function erasabilityError(source: string): string | null {
   } catch (e) {
     // `node --check` reports a parse error by exiting non-zero, which sets `status`.
     // Anything else — a read-only tmpdir, a sandbox that blocks spawning — never
-    // reached the parser and says nothing about the source under test. Reporting
-    // those as `after stripping: parse failed` would fail every conforming plugin
-    // with a message pointing at the wrong thing.
+    // reached the parser and says nothing about the source under test.
     if (typeof (e as { status?: unknown }).status !== 'number') return environmentError(e)
     const stderr = String((e as { stderr?: unknown }).stderr ?? (e as Error).message)
     const line = stderr.split('\n').find((l) => l.includes('Error:'))?.trim()
@@ -54,7 +49,7 @@ export function erasabilityError(source: string): string | null {
   }
 }
 
-/** The environment failed, not the source. Said plainly so nobody edits their plugin. */
+/** The environment failed, not the source. */
 function environmentError(e: unknown): string {
   return `erasability check could not run: ${(e as Error).message}`
 }
@@ -70,14 +65,11 @@ export function assertErasable(source: string): void {
 /**
  * Runs the erasability check over a plugin's own source files.
  *
- * This is what connects the check to the harnesses. Without it the kit would
- * verify a plugin's contract while staying silent about the one failure this
- * package exists to prevent: source that works bundled by esbuild and breaks
- * when the `local` driver loads it unbundled — a failure that only appears in
- * development, never in production.
+ * Catches source that works bundled by esbuild and breaks when the `local` driver
+ * loads it unbundled — a failure that only appears in development.
  *
- * Paths are the plugin's own files. Omitting them skips the check, which is
- * correct for a harness testing an in-memory module with no file on disk.
+ * Omitting the paths skips the check, which is correct for a harness testing an
+ * in-memory module with no file on disk.
  */
 export async function sourceErasabilityFailures(
   paths: readonly string[] | undefined,
