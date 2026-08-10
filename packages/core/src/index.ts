@@ -9,12 +9,18 @@ const names = [...registry.hyphae, ...registry.enzymes].map((s) => s.name).join(
 console.log(`mycelium: germinated ${String(registry.hyphae.length + registry.enzymes.length)} spores (${names})`)
 
 // The console hypha is driven by stdin here and by feed() in tests. Nothing else in
-// the core knows this method exists — it is not part of the Hypha contract.
-const consoleHypha = registry.hyphae.find((h) => h.name === 'console')?.instance as
-  | { feed(text: string): void }
-  | undefined
+// the core knows this method exists — it is not part of the Hypha contract, so it
+// must be duck-typed like every other plugin-boundary crossing, never cast: a real
+// channel plugin named 'console' with no feed() would otherwise throw unhandled on
+// the first keystroke, inside this top-level for-await, killing the process.
+function hasFeed(instance: unknown): instance is { feed(text: string): void } {
+  return typeof instance === 'object' && instance !== null
+    && typeof (instance as Record<string, unknown>).feed === 'function'
+}
 
-if (consoleHypha === undefined) {
+const consoleInstance = registry.hyphae.find((h) => h.name === 'console')?.instance
+
+if (!hasFeed(consoleInstance)) {
   console.log('no console hypha: nothing to read from')
 } else {
   console.log('listening on console')
@@ -26,7 +32,7 @@ if (consoleHypha === undefined) {
   // synchronously — a paste of several lines, or a fast pipe, fired every 'line' event
   // before the loop got back around to listening again, and all but the first were lost.
   for await (const line of rl) {
-    if (line.trim() !== '') consoleHypha.feed(line)
+    if (line.trim() !== '') consoleInstance.feed(line)
     rl.prompt()
   }
 }

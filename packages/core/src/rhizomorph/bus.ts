@@ -2,12 +2,12 @@ import type {
   Capabilities,
   ChannelCapability,
   EnzymeContext,
+  EnzymeStartContext,
   IncomingMessage,
   Invocation,
   Logger,
   OutgoingContent,
   Principal,
-  PushTarget,
 } from '@mycelo/septum'
 import type { GerminatedHypha, Registry } from '../germination/registry.js'
 import { bindArgs, parseCommand } from './parse.js'
@@ -26,6 +26,38 @@ function capabilitiesOf(hypha: GerminatedHypha | undefined): Capabilities {
   }
 }
 
+/**
+ * The message-independent slice of EnzymeContext — push, capabilitiesOf, rhiza, has,
+ * on — built once here so mycelium.ts's Enzyme.start() call (before any message
+ * exists) and createBus()'s per-message context below share one implementation of
+ * the phase-3 "not yet" wiring instead of two.
+ */
+export function createEnzymeStartContext(hyphae: readonly GerminatedHypha[], logger: Logger): EnzymeStartContext {
+  const hyphaByName = new Map(hyphae.map((h) => [h.name, h]))
+
+  async function send(channel: string, conversationId: string, out: OutgoingContent): Promise<void> {
+    const hypha = hyphaByName.get(channel)
+    if (hypha === undefined) throw new Error(`no hypha named '${channel}'`)
+    // The published contract (septum's OutgoingContent) promises this is enforced by
+    // the core. It previously was not: ctx.reply({}) reached the hypha untouched.
+    if (out.text === undefined && out.attachments === undefined && out.reactTo === undefined) {
+      throw new Error('OutgoingContent must set at least one of text, attachments, or reactTo')
+    }
+    await hypha.instance.send(conversationId, out)
+  }
+
+  return {
+    // Plugin settings live in the database from phase 5; nothing supplies them yet.
+    config: {},
+    logger,
+    push: async (target, content) => { await send(target.channel, target.conversationId, content) },
+    capabilitiesOf: (target) => capabilitiesOf(hyphaByName.get(target.channel)),
+    rhiza: () => notYet('ctx.rhiza()', 'phase 3 (anastomoses)'),
+    has: () => false,
+    on: () => notYet('ctx.on()', 'phase 3 (anastomoses)'),
+  }
+}
+
 export interface Bus {
   deliver(channel: string, raw: IncomingMessage): Promise<void>
 }
@@ -40,31 +72,17 @@ export interface BusOptions {
 
 export function createBus({ registry, prefix, logger, onUnrouted }: BusOptions): Bus {
   const hyphaByName = new Map(registry.hyphae.map((h) => [h.name, h]))
-
-  async function send(channel: string, conversationId: string, out: OutgoingContent): Promise<void> {
-    const hypha = hyphaByName.get(channel)
-    if (hypha === undefined) throw new Error(`no hypha named '${channel}'`)
-    // The published contract (septum's OutgoingContent) promises this is enforced by
-    // the core. It previously was not: ctx.reply({}) reached the hypha untouched.
-    if (out.text === undefined && out.attachments === undefined && out.reactTo === undefined) {
-      throw new Error('OutgoingContent must set at least one of text, attachments, or reactTo')
-    }
-    await hypha.instance.send(conversationId, out)
-  }
+  const startContext = createEnzymeStartContext(registry.hyphae, logger)
+  const send = (channel: string, conversationId: string, out: OutgoingContent): Promise<void> =>
+    startContext.push({ channel, conversationId }, out)
 
   function contextFor(message: IncomingMessage): EnzymeContext {
     const origin = hyphaByName.get(message.channel)
     return {
-      // Plugin settings live in the database from phase 5; nothing supplies them yet.
-      config: {},
+      ...startContext,
       logger: logger.child({ channel: message.channel }),
       reply: async (content) => { await send(message.channel, message.conversationId, content) },
-      push: async (target: PushTarget, content) => { await send(target.channel, target.conversationId, content) },
       capabilities: capabilitiesOf(origin),
-      capabilitiesOf: (target) => capabilitiesOf(hyphaByName.get(target.channel)),
-      rhiza: () => notYet('ctx.rhiza()', 'phase 3 (anastomoses)'),
-      has: () => false,
-      on: () => notYet('ctx.on()', 'phase 3 (anastomoses)'),
       get principal(): Principal { return notYet('ctx.principal', 'phase 4 (identity)') },
     }
   }

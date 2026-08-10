@@ -1,7 +1,8 @@
 import { loadBootstrap } from './config.js'
 import { germinate } from './germination/germinate.js'
-import type { Dormant, GerminatedHypha, Registry } from './germination/registry.js'
-import { createBus } from './rhizomorph/bus.js'
+import { buildRoutes } from './germination/registry.js'
+import type { Dormant, GerminatedEnzyme, GerminatedHypha, Registry } from './germination/registry.js'
+import { createBus, createEnzymeStartContext } from './rhizomorph/bus.js'
 import type { Bus } from './rhizomorph/bus.js'
 import { createLogger } from './support/logger.js'
 
@@ -21,14 +22,41 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
   const logger = createLogger()
   const config = loadBootstrap(configFile)
   const registry = await germinate(config.sporesDir, logger)
+  const dormant: Dormant[] = [...registry.dormant]
+
+  // septum's own conformance kit both requires start()/stop() as a pair and calls
+  // start() before handle() — but nothing in the runtime called it until now, so an
+  // enzyme that memoises state in start() reached its first command with that state
+  // never set. Runs before any hypha starts emitting, so nothing can reach handle()
+  // while an enzyme's start() is still in flight. Symmetric stop() — for either kind
+  // — and signal handling are deliberately deferred to phase 6 (supervision): this
+  // file only ever starts things.
+  const startedEnzymes: GerminatedEnzyme[] = []
+  for (const enzyme of registry.enzymes) {
+    if (enzyme.instance.start === undefined) {
+      startedEnzymes.push(enzyme)
+      continue
+    }
+    try {
+      await enzyme.instance.start(createEnzymeStartContext(registry.hyphae, logger.child({ enzyme: enzyme.name })))
+      startedEnzymes.push(enzyme)
+    } catch (e) {
+      logger.warn(`enzyme '${enzyme.name}' failed to start and is dormant`, { reason: (e as Error).message })
+      dormant.push({ name: enzyme.name, reason: (e as Error).message })
+    }
+  }
+  // A failed start() must not leave the enzyme routable: routes are rebuilt from
+  // only the enzymes that started (safe — buildRoutes() already accepted the full
+  // set at germination, and removing entries cannot introduce a new collision).
+  const routedRegistry: Registry = { ...registry, enzymes: startedEnzymes, routes: buildRoutes(startedEnzymes) }
 
   const bus = createBus({
-    registry,
+    registry: routedRegistry,
     prefix: config.prefix,
     logger,
     onUnrouted: async (message, command) => {
       if (command === null) return
-      const hypha = registry.hyphae.find((h) => h.name === message.channel)
+      const hypha = routedRegistry.hyphae.find((h) => h.name === message.channel)
       await hypha?.instance.send(message.conversationId, { text: `unknown command '${command}'` })
     },
   })
@@ -37,8 +65,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
   // (spec §8): it goes dormant and the others still start. Previously this loop had no
   // try/catch, so one bad hypha killed the process before any other hypha started.
   const started: GerminatedHypha[] = []
-  const dormant: Dormant[] = [...registry.dormant]
-  for (const hypha of registry.hyphae) {
+  for (const hypha of routedRegistry.hyphae) {
     try {
       await hypha.instance.start({
         config: {},
@@ -60,5 +87,5 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     }
   }
 
-  return { registry: { ...registry, hyphae: started, dormant }, bus }
+  return { registry: { ...routedRegistry, hyphae: started, dormant }, bus }
 }
