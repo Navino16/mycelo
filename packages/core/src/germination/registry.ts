@@ -30,7 +30,10 @@ export class CollisionError extends Error {
   readonly command: string
   readonly plugins: readonly string[]
   constructor(command: string, plugins: readonly string[]) {
-    super(`command '${command}' is declared by ${plugins.join(' and ')}`)
+    const message = plugins[0] === plugins[1]
+      ? `command '${command}' is declared twice by '${plugins[0]}'`
+      : `command '${command}' is declared by ${plugins.join(' and ')}`
+    super(message)
     this.name = 'CollisionError'
     this.command = command
     this.plugins = plugins
