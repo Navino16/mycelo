@@ -13,10 +13,10 @@ export interface HyphaHarness {
    * harness at all, and the configSchema checks below would be unreachable.
    */
   module: HyphaModule<unknown>
-  /** A config the schema must accept. */
   /** Absolute paths to the plugin's own source files. See sourceErasabilityFailures. */
   sourcePaths?: readonly string[]
-  validConfig: unknown
+  /** A config the schema must accept. Omit to skip that half of the check. */
+  validConfig?: unknown
   /** A config the schema must reject. Omit only if every input is valid. */
   invalidConfig?: unknown
 }
@@ -32,7 +32,7 @@ export async function hyphaChecks(harness: HyphaHarness): Promise<string[]> {
   try {
     manifest = parseManifest(harness.manifest)
   } catch (e) {
-    return [`manifest does not parse: ${(e as Error).message}`]
+    return [...failures, `manifest does not parse: ${(e as Error).message}`]
   }
 
   if (manifest.kind !== 'hypha') {
@@ -40,9 +40,13 @@ export async function hyphaChecks(harness: HyphaHarness): Promise<string[]> {
     return failures
   }
 
+  // Each sub-check is gated on its own input, not on validConfig: an author who
+  // only wants to assert that the schema rejects bad input should not have to
+  // invent a valid config, and safeParse(undefined) would fail against any
+  // z.object(), reporting a conformant plugin as broken.
   const schema = harness.module.configSchema
   if (schema !== undefined) {
-    if (!schema.safeParse(harness.validConfig).success) {
+    if (harness.validConfig !== undefined && !schema.safeParse(harness.validConfig).success) {
       failures.push('configSchema rejects the declared valid config')
     }
     if (harness.invalidConfig !== undefined && schema.safeParse(harness.invalidConfig).success) {
@@ -72,11 +76,19 @@ export async function hyphaChecks(harness: HyphaHarness): Promise<string[]> {
   }
 
   // stop() must be safe after a start() that never ran, because the core calls
-  // stop() during shutdown regardless of how germination went (spec §8).
-  try {
-    await instance.stop()
-  } catch (e) {
-    failures.push(`stop() throws when start() never ran: ${(e as Error).message}`)
+  // stop() during shutdown regardless of how germination went (spec §8). Guarded:
+  // a missing stop() is already reported above, and calling it anyway would add a
+  // second failure blaming a shutdown path that does not exist.
+  //
+  // start() is not called here, unlike in the enzyme and inhibitor kits. A hypha's
+  // start() opens the channel connection itself rather than through a context the
+  // author stubs, so invoking it would make the conformance suite dial Signal.
+  if (typeof instance.stop === 'function') {
+    try {
+      await instance.stop()
+    } catch (e) {
+      failures.push(`stop() throws when start() never ran: ${(e as Error).message}`)
+    }
   }
 
   return failures

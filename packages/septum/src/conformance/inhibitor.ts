@@ -19,6 +19,21 @@ export interface InhibitorHarness {
   denied: IncomingMessage[]
 }
 
+/**
+ * Renders a value for a failure message without ever throwing.
+ *
+ * JSON.stringify throws on a circular structure and on a BigInt — and those are
+ * exactly the values a confused plugin returns instead of a Verdict, so using it
+ * bare would crash the kit at the one place written to prevent a crash.
+ */
+function render(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? String(value)
+  } catch {
+    return Object.prototype.toString.call(value)
+  }
+}
+
 export async function inhibitorChecks(harness: InhibitorHarness): Promise<string[]> {
   const failures: string[] = [...(await sourceErasabilityFailures(harness.sourcePaths))]
 
@@ -26,10 +41,10 @@ export async function inhibitorChecks(harness: InhibitorHarness): Promise<string
   try {
     manifest = parseManifest(harness.manifest)
   } catch (e) {
-    return [`manifest does not parse: ${(e as Error).message}`]
+    return [...failures, `manifest does not parse: ${(e as Error).message}`]
   }
   if (manifest.kind !== 'inhibitor') {
-    return [`manifest kind is '${manifest.kind}', expected 'inhibitor'`]
+    return [...failures, `manifest kind is '${manifest.kind}', expected 'inhibitor'`]
   }
 
   const schema = harness.module.configSchema
@@ -51,6 +66,26 @@ export async function inhibitorChecks(harness: InhibitorHarness): Promise<string
   if (typeof instance.inspect !== 'function') {
     return [...failures, 'create() returned no inspect()']
   }
+  if ((instance.start === undefined) !== (instance.stop === undefined)) {
+    failures.push('start() and stop() must be both present or both absent')
+  }
+  // Presence is not callability. See the same check in enzymeChecks.
+  for (const method of ['start', 'stop'] as const) {
+    if (instance[method] !== undefined && typeof instance[method] !== 'function') {
+      failures.push(`${method} is present but not callable`)
+    }
+  }
+
+  // start() runs before inspect(), as it does at germination: an inhibitor that
+  // loads its allowlist in start() is correct, and inspecting first would report
+  // it as broken.
+  if (typeof instance.start === 'function') {
+    try {
+      await instance.start(harness.context())
+    } catch (e) {
+      return [...failures, `start() threw: ${(e as Error).message}`]
+    }
+  }
 
   /**
    * Calls inspect() and validates the shape of what comes back.
@@ -68,7 +103,7 @@ export async function inhibitorChecks(harness: InhibitorHarness): Promise<string
       return `inspect() threw: ${(e as Error).message}`
     }
     if (typeof raw !== 'object' || raw === null || !('allow' in raw)) {
-      return `inspect() returned ${JSON.stringify(raw) ?? String(raw)}, expected a Verdict`
+      return `inspect() returned ${render(raw)}, expected a Verdict`
     }
     const v = raw as { allow: unknown; reason?: unknown }
     if (typeof v.allow !== 'boolean') {
@@ -97,6 +132,16 @@ export async function inhibitorChecks(harness: InhibitorHarness): Promise<string
       failures.push('allowed a message expected to be denied')
     } else if (verdict.reason.trim() === '') {
       failures.push('denied with an empty reason — the core surfaces this text to the operator')
+    }
+  }
+
+  // Whatever start() opened is closed again, so the author's test process does not
+  // outlive the check with a timer or a watcher still running.
+  if (typeof instance.stop === 'function') {
+    try {
+      await instance.stop()
+    } catch (e) {
+      failures.push(`stop() threw: ${(e as Error).message}`)
     }
   }
 

@@ -28,19 +28,35 @@ export function erasabilityError(source: string): string | null {
   // The stripped output is an ES module, so it cannot be compiled as a script.
   // Writing it as .mjs and running `node --check` parses it exactly as the loader
   // would, and needs no experimental flag.
-  const dir = mkdtempSync(join(tmpdir(), 'mycelo-erase-'))
+  let dir: string
+  try {
+    dir = mkdtempSync(join(tmpdir(), 'mycelo-erase-'))
+  } catch (e) {
+    return environmentError(e)
+  }
   const file = join(dir, 'candidate.mjs')
   try {
     writeFileSync(file, js, 'utf8')
     execFileSync(process.execPath, ['--check', file], { stdio: 'pipe' })
     return null
   } catch (e) {
+    // `node --check` reports a parse error by exiting non-zero, which sets `status`.
+    // Anything else — a read-only tmpdir, a sandbox that blocks spawning — never
+    // reached the parser and says nothing about the source under test. Reporting
+    // those as `after stripping: parse failed` would fail every conforming plugin
+    // with a message pointing at the wrong thing.
+    if (typeof (e as { status?: unknown }).status !== 'number') return environmentError(e)
     const stderr = String((e as { stderr?: unknown }).stderr ?? (e as Error).message)
     const line = stderr.split('\n').find((l) => l.includes('Error:'))?.trim()
     return `after stripping: ${line ?? 'parse failed'}`
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+}
+
+/** The environment failed, not the source. Said plainly so nobody edits their plugin. */
+function environmentError(e: unknown): string {
+  return `erasability check could not run: ${(e as Error).message}`
 }
 
 /** Same check, as an assertion. Use in a plugin's own test suite. */

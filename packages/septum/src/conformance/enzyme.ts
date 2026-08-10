@@ -38,10 +38,10 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
   try {
     manifest = parseManifest(harness.manifest)
   } catch (e) {
-    return [`manifest does not parse: ${(e as Error).message}`]
+    return [...failures, `manifest does not parse: ${(e as Error).message}`]
   }
   if (manifest.kind !== 'enzyme') {
-    return [`manifest kind is '${manifest.kind}', expected 'enzyme'`]
+    return [...failures, `manifest kind is '${manifest.kind}', expected 'enzyme'`]
   }
 
   // Each sub-check is gated on its own input, not on validConfig: gating both on
@@ -70,6 +70,25 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
   if ((instance.start === undefined) !== (instance.stop === undefined)) {
     failures.push('start() and stop() must be both present or both absent')
   }
+  // Presence is not callability. A JavaScript enzyme can export a `start` that is
+  // not a function; the core calls it at germination and the bot fails to boot on
+  // a plugin the kit would otherwise have certified.
+  for (const method of ['start', 'stop'] as const) {
+    if (instance[method] !== undefined && typeof instance[method] !== 'function') {
+      failures.push(`${method} is present but not callable`)
+    }
+  }
+
+  // start() runs before handle(), as it does at germination. An enzyme that
+  // memoises a rhiza client in start() is correct, and calling handle() first
+  // would report it as broken — the kit punishing the right behaviour again.
+  if (typeof instance.start === 'function') {
+    try {
+      await instance.start(harness.context())
+    } catch (e) {
+      return [...failures, `start() threw: ${(e as Error).message}`]
+    }
+  }
 
   // Only commands with no required arguments are invoked. The kit cannot invent a
   // value for `--title` that the enzyme would accept, so calling handle() with empty
@@ -88,6 +107,16 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
       await instance.handle(invocation, harness.context())
     } catch (e) {
       failures.push(`handle() threw for declared command '${command.name}': ${(e as Error).message}`)
+    }
+  }
+
+  // Whatever start() opened is closed again, so the author's test process does not
+  // outlive the check with a timer or a subscription still running.
+  if (typeof instance.stop === 'function') {
+    try {
+      await instance.stop()
+    } catch (e) {
+      failures.push(`stop() threw: ${(e as Error).message}`)
     }
   }
 

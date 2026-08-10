@@ -370,3 +370,110 @@ describe('source erasability through a harness', () => {
     expect(failures.join(' ')).toContain('cannot read source')
   })
 })
+
+// ---------------------------------------------------------------------------
+// regressions found reviewing the kit
+// ---------------------------------------------------------------------------
+
+describe('regressions', () => {
+  it('keeps erasability failures when the manifest is rejected', async () => {
+    // The manifest early-returns used to build a fresh array, so the author saw
+    // only the manifest error and learned about the unloadable source one run later.
+    const dir = mkdtempSync(join(tmpdir(), 'mycelo-kit-'))
+    const file = join(dir, 'plugin.ts')
+    try {
+      writeFileSync(file, 'export enum Bad { A }\n', 'utf8')
+      const failures = await enzymeChecks({
+        ...goodEnzyme,
+        manifest: { kind: 'rhiza', name: 'links', septum: '^1.0' },
+        sourcePaths: [file],
+      })
+      expect(failures.join(' ')).toContain('is not erasable')
+      expect(failures.join(' ')).toContain("expected 'enzyme'")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('calls an enzyme start() before handle()', async () => {
+    let started = false
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        create: () => ({
+          async handle() {
+            if (!started) throw new Error('handle() ran before start()')
+          },
+          async start() {
+            started = true
+          },
+          async stop() {},
+        }),
+      },
+    })
+    expect(failures).toEqual([])
+  })
+
+  it('catches a start that is present but not callable', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: { create: () => ({ async handle() {}, start: true, stop: true }) as never },
+    })
+    expect(failures.join(' ')).toContain('not callable')
+  })
+
+  it('calls an inhibitor start() before inspect()', async () => {
+    let allowlist: readonly string[] | null = null
+    const failures = await inhibitorChecks({
+      ...goodInhibitor,
+      module: {
+        create: () => ({
+          async inspect(message) {
+            if (allowlist === null) throw new Error('inspect() ran before start()')
+            return allowlist.includes(message.sender.externalId)
+              ? { allow: true }
+              : { allow: false, reason: 'not on the allowlist' }
+          },
+          async start() {
+            allowlist = ['friend']
+          },
+          async stop() {},
+        }),
+      },
+    })
+    expect(failures).toEqual([])
+  })
+
+  it('does not crash on a verdict JSON.stringify cannot render', async () => {
+    const circular: Record<string, unknown> = {}
+    circular['self'] = circular
+    const failures = await inhibitorChecks({
+      ...goodInhibitor,
+      module: { create: () => ({ async inspect() { return circular as never } }) },
+    })
+    expect(failures.join(' ')).toContain('expected a Verdict')
+  })
+
+  it('reports a missing hypha stop() once, not twice', async () => {
+    const failures = await hyphaChecks({
+      ...goodHarness,
+      module: {
+        configSchema: config,
+        create: () =>
+          ({
+            async start() {},
+            async send() {},
+            async listGroupMembers() {
+              return []
+            },
+          }) as never,
+      },
+    })
+    expect(failures).toEqual(['create() returned no stop()'])
+  })
+
+  it('accepts a hypha harness that declares no valid config', async () => {
+    const withoutValid: HyphaHarness = { ...goodHarness, validConfig: undefined }
+    expect(await hyphaChecks(withoutValid)).toEqual([])
+  })
+})
