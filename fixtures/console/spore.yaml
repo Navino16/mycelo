@@ -1,0 +1,5 @@
+kind: hypha
+name: console
+septum: "^1.0"
+description: Reads stdin and writes stdout. Test fixture, never distributed.
+capabilities: []
