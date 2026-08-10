@@ -177,3 +177,21 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
   expect(errors).toHaveLength(2)
   expect(errors[1]).toContain('could not report')
 })
+
+it('rejects an OutgoingContent with nothing set, before handing it to the hypha', async () => {
+  const { registry, sent } = setup({
+    async handle(_inv, ctx) { await ctx.reply({}) },
+  })
+  const errors: string[] = []
+  const logger: Logger = {
+    debug() {}, info() {}, warn() {},
+    error: (m, meta) => { errors.push(`${m} ${JSON.stringify(meta ?? {})}`) },
+    child: () => logger,
+  }
+  const bus = createBus({ registry, prefix: '/', logger })
+  await expect(bus.deliver('console', message('/ping'))).resolves.toBeUndefined()
+  // The empty content never reached the hypha: only the recovery message did, which
+  // is how "contained, not process-fatal" is distinguished from "silently accepted".
+  expect(sent).toEqual([{ text: "command 'ping' failed" }])
+  expect(errors[0]).toContain('at least one of text, attachments, or reactTo')
+})

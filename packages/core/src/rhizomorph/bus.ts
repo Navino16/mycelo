@@ -44,6 +44,11 @@ export function createBus({ registry, prefix, logger, onUnrouted }: BusOptions):
   async function send(channel: string, conversationId: string, out: OutgoingContent): Promise<void> {
     const hypha = hyphaByName.get(channel)
     if (hypha === undefined) throw new Error(`no hypha named '${channel}'`)
+    // The published contract (septum's OutgoingContent) promises this is enforced by
+    // the core. It previously was not: ctx.reply({}) reached the hypha untouched.
+    if (out.text === undefined && out.attachments === undefined && out.reactTo === undefined) {
+      throw new Error('OutgoingContent must set at least one of text, attachments, or reactTo')
+    }
     await hypha.instance.send(conversationId, out)
   }
 
