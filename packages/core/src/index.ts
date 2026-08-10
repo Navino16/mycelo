@@ -19,9 +19,14 @@ if (consoleHypha === undefined) {
 } else {
   console.log('listening on console')
   const rl = createInterface({ input: process.stdin, output: process.stdout })
-  for (;;) {
-    const line = await rl.question('> ')
-    if (line.trim() === '') continue
-    consoleHypha.feed(line)
+  rl.setPrompt('> ')
+  rl.prompt()
+  // `for await` over the interface, not a repeated rl.question(): question() re-arms
+  // a one-shot 'line' listener, but readline drains a whole buffered chunk
+  // synchronously — a paste of several lines, or a fast pipe, fired every 'line' event
+  // before the loop got back around to listening again, and all but the first were lost.
+  for await (const line of rl) {
+    if (line.trim() !== '') consoleHypha.feed(line)
+    rl.prompt()
   }
 }
