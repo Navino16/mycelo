@@ -44,3 +44,30 @@ it('refuses a message with non-string messageId', () => {
   const msg = Object.assign(message(), { messageId: 456 })
   expect(() => normalize('console', msg)).toThrow('messageId')
 })
+
+it('refuses a message with undefined text', () => {
+  // The natural shape of an image-only message on Discord, Signal and WhatsApp:
+  // parseCommand(message.text, ...) in bus.ts calls text.startsWith() as its first
+  // statement, so an unguarded undefined here becomes a raw TypeError one call later.
+  const msg = Object.assign(message(), { text: undefined })
+  expect(() => normalize('console', msg)).toThrow('text')
+})
+
+it('refuses a message with non-string text', () => {
+  const msg = Object.assign(message(), { text: 123 })
+  expect(() => normalize('console', msg)).toThrow('text')
+})
+
+it('accepts an empty string text, unlike conversationId and messageId', () => {
+  expect(() => normalize('console', message({ text: '' }))).not.toThrow()
+})
+
+it('refuses a message with undefined attachments', () => {
+  const msg = Object.assign(message(), { attachments: undefined })
+  expect(() => normalize('console', msg)).toThrow('attachments')
+})
+
+it('refuses a message with non-array attachments', () => {
+  const msg = Object.assign(message(), { attachments: 'nope' })
+  expect(() => normalize('console', msg)).toThrow('attachments')
+})
