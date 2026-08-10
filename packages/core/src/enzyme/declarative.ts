@@ -33,13 +33,21 @@ export function loadDeclarative(
     const issue = parsed.error.issues[0]
     throw new Error(`${DECLARATIVE_ENTRY} is invalid at '${issue?.path.join('.') ?? ''}': ${issue?.message ?? ''}`)
   }
-  const responses = parsed.data.responses
+  // Null-prototype: a command named 'constructor', 'toString' or similar must not
+  // resolve through Object.prototype instead of failing the checks below.
+  const responses: Record<string, string> = Object.assign(
+    Object.create(null) as Record<string, string>,
+    parsed.data.responses,
+  )
 
   const undeclared = Object.keys(responses).filter((c) => !declaredCommands.includes(c))
   if (undeclared.length > 0) {
     throw new Error(`${DECLARATIVE_ENTRY} answers undeclared commands: ${undeclared.join(', ')}`)
   }
-  const unanswered = declaredCommands.filter((c) => responses[c] === undefined)
+  // Object.hasOwn, not `responses[c] !== undefined`: the latter walks the prototype
+  // chain, so a command named 'constructor' would read Object's own constructor
+  // function and pass this check as if it had been answered.
+  const unanswered = declaredCommands.filter((c) => !Object.hasOwn(responses, c))
   if (unanswered.length > 0) {
     throw new Error(`${DECLARATIVE_ENTRY} has no response for: ${unanswered.join(', ')}`)
   }
