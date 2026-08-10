@@ -1,0 +1,52 @@
+name: publish
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  # Required for OIDC. Publishing fails without it.
+  id-token: write
+
+jobs:
+  publish:
+    # Releases are tagged `@scope/name@version`. Any other release in this repo is
+    # not a package publication and must not reach npm.
+    if: startsWith(github.event.release.tag_name, '@mycelo/')
+    runs-on: ubuntu-latest    # cloud-hosted only; trusted publishing rejects self-hosted
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - run: npm ci
+      - run: npm run ci
+
+      # The tag decides what ships. Publishing whatever package.json happens to hold
+      # would ship the wrong version, or re-publish an existing one, on a mis-cut release.
+      - name: Resolve the package from the tag
+        id: target
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          name="${TAG%@*}"
+          version="${TAG##*@}"
+          actual="$(npm pkg get version --workspace "$name" \
+            | node -pe "Object.values(JSON.parse(require('fs').readFileSync(0,'utf8')))[0]")"
+          if [ "$actual" != "$version" ]; then
+            echo "::error::tag says $version, $name declares $actual"
+            exit 1
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      # --provenance attaches a signed attestation linking the tarball to this commit
+      # and workflow, which is what makes its origin verifiable by a consumer.
+      - name: Publish
+        env:
+          NAME: ${{ steps.target.outputs.name }}
+        run: npm publish --workspace "$NAME" --provenance
