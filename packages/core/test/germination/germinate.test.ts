@@ -2,8 +2,21 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'vitest'
+import type { Logger } from '@mycelo/septum'
 import { germinate } from '../../src/germination/germinate.js'
+import { CollisionError } from '../../src/germination/registry.js'
 import { createLogger } from '../../src/support/logger.js'
+
+/** Records every warn() call instead of printing it, so a test can inspect them. */
+function spyLogger(): { logger: Logger; warnings: string[] } {
+  const warnings: string[] = []
+  const logger: Logger = {
+    debug() {}, info() {}, error() {},
+    warn: (m) => { warnings.push(m) },
+    child: () => logger,
+  }
+  return { logger, warnings }
+}
 
 let dir: string
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'mycelo-germ-')) })
@@ -46,4 +59,44 @@ it('keeps germinating after one spore fails', async () => {
   const registry = await germinate(dir, createLogger())
   expect(registry.enzymes.map((e) => e.name)).toEqual(['ping'])
   expect(registry.dormant).toHaveLength(1)
+})
+
+it('propagates a command collision instead of swallowing it into a dormancy entry', async () => {
+  // germinate() catches per-spore exceptions into `dormant`; a collision must escape
+  // that net rather than being absorbed as if 'b' had merely failed to load (exit
+  // criterion 4 — the core cannot know what it would be authorizing otherwise).
+  spore('a', {
+    'spore.yaml': 'kind: enzyme\nname: a\nseptum: "^1.0"\ncommands:\n  - name: status\n    description: x\n',
+    'enzyme.yaml': 'responses:\n  status: from-a\n',
+  })
+  spore('b', {
+    'spore.yaml': 'kind: enzyme\nname: b\nseptum: "^1.0"\ncommands:\n  - name: status\n    description: x\n',
+    'enzyme.yaml': 'responses:\n  status: from-b\n',
+  })
+  try {
+    await germinate(dir, createLogger())
+    expect.unreachable()
+  } catch (e) {
+    expect(e).toBeInstanceOf(CollisionError)
+    const error = e as CollisionError
+    expect(error.plugins).toEqual(['a', 'b'])
+    expect(error.message).toContain('a')
+    expect(error.message).toContain('b')
+  }
+})
+
+it('warns naming the resolved path when the spores directory does not exist', async () => {
+  const missing = join(dir, 'does-not-exist')
+  const { logger, warnings } = spyLogger()
+  const registry = await germinate(missing, logger)
+  expect(registry.hyphae).toEqual([])
+  expect(warnings.some((w) => w.includes(missing))).toBe(true)
+})
+
+it('warns when germination produces zero spores, even though the directory exists', async () => {
+  const { logger, warnings } = spyLogger()
+  const registry = await germinate(dir, logger)
+  expect(registry.hyphae).toEqual([])
+  expect(registry.enzymes).toEqual([])
+  expect(warnings.some((w) => w.includes('zero spores'))).toBe(true)
 })

@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import type { Enzyme, Hypha, Logger } from '@mycelo/septum'
 import { discover } from './discover.js'
 import { loadModule } from './load.js'
@@ -30,6 +31,14 @@ function shapeError(instance: unknown, kind: 'hypha' | 'enzyme'): string | null 
  * command collision halts the whole phase (spec §8).
  */
 export async function germinate(sporesDir: string, logger: Logger): Promise<Registry> {
+  // A missing directory and a missing config file both resolve quietly to defaults
+  // (spec-compliant on their own), but their combination — run from the wrong cwd —
+  // produced "germinated 0 spores" and exit 0 with no word said. Not a crash, but not
+  // legible either.
+  if (!existsSync(sporesDir)) {
+    logger.warn(`spores directory does not exist: '${sporesDir}' — nothing will germinate`)
+  }
+
   const hyphae: GerminatedHypha[] = []
   const enzymes: GerminatedEnzyme[] = []
   const dormant: Dormant[] = []
@@ -70,5 +79,8 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
   }
 
   for (const d of dormant) logger.warn(`spore '${d.name}' is dormant`, { reason: d.reason })
+  if (hyphae.length === 0 && enzymes.length === 0) {
+    logger.warn('germination produced zero spores: no channel and no command will ever answer')
+  }
   return { hyphae, enzymes, dormant, routes: buildRoutes(enzymes) }
 }
