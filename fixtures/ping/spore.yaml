@@ -1,0 +1,7 @@
+kind: enzyme
+name: ping
+septum: "^1.0"
+description: Answers pong. Test fixture, never distributed.
+commands:
+  - name: ping
+    description: Health check
