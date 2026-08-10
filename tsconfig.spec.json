@@ -8,8 +8,9 @@
   },
   "include": [
     "packages/*/src/**/*",
-    "packages/*/conformance/**/*",
+    "packages/*/test/**/*",
     "fixtures/*/src/**/*",
+    "fixtures/*/test/**/*",
     "vitest.config.ts"
   ]
 }

@@ -1,16 +1,10 @@
 import { z } from 'zod'
 
+import { CHANNEL_CAPABILITIES } from './capabilities.js'
+
 /** Plugin kinds. Not an enum: Node's type-stripping cannot handle enums. */
 export const SPORE_KINDS = ['hypha', 'rhiza', 'enzyme', 'inhibitor'] as const
 export type SporeKind = (typeof SPORE_KINDS)[number]
-
-export const CHANNEL_CAPABILITIES = [
-  'attachments',
-  'reactions',
-  'threads',
-  'group_membership',
-] as const
-export type ChannelCapability = (typeof CHANNEL_CAPABILITIES)[number]
 
 /** Plugin and command names: lowercase, digits, dashes. Used in authorization identifiers. */
 const nameSchema = z

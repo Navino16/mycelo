@@ -3,3 +3,7 @@ dist/
 *.tsbuildinfo
 data/
 .env
+
+# A project-level .npmrc is how tokens get committed by accident.
+# Credentials belong in ~/.npmrc, outside every repository.
+.npmrc
