@@ -1,4 +1,7 @@
 {
   "files": [],
-  "references": [{ "path": "./packages/septum" }]
+  "references": [
+    { "path": "./packages/septum" },
+    { "path": "./packages/core" }
+  ]
 }

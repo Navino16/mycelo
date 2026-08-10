@@ -15,7 +15,8 @@
     "typecheck": "tsc -b && tsc -p tsconfig.spec.json",
     "build": "tsc -b",
     "lint": "eslint .",
-    "ci": "npm run lint && npm run typecheck && npm test"
+    "ci": "npm run lint && npm run typecheck && npm test",
+    "start": "npm run build --workspace @mycelo/core && node packages/core/dist/index.js"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
