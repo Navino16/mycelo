@@ -26,15 +26,14 @@ const goodHarness: HyphaHarness = {
   },
   module: {
     configSchema: config,
-    create: () =>
-      ({
-        async start() {},
-        async stop() {},
-        async send() {},
-        async listGroupMembers() {
-          return []
-        },
-      }) as never,
+    create: () => ({
+      async start() {},
+      async stop() {},
+      async send() {},
+      async listGroupMembers() {
+        return []
+      },
+    }),
   },
   validConfig: { account: '+33600000000' },
   invalidConfig: { account: 42 },
@@ -59,7 +58,7 @@ describe('hypha conformance checks', () => {
       ...goodHarness,
       module: {
         configSchema: config,
-        create: () => ({ async start() {}, async stop() {}, async send() {} }) as never,
+        create: () => ({ async start() {}, async stop() {}, async send() {} }),
       },
     })
     expect(failures.join(' ')).toContain('listGroupMembers')
@@ -68,7 +67,7 @@ describe('hypha conformance checks', () => {
   it('catches a config schema that accepts invalid config', async () => {
     const failures = await hyphaChecks({
       ...goodHarness,
-      module: { configSchema: z.any(), create: goodHarness.module.create },
+      module: { configSchema: z.any(), create: () => goodHarness.module.create() },
     })
     expect(failures.join(' ')).toContain('invalid config')
   })
