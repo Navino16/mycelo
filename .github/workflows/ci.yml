@@ -1,22 +1,17 @@
 name: ci
 
 on:
-  # Deliberately NOT feature/**. Triggering on both a feature push and its pull
-  # request produces two runs on the same commit, and the cancelled one shows on
-  # the PR as a failed check — GitHub aggregates checks from every event.
-  #
-  # What guarantees CI on a phase branch instead is the convention: open the draft
-  # pull request with the phase's first commit, not at the end. Draft does not
-  # suppress pull_request runs.
+  # Deliberately NOT feature/**: a feature push and its pull request would produce
+  # two runs on the same commit, and the cancelled one shows on the PR as a failed
+  # check. CI on a phase branch comes from opening the draft PR with the phase's
+  # first commit instead — draft does not suppress pull_request runs.
   push:
     branches: [main, develop]
   pull_request:
-  # Lets a run be triggered by hand from the Actions tab, which is the only way
-  # to re-run a check without pushing an empty commit.
+  # Manual re-run from the Actions tab, without pushing an empty commit.
   workflow_dispatch:
 
-# Only contents: read is needed. Declared explicitly rather than inheriting the
-# repository default, which is broader.
+# Narrower than the repository default, which this does not inherit.
 permissions:
   contents: read
 
@@ -34,18 +29,16 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          # Read from .nvmrc so the pinned version lives in one place and cannot
-          # drift from what engines.node requires.
+          # The pinned version lives in .nvmrc alone, so it cannot drift.
           node-version-file: .nvmrc
           cache: npm
 
-      # `npm ci` rather than `npm install`: it fails when the lockfile disagrees
-      # with package.json, which is exactly what CI should catch.
+      # `npm ci`, not `npm install`: it fails when the lockfile disagrees with
+      # package.json.
       - run: npm ci
 
-      # The three checks are separate steps so the Actions UI names which one
-      # failed. They are the same commands `npm run ci` chains locally — a CI
-      # running something different from the developer is a CI that lies.
+      # Separate steps so the Actions UI names the one that failed. Same commands
+      # `npm run ci` chains locally.
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
