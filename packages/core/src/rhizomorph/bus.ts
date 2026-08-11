@@ -116,8 +116,19 @@ export function createBus({ registry, prefix, logger, onUnrouted }: BusOptions):
           await send(message.channel, message.conversationId, { text: spec.respond })
           return
         }
+        const instance = route.enzyme.instance
+        if (instance === null) {
+          // A `code:` command with no loaded instance is a conformance gap the kit
+          // should have caught before germination; staying silent would hide it from
+          // both the user and the operator instead of surfacing it like a thrown handler.
+          logger.error(`enzyme '${route.plugin}' has no handler for '${route.qualified}'`, {})
+          await send(message.channel, message.conversationId, {
+            text: `command '${parsed.command}' failed`,
+          })
+          return
+        }
         try {
-          await route.enzyme.instance?.handle(invocation, contextFor(message))
+          await instance.handle(invocation, contextFor(message))
         } catch (e) {
           // A handler that throws is contained: clean error on the channel, trace logged.
           logger.error(`enzyme '${route.plugin}' threw handling '${route.qualified}'`, {

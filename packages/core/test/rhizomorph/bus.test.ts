@@ -55,6 +55,32 @@ it('answers a text command without touching the module', async () => {
   expect(sent).toEqual([{ text: 'Radarr http://radarr:7878' }])
 })
 
+it('never calls handle() when the command answers with respond, even with an instance present', async () => {
+  let calls = 0
+  const { registry, sent } = setup(
+    { async handle() { calls++ } },
+    [{ name: 'links', description: 'Service URLs', respond: 'Radarr http://radarr:7878' }],
+  )
+  const bus = createBus({ registry, prefix: '/', logger: createLogger() })
+  await bus.deliver('console', message('/links'))
+  expect(sent).toEqual([{ text: 'Radarr http://radarr:7878' }])
+  expect(calls).toBe(0)
+})
+
+it('logs and reports failure, rather than staying silent, when a code command has no loaded instance', async () => {
+  const { registry, sent } = setup(null, [{ name: 'boom', description: 'x', code: 'boom' }])
+  const errors: string[] = []
+  const logger: Logger = {
+    debug() {}, info() {}, warn() {},
+    error: (m) => { errors.push(m) },
+    child: () => logger,
+  }
+  const bus = createBus({ registry, prefix: '/', logger })
+  await bus.deliver('console', message('/boom'))
+  expect(sent).toEqual([{ text: "command 'boom' failed" }])
+  expect(errors[0]).toContain('boom')
+})
+
 it('reports an unknown command without invoking anything', async () => {
   const handle = vi.fn()
   const { registry } = setup({ handle })

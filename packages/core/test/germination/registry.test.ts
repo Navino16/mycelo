@@ -35,6 +35,11 @@ it('names both plugins in the collision', () => {
   }
 })
 
+it('pins each route to its own command spec, not the enzyme\'s first one', () => {
+  const routes = buildRoutes([enzyme('radarr', ['a', 'b'])])
+  expect(routes.get('b')?.spec.name).toBe('b')
+})
+
 it('distinguishes a plugin from colliding with itself', () => {
   try {
     buildRoutes([enzyme('a', ['status', 'status'])])

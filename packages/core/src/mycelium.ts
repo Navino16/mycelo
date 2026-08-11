@@ -33,7 +33,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
   // file only ever starts things.
   const startedEnzymes: GerminatedEnzyme[] = []
   for (const enzyme of registry.enzymes) {
-    // A text-only enzyme has no instance to start (Task 2 of the routing plan).
+    // A text-only enzyme has no instance to start (phase 2).
     if (enzyme.instance === null || enzyme.instance.start === undefined) {
       startedEnzymes.push(enzyme)
       continue

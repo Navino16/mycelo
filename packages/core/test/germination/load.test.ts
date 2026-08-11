@@ -142,6 +142,13 @@ it('still refuses a spore with a code command and no entry point', async () => {
   await expect(loadModule(await read('needy'))).rejects.toThrow('no entry point')
 })
 
+it('refuses a spore mixing respond and code commands with no entry point', async () => {
+  spore('mixed', {
+    'spore.yaml': 'kind: enzyme\nname: mixed\nseptum: "^1.0"\ncommands:\n  - name: hi\n    description: Greet\n    respond: hello\n  - name: bye\n    description: Farewell\n    code: handleBye\n',
+  })
+  await expect(loadModule(await read('mixed'))).rejects.toThrow('no entry point')
+})
+
 it('loads an entry point that is present even when no command needs it', async () => {
   spore('extra', {
     'spore.yaml': 'kind: enzyme\nname: extra\nseptum: "^1.0"\ncommands:\n  - name: hi\n    description: Greet\n    respond: hello\n',
