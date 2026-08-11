@@ -45,9 +45,6 @@ commands:
       - name: title
         description: Movie title
         required: true
-requires:
-  - rhiza: radarr
-    scopes: [movies:write]
 ```
 
 A command carries exactly one of `respond` or `code`, never both and never neither:
@@ -78,6 +75,10 @@ requires:
 
 `parseManifest` validates the parsed YAML and throws a `ManifestError` naming the offending
 field.
+
+On the current runtime, declaring `requires` at all keeps a spore dormant: resolving it
+(anastomoses) is a later phase, not yet implemented. A spore that needs a rhiza today
+should omit `requires` and check for it at runtime instead, through `ctx.has()`.
 
 ### `src/index.ts`
 
