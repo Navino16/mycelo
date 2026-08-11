@@ -47,10 +47,7 @@ const codeCommandSchema = z.object({
   args: z.array(argSpecSchema).optional(),
 })
 
-const commandSpecSchema = z.union(
-  [respondCommandSchema, codeCommandSchema],
-  { error: 'a command must declare exactly one of respond: or code:' },
-)
+const commandSpecSchema = z.union([respondCommandSchema, codeCommandSchema])
 export type CommandSpec = z.infer<typeof commandSpecSchema>
 
 const singleRequirementSchema = z.object({
@@ -121,6 +118,15 @@ export class ManifestError extends Error {
   }
 }
 
+/** True when a raw command object carries both `respond` and `code`, or neither. */
+function violatesExclusivity(command: unknown): boolean {
+  if (typeof command !== 'object' || command === null) return false
+  const c = command as Record<string, unknown>
+  const hasRespond = Object.hasOwn(c, 'respond') && c['respond'] !== undefined
+  const hasCode = Object.hasOwn(c, 'code') && c['code'] !== undefined
+  return hasRespond === hasCode
+}
+
 /**
  * Validate an unknown value as a spore manifest.
  * Throws ManifestError naming the first offending path, so germination
@@ -132,5 +138,17 @@ export function parseManifest(input: unknown): Manifest {
 
   const issue = result.error.issues[0]
   const path = issue?.path.length ? issue.path.join('.') : 'kind'
+
+  // The command union fails as a whole (no field-level issue) whenever a command
+  // is not an object at all, or carries both/neither of respond and code. Only the
+  // latter two are the exclusivity violation; the rest keep Zod's own message.
+  if (issue && issue.path.length === 2 && issue.path[0] === 'commands' && typeof input === 'object' && input !== null) {
+    const commands = (input as Record<string, unknown>)['commands']
+    const index = issue.path[1]
+    if (Array.isArray(commands) && typeof index === 'number' && violatesExclusivity(commands[index])) {
+      throw new ManifestError('a command must declare exactly one of respond: or code:', path)
+    }
+  }
+
   throw new ManifestError(issue?.message ?? 'invalid manifest', path)
 }

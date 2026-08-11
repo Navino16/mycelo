@@ -141,3 +141,25 @@ it('refuses args on a respond: command, since a plain string has no interpolatio
     expect((e as ManifestError).path).toBe('commands.0')
   }
 })
+
+it('rejects a respond that is not a string without blaming exclusivity', () => {
+  try {
+    parseManifest(enzymeManifest({ respond: 42 }))
+    throw new Error('should have thrown')
+  } catch (e) {
+    expect(e).toBeInstanceOf(ManifestError)
+    expect((e as ManifestError).message).not.toBe('a command must declare exactly one of respond: or code:')
+    expect((e as ManifestError).path).toBe('commands.0')
+  }
+})
+
+it('rejects a malformed args entry without blaming exclusivity', () => {
+  try {
+    parseManifest(enzymeManifest({ code: 'handleMutation', args: [{ name: 'who' }] }))
+    throw new Error('should have thrown')
+  } catch (e) {
+    expect(e).toBeInstanceOf(ManifestError)
+    expect((e as ManifestError).message).not.toBe('a command must declare exactly one of respond: or code:')
+    expect((e as ManifestError).path).toBe('commands.0')
+  }
+})
