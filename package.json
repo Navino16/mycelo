@@ -10,6 +10,7 @@
     "fixtures/*"
   ],
   "scripts": {
+    "pretest": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b && tsc -p tsconfig.spec.json",

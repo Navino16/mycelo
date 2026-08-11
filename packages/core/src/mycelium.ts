@@ -25,10 +25,10 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
   const dormant: Dormant[] = [...registry.dormant]
 
   // septum's own conformance kit both requires start()/stop() as a pair and calls
-  // start() before handle() — but nothing in the runtime called it until now, so an
-  // enzyme that memoises state in start() reached its first command with that state
-  // never set. Runs before any hypha starts emitting, so nothing can reach handle()
-  // while an enzyme's start() is still in flight. Symmetric stop() — for either kind
+  // start() before any handler — but nothing in the runtime called it until now, so
+  // an enzyme that memoises state in start() reached its first command with that
+  // state never set. Runs before any hypha starts emitting, so nothing can reach a
+  // handler while an enzyme's start() is still in flight. Symmetric stop() — for either kind
   // — and signal handling are deliberately deferred to phase 6 (supervision): this
   // file only ever starts things.
   const startedEnzymes: GerminatedEnzyme[] = []
