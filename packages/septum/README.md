@@ -79,8 +79,10 @@ import type { EnzymeModule } from '@mycelo/septum'
 
 export default {
   create: () => ({
-    async handle(invocation, ctx) {
-      await ctx.reply({ text: `hello, ${ctx.principal.displayName ?? 'stranger'}` })
+    handlers: {
+      async hello(invocation, ctx) {
+        await ctx.reply({ text: `hello, ${ctx.principal.displayName ?? 'stranger'}` })
+      },
     },
   }),
 } satisfies EnzymeModule

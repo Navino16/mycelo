@@ -100,7 +100,7 @@ const goodEnzyme: EnzymeHarness = {
     septum: '^1.0',
     commands: [{ name: 'links', description: 'Show links', code: 'links' }],
   },
-  module: { create: () => ({ async handle() {} }) },
+  module: { create: () => ({ handlers: { links: async () => {} } }) },
   context: enzymeContext,
 }
 
@@ -114,8 +114,10 @@ describe('enzyme conformance checks', () => {
       ...goodEnzyme,
       module: {
         create: () => ({
-          async handle() {
-            throw new Error('boom')
+          handlers: {
+            async links() {
+              throw new Error('boom')
+            },
           },
         }),
       },
@@ -126,7 +128,7 @@ describe('enzyme conformance checks', () => {
   it('catches start() without stop()', async () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
-      module: { create: () => ({ async handle() {}, async start() {} }) },
+      module: { create: () => ({ handlers: { links: async () => {} }, async start() {} }) },
     })
     expect(failures.join(' ')).toContain('both present or both absent')
   })
@@ -151,8 +153,10 @@ describe('enzyme conformance checks', () => {
       },
       module: {
         create: () => ({
-          async handle(inv) {
-            if (inv.args['title'] === undefined) throw new Error('missing required arg title')
+          handlers: {
+            async add(inv) {
+              if (inv.args['title'] === undefined) throw new Error('missing required arg title')
+            },
           },
         }),
       },
@@ -170,6 +174,70 @@ describe('enzyme conformance checks', () => {
       },
     })
     expect(failures.join(' ')).toContain('create() threw')
+  })
+
+  it('passes an enzyme whose handlers cover every code command', async () => {
+    expect(await enzymeChecks({
+      name: 'shared',
+      manifest: {
+        kind: 'enzyme', name: 'shared', septum: '^0.2',
+        commands: [
+          { name: 'links', description: 'Service URLs', respond: 'Radarr' },
+          { name: 'add', description: 'Add', code: 'mutate' },
+        ],
+      },
+      module: { create: () => ({ handlers: { mutate: async () => {} } }) },
+      context: enzymeContext,
+    })).toEqual([])
+  })
+
+  it('catches a code command with no handler', async () => {
+    const failures = await enzymeChecks({
+      name: 'broken',
+      manifest: {
+        kind: 'enzyme', name: 'broken', septum: '^0.2',
+        commands: [{ name: 'add', description: 'Add', code: 'mutate' }],
+      },
+      module: { create: () => ({ handlers: {} }) },
+      context: enzymeContext,
+    })
+    expect(failures.join(' ')).toContain('mutate')
+  })
+
+  it('certifies a plugin that ships no module at all', async () => {
+    expect(await enzymeChecks({
+      name: 'textonly',
+      manifest: {
+        kind: 'enzyme', name: 'textonly', septum: '^0.2',
+        commands: [{ name: 'links', description: 'Service URLs', respond: 'Radarr' }],
+      },
+      context: enzymeContext,
+    })).toEqual([])
+  })
+
+  it('refuses a code command with no module at all, naming the missing handler', async () => {
+    const failures = await enzymeChecks({
+      name: 'needy',
+      manifest: {
+        kind: 'enzyme', name: 'needy', septum: '^0.2',
+        commands: [{ name: 'add', description: 'Add', code: 'mutate' }],
+      },
+      context: enzymeContext,
+    })
+    expect(failures.join(' ')).toContain('mutate')
+  })
+
+  it('does not certify a handler resolved through Object.prototype', async () => {
+    const failures = await enzymeChecks({
+      name: 'sneaky',
+      manifest: {
+        kind: 'enzyme', name: 'sneaky', septum: '^0.2',
+        commands: [{ name: 'go', description: 'Go', code: 'constructor' }],
+      },
+      module: { create: () => ({ handlers: {} }) },
+      context: enzymeContext,
+    })
+    expect(failures.join(' ')).toContain('constructor')
   })
 })
 
@@ -395,14 +463,16 @@ describe('regressions', () => {
     }
   })
 
-  it('calls an enzyme start() before handle()', async () => {
+  it('calls an enzyme start() before its handlers', async () => {
     let started = false
     const failures = await enzymeChecks({
       ...goodEnzyme,
       module: {
         create: () => ({
-          async handle() {
-            if (!started) throw new Error('handle() ran before start()')
+          handlers: {
+            async links() {
+              if (!started) throw new Error('handler ran before start()')
+            },
           },
           async start() {
             started = true
@@ -417,7 +487,7 @@ describe('regressions', () => {
   it('catches a start that is present but not callable', async () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
-      module: { create: () => ({ async handle() {}, start: true, stop: true }) as never },
+      module: { create: () => ({ handlers: { links: async () => {} }, start: true, stop: true }) as never },
     })
     expect(failures.join(' ')).toContain('not callable')
   })

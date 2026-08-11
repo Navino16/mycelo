@@ -127,8 +127,20 @@ export function createBus({ registry, prefix, logger, onUnrouted }: BusOptions):
           })
           return
         }
+        // Object.hasOwn, never a plain index: a plugin-supplied handlers object walks
+        // Object.prototype otherwise, and `code: constructor` would resolve to a native
+        // function instead of the dormancy germination already refused this shape into.
+        const handler = Object.hasOwn(instance.handlers, spec.code) ? instance.handlers[spec.code] : undefined
+        if (handler === undefined) {
+          // Germination refuses this, so reaching it means the registry was built elsewhere.
+          logger.error(`enzyme '${route.plugin}' has no handler '${spec.code}'`)
+          await send(message.channel, message.conversationId, {
+            text: `command '${parsed.command}' failed`,
+          })
+          return
+        }
         try {
-          await instance.handle(invocation, contextFor(message))
+          await handler(invocation, contextFor(message))
         } catch (e) {
           // A handler that throws is contained: clean error on the channel, trace logged.
           logger.error(`enzyme '${route.plugin}' threw handling '${route.qualified}'`, {

@@ -148,3 +148,65 @@ it('sends a hypha dormant when it has listGroupMembers() but does not declare gr
   expect(registry.hyphae).toEqual([])
   expect(registry.dormant[0]?.reason).toContain('does not declare group_membership')
 })
+
+it('refuses an enzyme whose handlers lack a name the manifest references', async () => {
+  spore('broken', {
+    'spore.yaml': 'kind: enzyme\nname: broken\nseptum: "^1.0"\ncommands:\n  - name: go\n    description: Go\n    code: handleGo\n',
+    'src/index.ts': 'export default { create: () => ({ handlers: {} }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.enzymes).toEqual([])
+  expect(registry.dormant[0]?.reason).toContain('handleGo')
+})
+
+it('names a missing handler once even when two commands share it', async () => {
+  spore('shared', {
+    'spore.yaml': 'kind: enzyme\nname: shared\nseptum: "^1.0"\ncommands:\n  - name: add\n    description: Add\n    code: mutate\n  - name: remove\n    description: Remove\n    code: mutate\n',
+    'src/index.ts': 'export default { create: () => ({ handlers: {} }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.dormant[0]?.reason).toMatch(/mutate/)
+  expect(registry.dormant[0]?.reason.match(/mutate/g)).toHaveLength(1)
+})
+
+it('warns about a handler no command references, and still germinates', async () => {
+  spore('dead', {
+    'spore.yaml': 'kind: enzyme\nname: dead\nseptum: "^1.0"\ncommands:\n  - name: go\n    description: Go\n    code: handleGo\n',
+    'src/index.ts': 'export default { create: () => ({ handlers: { handleGo: async () => {}, leftover: async () => {} } }) }\n',
+  })
+  const warnings: string[] = []
+  const logger = createLogger()
+  const registry = await germinate(dir, { ...logger, warn: (m) => { warnings.push(m) } })
+  expect(registry.enzymes.map((e) => e.name)).toEqual(['dead'])
+  expect(warnings.join(' ')).toContain('leftover')
+})
+
+it('goes dormant on a command named "constructor" with no such handler, not Object.prototype.constructor', async () => {
+  spore('sneaky', {
+    'spore.yaml': 'kind: enzyme\nname: sneaky\nseptum: "^1.0"\ncommands:\n  - name: go\n    description: Go\n    code: constructor\n',
+    'src/index.ts': 'export default { create: () => ({ handlers: {} }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.enzymes).toEqual([])
+  expect(registry.dormant[0]?.reason).toContain('constructor')
+})
+
+it('goes dormant on a command named "toString" with no such handler, not Object.prototype.toString', async () => {
+  spore('sneaky2', {
+    'spore.yaml': 'kind: enzyme\nname: sneaky2\nseptum: "^1.0"\ncommands:\n  - name: go\n    description: Go\n    code: toString\n',
+    'src/index.ts': 'export default { create: () => ({ handlers: {} }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.enzymes).toEqual([])
+  expect(registry.dormant[0]?.reason).toContain('toString')
+})
+
+it('germinates when the handler is genuinely declared and named "constructor"', async () => {
+  spore('legit', {
+    'spore.yaml': 'kind: enzyme\nname: legit\nseptum: "^1.0"\ncommands:\n  - name: go\n    description: Go\n    code: constructor\n',
+    'src/index.ts': 'export default { create: () => ({ handlers: { constructor: async () => {} } }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.enzymes.map((e) => e.name)).toEqual(['legit'])
+  expect(registry.dormant).toEqual([])
+})

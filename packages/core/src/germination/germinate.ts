@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import type { Enzyme, Hypha, HyphaManifest, Logger } from '@mycelo/septum'
+import type { CommandSpec, Enzyme, Hypha, HyphaManifest, Logger } from '@mycelo/septum'
 import { discover } from './discover.js'
 import { loadModule } from './load.js'
 import { isFailure, readManifest } from './manifest.js'
@@ -8,7 +8,6 @@ import type { Dormant, GerminatedEnzyme, GerminatedHypha, Registry } from './reg
 
 const REQUIRED_METHODS = {
   hypha: ['start', 'stop', 'send'],
-  enzyme: ['handle'],
 } as const
 
 /**
@@ -16,7 +15,7 @@ const REQUIRED_METHODS = {
  * Without this the cast below would register an instance nothing has checked, and the
  * failure would surface on the first message instead of at germination.
  */
-function shapeError(instance: unknown, kind: 'hypha' | 'enzyme'): string | null {
+function shapeError(instance: unknown, kind: 'hypha'): string | null {
   if (typeof instance !== 'object' || instance === null) {
     return `create() returned ${String(instance)}, expected an object`
   }
@@ -24,6 +23,38 @@ function shapeError(instance: unknown, kind: 'hypha' | 'enzyme'): string | null 
     (m) => typeof (instance as Record<string, unknown>)[m] !== 'function',
   )
   return missing.length > 0 ? `create() returned no ${missing.join(', ')}` : null
+}
+
+/**
+ * Duck-typed, never instanceof: a spore is bundled with its own copy of everything.
+ * `handlers` is a plugin-supplied plain object, so every lookup uses
+ * Object.hasOwn — a command named `code: constructor` must not resolve through
+ * Object.prototype and pass as if a handler had genuinely been declared.
+ */
+function enzymeShapeError(instance: unknown, commands: readonly CommandSpec[]): string | null {
+  if (typeof instance !== 'object' || instance === null) {
+    return `create() returned ${String(instance)}, expected an object`
+  }
+  const handlers = (instance as { handlers?: unknown }).handlers
+  if (typeof handlers !== 'object' || handlers === null) {
+    return 'create() returned no handlers object'
+  }
+  const table = handlers as Record<string, unknown>
+  const missing = [
+    ...new Set(
+      commands
+        .filter((c) => c.respond === undefined)
+        .map((c) => c.code)
+        .filter((name) => !Object.hasOwn(table, name) || typeof table[name] !== 'function'),
+    ),
+  ]
+  return missing.length > 0 ? `handlers has no function for: ${missing.join(', ')}` : null
+}
+
+/** Dead code is not a broken plugin: warn and germinate (spec, "An unreferenced handler"). */
+function unreferencedHandlers(instance: Enzyme, commands: readonly CommandSpec[]): string[] {
+  const referenced = new Set(commands.filter((c) => c.respond === undefined).map((c) => c.code))
+  return Object.keys(instance.handlers).filter((name) => !referenced.has(name))
 }
 
 /**
@@ -88,16 +119,30 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
       let instance: unknown = null
       if (module !== null) {
         instance = module.create()
-        const problem = shapeError(instance, manifest.kind)
-        if (problem !== null) {
-          dormant.push({ name: manifest.name, reason: problem })
-          continue
-        }
         if (manifest.kind === 'hypha') {
+          const problem = shapeError(instance, manifest.kind)
+          if (problem !== null) {
+            dormant.push({ name: manifest.name, reason: problem })
+            continue
+          }
           const capProblem = capabilityShapeError(instance as Record<string, unknown>, manifest)
           if (capProblem !== null) {
             dormant.push({ name: manifest.name, reason: capProblem })
             continue
+          }
+        } else {
+          const problem = enzymeShapeError(instance, manifest.commands)
+          if (problem !== null) {
+            dormant.push({ name: manifest.name, reason: problem })
+            continue
+          }
+          const enzyme = instance as Enzyme
+          const unreferenced = unreferencedHandlers(enzyme, manifest.commands)
+          const handlerCount = Object.keys(enzyme.handlers).length
+          if (unreferenced.length > 0 && unreferenced.length === handlerCount) {
+            logger.warn(`spore '${manifest.name}' declares no handler any command references: the module is unreachable`)
+          } else if (unreferenced.length > 0) {
+            logger.warn(`spore '${manifest.name}' declares a handler no command references: ${unreferenced.join(', ')}`)
           }
         }
       }

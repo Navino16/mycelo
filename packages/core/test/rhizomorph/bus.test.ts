@@ -39,7 +39,7 @@ function message(text: string): IncomingMessage {
 
 it('routes a command to its enzyme and the reply back to the channel', async () => {
   const { registry, sent } = setup({
-    async handle(_inv, ctx) { await ctx.reply({ text: 'pong' }) },
+    handlers: { ping: async (_inv, ctx) => { await ctx.reply({ text: 'pong' }) } },
   })
   const bus = createBus({ registry, prefix: '/', logger: createLogger() })
   await bus.deliver('console', message('/ping'))
@@ -55,10 +55,10 @@ it('answers a text command without touching the module', async () => {
   expect(sent).toEqual([{ text: 'Radarr http://radarr:7878' }])
 })
 
-it('never calls handle() when the command answers with respond, even with an instance present', async () => {
+it('never calls a handler when the command answers with respond, even with an instance present', async () => {
   let calls = 0
   const { registry, sent } = setup(
-    { async handle() { calls++ } },
+    { handlers: { links: async () => { calls++ } } },
     [{ name: 'links', description: 'Service URLs', respond: 'Radarr http://radarr:7878' }],
   )
   const bus = createBus({ registry, prefix: '/', logger: createLogger() })
@@ -81,27 +81,37 @@ it('logs and reports failure, rather than staying silent, when a code command ha
   expect(errors[0]).toContain('boom')
 })
 
+it('reports failure rather than answering with Object.prototype.constructor when a handler named "constructor" is missing', async () => {
+  const { registry, sent } = setup(
+    { handlers: {} },
+    [{ name: 'boom', description: 'x', code: 'constructor' }],
+  )
+  const bus = createBus({ registry, prefix: '/', logger: createLogger() })
+  await bus.deliver('console', message('/boom'))
+  expect(sent).toEqual([{ text: "command 'boom' failed" }])
+})
+
 it('reports an unknown command without invoking anything', async () => {
-  const handle = vi.fn()
-  const { registry } = setup({ handle })
+  const ping = vi.fn()
+  const { registry } = setup({ handlers: { ping } })
   const onUnrouted = vi.fn(async () => {})
   const bus = createBus({ registry, prefix: '/', logger: createLogger(), onUnrouted })
   await bus.deliver('console', message('/nope'))
-  expect(handle).not.toHaveBeenCalled()
+  expect(ping).not.toHaveBeenCalled()
   expect(onUnrouted).toHaveBeenCalledWith(expect.anything(), 'nope')
 })
 
 it('ignores text carrying no command', async () => {
-  const handle = vi.fn()
-  const { registry } = setup({ handle })
+  const ping = vi.fn()
+  const { registry } = setup({ handlers: { ping } })
   const bus = createBus({ registry, prefix: '/', logger: createLogger() })
   await bus.deliver('console', message('just talking'))
-  expect(handle).not.toHaveBeenCalled()
+  expect(ping).not.toHaveBeenCalled()
 })
 
 it('contains a handler that throws and answers on the channel', async () => {
   const { registry, sent } = setup({
-    async handle() { throw new Error('boom') },
+    handlers: { ping: async () => { throw new Error('boom') } },
   })
   const bus = createBus({ registry, prefix: '/', logger: createLogger() })
   await bus.deliver('console', message('/ping'))
@@ -111,7 +121,7 @@ it('contains a handler that throws and answers on the channel', async () => {
 it('exposes the channel capabilities to the enzyme', async () => {
   let reported: readonly string[] = []
   const { registry } = setup({
-    async handle(_inv, ctx) { reported = ctx.capabilities.list() },
+    handlers: { ping: async (_inv, ctx) => { reported = ctx.capabilities.list() } },
   })
   const bus = createBus({ registry, prefix: '/', logger: createLogger() })
   await bus.deliver('console', message('/ping'))
@@ -121,8 +131,10 @@ it('exposes the channel capabilities to the enzyme', async () => {
 it('throws a message naming the phase for a facility that does not exist yet', async () => {
   let caught = ''
   const { registry } = setup({
-    async handle(_inv, ctx) {
-      try { ctx.rhiza('radarr') } catch (e) { caught = (e as Error).message }
+    handlers: {
+      ping: async (_inv, ctx) => {
+        try { ctx.rhiza('radarr') } catch (e) { caught = (e as Error).message }
+      },
     },
   })
   const bus = createBus({ registry, prefix: '/', logger: createLogger() })
@@ -133,8 +145,10 @@ it('throws a message naming the phase for a facility that does not exist yet', a
 it('throws a message naming the phase for ctx.on()', async () => {
   let caught = ''
   const { registry } = setup({
-    async handle(_inv, ctx) {
-      try { ctx.on('radarr', 'released', () => {}) } catch (e) { caught = (e as Error).message }
+    handlers: {
+      ping: async (_inv, ctx) => {
+        try { ctx.on('radarr', 'released', () => {}) } catch (e) { caught = (e as Error).message }
+      },
     },
   })
   const bus = createBus({ registry, prefix: '/', logger: createLogger() })
@@ -145,8 +159,10 @@ it('throws a message naming the phase for ctx.on()', async () => {
 it('throws a message naming the phase for ctx.principal', async () => {
   let caught = ''
   const { registry } = setup({
-    async handle(_inv, ctx) {
-      try { void ctx.principal } catch (e) { caught = (e as Error).message }
+    handlers: {
+      ping: async (_inv, ctx) => {
+        try { void ctx.principal } catch (e) { caught = (e as Error).message }
+      },
     },
   })
   const bus = createBus({ registry, prefix: '/', logger: createLogger() })
@@ -157,7 +173,7 @@ it('throws a message naming the phase for ctx.principal', async () => {
 it('never lets ctx.has() claim a dependency resolved: nothing has requires yet', async () => {
   let result = true
   const { registry } = setup({
-    async handle(_inv, ctx) { result = ctx.has('radarr') },
+    handlers: { ping: async (_inv, ctx) => { result = ctx.has('radarr') } },
   })
   const bus = createBus({ registry, prefix: '/', logger: createLogger() })
   await bus.deliver('console', message('/ping'))
@@ -165,16 +181,16 @@ it('never lets ctx.has() claim a dependency resolved: nothing has requires yet',
 })
 
 it('contains a malformed message instead of rejecting the fire-and-forget deliver()', async () => {
-  const handle = vi.fn()
-  const { registry } = setup({ handle })
+  const ping = vi.fn()
+  const { registry } = setup({ handlers: { ping } })
   const bus = createBus({ registry, prefix: '/', logger: createLogger() })
   const malformed = { ...message('/ping'), conversationId: '' }
   await expect(bus.deliver('console', malformed)).resolves.toBeUndefined()
-  expect(handle).not.toHaveBeenCalled()
+  expect(ping).not.toHaveBeenCalled()
 })
 
 it('contains an onUnrouted callback that itself throws', async () => {
-  const { registry } = setup({ async handle() {} })
+  const { registry } = setup({ handlers: { ping: async () => {} } })
   const onUnrouted = vi.fn(async () => { throw new Error('onUnrouted exploded') })
   const bus = createBus({ registry, prefix: '/', logger: createLogger(), onUnrouted })
   await expect(bus.deliver('console', message('/nope'))).resolves.toBeUndefined()
@@ -197,7 +213,7 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
       kind: 'enzyme', name: 'ping', septum: '^1.0',
       commands: [{ name: 'ping', description: 'Health check', code: 'ping' }],
     },
-    instance: { async handle() { throw new Error('boom') } },
+    instance: { handlers: { ping: async () => { throw new Error('boom') } } },
   }]
   const registry: Registry = { hyphae, enzymes, dormant: [], routes: buildRoutes(enzymes) }
   // A bespoke logger, not createLogger(): distinguishes "contained by the specific
@@ -217,7 +233,7 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
 
 it('rejects an OutgoingContent with nothing set, before handing it to the hypha', async () => {
   const { registry, sent } = setup({
-    async handle(_inv, ctx) { await ctx.reply({}) },
+    handlers: { ping: async (_inv, ctx) => { await ctx.reply({}) } },
   })
   const errors: string[] = []
   const logger: Logger = {

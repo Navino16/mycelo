@@ -86,21 +86,23 @@ const upcomingModule: EnzymeModule = {
         // @ts-expect-error capabilities are relative to a conversation
         void ctx.capabilities
       },
-      async handle(inv, ctx) {
-        // Adapting to a channel that cannot take attachments (spec §3.2).
-        if (!ctx.capabilities.has('attachments')) {
-          await ctx.reply({ text: 'text only' })
-          return
-        }
-        const radarr = ctx.rhiza<RadarrApi>('radarr')
-        const films = await radarr.upcoming(Number(inv.args['days'] ?? '7'))
-        await ctx.reply({ text: films.map((f) => f.title).join(', ') })
-        // Branching by hand inside an any_of group (spec §6).
-        if (ctx.has('plex')) {
-          await ctx.push({ channel: 'signal', conversationId: 'g:1' }, { text: 'also on plex' })
-        }
-        void ctx.principal.roles.length
-        void inv.rest
+      handlers: {
+        async upcoming(inv, ctx) {
+          // Adapting to a channel that cannot take attachments (spec §3.2).
+          if (!ctx.capabilities.has('attachments')) {
+            await ctx.reply({ text: 'text only' })
+            return
+          }
+          const radarr = ctx.rhiza<RadarrApi>('radarr')
+          const films = await radarr.upcoming(Number(inv.args['days'] ?? '7'))
+          await ctx.reply({ text: films.map((f) => f.title).join(', ') })
+          // Branching by hand inside an any_of group (spec §6).
+          if (ctx.has('plex')) {
+            await ctx.push({ channel: 'signal', conversationId: 'g:1' }, { text: 'also on plex' })
+          }
+          void ctx.principal.roles.length
+          void inv.rest
+        },
       },
     }
   },

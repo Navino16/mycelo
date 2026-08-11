@@ -3,7 +3,7 @@ import type { Enzyme } from '@mycelo/septum'
 import { buildRoutes, CollisionError } from '../../src/germination/registry.js'
 import type { GerminatedEnzyme } from '../../src/germination/registry.js'
 
-const instance: Enzyme = { async handle() {} }
+const instance: Enzyme = { handlers: {} }
 
 function enzyme(name: string, commands: string[]): GerminatedEnzyme {
   return {
