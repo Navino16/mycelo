@@ -106,15 +106,15 @@ export function createBus({ registry, prefix, logger, onUnrouted }: BusOptions):
           return
         }
         const spec = route.spec
+        if (spec.respond !== undefined) {
+          await send(message.channel, message.conversationId, { text: spec.respond })
+          return
+        }
         const invocation: Invocation = {
           command: parsed.command,
           args: bindArgs(parsed.rest, spec.args ?? []),
           rest: parsed.rest,
           message,
-        }
-        if (spec.respond !== undefined) {
-          await send(message.channel, message.conversationId, { text: spec.respond })
-          return
         }
         const instance = route.enzyme.instance
         if (instance === null) {

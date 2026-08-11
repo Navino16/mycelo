@@ -111,10 +111,33 @@ it('accepts a command answered by code, including a camelCase handler name', () 
 })
 
 it('refuses a command carrying both respond and code', () => {
-  expect(() => parseManifest(enzymeManifest({ respond: 'hi', code: 'handleHi' })))
-    .toThrow(ManifestError)
+  try {
+    parseManifest(enzymeManifest({ respond: 'hi', code: 'handleHi' }))
+    throw new Error('should have thrown')
+  } catch (e) {
+    expect(e).toBeInstanceOf(ManifestError)
+    expect((e as ManifestError).message).toBe('a command must declare exactly one of respond: or code:')
+    expect((e as ManifestError).path).toBe('commands.0')
+  }
 })
 
 it('refuses a command carrying neither', () => {
-  expect(() => parseManifest(enzymeManifest({}))).toThrow(ManifestError)
+  try {
+    parseManifest(enzymeManifest({}))
+    throw new Error('should have thrown')
+  } catch (e) {
+    expect(e).toBeInstanceOf(ManifestError)
+    expect((e as ManifestError).message).toBe('a command must declare exactly one of respond: or code:')
+    expect((e as ManifestError).path).toBe('commands.0')
+  }
+})
+
+it('refuses args on a respond: command, since a plain string has no interpolation', () => {
+  try {
+    parseManifest(enzymeManifest({ respond: 'hi', args: [{ name: 'who', description: 'x' }] }))
+    throw new Error('should have thrown')
+  } catch (e) {
+    expect(e).toBeInstanceOf(ManifestError)
+    expect((e as ManifestError).path).toBe('commands.0')
+  }
 })

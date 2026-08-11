@@ -24,7 +24,6 @@ export type ArgSpec = z.infer<typeof argSpecSchema>
 const commandBase = {
   name: nameSchema,
   description: z.string().min(1),
-  args: z.array(argSpecSchema).optional(),
 }
 
 // A union rather than a .refine(): z.infer then yields a type TypeScript narrows,
@@ -33,16 +32,25 @@ const respondCommandSchema = z.object({
   ...commandBase,
   respond: z.string().min(1),
   code: z.undefined().optional(),
+  // Object schemas strip unknown keys by default, which would silently drop an
+  // args a respond: command has no way to honour instead of rejecting it.
+  args: z.undefined().optional(),
 })
 
+// `args` lives here only: a respond: command is a plain string with no
+// interpolation, so an arg declared on one could never mean anything.
 // Not nameSchema: a handler name is an object key, and nameSchema forbids capitals.
 const codeCommandSchema = z.object({
   ...commandBase,
   code: z.string().min(1),
   respond: z.undefined().optional(),
+  args: z.array(argSpecSchema).optional(),
 })
 
-const commandSpecSchema = z.union([respondCommandSchema, codeCommandSchema])
+const commandSpecSchema = z.union(
+  [respondCommandSchema, codeCommandSchema],
+  { error: 'a command must declare exactly one of respond: or code:' },
+)
 export type CommandSpec = z.infer<typeof commandSpecSchema>
 
 const singleRequirementSchema = z.object({
