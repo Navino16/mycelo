@@ -18,14 +18,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - run: bun install --frozen-lockfile
+      - run: bun run ci
+
+      # npm only for the publish itself: bun publish has no provenance and no OIDC.
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org
-          cache: npm
-
-      - run: npm ci
-      - run: npm run ci
 
       # The tag decides what ships. Publishing whatever package.json happens to hold
       # would ship the wrong version, or re-publish an existing one, on a mis-cut release.
