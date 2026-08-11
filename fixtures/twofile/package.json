@@ -1,0 +1,9 @@
+{
+  "name": "@mycelo/fixture-twofile",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@mycelo/septum": "^0.3.0"
+  }
+}

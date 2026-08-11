@@ -1,0 +1,8 @@
+kind: enzyme
+name: twofile
+septum: "^0.3"
+description: A plugin in two files, unbundled. Test fixture, never distributed.
+commands:
+  - name: two
+    description: Multi-file check
+    code: handleTwo

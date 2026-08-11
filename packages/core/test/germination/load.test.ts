@@ -145,3 +145,14 @@ it('loads an entry point that is present even when no command needs it', async (
   })
   expect(await loadModule(await read('extra'))).not.toBeNull()
 })
+
+it('loads a spore made of two files that import each other with .js specifiers', async () => {
+  spore('multifile', {
+    'spore.yaml': HYPHA_MANIFEST,
+    'src/greeting.ts': 'export const who = "second file"\n',
+    'src/index.ts': "import { who } from './greeting.js'\nexport default { create: () => ({ name: who }) }\n",
+  })
+  const result = await loadInSubprocess(join(dir, 'multifile'))
+  expect(result.success).toBe(true)
+  expect(result.output).toContain('second file')
+})

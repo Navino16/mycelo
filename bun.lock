@@ -30,6 +30,13 @@
       "name": "@mycelo/fixture-ping",
       "version": "0.0.0",
     },
+    "fixtures/twofile": {
+      "name": "@mycelo/fixture-twofile",
+      "version": "0.0.0",
+      "dependencies": {
+        "@mycelo/septum": "^0.3.0",
+      },
+    },
     "packages/core": {
       "name": "@mycelo/core",
       "version": "0.0.0",
@@ -79,6 +86,8 @@
     "@mycelo/fixture-helpdesk": ["@mycelo/fixture-helpdesk@workspace:fixtures/helpdesk"],
 
     "@mycelo/fixture-ping": ["@mycelo/fixture-ping@workspace:fixtures/ping"],
+
+    "@mycelo/fixture-twofile": ["@mycelo/fixture-twofile@workspace:fixtures/twofile"],
 
     "@mycelo/septum": ["@mycelo/septum@workspace:packages/septum"],
 
