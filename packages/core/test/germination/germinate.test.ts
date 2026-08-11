@@ -181,6 +181,22 @@ it('warns about a handler no command references, and still germinates', async ()
   expect(warnings.join(' ')).toContain('leftover')
 })
 
+it('says the module is unreachable, not naming handlers, when every command answers with text', async () => {
+  spore('unreachable', {
+    'spore.yaml': 'kind: enzyme\nname: unreachable\nseptum: "^1.0"\ncommands:\n  - name: go\n    description: Go\n    respond: gone\n',
+    'src/index.ts': 'export default { create: () => ({ handlers: { leftover: async () => {} } }) }\n',
+  })
+  const warnings: string[] = []
+  const logger = createLogger()
+  const registry = await germinate(dir, { ...logger, warn: (m) => { warnings.push(m) } })
+  expect(registry.dormant).toEqual([])
+  expect(registry.enzymes.map((e) => e.name)).toEqual(['unreachable'])
+  expect(warnings.join(' ')).toContain('the module is unreachable')
+  expect(warnings.join(' ')).not.toContain('leftover')
+  // Still answers: the route resolves through `respond`, untouched by the dead handler.
+  expect(registry.routes.get('go')?.spec.respond).toBe('gone')
+})
+
 it('goes dormant on a command named "constructor" with no such handler, not Object.prototype.constructor', async () => {
   spore('sneaky', {
     'spore.yaml': 'kind: enzyme\nname: sneaky\nseptum: "^1.0"\ncommands:\n  - name: go\n    description: Go\n    code: constructor\n',
