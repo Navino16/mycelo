@@ -227,6 +227,39 @@ describe('enzyme conformance checks', () => {
     expect(failures.join(' ')).toContain('mutate')
   })
 
+  it('names a missing handler once even when two commands share it', async () => {
+    const failures = await enzymeChecks({
+      name: 'shared',
+      manifest: {
+        kind: 'enzyme', name: 'shared', septum: '^0.2',
+        commands: [
+          { name: 'add', description: 'Add', code: 'mutate' },
+          { name: 'remove', description: 'Remove', code: 'mutate' },
+        ],
+      },
+      module: { create: () => ({ handlers: {} }) },
+      context: enzymeContext,
+    })
+    expect(failures.join(' ')).toMatch(/mutate/)
+    expect(failures.join(' ').match(/mutate/g)).toHaveLength(1)
+  })
+
+  it('names a handler once in the no-module message even when two commands share it', async () => {
+    const failures = await enzymeChecks({
+      name: 'shared',
+      manifest: {
+        kind: 'enzyme', name: 'shared', septum: '^0.2',
+        commands: [
+          { name: 'add', description: 'Add', code: 'mutate' },
+          { name: 'remove', description: 'Remove', code: 'mutate' },
+        ],
+      },
+      context: enzymeContext,
+    })
+    expect(failures.join(' ')).toMatch(/mutate/)
+    expect(failures.join(' ').match(/mutate/g)).toHaveLength(1)
+  })
+
   it('does not certify a handler resolved through Object.prototype', async () => {
     const failures = await enzymeChecks({
       name: 'sneaky',

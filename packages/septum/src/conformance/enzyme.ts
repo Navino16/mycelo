@@ -50,7 +50,8 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
     // needs a handler to resolve, the same requirement germination enforces
     // before it ever asks a spore for a module.
     if (codeCommands.length > 0) {
-      failures.push(`no module supplied, but commands need a handler: ${codeCommands.map((c) => c.code).join(', ')}`)
+      const names = [...new Set(codeCommands.map((c) => c.code))]
+      failures.push(`no module supplied, but commands need a handler: ${names.join(', ')}`)
     }
     return failures
   }
@@ -82,11 +83,15 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
   // supplies, so a command declaring `code: constructor` must not resolve through
   // Object.prototype and be certified as having a handler that was never written.
   const table: Record<string, unknown> = instance.handlers
-  const missing = codeCommands.filter(
-    (c) => !Object.hasOwn(table, c.code) || typeof table[c.code] !== 'function',
-  )
+  const missing = [
+    ...new Set(
+      codeCommands
+        .filter((c) => !Object.hasOwn(table, c.code) || typeof table[c.code] !== 'function')
+        .map((c) => c.code),
+    ),
+  ]
   if (missing.length > 0) {
-    failures.push(`handlers has no function for: ${missing.map((c) => c.code).join(', ')}`)
+    failures.push(`handlers has no function for: ${missing.join(', ')}`)
     return failures
   }
   if ((instance.start === undefined) !== (instance.stop === undefined)) {
@@ -123,7 +128,8 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
       rest: '',
       message: stubMessage(),
     }
-    const handler = table[command.code] as (i: Invocation, ctx: EnzymeContext<unknown>) => Promise<void>
+    const handler = (Object.hasOwn(table, command.code) ? table[command.code] : undefined) as
+      (i: Invocation, ctx: EnzymeContext<unknown>) => Promise<void>
     try {
       await handler(invocation, harness.context())
     } catch (e) {
