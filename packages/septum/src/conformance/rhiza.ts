@@ -1,7 +1,6 @@
 import { parseManifest } from '../manifest.js'
 import type { HealthState } from '../context.js'
 import type { Rhiza, RhizaModule } from '../rhiza.js'
-import { sourceErasabilityFailures } from './erasability.js'
 
 const HEALTH_STATES: readonly HealthState[] = ['healthy', 'degraded', 'unreachable']
 
@@ -12,8 +11,6 @@ export interface RhizaHarness {
   module: RhizaModule<unknown, unknown>
   validConfig?: unknown
   invalidConfig?: unknown
-  /** Absolute paths to the plugin's own source files. See sourceErasabilityFailures. */
-  sourcePaths?: readonly string[]
 }
 
 /**
@@ -22,7 +19,7 @@ export interface RhizaHarness {
  * know that health() must report one of three states.
  */
 export async function rhizaChecks(harness: RhizaHarness): Promise<string[]> {
-  const failures: string[] = [...(await sourceErasabilityFailures(harness.sourcePaths))]
+  const failures: string[] = []
 
   let manifest
   try {

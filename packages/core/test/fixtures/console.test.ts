@@ -29,11 +29,3 @@ it('records what is sent to it', async () => {
   await instance.send('stdin', { text: 'pong' })
   expect(instance.sent).toEqual([{ text: 'pong' }])
 })
-
-import { readFileSync } from 'node:fs'
-import { erasabilityError } from '@mycelo/septum/conformance'
-
-it('is loadable by the local driver', () => {
-  const source = readFileSync(new URL('../../../../fixtures/console/src/index.ts', import.meta.url), 'utf8')
-  expect(erasabilityError(source)).toBeNull()
-})

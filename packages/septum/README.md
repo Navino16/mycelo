@@ -18,9 +18,7 @@ A `septum` is the interface a plugin implements. There are four, one per plugin 
 npm install @mycelo/septum
 ```
 
-ESM only — `require()` will not work. Developed and tested on Node 24; the conformance kit
-calls `module.stripTypeScriptTypes`, so an older runtime will not do. `zod` is a direct
-dependency, used to validate manifests.
+ESM only — `require()` will not work. `zod` is a direct dependency, used to validate manifests.
 
 ## A plugin is two files
 
@@ -119,9 +117,6 @@ implementation. Each returns a list of failure strings, so it works with any tes
 | `rhizaChecks` | manifest, config schema, `api`, and that `health()` reports rather than throws |
 | `enzymeChecks` | manifest, config schema, lifecycle, and every command with no required args |
 | `inhibitorChecks` | manifest, config schema, lifecycle, and a verdict per expected allow/deny |
-| `erasabilityError` | whether one source string survives Node's type-stripping loader |
-| `assertErasable` | the same, as a throwing assertion |
-| `sourceErasabilityFailures` | the same over a list of file paths |
 
 The harness is yours to build: the kit cannot know what your plugin depends on, so you supply
 the stubs.
@@ -157,7 +152,6 @@ it('conforms to the Enzyme contract', async () => {
       ],
     },
     module,
-    sourcePaths: [new URL('../src/index.ts', import.meta.url).pathname],
     context,
   })
   expect(failures).toEqual([])
@@ -166,14 +160,6 @@ it('conforms to the Enzyme contract', async () => {
 
 Commands with required arguments are skipped: the kit cannot invent a value your enzyme would
 accept, so calling them would report correct validation as a failure. Those are yours to test.
-
-## Erasability
-
-`sourcePaths` is optional but worth passing. It asks Node whether your source can be loaded by
-its type-stripping loader, which is how Mycelo's `local` driver loads a plugin during
-development. A plugin can work when bundled and break when loaded unbundled, so the check
-exists to catch that before your users do: **no enums, no decorators, no namespaces, no
-parameter properties**.
 
 ## Status
 
