@@ -124,7 +124,7 @@ the stubs.
 ```ts
 import type { EnzymeContext } from '@mycelo/septum'
 import { enzymeChecks } from '@mycelo/septum/conformance'
-import { expect, it } from 'vitest'
+import { expect, it } from 'bun:test'
 import module from '../src/index.js'
 
 const context = (): EnzymeContext => ({
@@ -163,7 +163,7 @@ accept, so calling them would report correct validation as a failure. Those are 
 
 ## Status
 
-`0.x` — the contract is expected to change. The core's phase 2 runtime implements it: `npm
+`0.x` — the contract is expected to change. The core's runtime implements it: `bun run
 start` answers a `respond:` command directly and dispatches a `code:` command to its
 `handlers` entry. Pin an exact version if that matters to you.
 
