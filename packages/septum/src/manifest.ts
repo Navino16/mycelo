@@ -21,11 +21,28 @@ const argSpecSchema = z.object({
 })
 export type ArgSpec = z.infer<typeof argSpecSchema>
 
-const commandSpecSchema = z.object({
+const commandBase = {
   name: nameSchema,
   description: z.string().min(1),
   args: z.array(argSpecSchema).optional(),
+}
+
+// A union rather than a .refine(): z.infer then yields a type TypeScript narrows,
+// so the core's dispatch needs no branch for a case the schema already forbids.
+const respondCommandSchema = z.object({
+  ...commandBase,
+  respond: z.string().min(1),
+  code: z.undefined().optional(),
 })
+
+// Not nameSchema: a handler name is an object key, and nameSchema forbids capitals.
+const codeCommandSchema = z.object({
+  ...commandBase,
+  code: z.string().min(1),
+  respond: z.undefined().optional(),
+})
+
+const commandSpecSchema = z.union([respondCommandSchema, codeCommandSchema])
 export type CommandSpec = z.infer<typeof commandSpecSchema>
 
 const singleRequirementSchema = z.object({
