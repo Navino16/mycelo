@@ -97,7 +97,7 @@ it('reports an unknown command without invoking anything', async () => {
   const onUnrouted = mock(async () => {})
   const bus = createBus({ registry, prefix: '/', logger: createLogger(), onUnrouted })
   await bus.deliver('console', message('/nope'))
-  expect(ping).toHaveBeenCalled()
+  expect(ping).not.toHaveBeenCalled()
   expect(onUnrouted).toHaveBeenCalledWith(expect.anything(), 'nope')
 })
 
