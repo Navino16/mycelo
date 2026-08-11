@@ -33,8 +33,6 @@ async function read(name: string) {
  * Runs under whatever `process.execPath` is — Bun during the suite.
  */
 async function loadInSubprocess(sporePath: string): Promise<{ success: boolean; output: string; error?: string }> {
-  // The subprocess will import the spore directly as a test of Node's type-stripping.
-  // First, find the entry point in the spore directory.
   const candidates = ['src/index.ts', 'index.ts', 'dist/index.js', 'index.js']
   let entryFile: string | null = null
   for (const candidate of candidates) {
@@ -68,9 +66,6 @@ console.log('success:', result.name ?? 'ok')
   }
 }
 
-// Tests the plumbing: path resolution, entry-point precedence, and duck-typed create() check.
-// Does NOT test that the type-stripping loader itself rejects non-erasable syntax (Vitest's
-// esbuild transform accepts it). The subprocess tests below cover the actual loader behavior.
 it('resolves entry point and validates create() duck-type', async () => {
   spore('probe', {
     'spore.yaml': HYPHA_MANIFEST,
@@ -94,10 +89,7 @@ it('refuses a default export with no create()', async () => {
   expect(loadModule(await read('bad'))).rejects.toThrow('create()')
 })
 
-// Subprocess tests: verify the type-stripping loader behavior (not Vitest's transform).
-// These exercise Node's actual ESM loader without any build-step transform in the way.
-
-it('loads an erasable TypeScript spore via plain node (type-stripping loader)', async () => {
+it('loads an erasable TypeScript spore via a subprocess', async () => {
   spore('erasable', {
     'spore.yaml': HYPHA_MANIFEST,
     'src/index.ts': `
