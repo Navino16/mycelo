@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { CHANNEL_CAPABILITIES } from './capabilities.js'
 
-/** Plugin kinds. Not an enum: Node's type-stripping cannot handle enums. */
+/** Plugin kinds. */
 export const SPORE_KINDS = ['hypha', 'rhiza', 'enzyme', 'inhibitor'] as const
 export type SporeKind = (typeof SPORE_KINDS)[number]
 

@@ -1,8 +1,6 @@
 /**
  * What a channel can do. A hypha declares its subset in its manifest; the core
  * exposes the resolved set to enzymes as a Capabilities view.
- *
- * Not an enum: erasableSyntaxOnly forbids them (see the plan's global constraints).
  */
 export const CHANNEL_CAPABILITIES = [
   'attachments',

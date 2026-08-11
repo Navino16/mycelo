@@ -30,7 +30,7 @@ capabilities are declared here rather than in the module.
 ```yaml
 kind: enzyme
 name: radarr-helper
-septum: "^0.2"
+septum: "^0.3"
 description: Movie shortcuts for Radarr
 commands:
   - name: help
@@ -106,6 +106,13 @@ A plugin whose commands all carry `respond:` needs no module at all — `help` a
 without one. The manifest is then the entire plugin: no `src/index.ts`, nothing to bundle,
 nothing that can throw at germination.
 
+## TypeScript
+
+The runtime is [Bun](https://bun.sh), which compiles TypeScript directly. A plugin may use any
+TypeScript construct — `enum`, `namespace`, decorators, parameter properties — and needs no
+bundler and no build step. It may be split across several files that import each other with
+`.js` specifiers, resolved the way Node's ESM does.
+
 ## Conformance kit
 
 `@mycelo/septum/conformance` exports checks a plugin author runs against their own
@@ -144,7 +151,7 @@ it('conforms to the Enzyme contract', async () => {
   const failures = await enzymeChecks({
     name: 'radarr-helper',
     manifest: {
-      kind: 'enzyme', name: 'radarr-helper', septum: '^0.2',
+      kind: 'enzyme', name: 'radarr-helper', septum: '^0.3',
       commands: [
         { name: 'help', description: 'Show what this plugin can do', respond: 'Try /add <title> to queue a movie.' },
         { name: 'add', description: 'Queue a movie by title', code: 'addMovie',

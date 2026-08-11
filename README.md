@@ -15,10 +15,10 @@ Discord ┘                      └─ Plex
 ## Status
 
 **Early development.** The plugin contract is published as
-[`@mycelo/septum`](https://www.npmjs.com/package/@mycelo/septum), currently at `0.2.0` on the
-registry — the `0.3.0` in this tree has not been published yet. The runtime now germinates
-plugins and routes commands between them, but the only hypha that exists is a `console` test
-fixture: no channel plugin, and so no released bot, exists yet.
+[`@mycelo/septum`](https://www.npmjs.com/package/@mycelo/septum). The version in this tree may
+be ahead of the registry between a merge and its release. The runtime now germinates plugins and
+routes commands between them, but the only hypha that exists is a `console` test fixture: no
+channel plugin, and so no released bot, exists yet.
 
 | | |
 |---|---|

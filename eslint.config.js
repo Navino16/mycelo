@@ -1,18 +1,6 @@
 import { defineConfig, globalIgnores } from 'eslint/config'
 import tseslint from 'typescript-eslint'
 
-// The decorator ban applies to every TypeScript file, test files included.
-const noDecorators = {
-  'no-restricted-syntax': [
-    'error',
-    {
-      selector: 'Decorator',
-      message:
-        'Decorators are not allowed: Node cannot type-strip them, so the spore would break when loaded through the local driver.',
-    },
-  ],
-}
-
 export default defineConfig(
   globalIgnores(['**/dist/**', '**/node_modules/**']),
   tseslint.configs.recommendedTypeChecked,
@@ -26,7 +14,6 @@ export default defineConfig(
       parserOptions: { project: './tsconfig.spec.json', tsconfigRootDir: import.meta.dirname },
     },
     rules: {
-      ...noDecorators,
       // Test doubles implement an async interface without needing to await
       // anything; that is a stub, not a bug.
       '@typescript-eslint/require-await': 'off',
@@ -39,20 +26,12 @@ export default defineConfig(
       parser: tseslint.parser,
       parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
     },
-    rules: {
-      // The compiler cannot enforce this: erasableSyntaxOnly accepts decorators,
-      // but Node rejects them at load time when type-stripping.
-      ...noDecorators,
-    },
   },
   {
     files: ['fixtures/**/*.ts'],
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: { project: './tsconfig.spec.json', tsconfigRootDir: import.meta.dirname },
-    },
-    rules: {
-      ...noDecorators,
     },
   },
   {
