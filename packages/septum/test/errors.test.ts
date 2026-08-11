@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { CapabilityMissingError, RhizaUnreachableError, ScopeDeniedError } from '../src/errors.js'
 
 describe('errors', () => {

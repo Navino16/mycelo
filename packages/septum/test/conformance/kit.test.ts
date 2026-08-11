@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { z } from 'zod'
 import { enzymeChecks } from '../../src/conformance/enzyme.js'
 import type { EnzymeHarness } from '../../src/conformance/enzyme.js'

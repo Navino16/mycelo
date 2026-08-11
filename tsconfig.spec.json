@@ -10,7 +10,6 @@
     "packages/*/src/**/*",
     "packages/*/test/**/*",
     "fixtures/*/src/**/*",
-    "fixtures/*/test/**/*",
-    "vitest.config.ts"
+    "fixtures/*/test/**/*"
   ]
 }

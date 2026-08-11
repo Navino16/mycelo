@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest'
+import { expect, it } from 'bun:test'
 import type { HyphaContext, IncomingMessage } from '@mycelo/septum'
 import module from '../../../../fixtures/console/src/index.js'
 

@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest'
+import { expect, it } from 'bun:test'
 import { bindArgs, parseCommand } from '../../src/rhizomorph/parse.js'
 
 it('parses a bare command', () => {
