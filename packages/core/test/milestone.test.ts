@@ -31,3 +31,27 @@ it('answers /ping with pong, through the real fixtures and the real bootstrap()'
   fixture.feed('/ping')
   await vi.waitFor(() => { expect(fixture.sent).toEqual([{ text: 'pong' }]) })
 })
+
+it('answers text and code commands from one plugin, sharing a handler', async () => {
+  const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\n`, 'utf8')
+
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+
+  const fixture = registry.hyphae.find((h) => h.name === 'console')
+    ?.instance as unknown as ConsoleFixture
+
+  fixture.feed('/links')
+  fixture.feed('/add Dune')
+  fixture.feed('/remove Dune')
+
+  await vi.waitFor(() => {
+    expect(fixture.sent).toEqual([
+      { text: 'Radarr http://radarr:7878' },
+      { text: 'add: Dune' },
+      { text: 'remove: Dune' },
+    ])
+  })
+})

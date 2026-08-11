@@ -1,0 +1,17 @@
+kind: enzyme
+name: helpdesk
+septum: "^1.0"
+description: Text and code in one plugin. Test fixture, never distributed.
+commands:
+  - name: links
+    description: Service URLs
+    respond: "Radarr http://radarr:7878"
+  - name: rules
+    description: House rules
+    respond: "No spoilers before Sunday."
+  - name: add
+    description: Add a title
+    code: handleMutation
+  - name: remove
+    description: Remove a title
+    code: handleMutation
