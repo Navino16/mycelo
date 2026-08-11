@@ -12,7 +12,6 @@
     "sourceMap": true,
     "composite": true,
     "skipLibCheck": true,
-    "verbatimModuleSyntax": true,
-    "erasableSyntaxOnly": true
+    "verbatimModuleSyntax": true
   }
 }

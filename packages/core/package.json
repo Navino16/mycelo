@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "start": "node dist/index.js",
+    "start": "bun src/index.ts",
     "build": "tsc -b"
   },
   "dependencies": {
