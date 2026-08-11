@@ -217,6 +217,16 @@ it('goes dormant on a command named "toString" with no such handler, not Object.
   expect(registry.dormant[0]?.reason).toContain('toString')
 })
 
+it('refuses an enzyme whose instance has start() but no stop(), matching the conformance kit', async () => {
+  spore('lopsided', {
+    'spore.yaml': 'kind: enzyme\nname: lopsided\nseptum: "^1.0"\ncommands:\n  - name: go\n    description: Go\n    code: go\n',
+    'src/index.ts': 'export default { create: () => ({ handlers: { go: async () => {} }, start: async () => {} }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.enzymes).toEqual([])
+  expect(registry.dormant[0]?.reason).toContain('both present or both absent')
+})
+
 it('germinates when the handler is genuinely declared and named "constructor"', async () => {
   spore('legit', {
     'spore.yaml': 'kind: enzyme\nname: legit\nseptum: "^1.0"\ncommands:\n  - name: go\n    description: Go\n    code: constructor\n',

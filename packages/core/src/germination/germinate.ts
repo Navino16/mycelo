@@ -48,7 +48,14 @@ function enzymeShapeError(instance: unknown, commands: readonly CommandSpec[]): 
         .filter((name) => !Object.hasOwn(table, name) || typeof table[name] !== 'function'),
     ),
   ]
-  return missing.length > 0 ? `handlers has no function for: ${missing.join(', ')}` : null
+  if (missing.length > 0) return `handlers has no function for: ${missing.join(', ')}`
+
+  // Matches conformance/enzyme.ts: the kit must not certify a pairing the runtime refuses.
+  const { start, stop } = instance as { start?: unknown; stop?: unknown }
+  if ((start === undefined) !== (stop === undefined)) {
+    return 'start() and stop() must be both present or both absent'
+  }
+  return null
 }
 
 /** Dead code is not a broken plugin: warn and germinate (spec, "An unreferenced handler"). */
