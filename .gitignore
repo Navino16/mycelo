@@ -7,3 +7,6 @@ data/
 # A project-level .npmrc is how tokens get committed by accident.
 # Credentials belong in ~/.npmrc, outside every repository.
 .npmrc
+
+# Subagent-driven development scratch: ledger, briefs, review packages.
+.superpowers/

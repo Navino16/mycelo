@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { stripTypeScriptTypes } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -41,7 +42,12 @@ export function erasabilityError(source: string): string | null {
     // Anything else — a read-only tmpdir, a sandbox that blocks spawning — never
     // reached the parser and says nothing about the source under test.
     if (typeof (e as { status?: unknown }).status !== 'number') return environmentError(e)
-    const stderr = String((e as { stderr?: unknown }).stderr ?? (e as Error).message)
+    const stderrValue = (e as { stderr?: unknown }).stderr
+    const stderr = Buffer.isBuffer(stderrValue)
+      ? stderrValue.toString('utf8')
+      : typeof stderrValue === 'string'
+        ? stderrValue
+        : (e as Error).message
     const line = stderr.split('\n').find((l) => l.includes('Error:'))?.trim()
     return `after stripping: ${line ?? 'parse failed'}`
   } finally {
@@ -79,7 +85,7 @@ export async function sourceErasabilityFailures(
   for (const path of paths) {
     let source: string
     try {
-      source = readFileSync(path, 'utf8')
+      source = await readFile(path, 'utf8')
     } catch (e) {
       failures.push(`cannot read source ${path}: ${(e as Error).message}`)
       continue

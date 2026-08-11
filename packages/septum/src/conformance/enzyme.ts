@@ -7,8 +7,8 @@ import type { IncomingMessage } from '../message.js'
 export interface EnzymeHarness {
   name: string
   manifest: unknown
-  /** See the note on HyphaHarness.module for why the config is `unknown`. */
-  module: EnzymeModule<unknown>
+  /** Omit for a plugin whose commands all answer with `respond`: it has no module at all. */
+  module?: EnzymeModule<unknown>
   /** Absolute paths to the plugin's own source files. See sourceErasabilityFailures. */
   sourcePaths?: readonly string[]
   validConfig?: unknown
@@ -44,6 +44,18 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
     return [...failures, `manifest kind is '${manifest.kind}', expected 'enzyme'`]
   }
 
+  const codeCommands = manifest.commands.filter((c) => c.respond === undefined)
+  if (harness.module === undefined) {
+    // A plugin that is only YAML is a plugin — but every `code:` command still
+    // needs a handler to resolve, the same requirement germination enforces
+    // before it ever asks a spore for a module.
+    if (codeCommands.length > 0) {
+      const names = [...new Set(codeCommands.map((c) => c.code))]
+      failures.push(`no module supplied, but commands need a handler: ${names.join(', ')}`)
+    }
+    return failures
+  }
+
   // Each sub-check is gated on its own input, not on validConfig: gating both on
   // validConfig would silently skip the over-permissive-schema check whenever an
   // author supplies only invalidConfig.
@@ -63,8 +75,23 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
   } catch (e) {
     return [...failures, `create() threw: ${(e as Error).message}`]
   }
-  if (typeof instance.handle !== 'function') {
-    failures.push('create() returned no handle()')
+  if (typeof instance.handlers !== 'object' || instance.handlers === null) {
+    failures.push('create() returned no handlers object')
+    return failures
+  }
+  // Object.hasOwn, never a plain index: `handlers` is a plain object the author
+  // supplies, so a command declaring `code: constructor` must not resolve through
+  // Object.prototype and be certified as having a handler that was never written.
+  const table: Record<string, unknown> = instance.handlers
+  const missing = [
+    ...new Set(
+      codeCommands
+        .filter((c) => !Object.hasOwn(table, c.code) || typeof table[c.code] !== 'function')
+        .map((c) => c.code),
+    ),
+  ]
+  if (missing.length > 0) {
+    failures.push(`handlers has no function for: ${missing.join(', ')}`)
     return failures
   }
   if ((instance.start === undefined) !== (instance.stop === undefined)) {
@@ -78,7 +105,7 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
     }
   }
 
-  // start() before handle(), as at germination: an enzyme that memoises a rhiza
+  // start() before any handler, as at germination: an enzyme that memoises a rhiza
   // client in start() would otherwise be reported as broken.
   if (typeof instance.start === 'function') {
     try {
@@ -90,8 +117,10 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
 
   // Only commands with no required arguments are invoked: the kit cannot invent a
   // value the enzyme would accept, so a correctly-validating one would fail here.
-  // Commands with required args are the author's to test.
-  for (const command of manifest.commands) {
+  // Commands with required args are the author's to test. An unreferenced handler
+  // produces nothing here: no author action differs for one, so the kit has no
+  // warning channel to widen for it.
+  for (const command of codeCommands) {
     if (command.args?.some((a) => a.required) === true) continue
     const invocation: Invocation = {
       command: command.name,
@@ -99,10 +128,12 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
       rest: '',
       message: stubMessage(),
     }
+    const handler = (Object.hasOwn(table, command.code) ? table[command.code] : undefined) as
+      (i: Invocation, ctx: EnzymeContext<unknown>) => Promise<void>
     try {
-      await instance.handle(invocation, harness.context())
+      await handler(invocation, harness.context())
     } catch (e) {
-      failures.push(`handle() threw for declared command '${command.name}': ${(e as Error).message}`)
+      failures.push(`handler threw for declared command '${command.name}': ${(e as Error).message}`)
     }
   }
 
