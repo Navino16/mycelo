@@ -1,11 +1,16 @@
 import { expect, it, vi } from 'vitest'
-import type { Enzyme, Hypha, IncomingMessage, Logger, OutgoingContent } from '@mycelo/septum'
+import type { CommandSpec, Enzyme, Hypha, IncomingMessage, Logger, OutgoingContent } from '@mycelo/septum'
 import { buildRoutes } from '../../src/germination/registry.js'
 import type { GerminatedEnzyme, GerminatedHypha, Registry } from '../../src/germination/registry.js'
 import { createBus } from '../../src/rhizomorph/bus.js'
 import { createLogger } from '../../src/support/logger.js'
 
-function setup(enzyme: Enzyme): { registry: Registry; sent: OutgoingContent[] } {
+const DEFAULT_COMMANDS: CommandSpec[] = [{ name: 'ping', description: 'Health check', code: 'ping' }]
+
+function setup(
+  instance: Enzyme | null,
+  commands: CommandSpec[] = DEFAULT_COMMANDS,
+): { registry: Registry; sent: OutgoingContent[] } {
   const sent: OutgoingContent[] = []
   const hypha: Hypha = {
     async start() {}, async stop() {},
@@ -18,11 +23,8 @@ function setup(enzyme: Enzyme): { registry: Registry; sent: OutgoingContent[] } 
   }]
   const enzymes: GerminatedEnzyme[] = [{
     name: 'ping',
-    manifest: {
-      kind: 'enzyme', name: 'ping', septum: '^1.0',
-      commands: [{ name: 'ping', description: 'Health check' }],
-    },
-    instance: enzyme,
+    manifest: { kind: 'enzyme', name: 'ping', septum: '^1.0', commands },
+    instance,
   }]
   return { registry: { hyphae, enzymes, dormant: [], routes: buildRoutes(enzymes) }, sent }
 }
@@ -42,6 +44,15 @@ it('routes a command to its enzyme and the reply back to the channel', async () 
   const bus = createBus({ registry, prefix: '/', logger: createLogger() })
   await bus.deliver('console', message('/ping'))
   expect(sent).toEqual([{ text: 'pong' }])
+})
+
+it('answers a text command without touching the module', async () => {
+  const { registry, sent } = setup(null, [
+    { name: 'links', description: 'Service URLs', respond: 'Radarr http://radarr:7878' },
+  ])
+  const bus = createBus({ registry, prefix: '/', logger: createLogger() })
+  await bus.deliver('console', message('/links'))
+  expect(sent).toEqual([{ text: 'Radarr http://radarr:7878' }])
 })
 
 it('reports an unknown command without invoking anything', async () => {
@@ -158,7 +169,7 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
     name: 'ping',
     manifest: {
       kind: 'enzyme', name: 'ping', septum: '^1.0',
-      commands: [{ name: 'ping', description: 'Health check' }],
+      commands: [{ name: 'ping', description: 'Health check', code: 'ping' }],
     },
     instance: { async handle() { throw new Error('boom') } },
   }]

@@ -85,17 +85,20 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
     }
     try {
       const module = await loadModule(read)
-      const instance: unknown = module.create()
-      const problem = shapeError(instance, manifest.kind)
-      if (problem !== null) {
-        dormant.push({ name: manifest.name, reason: problem })
-        continue
-      }
-      if (manifest.kind === 'hypha') {
-        const capProblem = capabilityShapeError(instance as Record<string, unknown>, manifest)
-        if (capProblem !== null) {
-          dormant.push({ name: manifest.name, reason: capProblem })
+      let instance: unknown = null
+      if (module !== null) {
+        instance = module.create()
+        const problem = shapeError(instance, manifest.kind)
+        if (problem !== null) {
+          dormant.push({ name: manifest.name, reason: problem })
           continue
+        }
+        if (manifest.kind === 'hypha') {
+          const capProblem = capabilityShapeError(instance as Record<string, unknown>, manifest)
+          if (capProblem !== null) {
+            dormant.push({ name: manifest.name, reason: capProblem })
+            continue
+          }
         }
       }
       // Checked last, once we know the spore would otherwise actually germinate: an
@@ -113,7 +116,7 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
       if (manifest.kind === 'hypha') {
         hyphae.push({ name: manifest.name, manifest, instance: instance as Hypha })
       } else {
-        enzymes.push({ name: manifest.name, manifest, instance: instance as Enzyme })
+        enzymes.push({ name: manifest.name, manifest, instance: instance as Enzyme | null })
       }
     } catch (e) {
       dormant.push({ name: manifest.name, reason: (e as Error).message })

@@ -14,7 +14,7 @@ function spore(name: string, yaml: string): void {
   writeFileSync(join(dir, name, 'spore.yaml'), yaml, 'utf8')
 }
 
-const VALID = 'kind: enzyme\nname: ping\nseptum: "^1.0"\ncommands:\n  - name: ping\n    description: Health check\n'
+const VALID = 'kind: enzyme\nname: ping\nseptum: "^1.0"\ncommands:\n  - name: ping\n    description: Health check\n    respond: pong\n'
 
 it('parses a valid manifest', () => {
   spore('ping', VALID)

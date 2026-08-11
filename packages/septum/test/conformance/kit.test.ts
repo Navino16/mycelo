@@ -98,7 +98,7 @@ const goodEnzyme: EnzymeHarness = {
     kind: 'enzyme',
     name: 'links',
     septum: '^1.0',
-    commands: [{ name: 'links', description: 'Show links' }],
+    commands: [{ name: 'links', description: 'Show links', code: 'links' }],
   },
   module: { create: () => ({ async handle() {} }) },
   context: enzymeContext,
@@ -144,6 +144,7 @@ describe('enzyme conformance checks', () => {
           {
             name: 'add',
             description: 'Add a movie',
+            code: 'add',
             args: [{ name: 'title', description: 'Title', required: true }],
           },
         ],

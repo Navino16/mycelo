@@ -42,8 +42,7 @@ it('refuses an instance that does not implement its kind', async () => {
 
 it('refuses a spore declaring requires, which phase 3 resolves', async () => {
   spore('needy', {
-    'spore.yaml': 'kind: enzyme\nname: needy\nseptum: "^1.0"\ncommands:\n  - name: needy\n    description: x\nrequires:\n  - rhiza: radarr\n',
-    'enzyme.yaml': 'responses:\n  needy: hi\n',
+    'spore.yaml': 'kind: enzyme\nname: needy\nseptum: "^1.0"\ncommands:\n  - name: needy\n    description: x\n    respond: hi\nrequires:\n  - rhiza: radarr\n',
   })
   const registry = await germinate(dir, createLogger())
   expect(registry.enzymes).toEqual([])
@@ -53,8 +52,7 @@ it('refuses a spore declaring requires, which phase 3 resolves', async () => {
 it('keeps germinating after one spore fails', async () => {
   spore('broken', { 'spore.yaml': 'kind: [unclosed\n' })
   spore('ping', {
-    'spore.yaml': 'kind: enzyme\nname: ping\nseptum: "^1.0"\ncommands:\n  - name: ping\n    description: x\n',
-    'enzyme.yaml': 'responses:\n  ping: pong\n',
+    'spore.yaml': 'kind: enzyme\nname: ping\nseptum: "^1.0"\ncommands:\n  - name: ping\n    description: x\n    respond: pong\n',
   })
   const registry = await germinate(dir, createLogger())
   expect(registry.enzymes.map((e) => e.name)).toEqual(['ping'])
@@ -66,12 +64,10 @@ it('propagates a command collision instead of swallowing it into a dormancy entr
   // that net rather than being absorbed as if 'b' had merely failed to load (exit
   // criterion 4 — the core cannot know what it would be authorizing otherwise).
   spore('a', {
-    'spore.yaml': 'kind: enzyme\nname: a\nseptum: "^1.0"\ncommands:\n  - name: status\n    description: x\n',
-    'enzyme.yaml': 'responses:\n  status: from-a\n',
+    'spore.yaml': 'kind: enzyme\nname: a\nseptum: "^1.0"\ncommands:\n  - name: status\n    description: x\n    respond: from-a\n',
   })
   spore('b', {
-    'spore.yaml': 'kind: enzyme\nname: b\nseptum: "^1.0"\ncommands:\n  - name: status\n    description: x\n',
-    'enzyme.yaml': 'responses:\n  status: from-b\n',
+    'spore.yaml': 'kind: enzyme\nname: b\nseptum: "^1.0"\ncommands:\n  - name: status\n    description: x\n    respond: from-b\n',
   })
   try {
     await germinate(dir, createLogger())
@@ -121,12 +117,10 @@ it('sends the second of two hyphae sharing a manifest name dormant, naming both 
 
 it('sends the second of two enzymes sharing a manifest name dormant, naming both directories', async () => {
   spore('alpha-enzyme', {
-    'spore.yaml': 'kind: enzyme\nname: shared\nseptum: "^1.0"\ncommands:\n  - name: a\n    description: x\n',
-    'enzyme.yaml': 'responses:\n  a: from-alpha\n',
+    'spore.yaml': 'kind: enzyme\nname: shared\nseptum: "^1.0"\ncommands:\n  - name: a\n    description: x\n    respond: from-alpha\n',
   })
   spore('beta-enzyme', {
-    'spore.yaml': 'kind: enzyme\nname: shared\nseptum: "^1.0"\ncommands:\n  - name: b\n    description: x\n',
-    'enzyme.yaml': 'responses:\n  b: from-beta\n',
+    'spore.yaml': 'kind: enzyme\nname: shared\nseptum: "^1.0"\ncommands:\n  - name: b\n    description: x\n    respond: from-beta\n',
   })
   const registry = await germinate(dir, createLogger())
   expect(registry.enzymes.map((e) => e.name)).toEqual(['shared'])

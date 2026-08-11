@@ -105,15 +105,19 @@ export function createBus({ registry, prefix, logger, onUnrouted }: BusOptions):
           await onUnrouted?.(message, parsed.command)
           return
         }
-        const spec = route.enzyme.manifest.commands.find((c) => c.name === parsed.command)
+        const spec = route.spec
         const invocation: Invocation = {
           command: parsed.command,
-          args: bindArgs(parsed.rest, spec?.args ?? []),
+          args: bindArgs(parsed.rest, spec.args ?? []),
           rest: parsed.rest,
           message,
         }
+        if (spec.respond !== undefined) {
+          await send(message.channel, message.conversationId, { text: spec.respond })
+          return
+        }
         try {
-          await route.enzyme.instance.handle(invocation, contextFor(message))
+          await route.enzyme.instance?.handle(invocation, contextFor(message))
         } catch (e) {
           // A handler that throws is contained: clean error on the channel, trace logged.
           logger.error(`enzyme '${route.plugin}' threw handling '${route.qualified}'`, {

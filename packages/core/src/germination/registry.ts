@@ -1,4 +1,4 @@
-import type { Enzyme, Hypha, Manifest } from '@mycelo/septum'
+import type { CommandSpec, Enzyme, Hypha, Manifest } from '@mycelo/septum'
 
 export interface GerminatedHypha {
   name: string
@@ -9,7 +9,7 @@ export interface GerminatedHypha {
 export interface GerminatedEnzyme {
   name: string
   manifest: Extract<Manifest, { kind: 'enzyme' }>
-  instance: Enzyme
+  instance: Enzyme | null
 }
 
 export interface Dormant {
@@ -23,6 +23,7 @@ export interface CommandRoute {
   plugin: string
   /** `<plugin>.<command>` — the authorization identifier, not what a user types. */
   qualified: string
+  spec: CommandSpec
   enzyme: GerminatedEnzyme
 }
 
@@ -63,6 +64,7 @@ export function buildRoutes(enzymes: readonly GerminatedEnzyme[]): Map<string, C
         command: spec.name,
         plugin: enzyme.name,
         qualified: `${enzyme.name}.${spec.name}`,
+        spec,
         enzyme,
       })
     }

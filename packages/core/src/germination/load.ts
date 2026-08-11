@@ -2,7 +2,6 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { SporeModule } from '@mycelo/septum'
-import { DECLARATIVE_ENTRY, hasDeclarativeEntry, loadDeclarative } from '../enzyme/declarative.js'
 import type { ReadManifest } from './manifest.js'
 
 const CODE_ENTRIES = ['src/index.ts', 'index.ts', 'dist/index.js', 'index.js']
@@ -15,22 +14,21 @@ function entryPoint(sporePath: string): string | null {
   return null
 }
 
+/** True when nothing in the manifest can reach a module. */
+function needsNoModule(manifest: ReadManifest['manifest']): boolean {
+  return manifest.kind === 'enzyme' && manifest.commands.every((c) => c.respond !== undefined)
+}
+
 /**
- * Imports a spore's module. A `.ts` entry loads through Node's type-stripping loader,
- * which is what the `local` driver relies on and why the erasable-syntax rule exists.
+ * Imports a spore's module, or returns null when the spore ships none. A `.ts` entry
+ * loads through Node's type-stripping loader, which is what the `local` driver relies on.
  */
-export async function loadModule(read: ReadManifest): Promise<SporeModule<unknown, unknown>> {
+export async function loadModule(read: ReadManifest): Promise<SporeModule<unknown, unknown> | null> {
   const { location, manifest } = read
-
-  // Declarative entries (enzyme.yaml) take precedence over code entries (src/index.ts).
-  // A plugin author must not assume their src/index.ts runs.
-  if (manifest.kind === 'enzyme' && hasDeclarativeEntry(location.path)) {
-    return loadDeclarative(location.path, manifest.commands.map((c) => c.name))
-  }
-
   const entry = entryPoint(location.path)
   if (entry === null) {
-    throw new Error(`no entry point: expected one of ${[...CODE_ENTRIES, DECLARATIVE_ENTRY].join(', ')}`)
+    if (needsNoModule(manifest)) return null
+    throw new Error(`no entry point: expected one of ${CODE_ENTRIES.join(', ')}`)
   }
 
   const imported: unknown = await import(pathToFileURL(entry).href)

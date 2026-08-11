@@ -65,7 +65,7 @@ it('invokes Enzyme.start() with a working push()/capabilitiesOf(), and has()/rhi
     ].join('\n'),
   })
   spore('probe', {
-    'spore.yaml': 'kind: enzyme\nname: probe\nseptum: "^1.0"\ncommands:\n  - name: probe\n    description: x\n',
+    'spore.yaml': 'kind: enzyme\nname: probe\nseptum: "^1.0"\ncommands:\n  - name: probe\n    description: x\n    code: probe\n',
     'src/index.ts': [
       'export default {',
       '  create: () => {',
@@ -102,7 +102,7 @@ it('invokes Enzyme.start() with a working push()/capabilitiesOf(), and has()/rhi
 
 it('sends an enzyme dormant and removes it from the routing table when start() throws', async () => {
   spore('exploder', {
-    'spore.yaml': 'kind: enzyme\nname: exploder\nseptum: "^1.0"\ncommands:\n  - name: boom\n    description: x\n',
+    'spore.yaml': 'kind: enzyme\nname: exploder\nseptum: "^1.0"\ncommands:\n  - name: boom\n    description: x\n    code: boom\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',

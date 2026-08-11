@@ -20,7 +20,6 @@ function spore(name: string, files: Record<string, string>): void {
 }
 
 const HYPHA_MANIFEST = 'kind: hypha\nname: probe\nseptum: "^1.0"\n'
-const ENZYME_MANIFEST = 'kind: enzyme\nname: responder\nseptum: "^1.0"\ncommands:\n  - name: greet\n    description: Greet\n'
 
 async function read(name: string) {
   const location = discover(dir).find((l) => l.directory === name)!
@@ -81,6 +80,7 @@ it('resolves entry point and validates create() duck-type', async () => {
     'src/index.ts': 'const name: string = "probe"\nexport default { create: () => ({ name }) }\n',
   })
   const module = await loadModule(await read('probe'))
+  if (module === null) throw new Error('expected a module')
   expect((module.create() as { name: string }).name).toBe('probe')
 })
 
@@ -128,16 +128,24 @@ it('rejects non-erasable syntax like enum via plain node', async () => {
   expect(result.error).toMatch(/ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX|error|enum/i)
 })
 
-// Declarative enzymes take precedence over code entries when both exist.
-// This is the intended behavior: a plugin author may have dead code without realizing it.
-it('uses enzyme.yaml when both enzyme.yaml and code entry exist', async () => {
-  spore('dual', {
-    'spore.yaml': ENZYME_MANIFEST,
-    'enzyme.yaml': 'responses:\n  greet: hello\n',
-    'src/index.ts': 'throw new Error("this code should never run")\n',
+it('needs no module when every command answers with text', async () => {
+  spore('textonly', {
+    'spore.yaml': 'kind: enzyme\nname: textonly\nseptum: "^1.0"\ncommands:\n  - name: hi\n    description: Greet\n    respond: hello\n',
   })
-  const module = await loadModule(await read('dual'))
-  // Calling create() on an enzyme module returns the enzyme, not a throw.
-  const enzyme = module.create()
-  expect(enzyme).toHaveProperty('handle')
+  expect(await loadModule(await read('textonly'))).toBeNull()
+})
+
+it('still refuses a spore with a code command and no entry point', async () => {
+  spore('needy', {
+    'spore.yaml': 'kind: enzyme\nname: needy\nseptum: "^1.0"\ncommands:\n  - name: hi\n    description: Greet\n    code: handleHi\n',
+  })
+  await expect(loadModule(await read('needy'))).rejects.toThrow('no entry point')
+})
+
+it('loads an entry point that is present even when no command needs it', async () => {
+  spore('extra', {
+    'spore.yaml': 'kind: enzyme\nname: extra\nseptum: "^1.0"\ncommands:\n  - name: hi\n    description: Greet\n    respond: hello\n',
+    'src/index.ts': 'export default { create: () => ({ handlers: {} }) }\n',
+  })
+  expect(await loadModule(await read('extra'))).not.toBeNull()
 })
