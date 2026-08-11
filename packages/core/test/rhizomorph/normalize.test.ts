@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest'
+import { expect, it } from 'bun:test'
 import type { IncomingMessage } from '@mycelo/septum'
 import { normalize } from '../../src/rhizomorph/normalize.js'
 

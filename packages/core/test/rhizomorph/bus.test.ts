@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest'
+import { expect, it, mock } from 'bun:test'
 import type { CommandSpec, Enzyme, Hypha, IncomingMessage, Logger, OutgoingContent } from '@mycelo/septum'
 import { buildRoutes } from '../../src/germination/registry.js'
 import type { GerminatedEnzyme, GerminatedHypha, Registry } from '../../src/germination/registry.js'
@@ -92,9 +92,9 @@ it('reports failure rather than answering with Object.prototype.constructor when
 })
 
 it('reports an unknown command without invoking anything', async () => {
-  const ping = vi.fn()
+  const ping = mock()
   const { registry } = setup({ handlers: { ping } })
-  const onUnrouted = vi.fn(async () => {})
+  const onUnrouted = mock(async () => {})
   const bus = createBus({ registry, prefix: '/', logger: createLogger(), onUnrouted })
   await bus.deliver('console', message('/nope'))
   expect(ping).not.toHaveBeenCalled()
@@ -102,7 +102,7 @@ it('reports an unknown command without invoking anything', async () => {
 })
 
 it('ignores text carrying no command', async () => {
-  const ping = vi.fn()
+  const ping = mock()
   const { registry } = setup({ handlers: { ping } })
   const bus = createBus({ registry, prefix: '/', logger: createLogger() })
   await bus.deliver('console', message('just talking'))
@@ -181,19 +181,19 @@ it('never lets ctx.has() claim a dependency resolved: nothing has requires yet',
 })
 
 it('contains a malformed message instead of rejecting the fire-and-forget deliver()', async () => {
-  const ping = vi.fn()
+  const ping = mock()
   const { registry } = setup({ handlers: { ping } })
   const bus = createBus({ registry, prefix: '/', logger: createLogger() })
   const malformed = { ...message('/ping'), conversationId: '' }
-  await expect(bus.deliver('console', malformed)).resolves.toBeUndefined()
+  expect(bus.deliver('console', malformed)).resolves.toBeUndefined()
   expect(ping).not.toHaveBeenCalled()
 })
 
 it('contains an onUnrouted callback that itself throws', async () => {
   const { registry } = setup({ handlers: { ping: async () => {} } })
-  const onUnrouted = vi.fn(async () => { throw new Error('onUnrouted exploded') })
+  const onUnrouted = mock(async () => { throw new Error('onUnrouted exploded') })
   const bus = createBus({ registry, prefix: '/', logger: createLogger(), onUnrouted })
-  await expect(bus.deliver('console', message('/nope'))).resolves.toBeUndefined()
+  expect(bus.deliver('console', message('/nope'))).resolves.toBeUndefined()
   expect(onUnrouted).toHaveBeenCalled()
 })
 
@@ -226,7 +226,7 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
     child: () => logger,
   }
   const bus = createBus({ registry, prefix: '/', logger })
-  await expect(bus.deliver('console', message('/ping'))).resolves.toBeUndefined()
+  expect(bus.deliver('console', message('/ping'))).resolves.toBeUndefined()
   expect(errors).toHaveLength(2)
   expect(errors[1]).toContain('could not report')
 })
@@ -242,7 +242,7 @@ it('rejects an OutgoingContent with nothing set, before handing it to the hypha'
     child: () => logger,
   }
   const bus = createBus({ registry, prefix: '/', logger })
-  await expect(bus.deliver('console', message('/ping'))).resolves.toBeUndefined()
+  expect(bus.deliver('console', message('/ping'))).resolves.toBeUndefined()
   // The empty content never reached the hypha: only the recovery message did, which
   // is how "contained, not process-fatal" is distinguished from "silently accepted".
   expect(sent).toEqual([{ text: "command 'ping' failed" }])

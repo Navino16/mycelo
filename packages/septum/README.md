@@ -18,9 +18,7 @@ A `septum` is the interface a plugin implements. There are four, one per plugin 
 npm install @mycelo/septum
 ```
 
-ESM only — `require()` will not work. Developed and tested on Node 24; the conformance kit
-calls `module.stripTypeScriptTypes`, so an older runtime will not do. `zod` is a direct
-dependency, used to validate manifests.
+ESM only — `require()` will not work. `zod` is a direct dependency, used to validate manifests.
 
 ## A plugin is two files
 
@@ -32,7 +30,7 @@ capabilities are declared here rather than in the module.
 ```yaml
 kind: enzyme
 name: radarr-helper
-septum: "^0.2"
+septum: "^0.3"
 description: Movie shortcuts for Radarr
 commands:
   - name: help
@@ -108,6 +106,13 @@ A plugin whose commands all carry `respond:` needs no module at all — `help` a
 without one. The manifest is then the entire plugin: no `src/index.ts`, nothing to bundle,
 nothing that can throw at germination.
 
+## TypeScript
+
+The runtime is [Bun](https://bun.sh), which compiles TypeScript directly. A plugin may use any
+TypeScript construct — `enum`, `namespace`, decorators, parameter properties — and needs no
+bundler and no build step. It may be split across several files that import each other with
+`.js` specifiers, resolved the way Node's ESM does.
+
 ## Conformance kit
 
 `@mycelo/septum/conformance` exports checks a plugin author runs against their own
@@ -119,9 +124,6 @@ implementation. Each returns a list of failure strings, so it works with any tes
 | `rhizaChecks` | manifest, config schema, `api`, and that `health()` reports rather than throws |
 | `enzymeChecks` | manifest, config schema, lifecycle, and every command with no required args |
 | `inhibitorChecks` | manifest, config schema, lifecycle, and a verdict per expected allow/deny |
-| `erasabilityError` | whether one source string survives Node's type-stripping loader |
-| `assertErasable` | the same, as a throwing assertion |
-| `sourceErasabilityFailures` | the same over a list of file paths |
 
 The harness is yours to build: the kit cannot know what your plugin depends on, so you supply
 the stubs.
@@ -129,7 +131,7 @@ the stubs.
 ```ts
 import type { EnzymeContext } from '@mycelo/septum'
 import { enzymeChecks } from '@mycelo/septum/conformance'
-import { expect, it } from 'vitest'
+import { expect, it } from 'bun:test'
 import module from '../src/index.js'
 
 const context = (): EnzymeContext => ({
@@ -149,7 +151,7 @@ it('conforms to the Enzyme contract', async () => {
   const failures = await enzymeChecks({
     name: 'radarr-helper',
     manifest: {
-      kind: 'enzyme', name: 'radarr-helper', septum: '^0.2',
+      kind: 'enzyme', name: 'radarr-helper', septum: '^0.3',
       commands: [
         { name: 'help', description: 'Show what this plugin can do', respond: 'Try /add <title> to queue a movie.' },
         { name: 'add', description: 'Queue a movie by title', code: 'addMovie',
@@ -157,7 +159,6 @@ it('conforms to the Enzyme contract', async () => {
       ],
     },
     module,
-    sourcePaths: [new URL('../src/index.ts', import.meta.url).pathname],
     context,
   })
   expect(failures).toEqual([])
@@ -167,17 +168,9 @@ it('conforms to the Enzyme contract', async () => {
 Commands with required arguments are skipped: the kit cannot invent a value your enzyme would
 accept, so calling them would report correct validation as a failure. Those are yours to test.
 
-## Erasability
-
-`sourcePaths` is optional but worth passing. It asks Node whether your source can be loaded by
-its type-stripping loader, which is how Mycelo's `local` driver loads a plugin during
-development. A plugin can work when bundled and break when loaded unbundled, so the check
-exists to catch that before your users do: **no enums, no decorators, no namespaces, no
-parameter properties**.
-
 ## Status
 
-`0.x` — the contract is expected to change. The core's phase 2 runtime implements it: `npm
+`0.x` — the contract is expected to change. The core's runtime implements it: `bun run
 start` answers a `respond:` command directly and dispatches a `code:` command to its
 `handlers` entry. Pin an exact version if that matters to you.
 

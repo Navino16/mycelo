@@ -5,11 +5,11 @@
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "start": "node dist/index.js",
+    "start": "bun src/index.ts",
     "build": "tsc -b"
   },
   "dependencies": {
-    "@mycelo/septum": "^0.2.0",
+    "@mycelo/septum": "^0.3.0",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   }

@@ -1,6 +1,6 @@
 {
   "name": "@mycelo/septum",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The plugin contract for Mycelo: the interfaces every hypha, rhiza, enzyme and inhibitor implements.",
   "license": "MIT",
   "author": "Nathan Jaunet",
@@ -27,10 +27,12 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "bun": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
     "./conformance": {
+      "bun": "./src/conformance/index.ts",
       "types": "./dist/conformance/index.d.ts",
       "default": "./dist/conformance/index.js"
     }
@@ -44,9 +46,6 @@
   },
   "publishConfig": {
     "access": "public"
-  },
-  "engines": {
-    "node": ">=24.19.0"
   },
   "dependencies": {
     "zod": "^4.4.3"

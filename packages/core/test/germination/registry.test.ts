@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest'
+import { expect, it } from 'bun:test'
 import type { Enzyme } from '@mycelo/septum'
 import { buildRoutes, CollisionError } from '../../src/germination/registry.js'
 import type { GerminatedEnzyme } from '../../src/germination/registry.js'

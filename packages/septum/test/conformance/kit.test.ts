@@ -1,7 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { z } from 'zod'
 import { enzymeChecks } from '../../src/conformance/enzyme.js'
 import type { EnzymeHarness } from '../../src/conformance/enzyme.js'
@@ -438,64 +435,10 @@ describe('rhiza conformance checks', () => {
 })
 
 // ---------------------------------------------------------------------------
-// erasability wired into the harnesses
-// ---------------------------------------------------------------------------
-
-describe('source erasability through a harness', () => {
-  it('reports a source file the local driver could not load', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'mycelo-kit-'))
-    const file = join(dir, 'plugin.ts')
-    try {
-      writeFileSync(file, 'export enum Bad { A }\n', 'utf8')
-      const failures = await rhizaChecks({ ...goodRhiza, sourcePaths: [file] })
-      expect(failures.join(' ')).toContain('is not erasable')
-      expect(failures.join(' ')).toContain('enum')
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
-  })
-
-  it('stays silent on conforming source', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'mycelo-kit-'))
-    const file = join(dir, 'plugin.ts')
-    try {
-      writeFileSync(file, 'export const K = ["a"] as const\nexport type K = (typeof K)[number]\n', 'utf8')
-      expect(await rhizaChecks({ ...goodRhiza, sourcePaths: [file] })).toEqual([])
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
-  })
-
-  it('reports an unreadable path rather than throwing', async () => {
-    const failures = await rhizaChecks({ ...goodRhiza, sourcePaths: ['/nonexistent/x.ts'] })
-    expect(failures.join(' ')).toContain('cannot read source')
-  })
-})
-
-// ---------------------------------------------------------------------------
 // regressions found reviewing the kit
 // ---------------------------------------------------------------------------
 
 describe('regressions', () => {
-  it('keeps erasability failures when the manifest is rejected', async () => {
-    // The manifest early-returns used to build a fresh array, so the author saw
-    // only the manifest error and learned about the unloadable source one run later.
-    const dir = mkdtempSync(join(tmpdir(), 'mycelo-kit-'))
-    const file = join(dir, 'plugin.ts')
-    try {
-      writeFileSync(file, 'export enum Bad { A }\n', 'utf8')
-      const failures = await enzymeChecks({
-        ...goodEnzyme,
-        manifest: { kind: 'rhiza', name: 'links', septum: '^1.0' },
-        sourcePaths: [file],
-      })
-      expect(failures.join(' ')).toContain('is not erasable')
-      expect(failures.join(' ')).toContain("expected 'enzyme'")
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
-  })
-
   it('calls an enzyme start() before its handlers', async () => {
     let started = false
     const failures = await enzymeChecks({

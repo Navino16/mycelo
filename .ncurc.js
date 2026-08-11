@@ -4,9 +4,8 @@
 // version checker can see.
 export default {
   reject: [
-    // Must track the major of the Node runtime (>=24.19.0). Newer types describe
+    // Must track the major of the Node runtime pinned in .nvmrc. Newer types describe
     // APIs the runtime does not have: the compiler accepts the code and it crashes.
-    // Raise only together with engines.node.
     '@types/node',
 
     // typescript-eslint peers `typescript@">=4.8.4 <6.1.0"`, so TypeScript 7 means

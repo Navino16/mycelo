@@ -14,14 +14,16 @@ Discord ┘                      └─ Plex
 
 ## Status
 
-**Early development.** The plugin contract exists and is published as
-[`@mycelo/septum`](https://www.npmjs.com/package/@mycelo/septum); the runtime that loads plugins
-is not written yet. Nothing here is usable as a bot today.
+**Early development.** The plugin contract is published as
+[`@mycelo/septum`](https://www.npmjs.com/package/@mycelo/septum). The version in this tree may
+be ahead of the registry between a merge and its release. The runtime now germinates plugins and
+routes commands between them, but the only hypha that exists is a `console` test fixture: no
+channel plugin, and so no released bot, exists yet.
 
 | | |
 |---|---|
 | Contract (`@mycelo/septum`) | published, `0.x`, expected to change |
-| Runtime | not started |
+| Runtime | phases 1–2.5 done; anastomoses next |
 | Admin UI | not started |
 | Plugin registry ([mycelo-spores](https://github.com/Navino16/mycelo-spores)) | empty |
 
@@ -43,11 +45,12 @@ structurally, a plugin architecture.
 
 ## Development
 
-Requires Node `>=24.18.0`.
+Requires [Bun](https://bun.sh) `1.3.14` (see `.bun-version`).
 
 ```sh
-npm install
-npm run ci      # lint + typecheck + test
+bun install
+bun run ci      # lint + typecheck + test
+bun run start   # runs from source, no build step
 ```
 
 Work happens on `develop`; `main` holds released state.

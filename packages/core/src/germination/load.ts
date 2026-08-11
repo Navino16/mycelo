@@ -20,8 +20,9 @@ function needsNoModule(manifest: ReadManifest['manifest']): boolean {
 }
 
 /**
- * Imports a spore's module, or returns null when the spore ships none. A `.ts` entry
- * loads through Node's type-stripping loader, which is what the `local` driver relies on.
+ * Imports a spore's module, or returns null when the spore ships none. Bun compiles
+ * TypeScript directly, so a `.ts` entry and `.js`-specifier imports between spore files
+ * both resolve — what the `local` driver relies on.
  */
 export async function loadModule(read: ReadManifest): Promise<SporeModule<unknown, unknown> | null> {
   const { location, manifest } = read

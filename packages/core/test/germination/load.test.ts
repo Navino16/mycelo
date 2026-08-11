@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, expect, it } from 'vitest'
+import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { discover } from '../../src/germination/discover.js'
 import { isFailure, readManifest } from '../../src/germination/manifest.js'
 import { loadModule } from '../../src/germination/load.js'
@@ -29,15 +29,10 @@ async function read(name: string) {
 }
 
 /**
- * Tests that a TypeScript spore can be imported via plain node, proving the
- * type-stripping loader handles erasable TypeScript syntax but rejects non-erasable.
- *
- * This directly imports the spore's entry point without using loadModule(),
- * simulating what the local driver does: straight TypeScript import.
+ * Imports a spore's entry point in a subprocess, the way the `local` driver does.
+ * Runs under whatever `process.execPath` is — Bun during the suite.
  */
 async function loadInSubprocess(sporePath: string): Promise<{ success: boolean; output: string; error?: string }> {
-  // The subprocess will import the spore directly as a test of Node's type-stripping.
-  // First, find the entry point in the spore directory.
   const candidates = ['src/index.ts', 'index.ts', 'dist/index.js', 'index.js']
   let entryFile: string | null = null
   for (const candidate of candidates) {
@@ -71,9 +66,6 @@ console.log('success:', result.name ?? 'ok')
   }
 }
 
-// Tests the plumbing: path resolution, entry-point precedence, and duck-typed create() check.
-// Does NOT test that the type-stripping loader itself rejects non-erasable syntax (Vitest's
-// esbuild transform accepts it). The subprocess tests below cover the actual loader behavior.
 it('resolves entry point and validates create() duck-type', async () => {
   spore('probe', {
     'spore.yaml': HYPHA_MANIFEST,
@@ -86,7 +78,7 @@ it('resolves entry point and validates create() duck-type', async () => {
 
 it('refuses a spore with no entry point', async () => {
   spore('empty', { 'spore.yaml': HYPHA_MANIFEST })
-  await expect(loadModule(await read('empty'))).rejects.toThrow('no entry point')
+  expect(loadModule(await read('empty'))).rejects.toThrow('no entry point')
 })
 
 it('refuses a default export with no create()', async () => {
@@ -94,13 +86,10 @@ it('refuses a default export with no create()', async () => {
     'spore.yaml': HYPHA_MANIFEST,
     'src/index.ts': 'export default { nope: true }\n',
   })
-  await expect(loadModule(await read('bad'))).rejects.toThrow('create()')
+  expect(loadModule(await read('bad'))).rejects.toThrow('create()')
 })
 
-// Subprocess tests: verify the type-stripping loader behavior (not Vitest's transform).
-// These exercise Node's actual ESM loader without any build-step transform in the way.
-
-it('loads an erasable TypeScript spore via plain node (type-stripping loader)', async () => {
+it('loads an erasable TypeScript spore via a subprocess', async () => {
   spore('erasable', {
     'spore.yaml': HYPHA_MANIFEST,
     'src/index.ts': `
@@ -118,14 +107,14 @@ export default { create: () => ({ success: true }) }
   expect(result.output).toContain('success:')
 })
 
-it('rejects non-erasable syntax like enum via plain node', async () => {
+it('loads non-erasable syntax like enum, which Bun compiles rather than strips', async () => {
   spore('nonerasable', {
     'spore.yaml': HYPHA_MANIFEST,
     'src/index.ts': 'export enum Bad { A }\nexport default { create: () => ({}) }\n',
   })
   const result = await loadInSubprocess(join(dir, 'nonerasable'))
-  expect(result.success).toBe(false)
-  expect(result.error).toMatch(/ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX|error|enum/i)
+  expect(result.success).toBe(true)
+  expect(result.output).toContain('success:')
 })
 
 it('needs no module when every command answers with text', async () => {
@@ -139,14 +128,14 @@ it('still refuses a spore with a code command and no entry point', async () => {
   spore('needy', {
     'spore.yaml': 'kind: enzyme\nname: needy\nseptum: "^1.0"\ncommands:\n  - name: hi\n    description: Greet\n    code: handleHi\n',
   })
-  await expect(loadModule(await read('needy'))).rejects.toThrow('no entry point')
+  expect(loadModule(await read('needy'))).rejects.toThrow('no entry point')
 })
 
 it('refuses a spore mixing respond and code commands with no entry point', async () => {
   spore('mixed', {
     'spore.yaml': 'kind: enzyme\nname: mixed\nseptum: "^1.0"\ncommands:\n  - name: hi\n    description: Greet\n    respond: hello\n  - name: bye\n    description: Farewell\n    code: handleBye\n',
   })
-  await expect(loadModule(await read('mixed'))).rejects.toThrow('no entry point')
+  expect(loadModule(await read('mixed'))).rejects.toThrow('no entry point')
 })
 
 it('loads an entry point that is present even when no command needs it', async () => {
@@ -155,4 +144,15 @@ it('loads an entry point that is present even when no command needs it', async (
     'src/index.ts': 'export default { create: () => ({ handlers: {} }) }\n',
   })
   expect(await loadModule(await read('extra'))).not.toBeNull()
+})
+
+it('loads a spore made of two files that import each other with .js specifiers', async () => {
+  spore('multifile', {
+    'spore.yaml': HYPHA_MANIFEST,
+    'src/greeting.ts': 'export const who = "second file"\n',
+    'src/index.ts': "import { who } from './greeting.js'\nexport default { create: () => ({ name: who }) }\n",
+  })
+  const result = await loadInSubprocess(join(dir, 'multifile'))
+  expect(result.success).toBe(true)
+  expect(result.output).toContain('second file')
 })

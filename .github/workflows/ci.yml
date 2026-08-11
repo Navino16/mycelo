@@ -27,18 +27,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v7
+      - uses: oven-sh/setup-bun@v2
         with:
-          # The pinned version lives in .nvmrc alone, so it cannot drift.
-          node-version-file: .nvmrc
-          cache: npm
+          # The pinned version lives in .bun-version alone, so it cannot drift.
+          bun-version-file: .bun-version
 
-      # `npm ci`, not `npm install`: it fails when the lockfile disagrees with
-      # package.json.
-      - run: npm ci
+      - run: bun install --frozen-lockfile
 
       # Separate steps so the Actions UI names the one that failed. Same commands
-      # `npm run ci` chains locally.
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
+      # `bun run ci` chains locally.
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run test

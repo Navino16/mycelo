@@ -1,9 +1,10 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it } from 'bun:test'
 import type { OutgoingContent } from '@mycelo/septum'
 import { bootstrap } from '../src/mycelium.js'
+import { waitFor } from './support/wait-for.js'
 
 interface ConsoleFixture {
   feed(text: string): void
@@ -29,7 +30,7 @@ it('answers /ping with pong, through the real fixtures and the real bootstrap()'
   const fixture = consoleHypha?.instance as unknown as ConsoleFixture
 
   fixture.feed('/ping')
-  await vi.waitFor(() => { expect(fixture.sent).toEqual([{ text: 'pong' }]) })
+  await waitFor(() => { expect(fixture.sent).toEqual([{ text: 'pong' }]) })
 })
 
 it('answers text and code commands from one plugin, sharing a handler', async () => {
@@ -47,11 +48,28 @@ it('answers text and code commands from one plugin, sharing a handler', async ()
   fixture.feed('/add Dune')
   fixture.feed('/remove Dune')
 
-  await vi.waitFor(() => {
+  await waitFor(() => {
     expect(fixture.sent).toEqual([
       { text: 'Radarr http://radarr:7878' },
       { text: 'add: Dune' },
       { text: 'remove: Dune' },
     ])
+  })
+})
+
+it('answers from a plugin split across two unbundled files', async () => {
+  const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\n`, 'utf8')
+
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+
+  const fixture = registry.hyphae.find((h) => h.name === 'console')
+    ?.instance as unknown as ConsoleFixture
+
+  fixture.feed('/two Bun')
+  await waitFor(() => {
+    expect(fixture.sent).toEqual([{ text: 'hello Bun from a second file' }])
   })
 })

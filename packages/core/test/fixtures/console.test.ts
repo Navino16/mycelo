@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest'
+import { expect, it } from 'bun:test'
 import type { HyphaContext, IncomingMessage } from '@mycelo/septum'
 import module from '../../../../fixtures/console/src/index.js'
 
@@ -28,12 +28,4 @@ it('records what is sent to it', async () => {
   const instance = module.create()
   await instance.send('stdin', { text: 'pong' })
   expect(instance.sent).toEqual([{ text: 'pong' }])
-})
-
-import { readFileSync } from 'node:fs'
-import { erasabilityError } from '@mycelo/septum/conformance'
-
-it('is loadable by the local driver', () => {
-  const source = readFileSync(new URL('../../../../fixtures/console/src/index.ts', import.meta.url), 'utf8')
-  expect(erasabilityError(source)).toBeNull()
 })

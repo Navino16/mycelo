@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, expect, it } from 'vitest'
+import { afterEach, beforeEach, expect, it } from 'bun:test'
 import type { Logger } from '@mycelo/septum'
 import { germinate } from '../../src/germination/germinate.js'
 import { CollisionError } from '../../src/germination/registry.js'
