@@ -38,4 +38,10 @@ export default defineConfig(
     files: ['**/*.js'],
     extends: [tseslint.configs.disableTypeChecked],
   },
+  {
+    // Build-time tool config, outside every tsconfig's include; projectService
+    // cannot find a project for it, so type-aware parsing is not an option.
+    files: ['**/drizzle.config.ts'],
+    extends: [tseslint.configs.disableTypeChecked],
+  },
 )
