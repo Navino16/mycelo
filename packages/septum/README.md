@@ -59,7 +59,39 @@ Each kind then adds its own:
 | `hypha` | `capabilities`: any of `attachments`, `reactions`, `threads`, `group_membership` |
 | `rhiza` | — |
 | `enzyme` | `commands`: at least one, each with a `name`, a `description`, and exactly one of `respond` (a fixed text reply) or `code` (a handler name); `code` commands may add `args` |
-| `inhibitor` | `enforcing`: whether a denial actually blocks, default `false` |
+| `inhibitor` | `enforcing`: how an *error* from this inhibitor is handled, default `false` |
+
+### `enforcing` governs errors, never refusals
+
+A refusal is always final. `inspect()` returning `{ allow: false }` refuses the message whether the
+inhibitor is `enforcing` or not — an advisory inhibitor is not a dry run. `enforcing` decides only
+what happens when the inhibitor *fails*:
+
+| `inspect()` | advisory (default) | `enforcing: true` |
+|---|---|---|
+| returns `{ allow: false }` | message refused | message refused |
+| throws | skipped with a warning | **all traffic refused** |
+
+The same applies before any message arrives: an `enforcing` inhibitor that never became usable —
+rejected config, a throwing `start()`, a module that will not load, an unparseable manifest —
+refuses all traffic, rather than leaving the channel it guarded open. An advisory one in that state
+is simply absent.
+
+A refusal is **silent on the channel**: the core sends nothing back, so a sender with no right to
+address the bot learns nothing from it.
+
+`InhibitorContext` also carries `requireCapability(channel, capability)`. Call it from `start()`:
+it throws when that channel cannot enforce a rule the inhibitor depends on — asking a channel with
+no `group_membership` to police group members, for instance. The throw makes the inhibitor dormant,
+which for an `enforcing` one means all traffic is then refused. That is the point: a security rule
+must never be silently inert.
+
+```ts
+start: (ctx) => {
+  ctx.requireCapability(ctx.config.channel, 'group_membership')
+  return Promise.resolve()
+}
+```
 
 A `requires` entry names one rhiza, with optional `scopes` and `optional: true`. A missing
 mandatory dependency leaves the spore dormant, naming the target; an absent optional one does
@@ -91,14 +123,24 @@ every spore may require it. `scopes` is mandatory-per-method: each granted scope
 on the object `ctx.rhiza('mycelium')` returns, and an ungranted scope's method is simply absent,
 not present-but-rejecting:
 
-| Scope | Mounts |
-|---|---|
-| `plugins.read` | `listPlugins(): readonly PluginInfo[]` |
-| `health.read` | `health(): Promise<readonly RhizaHealth[]>` |
-| `messages.send` | `send(target: PushTarget, content: OutgoingContent): Promise<void>` |
+| Scope | Interface | Mounts |
+|---|---|---|
+| `plugins.read` | `PluginsRead` | `listPlugins(): readonly PluginInfo[]` |
+| `health.read` | `HealthRead` | `health(): Promise<readonly RhizaHealth[]>` |
+| `messages.send` | `MessagesSend` | `send(target, content): Promise<void>` |
+| `principals.read` | `PrincipalsRead` | `listPrincipals()`, `getPrincipal(id)`, `findByIdentity(channel, externalId)` |
+| `principals.manage` | `PrincipalsManage` | `markReviewed(id)`, `setDisplayName(id, displayName)` |
+| `roles.read` | `RolesRead` | `listRoles()`, `rolesOf(principalId)` |
+| `roles.assign` | `RolesAssign` | `assignRole(principalId, roleName)`, `revokeRole(principalId, roleName)` |
+| `roles.manage` | `RolesManage` | `createRole(name, patterns)`, `setRoleCommands(name, patterns)`, `deleteRole(name)` |
 
-The remaining `MyceliumScope` values (`principals.*`, `roles.*`, `plugins.toggle`) parse but leave
-the spore dormant, naming the phase that mounts them — none does yet.
+Every method above is `async`. The identity and role methods reject rather than resolve quietly when
+they are asked about something that does not exist — an unknown principal id, an unknown role name —
+and `deleteRole`/`setRoleCommands` also reject on a `builtin` role such as `owner`. Only the two
+`getPrincipal`/`findByIdentity` lookups answer `null` for "not found", since asking is their purpose.
+
+`plugins.toggle` is the one `MyceliumScope` value with no interface and nothing mounted: it parses,
+and leaves the spore dormant naming the phase that mounts it (phase 5).
 
 ```yaml
 requires:
@@ -164,6 +206,12 @@ implementation. Each returns a list of failure strings, so it works with any tes
 
 The harness is yours to build: the kit cannot know what your plugin depends on, so you supply
 the stubs.
+
+`context()` is the context a *handler* gets. `start()` runs before any message exists and gets the
+narrower `EnzymeStartContext` — no `reply`, no `principal`, no `capabilities` — so `enzymeChecks`
+narrows `context()` down to those members before calling `start()`. An enzyme that reaches for
+`ctx.reply` in `start()` therefore fails the kit exactly as it would fail in the bot. Pass
+`startContext()` instead if you want to stub that moment yourself.
 
 ```ts
 import type { EnzymeContext } from '@mycelo/septum'

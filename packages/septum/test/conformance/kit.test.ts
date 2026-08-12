@@ -473,6 +473,47 @@ describe('regressions', () => {
     expect(failures).toEqual([])
   })
 
+  // The runtime hands start() an EnzymeStartContext; EnzymeContext extends it, so passing
+  // the fuller stub typechecked and certified an enzyme that throws in the bot.
+  it('hands start() a context with no reply, principal or capabilities', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        create: () => ({
+          handlers: { links: async () => {} },
+          async start(ctx) {
+            const seen = ctx as unknown as Record<string, unknown>
+            for (const absent of ['reply', 'principal', 'capabilities']) {
+              if (seen[absent] !== undefined) throw new Error(`start() saw ${absent}`)
+            }
+            if (typeof ctx.push !== 'function') throw new Error('start() lost push')
+          },
+          async stop() {},
+        }),
+      },
+    })
+    expect(failures).toEqual([])
+  })
+
+  it('lets a harness stub the start context itself', async () => {
+    let sawOwnStub = false
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      startContext: () => ({ ...enzymeContext(), config: { ownStub: true } }),
+      module: {
+        create: () => ({
+          handlers: { links: async () => {} },
+          async start(ctx) {
+            sawOwnStub = (ctx.config as { ownStub?: boolean }).ownStub === true
+          },
+          async stop() {},
+        }),
+      },
+    })
+    expect(failures).toEqual([])
+    expect(sawOwnStub).toBe(true)
+  })
+
   it('catches a start that is present but not callable', async () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
