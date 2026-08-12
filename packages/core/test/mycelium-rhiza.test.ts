@@ -20,7 +20,7 @@ function fresh(): Db {
 }
 
 function emptyRegistry(): Registry {
-  return { hyphae: [], rhizas: [], enzymes: [], dormant: [], routes: new Map(), order: [] }
+  return { hyphae: [], rhizas: [], enzymes: [], inhibitors: [], dormant: [], routes: new Map(), order: [], brokenEnforcing: [] }
 }
 
 const registry = {

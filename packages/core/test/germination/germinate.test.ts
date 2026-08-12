@@ -49,12 +49,55 @@ it('leaves a spore dormant when a declared requires target is not installed', as
   expect(registry.dormant[0]?.reason).toContain("requires rhiza 'radarr', which is not installed")
 })
 
-it('refuses to germinate an inhibitor: phase 4 routes them', async () => {
-  spore('gate', {
-    'spore.yaml': 'kind: inhibitor\nname: gate\nseptum: "^1.0"\n',
+it('germinates an inhibitor instead of refusing its kind', async () => {
+  spore('gatefix', {
+    'spore.yaml': 'kind: inhibitor\nname: gatefix\nseptum: "^1.0"\nenforcing: true\n',
+    'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
   })
   const registry = await germinate(dir, createLogger())
-  expect(registry.dormant[0]?.reason).toBe("kind 'inhibitor' is not routed until phase 4")
+  expect(registry.dormant).toEqual([])
+  expect(registry.inhibitors.map((i) => i.name)).toEqual(['gatefix'])
+  expect(registry.inhibitors[0]?.manifest.enforcing).toBe(true)
+})
+
+it('leaves an inhibitor with no inspect() dormant', async () => {
+  spore('badgate', {
+    'spore.yaml': 'kind: inhibitor\nname: badgate\nseptum: "^1.0"\n',
+    'src/index.ts': 'export default { create: () => ({}) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.dormant[0]?.reason).toContain('inspect')
+})
+
+it('refuses all traffic when an enforcing inhibitor is dormant from a rejected config', async () => {
+  spore('strictgate', {
+    'spore.yaml': 'kind: inhibitor\nname: strictgate\nseptum: "^1.0"\nenforcing: true\n',
+    'src/index.ts': [
+      'export default {',
+      '  configSchema: { safeParse: () => ({ success: false, error: "groupId is required" }) },',
+      '  create: () => ({ inspect: () => Promise.resolve({ allow: true }) }),',
+      '}',
+    ].join('\n'),
+  })
+  const registry = await germinate(dir, createLogger(), {})
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.brokenEnforcing).toEqual(['strictgate'])
+})
+
+it('does not refuse all traffic when a dormant inhibitor is only advisory', async () => {
+  spore('softgate', {
+    'spore.yaml': 'kind: inhibitor\nname: softgate\nseptum: "^1.0"\n',
+    'src/index.ts': [
+      'export default {',
+      '  configSchema: { safeParse: () => ({ success: false, error: "groupId is required" }) },',
+      '  create: () => ({ inspect: () => Promise.resolve({ allow: true }) }),',
+      '}',
+    ].join('\n'),
+  })
+  const registry = await germinate(dir, createLogger(), {})
+  expect(registry.dormant).toHaveLength(1)
+  expect(registry.brokenEnforcing).toEqual([])
 })
 
 it('makes a dependent dormant when a MANDATORY dependency fails to load, never importing its own module', async () => {

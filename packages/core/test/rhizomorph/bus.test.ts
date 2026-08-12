@@ -39,7 +39,7 @@ function setup(
   }]
   const order = [...rhizas.map((r) => r.name), 'ping']
   return {
-    registry: { hyphae, enzymes, rhizas, dormant: [], routes: buildRoutes(enzymes), order },
+    registry: { hyphae, enzymes, rhizas, inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order, brokenEnforcing: [] },
     sent,
   }
 }
@@ -116,7 +116,7 @@ it('names the failed command, not just the channel, when a respond: send throws'
     scopes: [],
     config: {},
   }]
-  const registry: Registry = { hyphae, enzymes, rhizas: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'] }
+  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'], brokenEnforcing: [] }
   const errors: string[] = []
   const logger: Logger = {
     debug() {}, info() {}, warn() {},
@@ -350,9 +350,10 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
     },
   ]
   const registry: Registry = {
-    hyphae, enzymes, rhizas, dormant: [],
+    hyphae, enzymes, rhizas, inhibitors: [], dormant: [],
     routes: buildRoutes(enzymes),
     order: ['mock', 'other', 'alpha', 'beta'],
+    brokenEnforcing: [],
   }
   const bus = createBus({ registry, db, prefix: '/', logger: createLogger() })
   await bus.deliver('console', message('/alpha'))
@@ -410,7 +411,7 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
     scopes: [],
     config: {},
   }]
-  const registry: Registry = { hyphae, enzymes, rhizas: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'] }
+  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'], brokenEnforcing: [] }
   // A bespoke logger, not createLogger(): distinguishes "contained by the specific
   // recovery-send try" from "contained by the outer catch-all" — both would make the
   // promise resolve, but only the former logs both failures under their own messages.

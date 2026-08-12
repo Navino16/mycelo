@@ -72,6 +72,28 @@ export function enzymeShapeError(instance: unknown, commands: readonly CommandSp
   return null
 }
 
+/**
+ * Duck-typed, never instanceof: a spore is bundled with its own copy of everything.
+ * `inspect` must be callable, not merely present — phase 1's conformance kit checked
+ * presence only and certified a broken plugin.
+ */
+export function inhibitorShapeError(instance: unknown): string | null {
+  if (typeof instance !== 'object' || instance === null) {
+    return `create() returned ${String(instance)}, expected an object`
+  }
+  const record = instance as Record<string, unknown>
+  if (typeof record['inspect'] !== 'function') return 'create() returned no inspect()'
+  if ((record['start'] === undefined) !== (record['stop'] === undefined)) {
+    return 'start() and stop() must be both present or both absent'
+  }
+  for (const method of ['start', 'stop']) {
+    if (record[method] !== undefined && typeof record[method] !== 'function') {
+      return `${method} is present but not callable`
+    }
+  }
+  return null
+}
+
 /** Dead code is not a broken plugin: warn and germinate (spec, "An unreferenced handler"). */
 export function unreferencedHandlers(instance: Enzyme, commands: readonly CommandSpec[]): string[] {
   const referenced = new Set(commands.filter((c) => c.respond === undefined).map((c) => c.code))

@@ -1,8 +1,11 @@
 import type { MyceliumScope } from '@mycelo/septum'
+import { createAdmissionChain, createInhibitorContext } from './admission/chain.js'
+import type { AdmissionChain } from './admission/chain.js'
+import { createMembershipCache } from './admission/membership.js'
 import { loadBootstrap } from './config.js'
 import { germinate } from './germination/germinate.js'
 import { buildRoutes } from './germination/registry.js'
-import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedRhiza, Registry } from './germination/registry.js'
+import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor, GerminatedRhiza, Registry } from './germination/registry.js'
 import { bootstrapIdentity } from './identity/bootstrap.js'
 import { createMyceliumApi } from './mycelium-rhiza.js'
 import { migrateDatabase, openDatabase } from './persistence/db.js'
@@ -13,10 +16,11 @@ import { createLogger } from './support/logger.js'
 export interface Mycelium {
   registry: Registry
   bus: Bus
+  admission: AdmissionChain
 }
 
 export function germinationBanner(registry: Registry): string {
-  const spores = [...registry.hyphae, ...registry.enzymes, ...registry.rhizas]
+  const spores = [...registry.hyphae, ...registry.enzymes, ...registry.rhizas, ...registry.inhibitors]
   return `germinated ${String(spores.length)} spores (${spores.map((s) => s.name).join(', ')})`
 }
 
@@ -125,6 +129,49 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     }
   }
 
+  // Step 2.5: inhibitors start last among the dependency-ordered spores, because
+  // ctx.rhiza() may reach a rhiza that must already be running (design §7).
+  const membership = createMembershipCache(connectedHyphae)
+  const startedInhibitors: GerminatedInhibitor[] = []
+  const brokenEnforcing: string[] = [...registry.brokenEnforcing]
+  for (const inhibitor of registry.inhibitors) {
+    const ctx = createInhibitorContext({
+      inhibitor, membership, rhizas: startedRhizas, mycelium,
+      logger: logger.child({ inhibitor: inhibitor.name }),
+    })
+    try {
+      await inhibitor.instance.start?.(ctx)
+      startedInhibitors.push(inhibitor)
+    } catch (e) {
+      const reason = (e as Error).message
+      dormant.push({ name: inhibitor.name, reason })
+      if (inhibitor.manifest.enforcing) {
+        // Design §7: an enforcing inhibitor that never started refuses everything,
+        // rather than leaving the channel it guarded wide open.
+        brokenEnforcing.push(inhibitor.name)
+        logger.error(`enforcing inhibitor '${inhibitor.name}' failed to start: all traffic is refused`, { reason })
+      } else {
+        logger.warn(`inhibitor '${inhibitor.name}' failed to start and is dormant`, { reason })
+      }
+    }
+  }
+
+  const admission = createAdmissionChain({
+    inhibitors: startedInhibitors,
+    brokenEnforcing,
+    membership,
+    logger,
+    rhiza: (inhibitor) => {
+      const ctx = createInhibitorContext({
+        inhibitor, membership, rhizas: startedRhizas, mycelium,
+        logger: logger.child({ inhibitor: inhibitor.name }),
+      })
+      // Method-call syntax, not a bare reference: extracting ctx.rhiza would trip
+      // @typescript-eslint/unbound-method on the interface's method-shorthand signature.
+      return <T>(name: string): T => ctx.rhiza<T>(name)
+    },
+  })
+
   // A failed start() must not leave the enzyme routable: routes are rebuilt from
   // only the enzymes that started (safe — buildRoutes() already accepted the full
   // set at germination, and removing entries cannot introduce a new collision).
@@ -133,6 +180,8 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     hyphae: connectedHyphae,
     rhizas: startedRhizas,
     enzymes: startedEnzymes,
+    inhibitors: startedInhibitors,
+    brokenEnforcing,
     routes: buildRoutes(startedEnzymes),
   }
 
@@ -163,5 +212,5 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
   }
   reportedHyphae = listening
 
-  return { registry: { ...routedRegistry, hyphae: listening, dormant }, bus }
+  return { registry: { ...routedRegistry, hyphae: listening, dormant }, bus, admission }
 }
