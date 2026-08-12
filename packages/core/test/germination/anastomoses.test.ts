@@ -81,14 +81,16 @@ describe('resolve', () => {
     expect(top?.reason).toBe("requires rhiza 'middle', which is dormant: requires rhiza 'absent', which is not installed")
   })
 
+  // Only a rhiza can be the target of a rhiza: requirement (spec §6), so a cycle over
+  // that edge type can only ever run between rhizas — never through an enzyme's name.
   it('throws on a cycle, naming the plugins in order', () => {
-    expect(() => resolve([enzyme('a', [{ rhiza: 'b' }]), rhiza('b', [{ rhiza: 'a' }])])).toThrow(CycleError)
-    expect(() => resolve([enzyme('a', [{ rhiza: 'b' }]), rhiza('b', [{ rhiza: 'a' }])])).toThrow(/a -> b -> a/)
+    expect(() => resolve([rhiza('a', [{ rhiza: 'b' }]), rhiza('b', [{ rhiza: 'a' }])])).toThrow(CycleError)
+    expect(() => resolve([rhiza('a', [{ rhiza: 'b' }]), rhiza('b', [{ rhiza: 'a' }])])).toThrow(/a -> b -> a/)
   })
 
   it('counts optional edges towards cycle detection, with no exemption', () => {
-    expect(() => resolve([enzyme('a', [{ rhiza: 'b', optional: true }]), rhiza('b', [{ rhiza: 'a' }])])).toThrow(CycleError)
-    expect(() => resolve([enzyme('a', [{ rhiza: 'b', optional: true }]), rhiza('b', [{ rhiza: 'a' }])])).toThrow(/a -> b -> a/)
+    expect(() => resolve([rhiza('a', [{ rhiza: 'b', optional: true }]), rhiza('b', [{ rhiza: 'a' }])])).toThrow(CycleError)
+    expect(() => resolve([rhiza('a', [{ rhiza: 'b', optional: true }]), rhiza('b', [{ rhiza: 'a' }])])).toThrow(/a -> b -> a/)
   })
 
   it('treats mycelium as always available and never part of a cycle', () => {
@@ -133,6 +135,15 @@ describe('resolve', () => {
     ])
     expect(names(r)).toEqual(['media'])
     expect(r.order[0]?.resolved.has('mock')).toBe(false)
+  })
+
+  it('leaves a spore dormant when rhiza: names an installed spore that is not a rhiza', () => {
+    const r = resolve([enzyme('user', [{ rhiza: 'ping' }]), enzyme('ping')])
+    // 'ping' has no requires of its own, so it germinates independently; 'user' is the
+    // one that goes dormant for naming an enzyme where a rhiza: requirement needs a rhiza.
+    expect(names(r)).toEqual(['ping'])
+    const user = r.dormant.find((d) => d.name === 'user')
+    expect(user?.reason).toBe("requires rhiza 'ping', which is kind 'enzyme', not a rhiza")
   })
 
   it('makes the second spore claiming a name dormant', () => {

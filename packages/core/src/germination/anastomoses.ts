@@ -66,19 +66,22 @@ interface Evaluated {
 const FAILED: Evaluated = { edges: [], mandatoryEdges: [], anyOf: [], scopes: [], usesMycelium: false }
 
 /**
- * Resolves one manifest's requirements against the installed set alone (no re-collapse):
+ * Resolves one manifest's requirements against the candidate pool alone (no re-collapse):
  * any_of first, then mandatory-target existence, then mycelium scopes — spec §6 order.
+ * `rhiza:` names a rhiza specifically, so a candidate of any other kind does not satisfy it
+ * — otherwise `ctx.rhiza()` would resolve a name that was never installed as a rhiza at all.
  */
-function evaluate(requires: readonly Requirement[], installed: ReadonlySet<string>): Evaluated {
+function evaluate(requires: readonly Requirement[], candidates: ReadonlyMap<string, ReadManifest>): Evaluated {
   const edges: string[] = []
   const mandatoryEdges: string[] = []
   const anyOf: AnyOfChoice[] = []
   let usesMycelium = false
+  const isRhiza = (name: string): boolean => candidates.get(name)?.manifest.kind === 'rhiza'
 
   for (const requirement of requires) {
     if ('any_of' in requirement) {
       const alternatives = requirement.any_of.map((a) => targetName(a.rhiza))
-      const chosen = alternatives.find((n) => n === 'mycelium' || installed.has(n))
+      const chosen = alternatives.find((n) => n === 'mycelium' || isRhiza(n))
       if (chosen === undefined) {
         const listed = alternatives.map((n) => `'${n}'`).join(', ')
         return { ...FAILED, dormantReason: `requires one of rhiza ${listed} — none is installed` }
@@ -97,11 +100,15 @@ function evaluate(requires: readonly Requirement[], installed: ReadonlySet<strin
       usesMycelium = true
       continue // scopes checked below, once every target has resolved
     }
-    if (installed.has(name)) {
+    if (isRhiza(name)) {
       edges.push(name)
       if (!requirement.optional) mandatoryEdges.push(name)
     } else if (!requirement.optional) {
-      return { ...FAILED, dormantReason: `requires rhiza '${name}', which is not installed` }
+      const candidate = candidates.get(name)
+      const reason = candidate === undefined
+        ? `requires rhiza '${name}', which is not installed`
+        : `requires rhiza '${name}', which is kind '${candidate.manifest.kind}', not a rhiza`
+      return { ...FAILED, dormantReason: reason }
     }
   }
 
@@ -184,12 +191,11 @@ export function resolve(reads: readonly ReadManifest[]): Resolution {
   }
 
   // Steps 2-4: any_of collapse, mandatory targets, scopes — per candidate, in that
-  // priority, against the installed set alone.
-  const installed = new Set(candidates.keys())
+  // priority, against the candidate pool alone.
   const primaryReasons = new Map<string, string>()
   const alive = new Map<string, AliveNode>()
   for (const [name, read] of candidates) {
-    const evaluated = evaluate(read.manifest.requires ?? [], installed)
+    const evaluated = evaluate(read.manifest.requires ?? [], candidates)
     if (evaluated.dormantReason !== undefined) {
       primaryReasons.set(name, evaluated.dormantReason)
       continue
