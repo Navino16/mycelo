@@ -30,7 +30,7 @@ capabilities are declared here rather than in the module.
 ```yaml
 kind: enzyme
 name: radarr-helper
-septum: "^0.3"
+septum: "^0.4"
 description: Movie shortcuts for Radarr
 commands:
   - name: help
@@ -61,8 +61,11 @@ Each kind then adds its own:
 | `enzyme` | `commands`: at least one, each with a `name`, a `description`, and exactly one of `respond` (a fixed text reply) or `code` (a handler name); `code` commands may add `args` |
 | `inhibitor` | `enforcing`: whether a denial actually blocks, default `false` |
 
-A `requires` entry names one rhiza, with optional `scopes` and `optional: true`. Use
-`any_of` instead when two rhizas would both do:
+A `requires` entry names one rhiza, with optional `scopes` and `optional: true`. A missing
+mandatory dependency leaves the spore dormant, naming the target; an absent optional one does
+not, and `ctx.has()` answers `false` for it. Use `any_of` instead when two rhizas would both do —
+it collapses to the first alternative that is actually installed, and only that one becomes an
+edge in the dependency graph:
 
 ```yaml
 requires:
@@ -71,12 +74,43 @@ requires:
       - rhiza: sonarr
 ```
 
+If neither `radarr` nor `sonarr` is installed, the spore is dormant naming both alternatives. A
+cycle among mandatory dependencies — anywhere in the graph, not only between two spores that
+require each other directly — is refused at startup, naming every plugin in the cycle.
+
 `parseManifest` validates the parsed YAML and throws a `ManifestError` naming the offending
 field.
 
-On the current runtime, declaring `requires` at all keeps a spore dormant: resolving it
-(anastomoses) is a later phase, not yet implemented. A spore that needs a rhiza today
-should omit `requires` and check for it at runtime instead, through `ctx.has()`.
+### `requires: [{ rhiza: mycelium, scopes: [...] }]`
+
+`mycelium` is the core itself, reachable like any other rhiza but never declared as installed —
+every spore may require it. `scopes` is mandatory-per-method: each granted scope mounts one method
+on the object `ctx.rhiza('mycelium')` returns, and an ungranted scope's method is simply absent,
+not present-but-rejecting:
+
+| Scope | Mounts |
+|---|---|
+| `plugins.read` | `listPlugins(): readonly PluginInfo[]` |
+| `health.read` | `health(): Promise<readonly RhizaHealth[]>` |
+| `messages.send` | `send(target: PushTarget, content: OutgoingContent): Promise<void>` |
+
+The remaining `MyceliumScope` values (`principals.*`, `roles.*`, `plugins.toggle`) parse but leave
+the spore dormant, naming the phase that mounts them — none does yet.
+
+```yaml
+requires:
+  - rhiza: mycelium
+    scopes: [plugins.read]
+```
+
+```ts
+async start(ctx) {
+  const plugins = ctx.rhiza<{ listPlugins(): { name: string }[] }>('mycelium').listPlugins()
+}
+```
+
+`scopes` may only be set on the `mycelium` requirement; setting it on any other rhiza is rejected,
+since only the mycelium has a scope model.
 
 ### `src/index.ts`
 
@@ -151,7 +185,7 @@ it('conforms to the Enzyme contract', async () => {
   const failures = await enzymeChecks({
     name: 'radarr-helper',
     manifest: {
-      kind: 'enzyme', name: 'radarr-helper', septum: '^0.3',
+      kind: 'enzyme', name: 'radarr-helper', septum: '^0.4',
       commands: [
         { name: 'help', description: 'Show what this plugin can do', respond: 'Try /add <title> to queue a movie.' },
         { name: 'add', description: 'Queue a movie by title', code: 'addMovie',
