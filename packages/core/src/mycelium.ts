@@ -190,10 +190,18 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     prefix: config.prefix,
     logger,
     db,
+    admission,
+    ...(config.defaultRole === undefined ? {} : { defaultRole: config.defaultRole }),
     mycelium,
     onUnrouted: async (message, command) => {
       if (command === null) return
       await sendVia(hyphaByName, message.channel, message.conversationId, { text: `unknown command '${command}'` })
+    },
+    onDenied: async (message, qualified) => {
+      const command = qualified.slice(qualified.indexOf('.') + 1)
+      await sendVia(hyphaByName, message.channel, message.conversationId, {
+        text: `you are not allowed to use '${command}'`,
+      })
     },
   })
   busBox.current = bus

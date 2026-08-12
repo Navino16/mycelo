@@ -463,7 +463,8 @@ it("keeps the mycelium's plugin list consistent with bootstrap()'s own registry 
     ].join('\n'),
   })
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\n`, 'utf8')
+  // owner matches message()'s fixed sender ('local'), so /probe is authorized (phase 4).
+  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\nowner:\n  channel: good\n  userId: local\n`, 'utf8')
 
   const { registry, bus } = await bootstrap(configFile)
   expect(registry.hyphae.map((h) => h.name)).toEqual(['good'])

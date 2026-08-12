@@ -19,9 +19,11 @@ it('answers /ping with pong, through the real fixtures and the real bootstrap()'
   // Exercises mycelium.ts's bootstrap() itself — the exact wiring src/index.ts runs —
   // rather than reassembling germinate()/createBus() by hand, which would test a
   // second, parallel implementation of the wiring instead of the shipped one.
+  // owner matches the console fixture's fixed sender ('local'), so every command it
+  // feeds is authorized (phase 4) — otherwise every one of these milestones is denied.
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\n`, 'utf8')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
 
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
@@ -36,7 +38,7 @@ it('answers /ping with pong, through the real fixtures and the real bootstrap()'
 it('answers text and code commands from one plugin, sharing a handler', async () => {
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\n`, 'utf8')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
 
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
@@ -60,7 +62,7 @@ it('answers text and code commands from one plugin, sharing a handler', async ()
 it('answers from a plugin split across two unbundled files', async () => {
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\n`, 'utf8')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
 
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
@@ -77,7 +79,7 @@ it('answers from a plugin split across two unbundled files', async () => {
 it('answers a lookup through a rhiza resolved via an any_of collapse', async () => {
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\n`, 'utf8')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
 
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
@@ -94,7 +96,7 @@ it('answers a lookup through a rhiza resolved via an any_of collapse', async () 
 it('answers unknown for a title that collides with an Object.prototype member', async () => {
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\n`, 'utf8')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
 
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
@@ -111,7 +113,7 @@ it('answers unknown for a title that collides with an Object.prototype member', 
 it('collapses an any_of to the first installed alternative', async () => {
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\n`, 'utf8')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
 
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
@@ -128,7 +130,7 @@ it('collapses an any_of to the first installed alternative', async () => {
 it('reads the mycelium through a scoped rhiza', async () => {
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\n`, 'utf8')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
 
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])

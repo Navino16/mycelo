@@ -10,7 +10,10 @@ import type {
   OutgoingContent,
   Principal,
 } from '@mycelo/septum'
+import type { AdmissionChain } from '../admission/chain.js'
 import type { GerminatedHypha, GerminatedRhiza, Registry } from '../germination/registry.js'
+import { authorize } from '../authorization/check.js'
+import { patternsOf, resolvePrincipal } from '../identity/resolve.js'
 import { createMyceliumApi } from '../mycelium-rhiza.js'
 import type { Db } from '../persistence/db.js'
 import { bindArgs, parseCommand } from './parse.js'
@@ -104,13 +107,20 @@ export interface BusOptions {
   prefix: string
   logger: Logger
   db: Db
+  admission: AdmissionChain
+  /** Assigned to a principal on first contact only (identity/resolve.ts). */
+  defaultRole?: string
   /** Called when text carries no command, or names one nothing declares. */
   onUnrouted?: (message: IncomingMessage, command: string | null) => Promise<void>
+  /** Sent verbatim when authorization refuses. */
+  onDenied?: (message: IncomingMessage, qualified: string) => Promise<void>
   /** Defaults to the real mycelium-as-rhiza API, grounded in this bus's own registry (design §2.4). */
   mycelium?: (scopes: readonly MyceliumScope[]) => object
 }
 
-export function createBus({ registry, prefix, logger, db, onUnrouted, mycelium }: BusOptions): Bus {
+export function createBus({
+  registry, prefix, logger, db, admission, defaultRole, onUnrouted, onDenied, mycelium,
+}: BusOptions): Bus {
   const hyphaByName = new Map(registry.hyphae.map((h) => [h.name, h]))
   const send = (channel: string, conversationId: string, out: OutgoingContent): Promise<void> =>
     sendVia(hyphaByName, channel, conversationId, out)
@@ -133,7 +143,7 @@ export function createBus({ registry, prefix, logger, db, onUnrouted, mycelium }
     ]),
   )
 
-  function contextFor(message: IncomingMessage, enzymeName: string): EnzymeContext {
+  function contextFor(message: IncomingMessage, enzymeName: string, principal: Principal): EnzymeContext {
     const origin = hyphaByName.get(message.channel)
     const startContext = startContextByEnzyme.get(enzymeName)
     if (startContext === undefined) throw new Error(`no start context built for enzyme '${enzymeName}'`)
@@ -142,7 +152,7 @@ export function createBus({ registry, prefix, logger, db, onUnrouted, mycelium }
       logger: logger.child({ channel: message.channel }),
       reply: async (content) => { await send(message.channel, message.conversationId, content) },
       capabilities: capabilitiesOf(origin),
-      get principal(): Principal { return notYet('ctx.principal', 'phase 4 (identity)') },
+      get principal(): Principal { return principal },
     }
   }
 
@@ -154,6 +164,24 @@ export function createBus({ registry, prefix, logger, db, onUnrouted, mycelium }
       // observed to become a process-fatal unhandled rejection, not merely a lost message.
       try {
         const message = normalize(channel, raw)
+
+        const verdict = await admission.admit(message)
+        if (!verdict.allow) {
+          // Silent on the channel: the bot does not confirm its existence to someone
+          // with no right to address it (design §3.1).
+          logger.info(`admission refused a message on '${channel}'`, { reason: verdict.reason })
+          return
+        }
+
+        let principal: Principal
+        try {
+          principal = resolvePrincipal(db, message.sender, defaultRole === undefined ? {} : { defaultRole })
+        } catch (e) {
+          // No principal means no authorization, so passing the message on would be a fail-open.
+          logger.error(`could not resolve the sender on '${channel}'`, { error: (e as Error).message })
+          return
+        }
+
         const parsed = parseCommand(message.text, prefix)
         if (parsed === null) {
           await onUnrouted?.(message, null)
@@ -164,6 +192,14 @@ export function createBus({ registry, prefix, logger, db, onUnrouted, mycelium }
           await onUnrouted?.(message, parsed.command)
           return
         }
+
+        // A respond: command is authorized too: it has no handler, but letting it
+        // through unchecked would make respond: a way around authorization entirely.
+        if (!authorize(route.qualified, patternsOf(db, principal.id))) {
+          await onDenied?.(message, route.qualified)
+          return
+        }
+
         const spec = route.spec
         if (spec.respond !== undefined) {
           try {
@@ -207,7 +243,7 @@ export function createBus({ registry, prefix, logger, db, onUnrouted, mycelium }
           return
         }
         try {
-          await handler(invocation, contextFor(message, route.plugin))
+          await handler(invocation, contextFor(message, route.plugin, principal))
         } catch (e) {
           // A handler that throws is contained: clean error on the channel, trace logged.
           logger.error(`enzyme '${route.plugin}' threw handling '${route.qualified}'`, {
