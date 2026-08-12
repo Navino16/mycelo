@@ -76,13 +76,23 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
   const hyphaByName = new Map(connectedHyphae.map((h) => [h.name, h]))
   const startedRhizas: GerminatedRhiza[] = []
   const startedEnzymes: GerminatedEnzyme[] = []
+  // Declared here, not at step 2.5 where it fills, because mycelium() below reads it
+  // live and an enzyme's start() can call that before step 2.5 runs.
+  const startedInhibitors: GerminatedInhibitor[] = []
   // Reassigned once step 3 computes `listening`, so listPlugins() never reports a
   // listen()-failed hypha as germinated after the point bootstrap() itself demotes it.
   let reportedHyphae: readonly GerminatedHypha[] = connectedHyphae
   // Reads reportedHyphae/startedRhizas/startedEnzymes/dormant live, so an enzyme
   // starting mid-loop sees exactly what has germinated and started so far.
   const mycelium = (scopes: readonly MyceliumScope[]): object => createMyceliumApi(
-    { ...registry, hyphae: reportedHyphae, rhizas: startedRhizas, enzymes: startedEnzymes, dormant },
+    {
+      ...registry,
+      hyphae: reportedHyphae,
+      rhizas: startedRhizas,
+      enzymes: startedEnzymes,
+      inhibitors: startedInhibitors,
+      dormant,
+    },
     scopes,
     (target, content) => sendVia(hyphaByName, target.channel, target.conversationId, content),
     db,
@@ -132,7 +142,6 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
   // Step 2.5: inhibitors start last among the dependency-ordered spores, because
   // ctx.rhiza() may reach a rhiza that must already be running (design §7).
   const membership = createMembershipCache(connectedHyphae)
-  const startedInhibitors: GerminatedInhibitor[] = []
   const brokenEnforcing: string[] = [...registry.brokenEnforcing]
   for (const inhibitor of registry.inhibitors) {
     const ctx = createInhibitorContext({

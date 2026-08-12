@@ -482,6 +482,69 @@ it("keeps the mycelium's plugin list consistent with bootstrap()'s own registry 
   ])
 })
 
+// The same property as the test above, for the one kind whose filtering was missing: an
+// inhibitor listed both germinated and dormant reports a broken gate as healthy.
+it("keeps the mycelium's plugin list consistent when an inhibitor's start() throws", async () => {
+  spore('good', {
+    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^1.0"\n',
+    'src/index.ts': [
+      'export default {',
+      '  create: () => ({',
+      '    connect: async () => {},',
+      '    listen: () => {},',
+      '    stop: async () => {},',
+      '    send: async () => {},',
+      '  }),',
+      '}',
+    ].join('\n'),
+  })
+  // Advisory, so admission still lets /probe through and the listing can be observed.
+  spore('softgate', {
+    'spore.yaml': 'kind: inhibitor\nname: softgate\nseptum: "^1.0"\n',
+    'src/index.ts': [
+      'export default {',
+      '  create: () => ({',
+      "    start: () => { throw new Error('gate cannot start') },",
+      '    stop: async () => {},',
+      '    inspect: async () => ({ allow: true }),',
+      '  }),',
+      '}',
+    ].join('\n'),
+  })
+  spore('admin', {
+    'spore.yaml': [
+      'kind: enzyme', 'name: admin', 'septum: "^0.4"',
+      'requires:', '  - rhiza: mycelium', '    scopes: [plugins.read]',
+      'commands:', '  - name: probe', '    description: x', '    code: probe', '',
+    ].join('\n'),
+    'src/index.ts': [
+      'export default {',
+      '  create: () => {',
+      '    const observed = {}',
+      '    return {',
+      '      observed,',
+      '      handlers: { probe: async (_inv, ctx) => { observed.plugins = ctx.rhiza("mycelium").listPlugins() } },',
+      '    }',
+      '  },',
+      '}',
+    ].join('\n'),
+  })
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\nowner:\n  channel: good\n  userId: local\n`, 'utf8')
+
+  const { registry, bus } = await bootstrap(configFile)
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.dormant.find((d) => d.name === 'softgate')?.reason).toContain('gate cannot start')
+
+  await bus.deliver('good', message('good', '/probe'))
+  const admin = registry.enzymes.find((e) => e.name === 'admin')
+  const observed = (admin?.instance as unknown as { observed: Record<string, unknown> }).observed
+  const listed = observed.plugins as { name: string; state: string }[]
+  expect(listed.filter((p) => p.name === 'softgate')).toEqual([
+    { name: 'softgate', commands: [], state: 'dormant', reason: 'gate cannot start' },
+  ])
+})
+
 it('routes onUnrouted through the shared send path, so an unregistered channel is a contained, logged failure rather than a silent no-op', async () => {
   spore('good', {
     'spore.yaml': 'kind: hypha\nname: good\nseptum: "^1.0"\n',
