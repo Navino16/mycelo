@@ -1,9 +1,10 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { Database } from 'bun:sqlite'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import type { OutgoingContent } from '@mycelo/septum'
-import { bootstrap } from '../src/mycelium.js'
+import { bootstrap, germinationBanner } from '../src/mycelium.js'
 import { waitFor } from './support/wait-for.js'
 
 interface ConsoleFixture {
@@ -266,4 +267,68 @@ it('lists roles and their patterns through /roles', async () => {
     const patterns = text.slice('owner: *; guest: '.length).split(', ')
     expect(new Set(patterns)).toEqual(new Set(['admin.whoami', 'admin.plugins']))
   })
+})
+
+it('runs the phase 4 milestone: gate admits, media stays denied until granted, carol never touches the db', async () => {
+  const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(
+    configFile,
+    'prefix: "/"\n'
+    + `spores: ${sporesDir}\n`
+    + 'owner:\n  channel: console\n  userId: alice\n'
+    + 'plugins:\n  gate:\n    channel: console\n    groupId: household\n',
+    'utf8',
+  )
+
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+  expect(germinationBanner(registry)).toBe(
+    'germinated 8 spores (console, admin, helpdesk, media, ping, twofile, mock, gate)',
+  )
+
+  const fixture = registry.hyphae.find((h) => h.name === 'console')
+    ?.instance as unknown as ConsoleFixture
+
+  fixture.feed('/whoami', 'alice')
+  await waitFor(() => {
+    expect(fixture.sent).toEqual([{ text: 'console:alice roles: owner' }])
+  })
+
+  // bob is a household member but holds no role yet: an explicit refusal, not silence.
+  fixture.feed('/movies Dune', 'bob')
+  await waitFor(() => {
+    expect(fixture.sent[1]).toEqual({ text: "you are not allowed to use 'movies'" })
+  })
+
+  fixture.feed('/role-new guest media.*', 'alice')
+  await waitFor(() => {
+    expect(fixture.sent[2]).toEqual({ text: "created role 'guest' with patterns: media.*" })
+  })
+
+  fixture.feed('/grant guest bob', 'alice')
+  await waitFor(() => {
+    expect(fixture.sent[3]).toEqual({ text: "granted 'guest' to bob" })
+  })
+
+  fixture.feed('/movies Dune', 'bob')
+  await waitFor(() => {
+    expect(fixture.sent[4]).toEqual({ text: 'Dune (2021) via mock' })
+  })
+
+  // carol is not in 'household': the gate refuses her before identity resolution runs,
+  // so nothing is sent and no row for her is ever written to channel_identity.
+  fixture.feed('/movies Dune', 'carol')
+  await waitFor(() => {
+    expect(fixture.sent).toHaveLength(5)
+  })
+
+  const db = new Database(join(dir, 'mycelo.db'), { readonly: true })
+  const identities = db.query('select channel, external_id from channel_identity').all() as
+    { channel: string, external_id: string }[]
+  expect(new Set(identities.map((i) => i.external_id))).toEqual(new Set(['alice', 'bob']))
+  const roles = db.query('select name, builtin from role').all() as
+    { name: string, builtin: number }[]
+  expect(new Set(roles.map((r) => r.name))).toEqual(new Set(['owner', 'guest']))
+  db.close()
 })
