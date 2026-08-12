@@ -600,12 +600,9 @@ it("counts and names a rhiza in the germination banner, not just hyphae and enzy
   expect(germinationBanner(registry)).toBe('germinated 2 spores (channel, store)')
 })
 
-// The next three cover bootstrap()'s own inhibitor wiring: the start loop and the
-// `[...registry.brokenEnforcing, ...brokenEnforcing]` merge (design §7) — neither is
-// reachable from germinate.ts tests alone, since one half only exists after start().
-// Assertions read mycelium.admission directly: bus.ts does not yet consult it (task 11),
-// so a channel-reply assertion here would pass or fail for a reason unrelated to the
-// merge under test.
+// The next three exercise both halves of the brokenEnforcing merge (design §7) through
+// the real bootstrap(). Assertions read mycelium.admission directly, since bus.ts does
+// not consult it until task 11.
 
 it('admits when an enforcing inhibitor starts cleanly', async () => {
   spore('cleangate', {
