@@ -11,6 +11,7 @@ import type {
   Principal,
 } from '@mycelo/septum'
 import type { GerminatedHypha, GerminatedRhiza, Registry } from '../germination/registry.js'
+import { createMyceliumApi } from '../mycelium-rhiza.js'
 import { bindArgs, parseCommand } from './parse.js'
 import { normalize } from './normalize.js'
 
@@ -27,7 +28,7 @@ function capabilitiesOf(hypha: GerminatedHypha | undefined): Capabilities {
   }
 }
 
-async function sendVia(
+export async function sendVia(
   hyphaByName: ReadonlyMap<string, GerminatedHypha>,
   channel: string,
   conversationId: string,
@@ -100,14 +101,16 @@ export interface BusOptions {
   logger: Logger
   /** Called when text carries no command, or names one nothing declares. */
   onUnrouted?: (message: IncomingMessage, command: string | null) => Promise<void>
-  /** Injected; task 6 substitutes the real mycelium-as-rhiza API here. */
+  /** Defaults to the real mycelium-as-rhiza API, grounded in this bus's own registry (design §2.4). */
   mycelium?: (scopes: readonly MyceliumScope[]) => object
 }
 
-export function createBus({ registry, prefix, logger, onUnrouted, mycelium = () => ({}) }: BusOptions): Bus {
+export function createBus({ registry, prefix, logger, onUnrouted, mycelium }: BusOptions): Bus {
   const hyphaByName = new Map(registry.hyphae.map((h) => [h.name, h]))
   const send = (channel: string, conversationId: string, out: OutgoingContent): Promise<void> =>
     sendVia(hyphaByName, channel, conversationId, out)
+  const mounted = mycelium ?? ((scopes: readonly MyceliumScope[]) =>
+    createMyceliumApi(registry, scopes, (target, content) => send(target.channel, target.conversationId, content)))
 
   // One context per enzyme, because `resolved` and `scopes` differ per spore
   // (design §2.4). Built once here rather than per message.
@@ -119,7 +122,7 @@ export function createBus({ registry, prefix, logger, onUnrouted, mycelium = () 
         rhizas: registry.rhizas,
         logger,
         access: { resolved: enzyme.resolved, scopes: enzyme.scopes },
-        mycelium,
+        mycelium: mounted,
       }),
     ]),
   )

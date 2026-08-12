@@ -1,8 +1,10 @@
+import type { MyceliumScope } from '@mycelo/septum'
 import { loadBootstrap } from './config.js'
 import { germinate } from './germination/germinate.js'
 import { buildRoutes } from './germination/registry.js'
 import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedRhiza, Registry } from './germination/registry.js'
-import { createBus, createEnzymeStartContext } from './rhizomorph/bus.js'
+import { createMyceliumApi } from './mycelium-rhiza.js'
+import { createBus, createEnzymeStartContext, sendVia } from './rhizomorph/bus.js'
 import type { Bus } from './rhizomorph/bus.js'
 import { createLogger } from './support/logger.js'
 
@@ -10,9 +12,6 @@ export interface Mycelium {
   registry: Registry
   bus: Bus
 }
-
-// Placeholder until task 6 builds the real mycelium-as-rhiza API from the registry.
-const mycelium = (): object => ({})
 
 /**
  * Germinates every spore, then starts it: every hypha connects, then every rhiza and
@@ -58,8 +57,19 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
   // failure marks that one spore dormant (spec §8) without skipping the rest.
   const rhizaByName = new Map(registry.rhizas.map((r) => [r.name, r]))
   const enzymeByName = new Map(registry.enzymes.map((e) => [e.name, e]))
+  const hyphaByName = new Map(connectedHyphae.map((h) => [h.name, h]))
   const startedRhizas: GerminatedRhiza[] = []
   const startedEnzymes: GerminatedEnzyme[] = []
+  // Reassigned once step 3 computes `listening`, so listPlugins() never reports a
+  // listen()-failed hypha as germinated after the point bootstrap() itself demotes it.
+  let reportedHyphae: readonly GerminatedHypha[] = connectedHyphae
+  // Reads reportedHyphae/startedRhizas/startedEnzymes/dormant live, so an enzyme
+  // starting mid-loop sees exactly what has germinated and started so far.
+  const mycelium = (scopes: readonly MyceliumScope[]): object => createMyceliumApi(
+    { ...registry, hyphae: reportedHyphae, rhizas: startedRhizas, enzymes: startedEnzymes, dormant },
+    scopes,
+    (target, content) => sendVia(hyphaByName, target.channel, target.conversationId, content),
+  )
   for (const name of registry.order) {
     const rhiza = rhizaByName.get(name)
     if (rhiza !== undefined) {
@@ -137,6 +147,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
       dormant.push({ name: hypha.name, reason: (e as Error).message })
     }
   }
+  reportedHyphae = listening
 
   return { registry: { ...routedRegistry, hyphae: listening, dormant }, bus }
 }

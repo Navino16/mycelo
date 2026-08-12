@@ -22,7 +22,8 @@ export type MyceliumScope = (typeof MYCELIUM_SCOPES)[number]
 
 export interface PluginInfo {
   name: string
-  kind: SporeKind
+  /** Absent when the spore went dormant before its manifest parsed. */
+  kind?: SporeKind
   /** Short command names, empty for any kind that declares none. */
   commands: readonly string[]
   state: 'germinated' | 'dormant'
