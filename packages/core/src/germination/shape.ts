@@ -1,4 +1,4 @@
-import type { CommandSpec, Enzyme, HyphaManifest } from '@mycelo/septum'
+import type { CommandSpec, Enzyme, Hypha, HyphaManifest } from '@mycelo/septum'
 
 /**
  * Duck-typed, never instanceof: a spore is bundled with its own copy of everything.
@@ -18,9 +18,11 @@ export function rhizaShapeError(instance: unknown): string | null {
   return null
 }
 
+// satisfies keeps this list bound to Hypha's own member names: a rename there now
+// fails the build here instead of silently sending every hypha dormant.
 const REQUIRED_METHODS = {
   hypha: ['connect', 'listen', 'stop', 'send'],
-} as const
+} as const satisfies { hypha: readonly (keyof Hypha)[] }
 
 /**
  * Duck-typed, never instanceof: a spore is bundled with its own copy of everything.
