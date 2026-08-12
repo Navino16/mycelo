@@ -80,16 +80,16 @@ export interface RolesRead {
 }
 
 export interface RolesAssign {
-  /** Rejects when the role does not exist. Assigning twice is a no-op, not a rejection. */
+  /** Rejects when the principal or the role does not exist. Assigning twice is a no-op. */
   assignRole(principalId: string, roleName: string): Promise<void>
-  /** Rejects when the role does not exist. Revoking one not held is a no-op. */
+  /** Rejects when the principal or the role does not exist. Revoking one not held is a no-op. */
   revokeRole(principalId: string, roleName: string): Promise<void>
 }
 
 export interface RolesManage {
   /** Rejects when the name is empty, already taken, or a pattern is repeated. */
   createRole(name: string, patterns: readonly string[]): Promise<void>
-  /** Replaces the patterns wholesale. Rejects when the role does not exist or is `builtin`. */
+  /** Replaces the patterns wholesale. Rejects when the role does not exist, is `builtin`, or a pattern is repeated. */
   setRoleCommands(name: string, patterns: readonly string[]): Promise<void>
   /** Rejects when the role does not exist or is `builtin`. */
   deleteRole(name: string): Promise<void>

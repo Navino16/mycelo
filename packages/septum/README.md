@@ -63,17 +63,19 @@ Each kind then adds its own:
 
 ### `enforcing` governs errors, never refusals
 
-A refusal is always final. `inspect()` returning `{ allow: false }` refuses the message whether the
-inhibitor is `enforcing` or not — an advisory inhibitor is not a dry run. `enforcing` decides only
-what happens when the inhibitor *fails*:
+A refusal is always final. `inspect()` returning `{ allow: false, reason: '...' }` refuses the
+message whether the inhibitor is `enforcing` or not — an advisory inhibitor is not a dry run.
+`reason` is required — `Verdict`'s `allow: false` branch has no default — and the core surfaces it
+to the operator, so a plugin author cannot skip it. `enforcing` decides only what happens when the
+inhibitor *fails*:
 
 | `inspect()` | advisory (default) | `enforcing: true` |
 |---|---|---|
-| returns `{ allow: false }` | message refused | message refused |
+| returns `{ allow: false, reason }` | message refused | message refused |
 | throws | skipped with a warning | **all traffic refused** |
 
 The same applies before any message arrives: an `enforcing` inhibitor that never became usable —
-rejected config, a throwing `start()`, a module that will not load, an unparseable manifest —
+rejected config, a throwing `start()`, a module that will not load, a manifest the schema rejects —
 refuses all traffic, rather than leaving the channel it guarded open. An advisory one in that state
 is simply absent.
 
@@ -87,7 +89,9 @@ which for an `enforcing` one means all traffic is then refused. That is the poin
 must never be silently inert.
 
 ```ts
-start: (ctx) => {
+import type { InhibitorContext } from '@mycelo/septum'
+
+function start(ctx: InhibitorContext<{ channel: string }>): Promise<void> {
   ctx.requireCapability(ctx.config.channel, 'group_membership')
   return Promise.resolve()
 }
@@ -119,9 +123,10 @@ field.
 ### `requires: [{ rhiza: mycelium, scopes: [...] }]`
 
 `mycelium` is the core itself, reachable like any other rhiza but never declared as installed —
-every spore may require it. `scopes` is mandatory-per-method: each granted scope mounts one method
-on the object `ctx.rhiza('mycelium')` returns, and an ungranted scope's method is simply absent,
-not present-but-rejecting:
+every spore may require it. `scopes` is mandatory-per-method: each granted scope mounts its
+methods on the object `ctx.rhiza('mycelium')` returns — one for most scopes, three for
+`principals.read` and `roles.manage` — and an ungranted scope's methods are simply absent, not
+present-but-rejecting:
 
 | Scope | Interface | Mounts |
 |---|---|---|
@@ -138,8 +143,9 @@ not present-but-rejecting:
 methods **reject** rather than resolve quietly when asked about something that does not exist — an
 unknown principal id, an unknown role name — and `deleteRole`/`setRoleCommands` also reject on a
 `builtin` role such as `owner`, while `createRole` rejects an empty name, a name already taken and a
-pattern listed twice. Only `getPrincipal` and `findByIdentity` answer `null` for "not found", since
-asking is their whole purpose.
+pattern listed twice. Three exceptions answer instead of rejecting: `getPrincipal` and
+`findByIdentity` answer `null` for "not found", since asking is their whole purpose, and `rolesOf`
+answers `[]` for an unknown principal, who holds no role either way.
 
 `plugins.toggle` is the one `MyceliumScope` value with no interface and nothing mounted: it parses,
 and leaves the spore dormant naming the phase that mounts it (phase 5).
