@@ -30,7 +30,7 @@ capabilities are declared here rather than in the module.
 ```yaml
 kind: enzyme
 name: radarr-helper
-septum: "^0.4"
+septum: "^0.5"
 description: Movie shortcuts for Radarr
 commands:
   - name: help
@@ -134,10 +134,12 @@ not present-but-rejecting:
 | `roles.assign` | `RolesAssign` | `assignRole(principalId, roleName)`, `revokeRole(principalId, roleName)` |
 | `roles.manage` | `RolesManage` | `createRole(name, patterns)`, `setRoleCommands(name, patterns)`, `deleteRole(name)` |
 
-Every method above is `async`. The identity and role methods reject rather than resolve quietly when
-they are asked about something that does not exist — an unknown principal id, an unknown role name —
-and `deleteRole`/`setRoleCommands` also reject on a `builtin` role such as `owner`. Only the two
-`getPrincipal`/`findByIdentity` lookups answer `null` for "not found", since asking is their purpose.
+`listPlugins()` alone is synchronous; every other method returns a promise. The identity and role
+methods **reject** rather than resolve quietly when asked about something that does not exist — an
+unknown principal id, an unknown role name — and `deleteRole`/`setRoleCommands` also reject on a
+`builtin` role such as `owner`, while `createRole` rejects an empty name, a name already taken and a
+pattern listed twice. Only `getPrincipal` and `findByIdentity` answer `null` for "not found", since
+asking is their whole purpose.
 
 `plugins.toggle` is the one `MyceliumScope` value with no interface and nothing mounted: it parses,
 and leaves the spore dormant naming the phase that mounts it (phase 5).
@@ -236,7 +238,7 @@ it('conforms to the Enzyme contract', async () => {
   const failures = await enzymeChecks({
     name: 'radarr-helper',
     manifest: {
-      kind: 'enzyme', name: 'radarr-helper', septum: '^0.4',
+      kind: 'enzyme', name: 'radarr-helper', septum: '^0.5',
       commands: [
         { name: 'help', description: 'Show what this plugin can do', respond: 'Try /add <title> to queue a movie.' },
         { name: 'add', description: 'Queue a movie by title', code: 'addMovie',
