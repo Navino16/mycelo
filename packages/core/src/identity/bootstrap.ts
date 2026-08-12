@@ -19,10 +19,15 @@ export interface BootstrapIdentityOptions {
 const OWNER_ROLE = 'owner'
 
 function ensureOwnerRole(db: Db): string {
-  const existing = db.select({ id: role.id }).from(role).where(eq(role.name, OWNER_ROLE)).get()
+  const existing = db.select({ id: role.id, builtin: role.builtin }).from(role).where(eq(role.name, OWNER_ROLE)).get()
   const id = existing?.id ?? crypto.randomUUID()
   if (existing === undefined) {
     db.insert(role).values({ id, name: OWNER_ROLE, builtin: true }).run()
+  } else if (!existing.builtin) {
+    // A spore holding roles.manage can create a plain role named 'owner' while the config
+    // has no owner: block. Design §2 guarantees the owner role is builtin, so boot repairs
+    // the flag rather than reusing a deletable row.
+    db.update(role).set({ builtin: true }).where(eq(role.id, id)).run()
   }
   db.insert(roleCommand).values({ roleId: id, pattern: '*' }).onConflictDoNothing().run()
   return id

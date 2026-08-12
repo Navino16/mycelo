@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'bun:test'
 import { eq } from 'drizzle-orm'
+import type { RolesManage } from '@mycelo/septum'
+import type { Registry } from '../../src/germination/registry.js'
+import { createMyceliumApi } from '../../src/mycelium-rhiza.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import type { Db } from '../../src/persistence/db.js'
 import { channelIdentity, principal, principalRole, role, roleCommand } from '../../src/persistence/schema.js'
 import { StartupError, bootstrapIdentity } from '../../src/identity/bootstrap.js'
+
+const noSend = async () => {}
+
+function emptyRegistry(): Registry {
+  return {
+    hyphae: [], rhizas: [], enzymes: [], inhibitors: [], dormant: [],
+    routes: new Map(), order: [], brokenEnforcing: [],
+  }
+}
 
 function fresh(): Db {
   const { db } = openDatabase(':memory:')
@@ -91,5 +103,25 @@ describe('bootstrapIdentity', () => {
     bootstrapIdentity(db, { owner })
     expect(db.select().from(principal).all()).toHaveLength(1)
     expect(db.select().from(principalRole).get()?.principalId).toBe('existing')
+  })
+
+  // Reachable: boot with no owner: block (design §8.1 allows it), let a spore holding
+  // roles.manage create a plain role named 'owner', then add owner: and reboot.
+  it('repairs the builtin flag on a role named owner that a spore created', async () => {
+    const db = fresh()
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
+    bootstrapIdentity(db, {})
+    await manage.createRole('owner', ['media.*'])
+    expect(db.select().from(role).where(eq(role.name, 'owner')).get()?.builtin).toBe(false)
+
+    bootstrapIdentity(db, { owner })
+    expect(db.select().from(role).where(eq(role.name, 'owner')).get()?.builtin).toBe(true)
+    // The guarantee design §2 makes: once builtin, neither call can undo it.
+    await expect(manage.deleteRole('owner')).rejects.toThrow(/builtin/)
+    await expect(manage.setRoleCommands('owner', [])).rejects.toThrow(/builtin/)
+    // Repaired, not replaced: one row, and the wildcard sits alongside what was there.
+    expect(db.select().from(role).all()).toHaveLength(1)
+    const patterns = db.select({ p: roleCommand.pattern }).from(roleCommand).all().map((r) => r.p)
+    expect(new Set(patterns)).toEqual(new Set(['media.*', '*']))
   })
 })
