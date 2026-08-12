@@ -474,6 +474,9 @@ const CONFIGURABLE_RHIZA_MODULE = `
   export default {
     // Duck-typed on purpose: a real spore is bundled with its own Zod.
     configSchema: { safeParse: (input) => {
+      // undefined and {} are reported differently on purpose: without it, dropping
+      // germinate()'s \`?? {}\` would leave the absent-key test green.
+      if (input === undefined) return { success: false, error: 'config was passed as undefined' }
       const token = input === null || typeof input !== 'object' ? undefined : input.token
       return typeof token === 'string'
         ? { success: true, data: { token } }
@@ -508,7 +511,9 @@ it('rejects a spore whose config key is absent entirely, rather than passing und
   confRhiza()
   const registry = await germinate(dir, createLogger(), {})
   expect(registry.rhizas).toEqual([])
+  // The absent key must arrive as {}, so the schema's own undefined branch stays unreached.
   expect(registry.dormant[0]?.reason).toContain('token must be a string')
+  expect(registry.dormant[0]?.reason).not.toContain('passed as undefined')
 })
 
 it('gives a spore with no configSchema an empty config', async () => {

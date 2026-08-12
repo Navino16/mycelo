@@ -32,9 +32,27 @@ it('ignores fields later phases will add', () => {
   expect(loadBootstrap(file).prefix).toBe('/')
 })
 
+// BootstrapError.message is Zod's generic text, identical for any field of that type, so
+// `.path` is the only thing that tells an operator which line to fix. Asserted, not implied.
 it('names the offending path when a field has the wrong type', () => {
   const file = writeConfig('prefix: 42\n')
   expect(() => loadBootstrap(file)).toThrow(BootstrapError)
+  try {
+    loadBootstrap(file)
+    throw new Error('loadBootstrap should have thrown')
+  } catch (e) {
+    expect((e as BootstrapError).path).toBe('prefix')
+  }
+})
+
+it('names the offending path inside a nested object', () => {
+  const file = writeConfig('owner:\n  channel: console\n  userId: 42\n')
+  try {
+    loadBootstrap(file)
+    throw new Error('loadBootstrap should have thrown')
+  } catch (e) {
+    expect((e as BootstrapError).path).toBe('owner.userId')
+  }
 })
 
 describe('loadBootstrap, phase 4 fields', () => {

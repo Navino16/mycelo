@@ -5,6 +5,9 @@ import type {
 import { bootstrapIdentity } from '../src/identity/bootstrap.js'
 import { resolvePrincipal } from '../src/identity/resolve.js'
 import type { Registry } from '../src/germination/registry.js'
+import { MYCELIUM_SCOPES } from '@mycelo/septum'
+import type { MyceliumScope } from '@mycelo/septum'
+import { MOUNTABLE_SCOPES, resolve } from '../src/germination/anastomoses.js'
 import { createMyceliumApi } from '../src/mycelium-rhiza.js'
 import { migrateDatabase, openDatabase } from '../src/persistence/db.js'
 import type { Db } from '../src/persistence/db.js'
@@ -115,27 +118,27 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
     const db = fresh()
     const p = resolvePrincipal(db, { channel: 'console', externalId: 'bob' })
     const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db) as RolesAssign
-    expect(assign.assignRole(p.id, 'ghost')).rejects.toThrow()
+    await expect(assign.assignRole(p.id, 'ghost')).rejects.toThrow(/ghost/)
   })
 
   it('refuses to delete or rewrite a builtin role', async () => {
     const db = fresh()
     bootstrapIdentity(db, { owner: { channel: 'console', userId: 'alice' } })
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
-    expect(manage.deleteRole('owner')).rejects.toThrow(/builtin/)
-    expect(manage.setRoleCommands('owner', ['media.*'])).rejects.toThrow(/builtin/)
+    await expect(manage.deleteRole('owner')).rejects.toThrow(/builtin/)
+    await expect(manage.setRoleCommands('owner', ['media.*'])).rejects.toThrow(/builtin/)
   })
 
   it('rejects deleting a role that does not exist, naming it', async () => {
     const db = fresh()
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
-    expect(manage.deleteRole('typo')).rejects.toThrow(/typo/)
+    await expect(manage.deleteRole('typo')).rejects.toThrow(/typo/)
   })
 
   it('rejects rewriting a role that does not exist, naming it', async () => {
     const db = fresh()
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
-    expect(manage.setRoleCommands('typo', ['media.*'])).rejects.toThrow(/typo/)
+    await expect(manage.setRoleCommands('typo', ['media.*'])).rejects.toThrow(/typo/)
   })
 
   it('replaces a role\'s patterns wholesale rather than appending', async () => {
@@ -167,5 +170,53 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
     await api.setDisplayName(p.id, 'Carol')
     expect((await api.getPrincipal(p.id))?.displayName).toBe('Carol')
     expect(db.select().from(principal).get()?.reviewedAt).toBeInstanceOf(Date)
+  })
+})
+
+// The worst defect of phase 4 was a scope mounted in one place and gated in the other, and
+// it was found by a fixture rather than a test. Phase 5's plugins.toggle walks the same path.
+describe('MOUNTABLE_SCOPES against what createMyceliumApi actually mounts', () => {
+  // Every scope MYCELIUM_SCOPES carries that no phase mounts yet. Mounting one means
+  // deleting its entry here and adding it to MOUNTABLE_SCOPES in the same commit.
+  const GATED: readonly MyceliumScope[] = ['plugins.toggle']
+
+  it('mounts exactly the scopes MOUNTABLE_SCOPES declares, and gates the rest', () => {
+    const mounted = MYCELIUM_SCOPES.filter((scope) => {
+      const api = createMyceliumApi(emptyRegistry(), [scope], noSend, fresh())
+      return Object.keys(api).length > 0
+    })
+    expect(new Set(mounted)).toEqual(new Set(MOUNTABLE_SCOPES))
+    const mountable = new Set<MyceliumScope>(MOUNTABLE_SCOPES)
+    expect(MYCELIUM_SCOPES.filter((s) => !mountable.has(s))).toEqual([...GATED])
+  })
+
+  it('leaves a spore dormant for every scope it does not mount', () => {
+    for (const scope of GATED) {
+      const r = resolve([{
+        location: { directory: 'toggler', manifestPath: 'toggler/spore.yaml' },
+        manifest: {
+          kind: 'enzyme', name: 'toggler', septum: '^0.5',
+          commands: [{ name: 'toggler', description: 'x', respond: 'hi' }],
+          requires: [{ rhiza: 'mycelium', scopes: [scope] }],
+        },
+      }] as unknown as Parameters<typeof resolve>[0])
+      expect(r.order).toEqual([])
+      expect(r.dormant[0]?.reason).toContain(`scope '${scope}'`)
+    }
+  })
+
+  it('grants every mountable scope without leaving the spore dormant', () => {
+    for (const scope of MOUNTABLE_SCOPES) {
+      const r = resolve([{
+        location: { directory: 'user', manifestPath: 'user/spore.yaml' },
+        manifest: {
+          kind: 'enzyme', name: 'user', septum: '^0.5',
+          commands: [{ name: 'user', description: 'x', respond: 'hi' }],
+          requires: [{ rhiza: 'mycelium', scopes: [scope] }],
+        },
+      }] as unknown as Parameters<typeof resolve>[0])
+      expect(r.dormant).toEqual([])
+      expect(r.order[0]?.scopes).toEqual([scope])
+    }
   })
 })

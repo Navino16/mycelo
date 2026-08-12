@@ -104,7 +104,7 @@ describe('resolve', () => {
     expect(r.dormant[0]?.reason).toBe("requires mycelium scope 'plugins.toggle', which arrives in phase 5")
   })
 
-  it('resolves principals.manage: task 8 mounted it, so phase 4 must not gate it', () => {
+  it('resolves a spore requiring principals.manage, which is mounted', () => {
     const r = resolve([enzyme('reviewer', [{ rhiza: 'mycelium', scopes: ['principals.manage'] }])])
     expect(names(r)).toEqual(['reviewer'])
     expect(r.dormant).toEqual([])
