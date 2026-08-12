@@ -29,10 +29,15 @@ export async function germinate(
 
   const reads: ReadManifest[] = []
   const dormant: Dormant[] = []
+  // Design §7: an enforcing inhibitor that fails to germinate must still refuse all
+  // traffic. Only germinate() holds both facts at once — the manifest and the dormancy.
+  const brokenEnforcing: string[] = []
   for (const location of discover(sporesDir)) {
     const read = readManifest(location)
     if (isFailure(read)) {
       dormant.push({ name: location.directory, reason: read.reason })
+      // No validated name to report: the directory is all a failed manifest leaves.
+      if (read.enforcingInhibitor) brokenEnforcing.push(location.directory)
     } else {
       reads.push(read)
     }
@@ -45,9 +50,6 @@ export async function germinate(
   const enzymes: GerminatedEnzyme[] = []
   const rhizas: GerminatedRhiza[] = []
   const inhibitors: GerminatedInhibitor[] = []
-  // Design §7: an enforcing inhibitor that fails to germinate must still refuse all
-  // traffic. Only germinate() holds both facts at once — the manifest and the dormancy.
-  const brokenEnforcing: string[] = []
   // Names that went dormant during this walk — resolve() cannot see a module-load or
   // shape failure, so a dependent's `mandatory`/`resolved` sets may still name one that
   // just failed.

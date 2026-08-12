@@ -171,6 +171,42 @@ it('does not refuse all traffic when a dormant inhibitor is only advisory', asyn
   expect(registry.brokenEnforcing).toEqual([])
 })
 
+// Every other brokenEnforcing test uses a valid manifest, so a typo in spore.yaml was the
+// one path to dormancy that left the guarded channel open with only a warning (design §7).
+it('refuses all traffic when an enforcing inhibitor\'s manifest does not parse', async () => {
+  spore('typogate', {
+    'spore.yaml': 'kind: inhibitor\nname: typogate\nenforcing: true\nseptem: "^1.0"\n',
+    'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  // No validated name exists, so the directory is what identifies it.
+  expect(registry.brokenEnforcing).toEqual(['typogate'])
+})
+
+it('does not refuse all traffic when an unparseable manifest is not an enforcing inhibitor', async () => {
+  spore('typosoft', {
+    'spore.yaml': 'kind: inhibitor\nname: typosoft\nseptem: "^1.0"\n',
+    'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
+  })
+  spore('typoenzyme', {
+    'spore.yaml': 'kind: enzyme\nname: typoenzyme\nenforcing: true\nseptem: "^1.0"\n',
+    'src/index.ts': 'export default { create: () => ({ handlers: {} }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.dormant).toHaveLength(2)
+  expect(registry.brokenEnforcing).toEqual([])
+})
+
+it('does not read a truthy-but-not-true enforcing out of an unvalidated manifest', async () => {
+  spore('sneakygate', {
+    'spore.yaml': 'kind: inhibitor\nname: sneakygate\nenforcing: "yes"\nseptem: "^1.0"\n',
+    'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.brokenEnforcing).toEqual([])
+})
+
 it('makes a dependent dormant when a MANDATORY dependency fails to load, never importing its own module', async () => {
   // Marker written at import time, not inside create(): proves the module was never
   // loaded, rather than merely that the spore ended up dormant.
