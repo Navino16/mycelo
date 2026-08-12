@@ -100,8 +100,8 @@ describe('resolve', () => {
   })
 
   it('leaves a spore dormant when it asks for a scope this phase cannot mount', () => {
-    const r = resolve([enzyme('grant', [{ rhiza: 'mycelium', scopes: ['roles.assign'] }])])
-    expect(r.dormant[0]?.reason).toBe("requires mycelium scope 'roles.assign', which arrives in phase 4")
+    const r = resolve([enzyme('grant', [{ rhiza: 'mycelium', scopes: ['principals.manage'] }])])
+    expect(r.dormant[0]?.reason).toBe("requires mycelium scope 'principals.manage', which arrives in phase 4")
   })
 
   it('puts mycelium in the resolved set while keeping it out of the graph', () => {

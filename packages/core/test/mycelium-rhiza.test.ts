@@ -24,7 +24,7 @@ function emptyRegistry(): Registry {
 }
 
 const registry = {
-  hyphae: [], rhizas: [], dormant: [{ name: 'broken', reason: 'create() returned no api' }],
+  hyphae: [], rhizas: [], inhibitors: [], dormant: [{ name: 'broken', reason: 'create() returned no api' }],
   enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^0.4',
     commands: [{ name: 'movies', description: 'x', code: 'h' }] }, instance: null }],
   routes: new Map(),
@@ -54,6 +54,15 @@ it('omits kind for a dormant plugin rather than inventing one, since none was ev
   const broken = api.listPlugins().find((p) => p.name === 'broken')
   expect(broken).toBeDefined()
   expect(broken).not.toHaveProperty('kind')
+})
+
+it('lists a germinated inhibitor with an empty command list', () => {
+  const withInhibitor = {
+    ...registry,
+    inhibitors: [{ name: 'gate', manifest: { kind: 'inhibitor', name: 'gate', septum: '^0.5', enforcing: true } }],
+  } as unknown as Registry
+  const api = createMyceliumApi(withInhibitor, ['plugins.read'], stubSend, fresh()) as PluginsRead
+  expect(api.listPlugins()).toContainEqual({ name: 'gate', kind: 'inhibitor', commands: [], state: 'germinated' })
 })
 
 it('aggregates each germinated rhiza health', async () => {

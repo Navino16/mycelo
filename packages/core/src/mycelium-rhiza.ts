@@ -30,6 +30,7 @@ function listPlugins(registry: Registry): readonly PluginInfo[] {
       state: 'germinated' as const,
     })),
     ...registry.rhizas.map((r) => ({ name: r.name, kind: r.manifest.kind, commands: [], state: 'germinated' as const })),
+    ...registry.inhibitors.map((i) => ({ name: i.name, kind: i.manifest.kind, commands: [], state: 'germinated' as const })),
   ]
   // Dormant carries no kind: a spore may fail before its manifest ever parses.
   const dormant: PluginInfo[] = registry.dormant.map((d) => ({

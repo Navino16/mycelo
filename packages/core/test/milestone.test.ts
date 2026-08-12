@@ -7,7 +7,7 @@ import { bootstrap } from '../src/mycelium.js'
 import { waitFor } from './support/wait-for.js'
 
 interface ConsoleFixture {
-  feed(text: string): void
+  feed(text: string, externalId?: string): void
   readonly sent: OutgoingContent[]
 }
 
@@ -23,7 +23,7 @@ it('answers /ping with pong, through the real fixtures and the real bootstrap()'
   // milestones exercise routing, not authorization.
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\nplugins:\n  gate:\n    channel: console\n    groupId: household\n`, 'utf8')
 
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
@@ -38,7 +38,7 @@ it('answers /ping with pong, through the real fixtures and the real bootstrap()'
 it('answers text and code commands from one plugin, sharing a handler', async () => {
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\nplugins:\n  gate:\n    channel: console\n    groupId: household\n`, 'utf8')
 
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
@@ -62,7 +62,7 @@ it('answers text and code commands from one plugin, sharing a handler', async ()
 it('answers from a plugin split across two unbundled files', async () => {
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\nplugins:\n  gate:\n    channel: console\n    groupId: household\n`, 'utf8')
 
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
@@ -79,7 +79,7 @@ it('answers from a plugin split across two unbundled files', async () => {
 it('answers a lookup through a rhiza resolved via an any_of collapse', async () => {
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\nplugins:\n  gate:\n    channel: console\n    groupId: household\n`, 'utf8')
 
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
@@ -96,7 +96,7 @@ it('answers a lookup through a rhiza resolved via an any_of collapse', async () 
 it('answers unknown for a title that collides with an Object.prototype member', async () => {
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\nplugins:\n  gate:\n    channel: console\n    groupId: household\n`, 'utf8')
 
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
@@ -113,7 +113,7 @@ it('answers unknown for a title that collides with an Object.prototype member', 
 it('collapses an any_of to the first installed alternative', async () => {
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\nplugins:\n  gate:\n    channel: console\n    groupId: household\n`, 'utf8')
 
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
@@ -130,7 +130,7 @@ it('collapses an any_of to the first installed alternative', async () => {
 it('reads the mycelium through a scoped rhiza', async () => {
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\nplugins:\n  gate:\n    channel: console\n    groupId: household\n`, 'utf8')
 
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
@@ -141,7 +141,129 @@ it('reads the mycelium through a scoped rhiza', async () => {
   fixture.feed('/plugins')
   await waitFor(() => {
     expect(fixture.sent).toEqual([
-      { text: 'console, admin, helpdesk, media, ping, twofile, mock' },
+      { text: 'console, admin, helpdesk, media, ping, twofile, mock, gate' },
     ])
+  })
+})
+
+it('gates admission by group membership and grants/revokes roles through admin', async () => {
+  const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(
+    configFile,
+    'prefix: "/"\n'
+    + `spores: ${sporesDir}\n`
+    + 'owner:\n  channel: console\n  userId: alice\n'
+    + 'plugins:\n  gate:\n    channel: console\n    groupId: household\n',
+    'utf8',
+  )
+
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+
+  const fixture = registry.hyphae.find((h) => h.name === 'console')
+    ?.instance as unknown as ConsoleFixture
+
+  // alice is the owner (pattern '*') and a household member: admitted and authorized.
+  fixture.feed('/whoami', 'alice')
+  // carol is not a household member: gate refuses her, silently, before any reply.
+  fixture.feed('/whoami', 'carol')
+  // bob is a household member but holds no role yet: admitted, then denied.
+  fixture.feed('/whoami', 'bob')
+  await waitFor(() => {
+    expect(fixture.sent).toEqual([
+      { text: 'console:alice roles: owner' },
+      { text: "you are not allowed to use 'whoami'" },
+    ])
+  })
+
+  fixture.feed('/role-new guest admin.whoami', 'alice')
+  await waitFor(() => {
+    expect(fixture.sent[2]).toEqual({ text: "created role 'guest' with patterns: admin.whoami" })
+  })
+
+  fixture.feed('/grant guest bob', 'alice')
+  await waitFor(() => {
+    expect(fixture.sent[3]).toEqual({ text: "granted 'guest' to bob" })
+  })
+
+  fixture.feed('/whoami', 'bob')
+  await waitFor(() => {
+    expect(fixture.sent[4]).toEqual({ text: 'console:bob roles: guest' })
+  })
+
+  // guest only grants admin.whoami: a command outside that pattern is still denied.
+  fixture.feed('/plugins', 'bob')
+  await waitFor(() => {
+    expect(fixture.sent[5]).toEqual({ text: "you are not allowed to use 'plugins'" })
+  })
+
+  fixture.feed('/revoke guest bob', 'alice')
+  await waitFor(() => {
+    expect(fixture.sent[6]).toEqual({ text: "revoked 'guest' from bob" })
+  })
+
+  fixture.feed('/whoami', 'bob')
+  await waitFor(() => {
+    expect(fixture.sent[7]).toEqual({ text: "you are not allowed to use 'whoami'" })
+  })
+})
+
+it('reports a clear failure granting a role to an identity the mycelium has never seen', async () => {
+  const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(
+    configFile,
+    'prefix: "/"\n'
+    + `spores: ${sporesDir}\n`
+    + 'owner:\n  channel: console\n  userId: alice\n'
+    + 'plugins:\n  gate:\n    channel: console\n    groupId: household\n',
+    'utf8',
+  )
+
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+
+  const fixture = registry.hyphae.find((h) => h.name === 'console')
+    ?.instance as unknown as ConsoleFixture
+
+  fixture.feed('/grant guest bob', 'alice')
+  await waitFor(() => {
+    expect(fixture.sent).toEqual([{ text: "no identity 'bob' on channel 'console'" }])
+  })
+})
+
+it('lists roles and their patterns through /roles', async () => {
+  const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(
+    configFile,
+    'prefix: "/"\n'
+    + `spores: ${sporesDir}\n`
+    + 'owner:\n  channel: console\n  userId: alice\n'
+    + 'plugins:\n  gate:\n    channel: console\n    groupId: household\n',
+    'utf8',
+  )
+
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+
+  const fixture = registry.hyphae.find((h) => h.name === 'console')
+    ?.instance as unknown as ConsoleFixture
+
+  fixture.feed('/roles', 'alice')
+  await waitFor(() => { expect(fixture.sent).toEqual([{ text: 'owner: *' }]) })
+
+  fixture.feed('/role-new guest admin.whoami admin.plugins', 'alice')
+  await waitFor(() => { expect(fixture.sent).toHaveLength(2) })
+
+  fixture.feed('/roles', 'alice')
+  await waitFor(() => {
+    // roleCommand carries no ordering guarantee across its two rows, so patterns are
+    // compared as a set rather than as an exact joined string.
+    const text = (fixture.sent[2] as { text?: string }).text ?? ''
+    expect(text.startsWith('owner: *; guest: ')).toBe(true)
+    const patterns = text.slice('owner: *; guest: '.length).split(', ')
+    expect(new Set(patterns)).toEqual(new Set(['admin.whoami', 'admin.plugins']))
   })
 })

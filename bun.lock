@@ -27,6 +27,13 @@
         "@mycelo/septum": "^0.5.0",
       },
     },
+    "fixtures/gate": {
+      "name": "@mycelo/fixture-gate",
+      "version": "0.0.0",
+      "dependencies": {
+        "@mycelo/septum": "^0.5.0",
+      },
+    },
     "fixtures/helpdesk": {
       "name": "@mycelo/fixture-helpdesk",
       "version": "0.0.0",
@@ -165,6 +172,8 @@
     "@mycelo/fixture-admin": ["@mycelo/fixture-admin@workspace:fixtures/admin"],
 
     "@mycelo/fixture-console": ["@mycelo/fixture-console@workspace:fixtures/console"],
+
+    "@mycelo/fixture-gate": ["@mycelo/fixture-gate@workspace:fixtures/gate"],
 
     "@mycelo/fixture-helpdesk": ["@mycelo/fixture-helpdesk@workspace:fixtures/helpdesk"],
 

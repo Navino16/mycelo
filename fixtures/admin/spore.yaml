@@ -1,11 +1,44 @@
 kind: enzyme
 name: admin
 septum: "^0.5"
-description: Reads the mycelium through a scope. Test fixture, never distributed.
+description: Reads and administers the mycelium through scopes. Test fixture, never distributed.
 requires:
   - rhiza: mycelium
-    scopes: [plugins.read]
+    scopes: [plugins.read, principals.read, roles.read, roles.assign, roles.manage]
 commands:
   - name: plugins
     description: List installed plugins
     code: handlePlugins
+  - name: whoami
+    description: Report your principal and roles
+    code: handleWhoami
+  - name: roles
+    description: List roles and their command patterns
+    code: handleRoles
+  - name: grant
+    description: Give a role to someone on this channel
+    code: handleGrant
+    args:
+      - name: role
+        description: Role name
+        required: true
+      - name: who
+        description: Channel handle of the recipient
+        required: true
+  - name: revoke
+    description: Take a role away from someone on this channel
+    code: handleRevoke
+    args:
+      - name: role
+        description: Role name
+        required: true
+      - name: who
+        description: Channel handle
+        required: true
+  - name: role-new
+    description: Create a role with command patterns
+    code: handleRoleNew
+    args:
+      - name: name
+        description: Role name
+        required: true

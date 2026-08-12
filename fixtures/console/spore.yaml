@@ -2,4 +2,4 @@ kind: hypha
 name: console
 septum: "^0.5"
 description: Reads stdin and writes stdout. Test fixture, never distributed.
-capabilities: []
+capabilities: [group_membership]

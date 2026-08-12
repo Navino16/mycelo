@@ -2,16 +2,15 @@ import type { MyceliumScope, Requirement } from '@mycelo/septum'
 import type { Dormant } from './registry.js'
 import type { ReadManifest } from './manifest.js'
 
-export const MOUNTABLE_SCOPES: readonly MyceliumScope[] = ['plugins.read', 'health.read', 'messages.send']
+export const MOUNTABLE_SCOPES: readonly MyceliumScope[] = [
+  'plugins.read', 'health.read', 'messages.send',
+  'principals.read', 'roles.read', 'roles.assign', 'roles.manage',
+]
 
 // Every scope MYCELIUM_SCOPES carries that MOUNTABLE_SCOPES does not yet mount, and the
 // phase it arrives in. Adding a scope in phase 4 is then one line here.
 const SCOPE_PHASE: Partial<Record<MyceliumScope, number>> = {
-  'principals.read': 4,
   'principals.manage': 4,
-  'roles.read': 4,
-  'roles.assign': 4,
-  'roles.manage': 4,
   'plugins.toggle': 4,
 }
 

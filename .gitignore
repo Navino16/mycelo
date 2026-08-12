@@ -4,6 +4,9 @@ dist/
 data/
 .env
 
+# WAL mode creates -wal and -shm siblings alongside mycelo.db.
+mycelo.db*
+
 # A project-level .npmrc is how tokens get committed by accident.
 # Credentials belong in ~/.npmrc, outside every repository.
 .npmrc
