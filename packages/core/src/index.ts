@@ -1,6 +1,7 @@
 import { createInterface } from 'node:readline/promises'
 import { resolve } from 'node:path'
 import { bootstrap, germinationBanner } from './mycelium.js'
+import { parseSenderLine } from './support/sender.js'
 
 const configFile = resolve(process.cwd(), 'mycelo.yaml')
 const { registry } = await bootstrap(configFile)
@@ -15,16 +16,6 @@ console.log(`mycelium: ${germinationBanner(registry)}`)
 function hasFeed(instance: unknown): instance is { feed(text: string, externalId?: string): void } {
   return typeof instance === 'object' && instance !== null
     && typeof (instance as Record<string, unknown>).feed === 'function'
-}
-
-// Test-fixture seam for speaking as different senders: `name> text` speaks as `name`, splitting
-// on the first `>` only so later `>` characters stay part of the text; no prefix, or a blank
-// name, keeps today's `local`.
-export function parseSenderLine(line: string): { sender: string, text: string } {
-  const i = line.indexOf('>')
-  if (i === -1) return { sender: 'local', text: line.trim() }
-  const sender = line.slice(0, i).trim()
-  return { sender: sender === '' ? 'local' : sender, text: line.slice(i + 1).trim() }
 }
 
 const consoleInstance = registry.hyphae.find((h) => h.name === 'console')?.instance
