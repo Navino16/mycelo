@@ -1,4 +1,4 @@
-import type { HealthStatus, PushTarget } from './context.js'
+import type { HealthStatus, Principal, PushTarget } from './context.js'
 import type { SporeKind } from './manifest.js'
 import type { OutgoingContent } from './message.js'
 
@@ -48,4 +48,37 @@ export interface HealthRead {
 
 export interface MessagesSend {
   send(target: PushTarget, content: OutgoingContent): Promise<void>
+}
+
+export interface RoleInfo {
+  name: string
+  patterns: readonly string[]
+  builtin: boolean
+}
+
+export interface PrincipalsRead {
+  listPrincipals(): Promise<readonly Principal[]>
+  getPrincipal(id: string): Promise<Principal | null>
+  findByIdentity(channel: string, externalId: string): Promise<Principal | null>
+}
+
+export interface PrincipalsManage {
+  markReviewed(id: string): Promise<void>
+  setDisplayName(id: string, displayName: string): Promise<void>
+}
+
+export interface RolesRead {
+  listRoles(): Promise<readonly RoleInfo[]>
+  rolesOf(principalId: string): Promise<readonly string[]>
+}
+
+export interface RolesAssign {
+  assignRole(principalId: string, roleName: string): Promise<void>
+  revokeRole(principalId: string, roleName: string): Promise<void>
+}
+
+export interface RolesManage {
+  createRole(name: string, patterns: readonly string[]): Promise<void>
+  setRoleCommands(name: string, patterns: readonly string[]): Promise<void>
+  deleteRole(name: string): Promise<void>
 }

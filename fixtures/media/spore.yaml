@@ -1,6 +1,6 @@
 kind: enzyme
 name: media
-septum: "^0.4"
+septum: "^0.5"
 description: Depends on a rhiza and on an any_of group. Test fixture, never distributed.
 requires:
   - rhiza: mock

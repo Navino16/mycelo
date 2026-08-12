@@ -1,6 +1,6 @@
 {
   "name": "@mycelo/septum",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "The plugin contract for Mycelo: the interfaces every hypha, rhiza, enzyme and inhibitor implements.",
   "license": "MIT",
   "author": "Nathan Jaunet",

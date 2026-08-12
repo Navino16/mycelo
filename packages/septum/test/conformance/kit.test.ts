@@ -297,6 +297,7 @@ function inhibitorContext(): InhibitorContext<unknown> {
     async groupMembers() {
       return null
     },
+    requireCapability: () => {},
     rhiza: <T,>() => ({}) as T,
     has: () => false,
   }
