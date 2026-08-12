@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { discover } from '../../src/germination/discover.js'
-import { isFailure, readManifest } from '../../src/germination/manifest.js'
+import { isFailure, manifestFailureReason, readManifest } from '../../src/germination/manifest.js'
 
 let dir: string
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'mycelo-man-')) })
@@ -39,4 +39,12 @@ it('reports a schema violation with the offending field', () => {
   // come from the path, not the message — this is what distinguishes the assertion
   // from one that would pass against any generic schema-violation reason.
   if (isFailure(read)) expect(read.reason).toContain("'name'")
+})
+
+it('names the path for a lookalike error that is not an instance of this core\'s ManifestError', () => {
+  class OtherManifestError extends Error {
+    constructor(message: string, readonly path: string) { super(message) }
+  }
+  const reason = manifestFailureReason(new OtherManifestError('bad', 'requires.0.scopes.0'))
+  expect(reason).toBe("invalid manifest at 'requires.0.scopes.0': bad")
 })
