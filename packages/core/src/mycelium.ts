@@ -3,7 +3,9 @@ import { loadBootstrap } from './config.js'
 import { germinate } from './germination/germinate.js'
 import { buildRoutes } from './germination/registry.js'
 import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedRhiza, Registry } from './germination/registry.js'
+import { bootstrapIdentity } from './identity/bootstrap.js'
 import { createMyceliumApi } from './mycelium-rhiza.js'
+import { migrateDatabase, openDatabase } from './persistence/db.js'
 import { createBus, createEnzymeStartContext, sendVia } from './rhizomorph/bus.js'
 import type { Bus } from './rhizomorph/bus.js'
 import { createLogger } from './support/logger.js'
@@ -25,6 +27,11 @@ export function germinationBanner(registry: Registry): string {
 export async function bootstrap(configFile: string): Promise<Mycelium> {
   const logger = createLogger()
   const config = loadBootstrap(configFile)
+  // No degraded mode: with no database there is no authorization, so a failure here
+  // must halt startup rather than fail open (spec §5).
+  const { db } = openDatabase(config.databaseFile)
+  migrateDatabase(db)
+  bootstrapIdentity(db, { owner: config.owner, defaultRole: config.defaultRole })
   const registry = await germinate(config.sporesDir, logger, config.plugins)
   const dormant: Dormant[] = [...registry.dormant]
 
@@ -74,6 +81,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     { ...registry, hyphae: reportedHyphae, rhizas: startedRhizas, enzymes: startedEnzymes, dormant },
     scopes,
     (target, content) => sendVia(hyphaByName, target.channel, target.conversationId, content),
+    db,
   )
   for (const name of registry.order) {
     const rhiza = rhizaByName.get(name)
@@ -132,6 +140,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     registry: routedRegistry,
     prefix: config.prefix,
     logger,
+    db,
     mycelium,
     onUnrouted: async (message, command) => {
       if (command === null) return

@@ -12,6 +12,7 @@ import type {
 } from '@mycelo/septum'
 import type { GerminatedHypha, GerminatedRhiza, Registry } from '../germination/registry.js'
 import { createMyceliumApi } from '../mycelium-rhiza.js'
+import type { Db } from '../persistence/db.js'
 import { bindArgs, parseCommand } from './parse.js'
 import { normalize } from './normalize.js'
 
@@ -102,18 +103,19 @@ export interface BusOptions {
   registry: Registry
   prefix: string
   logger: Logger
+  db: Db
   /** Called when text carries no command, or names one nothing declares. */
   onUnrouted?: (message: IncomingMessage, command: string | null) => Promise<void>
   /** Defaults to the real mycelium-as-rhiza API, grounded in this bus's own registry (design §2.4). */
   mycelium?: (scopes: readonly MyceliumScope[]) => object
 }
 
-export function createBus({ registry, prefix, logger, onUnrouted, mycelium }: BusOptions): Bus {
+export function createBus({ registry, prefix, logger, db, onUnrouted, mycelium }: BusOptions): Bus {
   const hyphaByName = new Map(registry.hyphae.map((h) => [h.name, h]))
   const send = (channel: string, conversationId: string, out: OutgoingContent): Promise<void> =>
     sendVia(hyphaByName, channel, conversationId, out)
   const mounted = mycelium ?? ((scopes: readonly MyceliumScope[]) =>
-    createMyceliumApi(registry, scopes, (target, content) => send(target.channel, target.conversationId, content)))
+    createMyceliumApi(registry, scopes, (target, content) => send(target.channel, target.conversationId, content), db))
 
   // One context per enzyme, because `resolved` and `scopes` differ per spore
   // (design §2.4). Built once here rather than per message.
