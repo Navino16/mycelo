@@ -68,6 +68,77 @@ it('leaves an inhibitor with no inspect() dormant', async () => {
   const registry = await germinate(dir, createLogger())
   expect(registry.inhibitors).toEqual([])
   expect(registry.dormant[0]?.reason).toContain('inspect')
+  // 'badgate' declares no `enforcing`, so its own shape failure must not fail closed.
+  expect(registry.brokenEnforcing).toEqual([])
+})
+
+it('refuses all traffic when an enforcing inhibitor has a shape failure', async () => {
+  spore('shapegate', {
+    'spore.yaml': 'kind: inhibitor\nname: shapegate\nseptum: "^1.0"\nenforcing: true\n',
+    'src/index.ts': 'export default { create: () => ({}) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.brokenEnforcing).toEqual(['shapegate'])
+})
+
+it('refuses all traffic when an enforcing inhibitor throws on module load', async () => {
+  spore('throwloadgate', {
+    'spore.yaml': 'kind: inhibitor\nname: throwloadgate\nseptum: "^1.0"\nenforcing: true\n',
+    'src/index.ts': 'throw new Error("import explodes")\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.brokenEnforcing).toEqual(['throwloadgate'])
+})
+
+it('does not refuse all traffic when an advisory inhibitor throws on module load', async () => {
+  spore('throwloadgate2', {
+    'spore.yaml': 'kind: inhibitor\nname: throwloadgate2\nseptum: "^1.0"\n',
+    'src/index.ts': 'throw new Error("import explodes")\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.brokenEnforcing).toEqual([])
+})
+
+it('refuses all traffic when an enforcing inhibitor throws in create()', async () => {
+  spore('throwcreategate', {
+    'spore.yaml': 'kind: inhibitor\nname: throwcreategate\nseptum: "^1.0"\nenforcing: true\n',
+    'src/index.ts': 'export default { create: () => { throw new Error("create explodes") } }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.brokenEnforcing).toEqual(['throwcreategate'])
+})
+
+it('refuses all traffic when an enforcing inhibitor has a dormant mandatory dependency', async () => {
+  spore('brokenstore', {
+    'spore.yaml': 'kind: rhiza\nname: brokenstore\nseptum: "^1.0"\n',
+    'src/index.ts': 'throw new Error("store explodes")\n',
+  })
+  spore('depgate', {
+    'spore.yaml': 'kind: inhibitor\nname: depgate\nseptum: "^1.0"\nenforcing: true\nrequires:\n  - rhiza: brokenstore\n',
+    'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.brokenEnforcing).toEqual(['depgate'])
+})
+
+it('does not refuse all traffic when an advisory inhibitor has a dormant mandatory dependency', async () => {
+  spore('brokenstore', {
+    'spore.yaml': 'kind: rhiza\nname: brokenstore\nseptum: "^1.0"\n',
+    'src/index.ts': 'throw new Error("store explodes")\n',
+  })
+  spore('depgate2', {
+    'spore.yaml': 'kind: inhibitor\nname: depgate2\nseptum: "^1.0"\nrequires:\n  - rhiza: brokenstore\n',
+    'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.dormant.find((d) => d.name === 'depgate2')).toBeDefined()
+  expect(registry.brokenEnforcing).toEqual([])
 })
 
 it('refuses all traffic when an enforcing inhibitor is dormant from a rejected config', async () => {
