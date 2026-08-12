@@ -74,9 +74,12 @@ requires:
       - rhiza: sonarr
 ```
 
-If neither `radarr` nor `sonarr` is installed, the spore is dormant naming both alternatives. A
-cycle among mandatory dependencies — anywhere in the graph, not only between two spores that
-require each other directly — is refused at startup, naming every plugin in the cycle.
+If neither `radarr` nor `sonarr` is installed, the spore is dormant naming both alternatives.
+
+Cycle detection runs over every `requires` edge in the graph, **optional included, with no
+exemption** — anywhere in the graph, not only between two spores that require each other
+directly. This means two plugins that only *optionally* require each other still cannot
+coexist: the bot refuses to start at all, naming every plugin in the cycle.
 
 `parseManifest` validates the parsed YAML and throws a `ManifestError` naming the offending
 field.
