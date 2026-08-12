@@ -19,8 +19,8 @@ it('answers /ping with pong, through the real fixtures and the real bootstrap()'
   // Exercises mycelium.ts's bootstrap() itself — the exact wiring src/index.ts runs —
   // rather than reassembling germinate()/createBus() by hand, which would test a
   // second, parallel implementation of the wiring instead of the shipped one.
-  // owner matches the console fixture's fixed sender ('local'), so every command it
-  // feeds is authorized (phase 4) — otherwise every one of these milestones is denied.
+  // owner grants the console fixture's fixed sender ('local') the owner role: these
+  // milestones exercise routing, not authorization.
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
   writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
