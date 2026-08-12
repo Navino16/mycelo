@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import type { Db } from '../../src/persistence/db.js'
 import { channelIdentity, principal, principalRole, role, roleCommand } from '../../src/persistence/schema.js'
@@ -16,6 +16,14 @@ function seedRole(db: Db, name: string, patterns: readonly string[]): string {
   db.insert(role).values({ id, name }).run()
   for (const pattern of patterns) db.insert(roleCommand).values({ roleId: id, pattern }).run()
   return id
+}
+
+// SQLite's own write counter: unlike reading a column back, it detects an UPDATE
+// that changes no value, which the guard under test exists to avoid.
+function totalChanges(db: Db): number {
+  const row = db.get<[number]>(sql`SELECT total_changes()`)
+  if (row === undefined) throw new Error('total_changes() returned nothing')
+  return row[0]
 }
 
 describe('resolvePrincipal', () => {
@@ -75,9 +83,17 @@ describe('resolvePrincipal', () => {
   it('does not write when the display name is unchanged', () => {
     const db = fresh()
     resolvePrincipal(db, { channel: 'console', externalId: 'alice', displayName: 'alice' })
-    const before = db.select().from(channelIdentity).get()?.firstSeenAt
+    const before = totalChanges(db)
     resolvePrincipal(db, { channel: 'console', externalId: 'alice', displayName: 'alice' })
-    expect(db.select().from(channelIdentity).get()?.firstSeenAt).toEqual(before)
+    expect(totalChanges(db)).toBe(before)
+  })
+
+  it('writes exactly once when the display name changed', () => {
+    const db = fresh()
+    resolvePrincipal(db, { channel: 'console', externalId: 'alice', displayName: 'alice' })
+    const before = totalChanges(db)
+    resolvePrincipal(db, { channel: 'console', externalId: 'alice', displayName: 'Alice B' })
+    expect(totalChanges(db)).toBe(before + 1)
   })
 
   it('treats the same handle on two channels as two principals', () => {
