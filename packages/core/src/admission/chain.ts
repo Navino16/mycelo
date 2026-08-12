@@ -53,6 +53,9 @@ export function createAdmissionChain(options: {
 }): AdmissionChain {
   const { inhibitors, brokenEnforcing, membership, logger, rhiza } = options
   const ordered = [...inhibitors].sort((a, b) => a.name.localeCompare(b.name))
+  // Same attribution start() gets (mycelium.ts), so an inhibitor's records name it in
+  // both moments rather than only during startup.
+  const loggerFor = new Map(inhibitors.map((i) => [i.name, logger.child({ inhibitor: i.name })]))
 
   return {
     async admit(message) {
@@ -62,7 +65,7 @@ export function createAdmissionChain(options: {
       for (const inhibitor of ordered) {
         const ctx: InhibitorContext = {
           config: inhibitor.config,
-          logger,
+          logger: loggerFor.get(inhibitor.name) ?? logger,
           groupMembers: (channel, groupId) => membership.members(channel, groupId),
           requireCapability: (channel, capability) => { membership.requireCapability(channel, capability) },
           rhiza: rhiza(inhibitor),
@@ -70,7 +73,14 @@ export function createAdmissionChain(options: {
         }
         try {
           const verdict = await inhibitor.instance.inspect(message, ctx)
-          if (!verdict.allow) return verdict
+          // `allow` is a plugin-supplied value that decides admission, and a bare
+          // !verdict.allow admits any truthy non-boolean. Routed through the throw path
+          // so a malformed verdict fails closed for an enforcing inhibitor.
+          const allow: unknown = (verdict as { allow?: unknown } | null | undefined)?.allow
+          if (typeof allow !== 'boolean') {
+            throw new Error(`inspect() returned no boolean 'allow' (got ${typeof allow})`)
+          }
+          if (!allow) return verdict
         } catch (e) {
           const reason = (e as Error).message
           if (inhibitor.manifest.enforcing) {
