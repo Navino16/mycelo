@@ -56,7 +56,8 @@ it('keeps other hyphae starting when one throws in connect(), and marks it dorma
   writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\n`, 'utf8')
 
   const { registry } = await bootstrap(configFile)
-  expect(registry.hyphae.map((h) => h.name)).toEqual(['good'])
+  // Deliberately wrong, to prove CI fails on a red suite (task 8, step 6). Reverted next commit.
+  expect(registry.hyphae.map((h) => h.name)).toEqual(['bad'])
   expect(registry.dormant.find((d) => d.name === 'bad')?.reason).toContain('boom')
 })
 
