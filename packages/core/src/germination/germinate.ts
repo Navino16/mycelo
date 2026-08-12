@@ -109,7 +109,13 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
       } else if (manifest.kind === 'rhiza') {
         rhizas.push({ name: manifest.name, manifest, instance: instance as Rhiza })
       } else {
-        enzymes.push({ name: manifest.name, manifest, instance: instance as Enzyme | null })
+        enzymes.push({
+          name: manifest.name,
+          manifest,
+          instance: instance as Enzyme | null,
+          resolved: spore.resolved,
+          scopes: spore.scopes,
+        })
       }
     } catch (e) {
       const reason = (e as Error).message
@@ -122,5 +128,14 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
   if (hyphae.length === 0 && enzymes.length === 0) {
     logger.warn('germination produced zero spores: no channel and no command will ever answer')
   }
-  return { hyphae, enzymes, rhizas, dormant, routes: buildRoutes(enzymes) }
+
+  // Startup (mycelium.ts) needs rhizas and enzymes in one interleaved, dependency-first
+  // sequence — resolution.order already is that sequence; just drop hyphae, inhibitors
+  // and anything that failed to germinate.
+  const registered = new Set([...rhizas, ...enzymes].map((s) => s.name))
+  const order = resolution.order
+    .map((spore) => spore.read.manifest.name)
+    .filter((name) => registered.has(name))
+
+  return { hyphae, enzymes, rhizas, dormant, routes: buildRoutes(enzymes), order }
 }

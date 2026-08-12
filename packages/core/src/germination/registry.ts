@@ -1,4 +1,4 @@
-import type { CommandSpec, Enzyme, Hypha, Manifest, Rhiza } from '@mycelo/septum'
+import type { CommandSpec, Enzyme, Hypha, Manifest, MyceliumScope, Rhiza } from '@mycelo/septum'
 
 export interface GerminatedHypha {
   name: string
@@ -10,6 +10,9 @@ export interface GerminatedEnzyme {
   name: string
   manifest: Extract<Manifest, { kind: 'enzyme' }>
   instance: Enzyme | null
+  /** This spore's own resolved set (anastomoses.ts), for ctx.rhiza()/ctx.has(). */
+  resolved: ReadonlySet<string>
+  scopes: readonly MyceliumScope[]
 }
 
 export interface GerminatedRhiza {
@@ -53,6 +56,8 @@ export interface Registry {
   rhizas: readonly GerminatedRhiza[]
   dormant: readonly Dormant[]
   routes: ReadonlyMap<string, CommandRoute>
+  /** Names of germinated rhizas and enzymes only, dependency-first (anastomoses.ts). */
+  order: readonly string[]
 }
 
 /**
