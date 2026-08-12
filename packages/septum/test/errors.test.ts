@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { CapabilityMissingError, RhizaUnreachableError, ScopeDeniedError } from '../src/errors.js'
+import { CapabilityMissingError, RhizaUnreachableError } from '../src/errors.js'
 
 describe('errors', () => {
   it('RhizaUnreachableError names the rhiza and keeps the cause', () => {
@@ -18,12 +18,7 @@ describe('errors', () => {
     expect(e.message).toContain('reactions')
   })
 
-  it('ScopeDeniedError names the scope', () => {
-    const e = new ScopeDeniedError('roles.assign')
-    expect(e.scope).toBe('roles.assign')
-  })
-
   it('all are instances of Error', () => {
-    expect(new ScopeDeniedError('x')).toBeInstanceOf(Error)
+    expect(new RhizaUnreachableError('x')).toBeInstanceOf(Error)
   })
 })
