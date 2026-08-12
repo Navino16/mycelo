@@ -64,8 +64,19 @@ const singleRequirementSchema = z
     path: ['scopes'],
   })
 
+// Both fields guarded the same way args is on respondCommandSchema above: a bare
+// z.object() would strip optional/scopes silently, turning a requested optional or
+// scoped any_of into a plain mandatory one with no diagnostic.
+const anyOfAlternativeSchema = z.object({
+  rhiza: targetSchema,
+  scopes: z.undefined().optional(),
+  optional: z.undefined().optional(),
+})
+
 const anyOfRequirementSchema = z.object({
-  any_of: z.array(z.object({ rhiza: targetSchema })).min(2),
+  any_of: z.array(anyOfAlternativeSchema).min(2),
+  optional: z.undefined().optional(),
+  scopes: z.undefined().optional(),
 })
 
 const requirementSchema = z.union([singleRequirementSchema, anyOfRequirementSchema])

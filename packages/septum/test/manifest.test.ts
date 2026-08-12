@@ -188,3 +188,28 @@ describe('mycelium scopes', () => {
       .toThrow(/scopes apply only to rhiza 'mycelium'/)
   })
 })
+
+describe('any_of', () => {
+  const base = { kind: 'rhiza', name: 'probe', septum: '^0.4' }
+
+  it('rejects optional on an any_of requirement rather than silently dropping it', () => {
+    expect(() => parseManifest({
+      ...base,
+      requires: [{ any_of: [{ rhiza: 'plex' }, { rhiza: 'jellyfin' }], optional: true }],
+    })).toThrow(ManifestError)
+  })
+
+  it('rejects scopes on an any_of requirement rather than silently dropping it', () => {
+    expect(() => parseManifest({
+      ...base,
+      requires: [{ any_of: [{ rhiza: 'plex' }, { rhiza: 'jellyfin' }], scopes: ['plugins.read'] }],
+    })).toThrow(ManifestError)
+  })
+
+  it('rejects scopes on an any_of alternative rather than silently dropping it', () => {
+    expect(() => parseManifest({
+      ...base,
+      requires: [{ any_of: [{ rhiza: 'plex', scopes: ['plugins.read'] }, { rhiza: 'jellyfin' }] }],
+    })).toThrow(ManifestError)
+  })
+})
