@@ -75,7 +75,10 @@ export function createEnzymeStartContext(options: StartContextOptions): EnzymeSt
     }
     if (name === 'mycelium') return mycelium(access.scopes) as TApi
     const found = rhizaByName.get(name)
-    if (found === undefined) throw new Error(`rhiza '${name}' resolved but is not installed`)
+    // Resolution (anastomoses.ts) only ever puts a genuine rhiza in `access.resolved`,
+    // so reaching here with no match means that rhiza's own start() failed at runtime —
+    // never that it was never installed (core spec §8; the cascade to this enzyme is deferred).
+    if (found === undefined) throw new Error(`rhiza '${name}' resolved but failed to start and is unavailable`)
     return found.instance.api as TApi
   }
 

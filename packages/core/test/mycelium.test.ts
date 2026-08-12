@@ -409,6 +409,60 @@ it('routes onUnrouted through the shared send path, so an unregistered channel i
   expect(logs.some((l) => l.includes("no hypha named 'phantom'"))).toBe(true)
 })
 
+it("names a failed start(), not a missing installation, when ctx.rhiza() reaches a mandatory dependency that failed to start", async () => {
+  spore('latefail', {
+    'spore.yaml': 'kind: rhiza\nname: latefail\nseptum: "^0.4"\n',
+    'src/index.ts': [
+      'export default {',
+      '  create: () => ({',
+      "    async start() { throw new Error('boom') },",
+      '    async stop() {},',
+      "    health: async () => ({ state: 'healthy', checkedAt: new Date() }),",
+      '    api: {},',
+      '  }),',
+      '}',
+    ].join('\n'),
+  })
+  spore('user', {
+    'spore.yaml': [
+      'kind: enzyme', 'name: user', 'septum: "^0.4"',
+      'requires:', '  - rhiza: latefail',
+      'commands:', '  - name: user', '    description: x', '    code: user', '',
+    ].join('\n'),
+    'src/index.ts': [
+      'export default {',
+      '  create: () => {',
+      '    const observed = {}',
+      '    return {',
+      '      observed,',
+      '      async start(ctx) {',
+      '        observed.has = ctx.has("latefail")',
+      '        try { ctx.rhiza("latefail") } catch (e) { observed.rhizaError = e.message }',
+      '      },',
+      '      async stop() {},',
+      '      handlers: { user: async () => {} },',
+      '    }',
+      '  },',
+      '}',
+    ].join('\n'),
+  })
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\n`, 'utf8')
+
+  const { registry } = await bootstrap(configFile)
+  // The cascade is deliberately not implemented (deferred): 'user' still starts and
+  // is not marked dormant even though its mandatory dependency failed.
+  expect(registry.dormant.find((d) => d.name === 'latefail')?.reason).toContain('boom')
+  expect(registry.enzymes.map((e) => e.name)).toEqual(['user'])
+
+  const user = registry.enzymes.find((e) => e.name === 'user')
+  const observed = (user?.instance as unknown as { observed: Record<string, unknown> }).observed
+  expect(observed.has).toBe(true)
+  expect(observed.rhizaError).toContain("'latefail'")
+  expect(observed.rhizaError).toContain('failed to start')
+  expect(observed.rhizaError).not.toContain('not installed')
+})
+
 it("counts and names a rhiza in the germination banner, not just hyphae and enzymes", async () => {
   spore('channel', {
     'spore.yaml': 'kind: hypha\nname: channel\nseptum: "^1.0"\ncapabilities: []\n',
