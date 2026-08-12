@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { CHANNEL_CAPABILITIES } from './capabilities.js'
+import { MYCELIUM_SCOPES } from './mycelium.js'
 
 /** Plugin kinds. */
 export const SPORE_KINDS = ['hypha', 'rhiza', 'enzyme', 'inhibitor'] as const
@@ -50,11 +51,18 @@ const codeCommandSchema = z.object({
 const commandSpecSchema = z.union([respondCommandSchema, codeCommandSchema])
 export type CommandSpec = z.infer<typeof commandSpecSchema>
 
-const singleRequirementSchema = z.object({
-  rhiza: targetSchema,
-  scopes: z.array(z.string()).optional(),
-  optional: z.boolean().default(false),
-})
+const singleRequirementSchema = z
+  .object({
+    rhiza: targetSchema,
+    scopes: z.array(z.enum(MYCELIUM_SCOPES)).optional(),
+    optional: z.boolean().default(false),
+  })
+  // Only the mycelium has a scope model. Ignoring the field elsewhere would let an
+  // author believe they had constrained something (core spec §6.1).
+  .refine((r) => r.scopes === undefined || r.rhiza === 'mycelium', {
+    message: "scopes apply only to rhiza 'mycelium'",
+    path: ['scopes'],
+  })
 
 const anyOfRequirementSchema = z.object({
   any_of: z.array(z.object({ rhiza: targetSchema })).min(2),
@@ -118,6 +126,10 @@ export class ManifestError extends Error {
   }
 }
 
+function isUnknownArray(x: unknown): x is readonly unknown[] {
+  return Array.isArray(x)
+}
+
 /** True when a raw command object carries both `respond` and `code`, or neither. */
 function violatesExclusivity(command: unknown): boolean {
   if (typeof command !== 'object' || command === null) return false
@@ -147,6 +159,20 @@ export function parseManifest(input: unknown): Manifest {
     const index = issue.path[1]
     if (Array.isArray(commands) && typeof index === 'number' && violatesExclusivity(commands[index])) {
       throw new ManifestError('a command must declare exactly one of respond: or code:', path)
+    }
+  }
+
+  // The requirement union fails as a whole, so a misspelled scope reports `Invalid input`
+  // unless the branch the author clearly meant is surfaced. Mirrors the commands case above.
+  // `Array.isArray` narrows an `unknown` argument to `any[]` (lib.es5.d.ts), so a local
+  // predicate is used instead to keep the branches genuinely unknown until asserted.
+  if (issue && issue.path[0] === 'requires' && 'errors' in issue) {
+    const branches = (issue as { errors?: unknown }).errors
+    const first = isUnknownArray(branches) ? branches[0] : undefined
+    const inner = isUnknownArray(first) ? (first[0] as { message?: unknown; path?: unknown }) : undefined
+    if (inner !== undefined && typeof inner.message === 'string') {
+      const innerPath = isUnknownArray(inner.path) ? inner.path : []
+      throw new ManifestError(inner.message, [...issue.path, ...innerPath].join('.'))
     }
   }
 
