@@ -17,11 +17,9 @@ beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'mycelo-milestone-')) })
 afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
 
 it('answers /ping with pong, through the real fixtures and the real bootstrap()', async () => {
-  // Exercises mycelium.ts's bootstrap() itself — the exact wiring src/index.ts runs —
-  // rather than reassembling germinate()/createBus() by hand, which would test a
-  // second, parallel implementation of the wiring instead of the shipped one.
-  // owner grants the console fixture's fixed sender ('local') the owner role: these
-  // milestones exercise routing, not authorization.
+  // Exercises mycelium.ts's bootstrap() itself, not a hand-reassembled germinate()/
+  // createBus(). `owner` grants the fixture's fixed sender ('local') the owner role:
+  // these milestones exercise routing, not authorization.
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
   writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\nplugins:\n  gate:\n    channel: console\n    groupId: household\n`, 'utf8')
@@ -319,9 +317,14 @@ it('runs the phase 4 milestone: gate admits, media stays denied until granted, c
   // carol is not in 'household': the gate refuses her before identity resolution runs,
   // so nothing is sent and no row for her is ever written to channel_identity.
   fixture.feed('/movies Dune', 'carol')
+  // A refusal is silent, so waiting on carol's own output would return immediately and
+  // read the database before her delivery had even reached admission. bob's next reply is
+  // the barrier: fed after hers, and its path is strictly longer than a refusal's.
+  fixture.feed('/movies Solaris', 'bob')
   await waitFor(() => {
-    expect(fixture.sent).toHaveLength(5)
+    expect(fixture.sent[5]).toEqual({ text: 'Solaris (unknown) via mock' })
   })
+  expect(fixture.sent).toHaveLength(6)
 
   const db = new Database(join(dir, 'mycelo.db'), { readonly: true })
   const identities = db.query('select channel, external_id from channel_identity').all() as
