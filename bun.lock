@@ -16,14 +16,14 @@
       "name": "@mycelo/fixture-console",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.3.0",
+        "@mycelo/septum": "^0.4.0",
       },
     },
     "fixtures/helpdesk": {
       "name": "@mycelo/fixture-helpdesk",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.3.0",
+        "@mycelo/septum": "^0.4.0",
       },
     },
     "fixtures/ping": {
@@ -34,14 +34,14 @@
       "name": "@mycelo/fixture-twofile",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.3.0",
+        "@mycelo/septum": "^0.4.0",
       },
     },
     "packages/core": {
       "name": "@mycelo/core",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.3.0",
+        "@mycelo/septum": "^0.4.0",
         "yaml": "^2.9.0",
         "zod": "^4.4.3",
       },
@@ -250,12 +250,6 @@
     "zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
     "@eslint-community/eslint-utils/eslint-visitor-keys": ["eslint-visitor-keys@3.4.3", "", {}, "sha512-wpc+LXeiyiisxPlEkUzU6svyS1frIO3Mgxj1fdy7Pm8Ygzguax2N3Fa/D/ag1WqbOprdI+uY6wMUl8/a2G+iag=="],
-
-    "@mycelo/fixture-console/@mycelo/septum": ["@mycelo/septum@0.3.0", "", { "dependencies": { "zod": "^4.4.3" } }, "sha512-gdbxOOBpTlNAwSRjQz2JpdmONLU/0w+O7xkBTtXYUY7PIRYZA2XtDqH8HLCAQrfDiu/Io/KUoERWdlu5T5EdGw=="],
-
-    "@mycelo/fixture-helpdesk/@mycelo/septum": ["@mycelo/septum@0.3.0", "", { "dependencies": { "zod": "^4.4.3" } }, "sha512-gdbxOOBpTlNAwSRjQz2JpdmONLU/0w+O7xkBTtXYUY7PIRYZA2XtDqH8HLCAQrfDiu/Io/KUoERWdlu5T5EdGw=="],
-
-    "@mycelo/fixture-twofile/@mycelo/septum": ["@mycelo/septum@0.3.0", "", { "dependencies": { "zod": "^4.4.3" } }, "sha512-gdbxOOBpTlNAwSRjQz2JpdmONLU/0w+O7xkBTtXYUY7PIRYZA2XtDqH8HLCAQrfDiu/Io/KUoERWdlu5T5EdGw=="],
 
     "@typescript-eslint/eslint-plugin/ignore": ["ignore@7.0.6", "", {}, "sha512-BAg6QkE8W+TuQLrrw0Ugr7HegXduRuuj8/ti2kSOc+jz1dmx8/WNcjr6XGnq5YpDWxFwwaavqD0+jIUOKelTsw=="],
   }

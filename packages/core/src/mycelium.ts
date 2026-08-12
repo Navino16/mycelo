@@ -62,13 +62,13 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     },
   })
 
-  // A hypha whose start() throws is contained the same way a germination failure is
-  // (spec §8): it goes dormant and the others still start. Previously this loop had no
-  // try/catch, so one bad hypha killed the process before any other hypha started.
+  // A hypha whose connect() or listen() throws is contained the same way a germination
+  // failure is (spec §8): it goes dormant and the others still start. Previously this
+  // loop had no try/catch, so one bad hypha killed the process before any other started.
   const started: GerminatedHypha[] = []
   for (const hypha of routedRegistry.hyphae) {
     try {
-      await hypha.instance.start({
+      await hypha.instance.connect({
         config: {},
         logger: logger.child({ hypha: hypha.name }),
         emit: (message) => {
@@ -81,6 +81,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
           })
         },
       })
+      hypha.instance.listen()
       started.push(hypha)
     } catch (e) {
       logger.warn(`hypha '${hypha.name}' failed to start and is dormant`, { reason: (e as Error).message })

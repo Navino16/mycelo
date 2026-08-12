@@ -53,7 +53,7 @@ export async function hyphaChecks(harness: HyphaHarness): Promise<string[]> {
   } catch (e) {
     return [...failures, `create() threw: ${(e as Error).message}`]
   }
-  for (const method of ['start', 'stop', 'send'] as const) {
+  for (const method of ['connect', 'listen', 'stop', 'send'] as const) {
     if (typeof instance[method] !== 'function') {
       failures.push(`create() returned no ${method}()`)
     }
@@ -68,18 +68,18 @@ export async function hyphaChecks(harness: HyphaHarness): Promise<string[]> {
     failures.push('listGroupMembers() exists but the manifest does not declare group_membership')
   }
 
-  // stop() must be safe after a start() that never ran: the core calls it during
+  // stop() must be safe after a connect() that never ran: the core calls it during
   // shutdown regardless of how germination went (spec §8). Guarded, because a
   // missing stop() is already reported above.
   //
-  // start() is not called here, unlike in the enzyme and inhibitor kits: a hypha
+  // connect() is not called here, unlike in the enzyme and inhibitor kits: a hypha
   // opens its channel connection directly, not through a context the author stubs,
   // so calling it would make the conformance suite dial Signal.
   if (typeof instance.stop === 'function') {
     try {
       await instance.stop()
     } catch (e) {
-      failures.push(`stop() throws when start() never ran: ${(e as Error).message}`)
+      failures.push(`stop() throws when connect() never ran: ${(e as Error).message}`)
     }
   }
 

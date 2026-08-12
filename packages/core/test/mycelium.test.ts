@@ -16,13 +16,14 @@ function spore(name: string, files: Record<string, string>): void {
   }
 }
 
-it('keeps other hyphae starting when one throws in start(), and marks it dormant', async () => {
+it('keeps other hyphae starting when one throws in connect(), and marks it dormant', async () => {
   spore('bad', {
     'spore.yaml': 'kind: hypha\nname: bad\nseptum: "^1.0"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
-      "    start: () => { throw new Error('boom') },",
+      "    connect: () => { throw new Error('boom') },",
+      '    listen: () => {},',
       '    stop: async () => {},',
       '    send: async () => {},',
       '  }),',
@@ -34,7 +35,8 @@ it('keeps other hyphae starting when one throws in start(), and marks it dormant
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
-      '    start: async () => {},',
+      '    connect: async () => {},',
+      '    listen: () => {},',
       '    stop: async () => {},',
       '    send: async () => {},',
       '  }),',
@@ -57,7 +59,8 @@ it('invokes Enzyme.start() with a working push()/capabilitiesOf(), and has()/rhi
       'export default {',
       '  create: () => ({',
       '    sent,',
-      '    start: async () => {},',
+      '    connect: async () => {},',
+      '    listen: () => {},',
       '    stop: async () => {},',
       '    send: async (_id, out) => { sent.push(out) },',
       '  }),',

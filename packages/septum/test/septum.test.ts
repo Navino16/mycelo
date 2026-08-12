@@ -21,10 +21,11 @@ const signalModule: HyphaModule<SignalConfig> = {
   configSchema: signalConfig,
   create() {
     return {
-      async start(ctx) {
+      async connect(ctx) {
         ctx.logger.info('connecting', { account: ctx.config.account })
         void ctx.config.timeoutMs
       },
+      listen() {},
       async stop() {},
       async send(conversationId, out) {
         void conversationId

@@ -37,7 +37,7 @@ it('refuses an instance that does not implement its kind', async () => {
   })
   const registry = await germinate(dir, createLogger())
   expect(registry.hyphae).toEqual([])
-  expect(registry.dormant[0]?.reason).toContain('create() returned no start, stop, send')
+  expect(registry.dormant[0]?.reason).toContain('create() returned no connect, listen, stop, send')
 })
 
 it('refuses a spore declaring requires, which phase 3 resolves', async () => {
@@ -97,7 +97,7 @@ it('warns when germination produces zero spores, even though the directory exist
   expect(warnings.some((w) => w.includes('zero spores'))).toBe(true)
 })
 
-const HYPHA_BODY = 'start: async () => {}, stop: async () => {}, send: async () => {}'
+const HYPHA_BODY = 'connect: async () => {}, listen: () => {}, stop: async () => {}, send: async () => {}'
 
 it('sends the second of two hyphae sharing a manifest name dormant, naming both directories', async () => {
   spore('first-copy', {

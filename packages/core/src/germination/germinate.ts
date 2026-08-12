@@ -7,7 +7,7 @@ import { buildRoutes } from './registry.js'
 import type { Dormant, GerminatedEnzyme, GerminatedHypha, Registry } from './registry.js'
 
 const REQUIRED_METHODS = {
-  hypha: ['start', 'stop', 'send'],
+  hypha: ['connect', 'listen', 'stop', 'send'],
 } as const
 
 /**

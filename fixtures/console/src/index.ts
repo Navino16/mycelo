@@ -6,15 +6,20 @@ export default {
   create: () => {
     let ctx: HyphaContext<unknown> | null = null
     let counter = 0
+    let listening = false
     const sent: OutgoingContent[] = []
     return {
       sent,
-      start: (context: HyphaContext<unknown>) => {
+      connect: (context: HyphaContext<unknown>) => {
         ctx = context
         return Promise.resolve()
       },
+      listen: () => {
+        listening = true
+      },
       stop: () => {
         ctx = null
+        listening = false
         return Promise.resolve()
       },
       send: (_conversationId: string, out: OutgoingContent) => {
@@ -24,6 +29,7 @@ export default {
       },
       /** Test seam: what stdin does in the demo, a test does directly. */
       feed(text: string) {
+        if (!listening) return
         counter += 1
         ctx?.emit({
           channel: 'console',

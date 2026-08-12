@@ -13,7 +13,7 @@ function setup(
 ): { registry: Registry; sent: OutgoingContent[] } {
   const sent: OutgoingContent[] = []
   const hypha: Hypha = {
-    async start() {}, async stop() {},
+    async connect() {}, listen() {}, async stop() {},
     async send(_c, out) { sent.push(out) },
   }
   const hyphae: GerminatedHypha[] = [{
@@ -199,7 +199,7 @@ it('contains an onUnrouted callback that itself throws', async () => {
 
 it('contains a recovery send that also fails, with nowhere left to answer', async () => {
   const hypha: Hypha = {
-    async start() {}, async stop() {},
+    async connect() {}, listen() {}, async stop() {},
     async send() { throw new Error('channel down') },
   }
   const hyphae: GerminatedHypha[] = [{
