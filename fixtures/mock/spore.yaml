@@ -1,0 +1,4 @@
+kind: rhiza
+name: mock
+septum: "^0.4"
+description: A connected system that answers from a table. Test fixture, never distributed.

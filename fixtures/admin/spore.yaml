@@ -1,0 +1,11 @@
+kind: enzyme
+name: admin
+septum: "^0.4"
+description: Reads the mycelium through a scope. Test fixture, never distributed.
+requires:
+  - rhiza: mycelium
+    scopes: [plugins.read]
+commands:
+  - name: plugins
+    description: List installed plugins
+    code: handlePlugins

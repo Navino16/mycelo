@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import type { IncomingMessage } from '@mycelo/septum'
-import { bootstrap } from '../src/mycelium.js'
+import { bootstrap, germinationBanner } from '../src/mycelium.js'
 
 function message(channel: string, text: string): IncomingMessage {
   return {
@@ -377,4 +377,39 @@ it("keeps the mycelium's plugin list consistent with bootstrap()'s own registry 
     { name: 'admin', kind: 'enzyme', commands: ['probe'], state: 'germinated' },
     { name: 'bad', commands: [], state: 'dormant', reason: 'boom' },
   ])
+})
+
+it("counts and names a rhiza in the germination banner, not just hyphae and enzymes", async () => {
+  spore('channel', {
+    'spore.yaml': 'kind: hypha\nname: channel\nseptum: "^1.0"\ncapabilities: []\n',
+    'src/index.ts': [
+      'export default {',
+      '  create: () => ({',
+      '    connect: async () => {},',
+      '    listen: () => {},',
+      '    stop: async () => {},',
+      '    send: async () => {},',
+      '  }),',
+      '}',
+    ].join('\n'),
+  })
+  spore('store', {
+    'spore.yaml': 'kind: rhiza\nname: store\nseptum: "^0.4"\n',
+    'src/index.ts': [
+      'export default {',
+      '  create: () => ({',
+      '    start: async () => {},',
+      '    stop: async () => {},',
+      "    health: async () => ({ state: 'healthy', checkedAt: new Date() }),",
+      '    api: {},',
+      '  }),',
+      '}',
+    ].join('\n'),
+  })
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\n`, 'utf8')
+
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+  expect(germinationBanner(registry)).toBe('germinated 2 spores (channel, store)')
 })

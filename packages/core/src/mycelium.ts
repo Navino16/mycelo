@@ -13,6 +13,11 @@ export interface Mycelium {
   bus: Bus
 }
 
+export function germinationBanner(registry: Registry): string {
+  const spores = [...registry.hyphae, ...registry.enzymes, ...registry.rhizas]
+  return `germinated ${String(spores.length)} spores (${spores.map((s) => s.name).join(', ')})`
+}
+
 /**
  * Germinates every spore, then starts it: every hypha connects, then every rhiza and
  * enzyme starts in dependency order, then every hypha listens (design §2.1).
