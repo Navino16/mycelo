@@ -4,6 +4,8 @@ export interface GerminatedHypha {
   name: string
   manifest: Extract<Manifest, { kind: 'hypha' }>
   instance: Hypha
+  /** Validated against the module's own configSchema during germination. */
+  config: unknown
 }
 
 export interface GerminatedEnzyme {
@@ -13,12 +15,16 @@ export interface GerminatedEnzyme {
   /** This spore's own resolved set (anastomoses.ts), for ctx.rhiza()/ctx.has(). */
   resolved: ReadonlySet<string>
   scopes: readonly MyceliumScope[]
+  /** Validated against the module's own configSchema during germination. */
+  config: unknown
 }
 
 export interface GerminatedRhiza {
   name: string
   manifest: Extract<Manifest, { kind: 'rhiza' }>
   instance: Rhiza
+  /** Validated against the module's own configSchema during germination. */
+  config: unknown
 }
 
 export interface Dormant {

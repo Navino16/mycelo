@@ -23,6 +23,7 @@ function setup(
     name: 'console',
     manifest: { kind: 'hypha', name: 'console', septum: '^1.0', capabilities: ['reactions'] },
     instance: hypha,
+    config: {},
   }]
   const enzymes: GerminatedEnzyme[] = [{
     name: 'ping',
@@ -30,6 +31,7 @@ function setup(
     instance,
     resolved: new Set(resolved),
     scopes: [],
+    config: {},
   }]
   const order = [...rhizas.map((r) => r.name), 'ping']
   return {
@@ -43,12 +45,13 @@ const stubRhiza = (name: string, api: unknown): GerminatedRhiza => ({
   name,
   manifest: { kind: 'rhiza', name, septum: '^0.4' },
   instance: { api } as unknown as Rhiza,
+  config: {},
 })
 
 it('resolves a declared rhiza through ctx.rhiza()', () => {
   const ctx = createEnzymeStartContext({
     hyphae: [], rhizas: [stubRhiza('mock', { lookup: () => 'x' })],
-    logger: createLogger(), access: access(['mock']), mycelium: () => ({}),
+    logger: createLogger(), access: access(['mock']), mycelium: () => ({}), config: {},
   })
   expect(ctx.rhiza<{ lookup(): string }>('mock').lookup()).toBe('x')
 })
@@ -56,7 +59,7 @@ it('resolves a declared rhiza through ctx.rhiza()', () => {
 it('throws when a rhiza was never declared, naming the target', () => {
   const ctx = createEnzymeStartContext({
     hyphae: [], rhizas: [stubRhiza('mock', {})],
-    logger: createLogger(), access: access([]), mycelium: () => ({}),
+    logger: createLogger(), access: access([]), mycelium: () => ({}), config: {},
   })
   expect(() => ctx.rhiza('mock')).toThrow(/'mock'.*not declared/)
 })
@@ -64,7 +67,7 @@ it('throws when a rhiza was never declared, naming the target', () => {
 it('answers has() from the resolved set, not from what is installed', () => {
   const ctx = createEnzymeStartContext({
     hyphae: [], rhizas: [stubRhiza('mock', {}), stubRhiza('other', {})],
-    logger: createLogger(), access: access(['mock']), mycelium: () => ({}),
+    logger: createLogger(), access: access(['mock']), mycelium: () => ({}), config: {},
   })
   expect(ctx.has('mock')).toBe(true)
   expect(ctx.has('other')).toBe(false)
@@ -96,6 +99,7 @@ it('names the failed command, not just the channel, when a respond: send throws'
     name: 'console',
     manifest: { kind: 'hypha', name: 'console', septum: '^1.0', capabilities: [] },
     instance: hypha,
+    config: {},
   }]
   const enzymes: GerminatedEnzyme[] = [{
     name: 'ping',
@@ -106,6 +110,7 @@ it('names the failed command, not just the channel, when a respond: send throws'
     instance: null,
     resolved: new Set(),
     scopes: [],
+    config: {},
   }]
   const registry: Registry = { hyphae, enzymes, rhizas: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'] }
   const errors: string[] = []
@@ -293,6 +298,7 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
     name: 'console',
     manifest: { kind: 'hypha', name: 'console', septum: '^1.0', capabilities: [] },
     instance: hypha,
+    config: {},
   }]
   const rhizas: GerminatedRhiza[] = [stubRhiza('mock', {}), stubRhiza('other', {})]
   const enzymes: GerminatedEnzyme[] = [
@@ -315,6 +321,7 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
       },
       resolved: new Set(['mock', 'mycelium']),
       scopes: ['plugins.read'],
+      config: {},
     },
     {
       name: 'beta',
@@ -335,6 +342,7 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
       },
       resolved: new Set(['other', 'mycelium']),
       scopes: ['health.read'],
+      config: {},
     },
   ]
   const registry: Registry = {
@@ -385,6 +393,7 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
     name: 'console',
     manifest: { kind: 'hypha', name: 'console', septum: '^1.0', capabilities: [] },
     instance: hypha,
+    config: {},
   }]
   const enzymes: GerminatedEnzyme[] = [{
     name: 'ping',
@@ -395,6 +404,7 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
     instance: { handlers: { ping: async () => { throw new Error('boom') } } },
     resolved: new Set(),
     scopes: [],
+    config: {},
   }]
   const registry: Registry = { hyphae, enzymes, rhizas: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'] }
   // A bespoke logger, not createLogger(): distinguishes "contained by the specific

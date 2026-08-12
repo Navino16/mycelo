@@ -57,6 +57,7 @@ export interface StartContextOptions {
   access: SporeAccess
   /** Injected so bus.ts does not import mycelium-rhiza.ts, which imports Registry. */
   mycelium: (scopes: readonly MyceliumScope[]) => object
+  config: unknown
 }
 
 /**
@@ -65,7 +66,7 @@ export interface StartContextOptions {
  * exists) and createBus()'s per-message context below share one implementation.
  */
 export function createEnzymeStartContext(options: StartContextOptions): EnzymeStartContext {
-  const { hyphae, rhizas, logger, access, mycelium } = options
+  const { hyphae, rhizas, logger, access, mycelium, config } = options
   const hyphaByName = new Map(hyphae.map((h) => [h.name, h]))
   const rhizaByName = new Map(rhizas.map((r) => [r.name, r]))
 
@@ -83,8 +84,7 @@ export function createEnzymeStartContext(options: StartContextOptions): EnzymeSt
   }
 
   return {
-    // Plugin settings live in the database from phase 5; nothing supplies them yet.
-    config: {},
+    config,
     logger,
     push: async (target, content) => { await sendVia(hyphaByName, target.channel, target.conversationId, content) },
     capabilitiesOf: (target) => capabilitiesOf(hyphaByName.get(target.channel)),
@@ -126,6 +126,7 @@ export function createBus({ registry, prefix, logger, onUnrouted, mycelium }: Bu
         logger,
         access: { resolved: enzyme.resolved, scopes: enzyme.scopes },
         mycelium: mounted,
+        config: enzyme.config,
       }),
     ]),
   )

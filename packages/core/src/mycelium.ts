@@ -25,7 +25,7 @@ export function germinationBanner(registry: Registry): string {
 export async function bootstrap(configFile: string): Promise<Mycelium> {
   const logger = createLogger()
   const config = loadBootstrap(configFile)
-  const registry = await germinate(config.sporesDir, logger)
+  const registry = await germinate(config.sporesDir, logger, config.plugins)
   const dormant: Dormant[] = [...registry.dormant]
 
   // Step 1: connect() every hypha. `busBox.current` fills in once the bus exists,
@@ -35,7 +35,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
   for (const hypha of registry.hyphae) {
     try {
       await hypha.instance.connect({
-        config: {},
+        config: hypha.config,
         logger: logger.child({ hypha: hypha.name }),
         emit: (message) => {
           if (busBox.current === undefined) {
@@ -80,7 +80,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     if (rhiza !== undefined) {
       try {
         await rhiza.instance.start({
-          config: {},
+          config: rhiza.config,
           logger: logger.child({ rhiza: rhiza.name }),
           // Rhiza domain events have no subscriber yet: ctx.on() is not scheduled (design §12).
           emit: () => {},
@@ -108,6 +108,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
         logger: logger.child({ enzyme: enzyme.name }),
         access: { resolved: enzyme.resolved, scopes: enzyme.scopes },
         mycelium,
+        config: enzyme.config,
       }))
       startedEnzymes.push(enzyme)
     } catch (e) {

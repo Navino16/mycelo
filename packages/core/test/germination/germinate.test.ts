@@ -319,3 +319,53 @@ it('germinates when the handler is genuinely declared and named "constructor"', 
   expect(registry.enzymes.map((e) => e.name)).toEqual(['legit'])
   expect(registry.dormant).toEqual([])
 })
+
+const CONFIGURABLE_RHIZA_MODULE = `
+  export default {
+    // Duck-typed on purpose: a real spore is bundled with its own Zod.
+    configSchema: { safeParse: (input) => {
+      const token = input === null || typeof input !== 'object' ? undefined : input.token
+      return typeof token === 'string'
+        ? { success: true, data: { token } }
+        : { success: false, error: 'token must be a string' }
+    } },
+    create: () => ({ ${RHIZA_BODY} }),
+  }
+`
+
+function confRhiza(): void {
+  spore('confrhiza', {
+    'spore.yaml': 'kind: rhiza\nname: confrhiza\nseptum: "^0.4"\n',
+    'src/index.ts': CONFIGURABLE_RHIZA_MODULE,
+  })
+}
+
+it('serves a spore its config from mycelo.yaml', async () => {
+  confRhiza()
+  const registry = await germinate(dir, createLogger(), { confrhiza: { token: 'abc' } })
+  expect(registry.dormant).toEqual([])
+  expect(registry.rhizas[0]?.config).toEqual({ token: 'abc' })
+})
+
+it('leaves a spore dormant, with the reason, when its config is rejected', async () => {
+  confRhiza()
+  const registry = await germinate(dir, createLogger(), { confrhiza: { token: 42 } })
+  expect(registry.rhizas).toEqual([])
+  expect(registry.dormant[0]?.reason).toContain('token must be a string')
+})
+
+it('rejects a spore whose config key is absent entirely, rather than passing undefined', async () => {
+  confRhiza()
+  const registry = await germinate(dir, createLogger(), {})
+  expect(registry.rhizas).toEqual([])
+  expect(registry.dormant[0]?.reason).toContain('token must be a string')
+})
+
+it('gives a spore with no configSchema an empty config', async () => {
+  spore('plainrhiza', {
+    'spore.yaml': 'kind: rhiza\nname: plainrhiza\nseptum: "^0.4"\n',
+    'src/index.ts': `export default { create: () => ({ ${RHIZA_BODY} }) }\n`,
+  })
+  const registry = await germinate(dir, createLogger(), {})
+  expect(registry.rhizas[0]?.config).toEqual({})
+})

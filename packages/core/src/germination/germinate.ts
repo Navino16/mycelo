@@ -14,7 +14,11 @@ import { capabilityShapeError, enzymeShapeError, hyphaShapeError, rhizaShapeErro
  * topological order. A spore that fails goes dormant with a reason; only a command
  * collision halts the whole phase (spec §8). CycleError propagates out untouched.
  */
-export async function germinate(sporesDir: string, logger: Logger): Promise<Registry> {
+export async function germinate(
+  sporesDir: string,
+  logger: Logger,
+  pluginConfig: Readonly<Record<string, unknown>> = {},
+): Promise<Registry> {
   // A missing directory and a missing config file both resolve quietly to defaults
   // (spec-compliant on their own), but their combination — run from the wrong cwd —
   // produced "germinated 0 spores" and exit 0 with no word said. Not a crash, but not
@@ -71,7 +75,20 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
     try {
       const module = await loadModule(spore.read)
       let instance: unknown = null
+      let config: unknown = {}
       if (module !== null) {
+        if (module.configSchema !== undefined) {
+          const declared = pluginConfig[manifest.name] ?? {}
+          // Duck-typed, never instanceof: a spore is bundled with its own copy of Zod.
+          const parsed = module.configSchema.safeParse(declared)
+          if (!parsed.success) {
+            const reason = `configuration rejected: ${String(parsed.error)}`
+            dormant.push({ name: manifest.name, reason })
+            failed.set(manifest.name, reason)
+            continue
+          }
+          config = parsed.data
+        }
         instance = module.create()
         if (manifest.kind === 'hypha') {
           const problem = hyphaShapeError(instance, manifest.kind) ?? capabilityShapeError(instance as Record<string, unknown>, manifest)
@@ -105,9 +122,9 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
         }
       }
       if (manifest.kind === 'hypha') {
-        hyphae.push({ name: manifest.name, manifest, instance: instance as Hypha })
+        hyphae.push({ name: manifest.name, manifest, instance: instance as Hypha, config })
       } else if (manifest.kind === 'rhiza') {
-        rhizas.push({ name: manifest.name, manifest, instance: instance as Rhiza })
+        rhizas.push({ name: manifest.name, manifest, instance: instance as Rhiza, config })
       } else {
         enzymes.push({
           name: manifest.name,
@@ -115,6 +132,7 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
           instance: instance as Enzyme | null,
           resolved: spore.resolved,
           scopes: spore.scopes,
+          config,
         })
       }
     } catch (e) {
