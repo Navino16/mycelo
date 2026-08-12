@@ -39,7 +39,11 @@ export function createMembershipCache(
       if (hit !== undefined && now() - hit.at < ttlMs) return hit.members
       // Awaited before caching, so a rejection is never stored and a transient
       // outage is retried on the next message.
-      const members = await hypha.instance.listGroupMembers(groupId)
+      const returned: unknown = await hypha.instance.listGroupMembers(groupId)
+      // The published contract promises an array or null, but this is plugin code: an
+      // inhibitor written to the contract checks `=== null` and would throw on .some().
+      if (!Array.isArray(returned)) return null
+      const members = returned as readonly ChannelIdentity[]
       cache.set(key, { at: now(), members })
       return members
     },

@@ -539,7 +539,7 @@ it("keeps the mycelium's plugin list consistent when an inhibitor's start() thro
   await bus.deliver('good', message('good', '/probe'))
   const admin = registry.enzymes.find((e) => e.name === 'admin')
   const observed = (admin?.instance as unknown as { observed: Record<string, unknown> }).observed
-  const listed = observed.plugins as { name: string; state: string }[]
+  const listed = observed.plugins as Record<string, unknown>[]
   expect(listed.filter((p) => p.name === 'softgate')).toEqual([
     { name: 'softgate', commands: [], state: 'dormant', reason: 'gate cannot start' },
   ])

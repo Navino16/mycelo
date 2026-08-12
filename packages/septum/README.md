@@ -199,7 +199,7 @@ implementation. Each returns a list of failure strings, so it works with any tes
 
 | Export | Checks |
 |---|---|
-| `hyphaChecks` | manifest, config schema, `connect`/`listen`/`stop`/`send`, `group_membership` consistency |
+| `hyphaChecks` | manifest, config schema, `connect`/`listen`/`stop`/`send`, `group_membership` consistency, and — given a `membershipGroupId` — that `listGroupMembers` resolves an array |
 | `rhizaChecks` | manifest, config schema, `api`, and that `health()` reports rather than throws |
 | `enzymeChecks` | manifest, config schema, lifecycle, and every command with no required args |
 | `inhibitorChecks` | manifest, config schema, lifecycle, and a verdict per expected allow/deny |

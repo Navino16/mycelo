@@ -62,6 +62,46 @@ describe('hypha conformance checks', () => {
     expect(failures.join(' ')).toContain('listGroupMembers')
   })
 
+  // The core normalises a non-array to null, so the rule an inhibitor wrote against the
+  // contract stops applying instead of throwing. The kit is where that surfaces.
+  it('calls listGroupMembers when a group id is supplied', async () => {
+    expect(await hyphaChecks({ ...goodHarness, membershipGroupId: 'household' })).toEqual([])
+  })
+
+  it.each([['undefined', undefined], ['null', null], ['an object', {}]])(
+    'catches a listGroupMembers resolving %s instead of an array',
+    async (_label, value) => {
+      const failures = await hyphaChecks({
+        ...goodHarness,
+        membershipGroupId: 'household',
+        module: {
+          configSchema: config,
+          create: () => ({
+            async connect() {}, listen() {}, async stop() {}, async send() {},
+            listGroupMembers: () => Promise.resolve(value),
+          }) as never,
+        },
+      })
+      expect(failures.join(' ')).toContain('expected an array')
+    },
+  )
+
+  it('does not call listGroupMembers unless a group id is supplied', async () => {
+    let called = false
+    const failures = await hyphaChecks({
+      ...goodHarness,
+      module: {
+        configSchema: config,
+        create: () => ({
+          async connect() {}, listen() {}, async stop() {}, async send() {},
+          async listGroupMembers() { called = true; return [] },
+        }),
+      },
+    })
+    expect(failures).toEqual([])
+    expect(called).toBe(false)
+  })
+
   it('reports a hypha with no listen()', async () => {
     const failures = await hyphaChecks({
       ...goodHarness,

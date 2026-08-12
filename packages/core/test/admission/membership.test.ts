@@ -103,3 +103,29 @@ describe('createMembershipCache', () => {
     expect(() => cache.requireCapability('signal', 'group_membership')).toThrow(/signal/)
   })
 })
+
+// listGroupMembers is plugin code: the contract promises an array or null, and an
+// inhibitor written to it checks `=== null` before calling .some().
+describe('a listGroupMembers that breaks its contract', () => {
+  const returning = (value: unknown): GerminatedHypha => ({
+    name: 'console', config: {},
+    manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.5', capabilities: ['group_membership'] },
+    instance: {
+      connect: () => Promise.resolve(),
+      listen: () => {},
+      stop: () => Promise.resolve(),
+      send: () => Promise.resolve(),
+      listGroupMembers: () => Promise.resolve(value),
+    },
+  } as unknown as GerminatedHypha)
+
+  it.each([
+    ['undefined', undefined],
+    ['a bare object', { alice: true }],
+    ['a string', 'alice'],
+  ])('resolves null rather than %s, and caches nothing', async (_label, value) => {
+    const cache = createMembershipCache([returning(value)])
+    expect(await cache.members('console', 'g1')).toBeNull()
+    expect(await cache.members('console', 'g1')).toBeNull()
+  })
+})
