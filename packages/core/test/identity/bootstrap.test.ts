@@ -7,6 +7,7 @@ import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import type { Db } from '../../src/persistence/db.js'
 import { channelIdentity, principal, principalRole, role, roleCommand } from '../../src/persistence/schema.js'
 import { StartupError, bootstrapIdentity } from '../../src/identity/bootstrap.js'
+import { rejectsWith } from '../support/rejects.js'
 
 const noSend = async () => {}
 
@@ -117,8 +118,8 @@ describe('bootstrapIdentity', () => {
     bootstrapIdentity(db, { owner })
     expect(db.select().from(role).where(eq(role.name, 'owner')).get()?.builtin).toBe(true)
     // The guarantee design §2 makes: once builtin, neither call can undo it.
-    await expect(manage.deleteRole('owner')).rejects.toThrow(/builtin/)
-    await expect(manage.setRoleCommands('owner', [])).rejects.toThrow(/builtin/)
+    await rejectsWith(manage.deleteRole('owner'), /builtin/)
+    await rejectsWith(manage.setRoleCommands('owner', []), /builtin/)
     // Repaired, not replaced: one row, and the wildcard sits alongside what was there.
     expect(db.select().from(role).all()).toHaveLength(1)
     const patterns = db.select({ p: roleCommand.pattern }).from(roleCommand).all().map((r) => r.p)

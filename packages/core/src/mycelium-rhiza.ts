@@ -93,11 +93,20 @@ function findByIdentity(db: Db, channel: string, externalId: string): Principal 
   return row === undefined ? null : loadPrincipal(db, row.principalId)
 }
 
+// An UPDATE matching no row is not an error in SQL, but it is a caller mistake here: the
+// published contract says these reject rather than resolve for an id nobody holds.
+function requirePrincipal(db: Db, id: string): void {
+  const row = db.select({ id: principal.id }).from(principal).where(eq(principal.id, id)).get()
+  if (row === undefined) throw new Error(`principal '${id}' does not exist`)
+}
+
 function markReviewed(db: Db, id: string): void {
+  requirePrincipal(db, id)
   db.update(principal).set({ reviewedAt: new Date() }).where(eq(principal.id, id)).run()
 }
 
 function setDisplayName(db: Db, id: string, displayName: string): void {
+  requirePrincipal(db, id)
   db.update(principal).set({ displayName }).where(eq(principal.id, id)).run()
 }
 
@@ -127,18 +136,26 @@ function findRole(db: Db, name: string): { id: string; builtin: boolean } | unde
 function assignRole(db: Db, principalId: string, roleName: string): void {
   const found = findRole(db, roleName)
   if (found === undefined) throw new Error(`role '${roleName}' does not exist`)
+  requirePrincipal(db, principalId)
   db.insert(principalRole).values({ principalId, roleId: found.id }).onConflictDoNothing().run()
 }
 
 function revokeRole(db: Db, principalId: string, roleName: string): void {
   const found = findRole(db, roleName)
   if (found === undefined) throw new Error(`role '${roleName}' does not exist`)
+  requirePrincipal(db, principalId)
   db.delete(principalRole)
     .where(and(eq(principalRole.principalId, principalId), eq(principalRole.roleId, found.id)))
     .run()
 }
 
+// Curated like its three siblings: the raw SQLite UNIQUE and primary-key violations
+// reached the user as "command 'role-new' failed", naming nothing.
 function createRole(db: Db, name: string, patterns: readonly string[]): void {
+  if (name === '') throw new Error('a role name cannot be empty')
+  if (findRole(db, name) !== undefined) throw new Error(`role '${name}' already exists`)
+  const duplicate = patterns.find((p, i) => patterns.indexOf(p) !== i)
+  if (duplicate !== undefined) throw new Error(`pattern '${duplicate}' is listed twice`)
   const id = crypto.randomUUID()
   db.transaction((tx) => {
     tx.insert(role).values({ id, name }).run()
@@ -150,6 +167,8 @@ function setRoleCommands(db: Db, name: string, patterns: readonly string[]): voi
   const found = findRole(db, name)
   if (found === undefined) throw new Error(`role '${name}' does not exist`)
   if (found.builtin) throw new Error(`role '${name}' is builtin and cannot be rewritten`)
+  const duplicate = patterns.find((p, i) => patterns.indexOf(p) !== i)
+  if (duplicate !== undefined) throw new Error(`pattern '${duplicate}' is listed twice`)
   db.transaction((tx) => {
     tx.delete(roleCommand).where(eq(roleCommand.roleId, found.id)).run()
     for (const pattern of patterns) tx.insert(roleCommand).values({ roleId: found.id, pattern }).run()

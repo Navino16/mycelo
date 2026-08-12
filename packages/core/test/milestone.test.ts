@@ -232,6 +232,44 @@ it('reports a clear failure granting a role to an identity the mycelium has neve
   })
 })
 
+// The mycelium curates every one of these; before the fixture surfaced them they all
+// reached the user as "command '<name>' failed".
+it('surfaces the mycelium\'s own diagnostic instead of a generic command failure', async () => {
+  const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(
+    configFile,
+    'prefix: "/"\n'
+    + `spores: ${sporesDir}\n`
+    + 'owner:\n  channel: console\n  userId: alice\n'
+    + 'plugins:\n  gate:\n    channel: console\n    groupId: household\n',
+    'utf8',
+  )
+
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+
+  const fixture = registry.hyphae.find((h) => h.name === 'console')
+    ?.instance as unknown as ConsoleFixture
+
+  // A role that does not exist, granted to an identity that does.
+  fixture.feed('/grant ghost alice', 'alice')
+  await waitFor(() => { expect(fixture.sent[0]).toEqual({ text: "role 'ghost' does not exist" }) })
+
+  fixture.feed('/role-new guest media.* media.*', 'alice')
+  await waitFor(() => { expect(fixture.sent[1]).toEqual({ text: "pattern 'media.*' is listed twice" }) })
+
+  fixture.feed('/role-new owner', 'alice')
+  await waitFor(() => { expect(fixture.sent[2]).toEqual({ text: "role 'owner' already exists" }) })
+
+  fixture.feed('/role-new', 'alice')
+  await waitFor(() => { expect(fixture.sent[3]).toEqual({ text: 'usage: role-new <name> [pattern...]' }) })
+
+  // Nothing above created a role, so /roles still shows only the builtin one.
+  fixture.feed('/roles', 'alice')
+  await waitFor(() => { expect(fixture.sent[4]).toEqual({ text: 'owner: *' }) })
+})
+
 it('lists roles and their patterns through /roles', async () => {
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')

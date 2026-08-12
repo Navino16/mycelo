@@ -12,6 +12,7 @@ import { createMyceliumApi } from '../src/mycelium-rhiza.js'
 import { migrateDatabase, openDatabase } from '../src/persistence/db.js'
 import type { Db } from '../src/persistence/db.js'
 import { principal } from '../src/persistence/schema.js'
+import { rejectsWith } from './support/rejects.js'
 
 const stubSend = async () => {}
 const noSend = stubSend
@@ -118,27 +119,27 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
     const db = fresh()
     const p = resolvePrincipal(db, { channel: 'console', externalId: 'bob' })
     const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db) as RolesAssign
-    await expect(assign.assignRole(p.id, 'ghost')).rejects.toThrow(/ghost/)
+    await rejectsWith(assign.assignRole(p.id, 'ghost'), /ghost/)
   })
 
   it('refuses to delete or rewrite a builtin role', async () => {
     const db = fresh()
     bootstrapIdentity(db, { owner: { channel: 'console', userId: 'alice' } })
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
-    await expect(manage.deleteRole('owner')).rejects.toThrow(/builtin/)
-    await expect(manage.setRoleCommands('owner', ['media.*'])).rejects.toThrow(/builtin/)
+    await rejectsWith(manage.deleteRole('owner'), /builtin/)
+    await rejectsWith(manage.setRoleCommands('owner', ['media.*']), /builtin/)
   })
 
   it('rejects deleting a role that does not exist, naming it', async () => {
     const db = fresh()
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
-    await expect(manage.deleteRole('typo')).rejects.toThrow(/typo/)
+    await rejectsWith(manage.deleteRole('typo'), /typo/)
   })
 
   it('rejects rewriting a role that does not exist, naming it', async () => {
     const db = fresh()
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
-    await expect(manage.setRoleCommands('typo', ['media.*'])).rejects.toThrow(/typo/)
+    await rejectsWith(manage.setRoleCommands('typo', ['media.*']), /typo/)
   })
 
   it('replaces a role\'s patterns wholesale rather than appending', async () => {
@@ -218,5 +219,44 @@ describe('MOUNTABLE_SCOPES against what createMyceliumApi actually mounts', () =
       expect(r.dormant).toEqual([])
       expect(r.order[0]?.scopes).toEqual([scope])
     }
+  })
+})
+
+// Curated diagnostics, not raw SQLite: /role-new answered "command 'role-new' failed" for
+// a duplicate name or a repeated pattern, and the three silent resolves named nothing.
+describe('rejections a caller can act on', () => {
+  it('rejects creating a role whose name is taken, or empty', async () => {
+    const db = fresh()
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
+    await manage.createRole('guest', ['media.*'])
+    await rejectsWith(manage.createRole('guest', ['admin.*']), /'guest' already exists/)
+    await rejectsWith(manage.createRole('', []), /cannot be empty/)
+    expect(await (createMyceliumApi(emptyRegistry(), ['roles.read'], noSend, db) as RolesRead).listRoles())
+      .toHaveLength(1)
+  })
+
+  it('rejects a pattern listed twice in one call, on create and on rewrite', async () => {
+    const db = fresh()
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
+    await rejectsWith(manage.createRole('guest', ['media.*', 'media.*']), /'media.\*' is listed twice/)
+    await manage.createRole('guest', ['media.*'])
+    await rejectsWith(manage.setRoleCommands('guest', ['admin.*', 'admin.*']), /listed twice/)
+  })
+
+  it('rejects markReviewed, setDisplayName, assignRole and revokeRole for an unknown principal', async () => {
+    const db = fresh()
+    bootstrapIdentity(db, { owner: { channel: 'console', userId: 'alice' } })
+    const manage = createMyceliumApi(emptyRegistry(), ['principals.manage'], noSend, db) as PrincipalsManage
+    const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db) as RolesAssign
+    await rejectsWith(manage.markReviewed('nobody'), /principal 'nobody' does not exist/)
+    await rejectsWith(manage.setDisplayName('nobody', 'X'), /principal 'nobody' does not exist/)
+    await rejectsWith(assign.assignRole('nobody', 'owner'), /principal 'nobody' does not exist/)
+    await rejectsWith(assign.revokeRole('nobody', 'owner'), /principal 'nobody' does not exist/)
+  })
+
+  it('still reports an unknown role before an unknown principal, so the first fault named is the caller\'s', async () => {
+    const db = fresh()
+    const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db) as RolesAssign
+    await rejectsWith(assign.assignRole('nobody', 'ghost'), /role 'ghost'/)
   })
 })

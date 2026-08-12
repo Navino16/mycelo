@@ -46,7 +46,7 @@ export interface HyphaContext<TConfig = unknown> extends BaseContext<TConfig> {
 }
 
 export interface RhizaContext<TConfig = unknown> extends BaseContext<TConfig> {
-  /** Emit a domain event enzymes can subscribe to via EnzymeContext.on(). */
+  /** Reserved: no subscriber exists yet, so the core discards what this emits. */
   emit(event: string, payload: unknown): void
 }
 
@@ -82,7 +82,7 @@ export interface EnzymeStartContext<TConfig = unknown> extends BaseContext<TConf
   /** Whether an optional or any_of dependency resolved. */
   has(name: string): boolean
   capabilitiesOf(target: PushTarget): Capabilities
-  /** Subscribe to a rhiza event. */
+  /** Reserved: not implemented yet — the core throws (design §12). */
   on(rhiza: string, event: string, handler: (payload: unknown) => void): void
 }
 

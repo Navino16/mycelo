@@ -34,7 +34,14 @@ export default {
           await ctx.reply({ text: `no identity '${who}' on channel '${invocation.message.channel}'` })
           return
         }
-        await ctx.rhiza<RolesAssign>('mycelium').assignRole(identity.id, role)
+        // The mycelium curates its own diagnostics ("role 'x' does not exist"); letting the
+        // throw reach the bus would replace them all with "command 'grant' failed".
+        try {
+          await ctx.rhiza<RolesAssign>('mycelium').assignRole(identity.id, role)
+        } catch (e) {
+          await ctx.reply({ text: (e as Error).message })
+          return
+        }
         await ctx.reply({ text: `granted '${role}' to ${who}` })
       },
       handleRevoke: async (invocation, ctx) => {
@@ -48,7 +55,12 @@ export default {
           await ctx.reply({ text: `no identity '${who}' on channel '${invocation.message.channel}'` })
           return
         }
-        await ctx.rhiza<RolesAssign>('mycelium').revokeRole(identity.id, role)
+        try {
+          await ctx.rhiza<RolesAssign>('mycelium').revokeRole(identity.id, role)
+        } catch (e) {
+          await ctx.reply({ text: (e as Error).message })
+          return
+        }
         await ctx.reply({ text: `revoked '${role}' from ${who}` })
       },
       // Only `name` is a declared arg spec, so bindArgs binds the whole remainder to it;
@@ -58,7 +70,16 @@ export default {
         const space = rest.indexOf(' ')
         const name = space === -1 ? rest : rest.slice(0, space)
         const patterns = space === -1 ? [] : rest.slice(space + 1).trim().split(/\s+/).filter((p) => p !== '')
-        await ctx.rhiza<RolesManage>('mycelium').createRole(name, patterns)
+        if (name === '') {
+          await ctx.reply({ text: 'usage: role-new <name> [pattern...]' })
+          return
+        }
+        try {
+          await ctx.rhiza<RolesManage>('mycelium').createRole(name, patterns)
+        } catch (e) {
+          await ctx.reply({ text: (e as Error).message })
+          return
+        }
         await ctx.reply({ text: `created role '${name}' with patterns: ${patterns.join(', ') || 'none'}` })
       },
     },
