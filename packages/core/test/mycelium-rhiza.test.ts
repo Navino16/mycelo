@@ -117,6 +117,18 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
     expect(manage.setRoleCommands('owner', ['media.*'])).rejects.toThrow(/builtin/)
   })
 
+  it('rejects deleting a role that does not exist, naming it', async () => {
+    const db = fresh()
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
+    expect(manage.deleteRole('typo')).rejects.toThrow(/typo/)
+  })
+
+  it('rejects rewriting a role that does not exist, naming it', async () => {
+    const db = fresh()
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
+    expect(manage.setRoleCommands('typo', ['media.*'])).rejects.toThrow(/typo/)
+  })
+
   it('replaces a role\'s patterns wholesale rather than appending', async () => {
     const db = fresh()
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
@@ -124,6 +136,17 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
     await manage.createRole('guest', ['media.*', 'admin.plugins'])
     await manage.setRoleCommands('guest', ['media.movies'])
     expect((await read.listRoles()).find((r) => r.name === 'guest')?.patterns).toEqual(['media.movies'])
+  })
+
+  it('does not let Object.prototype pollution forge an ungranted scope', () => {
+    // A caller probes for a scope with `in`, so a polluted prototype must not answer for it.
+    Object.defineProperty(Object.prototype, 'assignRole', { value: () => {}, configurable: true, enumerable: false })
+    try {
+      const api = createMyceliumApi(emptyRegistry(), ['plugins.read'], noSend, fresh())
+      expect('assignRole' in api).toBe(false)
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'assignRole')
+    }
   })
 
   it('marks a principal reviewed and renames it', async () => {
