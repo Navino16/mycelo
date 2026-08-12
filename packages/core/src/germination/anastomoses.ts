@@ -15,9 +15,19 @@ const SCOPE_PHASE: Partial<Record<MyceliumScope, number>> = {
   'plugins.toggle': 4,
 }
 
+/** One `any_of` requirement's outcome: which alternative was chosen, and the full list offered. */
+export interface AnyOfChoice {
+  chosen: string
+  alternatives: readonly string[]
+}
+
 export interface ResolvedSpore {
   read: ReadManifest
   resolved: ReadonlySet<string>
+  /** The subset of `resolved` whose absence makes this spore dormant. */
+  mandatory: ReadonlySet<string>
+  /** Deliberately not re-collapsed if `chosen` later turns out dormant (spec §6). */
+  anyOf: readonly AnyOfChoice[]
   scopes: readonly MyceliumScope[]
 }
 
@@ -45,6 +55,7 @@ function targetName(target: string): string {
 interface Evaluated {
   edges: readonly string[]
   mandatoryEdges: readonly string[]
+  anyOf: readonly AnyOfChoice[]
   scopes: readonly MyceliumScope[]
   // mycelium always resolves and belongs in ctx.has(), but declares nothing itself and
   // so is never a graph edge (core spec §6, last paragraph) — tracked separately from edges.
@@ -52,7 +63,7 @@ interface Evaluated {
   dormantReason?: string
 }
 
-const FAILED: Evaluated = { edges: [], mandatoryEdges: [], scopes: [], usesMycelium: false }
+const FAILED: Evaluated = { edges: [], mandatoryEdges: [], anyOf: [], scopes: [], usesMycelium: false }
 
 /**
  * Resolves one manifest's requirements against the installed set alone (no re-collapse):
@@ -61,6 +72,7 @@ const FAILED: Evaluated = { edges: [], mandatoryEdges: [], scopes: [], usesMycel
 function evaluate(requires: readonly Requirement[], installed: ReadonlySet<string>): Evaluated {
   const edges: string[] = []
   const mandatoryEdges: string[] = []
+  const anyOf: AnyOfChoice[] = []
   let usesMycelium = false
 
   for (const requirement of requires) {
@@ -76,6 +88,7 @@ function evaluate(requires: readonly Requirement[], installed: ReadonlySet<strin
       } else {
         edges.push(chosen)
         mandatoryEdges.push(chosen)
+        anyOf.push({ chosen, alternatives })
       }
       continue
     }
@@ -104,13 +117,14 @@ function evaluate(requires: readonly Requirement[], installed: ReadonlySet<strin
     }
   }
 
-  return { edges, mandatoryEdges, scopes: [...new Set(scopes)], usesMycelium }
+  return { edges, mandatoryEdges, anyOf, scopes: [...new Set(scopes)], usesMycelium }
 }
 
 interface AliveNode {
   read: ReadManifest
   edges: readonly string[]
   mandatoryEdges: readonly string[]
+  anyOf: readonly AnyOfChoice[]
   scopes: readonly MyceliumScope[]
   usesMycelium: boolean
 }
@@ -184,6 +198,7 @@ export function resolve(reads: readonly ReadManifest[]): Resolution {
       read,
       edges: evaluated.edges,
       mandatoryEdges: evaluated.mandatoryEdges,
+      anyOf: evaluated.anyOf,
       scopes: evaluated.scopes,
       usesMycelium: evaluated.usesMycelium,
     })
@@ -222,7 +237,14 @@ export function resolve(reads: readonly ReadManifest[]): Resolution {
     if (node === undefined) throw new Error(`unreachable: '${name}' ordered but not a survivor`)
     const resolved = node.edges.filter((dep) => survivors.has(dep))
     if (node.usesMycelium) resolved.push('mycelium')
-    return { read: node.read, resolved: new Set(resolved), scopes: node.scopes }
+    const mandatory = node.mandatoryEdges.filter((dep) => survivors.has(dep))
+    return {
+      read: node.read,
+      resolved: new Set(resolved),
+      mandatory: new Set(mandatory),
+      anyOf: node.anyOf,
+      scopes: node.scopes,
+    }
   })
 
   return { order, dormant }

@@ -1,4 +1,4 @@
-import type { CommandSpec, Enzyme, Hypha, Manifest } from '@mycelo/septum'
+import type { CommandSpec, Enzyme, Hypha, Manifest, Rhiza } from '@mycelo/septum'
 
 export interface GerminatedHypha {
   name: string
@@ -10,6 +10,12 @@ export interface GerminatedEnzyme {
   name: string
   manifest: Extract<Manifest, { kind: 'enzyme' }>
   instance: Enzyme | null
+}
+
+export interface GerminatedRhiza {
+  name: string
+  manifest: Extract<Manifest, { kind: 'rhiza' }>
+  instance: Rhiza
 }
 
 export interface Dormant {
@@ -44,6 +50,7 @@ export class CollisionError extends Error {
 export interface Registry {
   hyphae: readonly GerminatedHypha[]
   enzymes: readonly GerminatedEnzyme[]
+  rhizas: readonly GerminatedRhiza[]
   dormant: readonly Dormant[]
   routes: ReadonlyMap<string, CommandRoute>
 }

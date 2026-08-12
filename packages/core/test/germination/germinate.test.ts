@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
@@ -40,13 +40,96 @@ it('refuses an instance that does not implement its kind', async () => {
   expect(registry.dormant[0]?.reason).toContain('create() returned no connect, listen, stop, send')
 })
 
-it('refuses a spore declaring requires, which phase 3 resolves', async () => {
+it('leaves a spore dormant when a declared requires target is not installed', async () => {
   spore('needy', {
     'spore.yaml': 'kind: enzyme\nname: needy\nseptum: "^1.0"\ncommands:\n  - name: needy\n    description: x\n    respond: hi\nrequires:\n  - rhiza: radarr\n',
   })
   const registry = await germinate(dir, createLogger())
   expect(registry.enzymes).toEqual([])
-  expect(registry.dormant[0]?.reason).toContain('phase 3')
+  expect(registry.dormant[0]?.reason).toContain("requires rhiza 'radarr', which is not installed")
+})
+
+it('refuses to germinate an inhibitor: phase 4 routes them', async () => {
+  spore('gate', {
+    'spore.yaml': 'kind: inhibitor\nname: gate\nseptum: "^1.0"\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.dormant[0]?.reason).toBe("kind 'inhibitor' is not routed until phase 4")
+})
+
+it('makes a dependent dormant when a MANDATORY dependency fails to load, never importing its own module', async () => {
+  // Marker written at import time, not inside create(): proves the module was never
+  // loaded, rather than merely that the spore ended up dormant.
+  const marker = join(dir, 'needs-it-loaded')
+  spore('broken-rhiza', {
+    'spore.yaml': 'kind: rhiza\nname: broken-rhiza\nseptum: "^0.4"\n',
+    'src/index.ts': 'throw new Error("module explodes")\n',
+  })
+  spore('needs-it', {
+    'spore.yaml': 'kind: enzyme\nname: needs-it\nseptum: "^0.4"\nrequires:\n  - rhiza: broken-rhiza\ncommands:\n  - name: hi\n    description: x\n    respond: hi\n',
+    'src/index.ts': `import { writeFileSync } from 'node:fs'\nwriteFileSync(${JSON.stringify(marker)}, 'loaded')\nexport default { create: () => ({ handlers: {} }) }\n`,
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.enzymes).toEqual([])
+  expect(registry.dormant.find((d) => d.name === 'needs-it')?.reason)
+    .toContain("requires rhiza 'broken-rhiza', which is dormant")
+  expect(existsSync(marker)).toBe(false)
+})
+
+it('keeps a dependent germinating when an OPTIONAL dependency fails to load', async () => {
+  spore('broken-rhiza', {
+    'spore.yaml': 'kind: rhiza\nname: broken-rhiza\nseptum: "^0.4"\n',
+    'src/index.ts': 'throw new Error("module explodes")\n',
+  })
+  spore('shrugs-it-off', {
+    'spore.yaml': 'kind: enzyme\nname: shrugs-it-off\nseptum: "^0.4"\nrequires:\n  - rhiza: broken-rhiza\n    optional: true\ncommands:\n  - name: hi\n    description: x\n    respond: hi\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.enzymes.map((e) => e.name)).toEqual(['shrugs-it-off'])
+  expect(registry.dormant.find((d) => d.name === 'shrugs-it-off')).toBeUndefined()
+})
+
+// Deliberate: re-collapsing would invalidate the topological order (design §2.2).
+it('does not fall back to a healthy any_of alternative when the chosen one fails to load', async () => {
+  spore('alpha', {
+    'spore.yaml': 'kind: rhiza\nname: alpha\nseptum: "^0.4"\n',
+    'src/index.ts': 'throw new Error("alpha explodes")\n',
+  })
+  spore('beta', {
+    'spore.yaml': 'kind: rhiza\nname: beta\nseptum: "^0.4"\n',
+    'src/index.ts': 'export default { create: () => ({ start: async () => {}, stop: async () => {}, health: async () => "healthy", api: {} }) }\n',
+  })
+  spore('picks-one', {
+    'spore.yaml': 'kind: enzyme\nname: picks-one\nseptum: "^0.4"\nrequires:\n  - any_of:\n      - rhiza: alpha\n      - rhiza: beta\ncommands:\n  - name: hi\n    description: x\n    respond: hi\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.rhizas.map((r) => r.name)).toEqual(['beta'])
+  expect(registry.enzymes).toEqual([])
+  expect(registry.dormant.find((d) => d.name === 'picks-one')?.reason).toBe(
+    "requires one of rhiza 'alpha', 'beta'; 'alpha' was chosen and is dormant: alpha explodes",
+  )
+})
+
+const RHIZA_BODY = 'start: async () => {}, stop: async () => {}, health: async () => "healthy", api: {}'
+
+it('germinates a valid rhiza into registry.rhizas', async () => {
+  spore('valid-rhiza', {
+    'spore.yaml': 'kind: rhiza\nname: valid-rhiza\nseptum: "^0.4"\n',
+    'src/index.ts': `export default { create: () => ({ ${RHIZA_BODY} }) }\n`,
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.rhizas.map((r) => r.name)).toEqual(['valid-rhiza'])
+  expect(registry.dormant).toEqual([])
+})
+
+it('sends a rhiza dormant when create() returns no api, matching the conformance kit', async () => {
+  spore('no-api', {
+    'spore.yaml': 'kind: rhiza\nname: no-api\nseptum: "^0.4"\n',
+    'src/index.ts': 'export default { create: () => ({ start: async () => {}, stop: async () => {}, health: async () => "healthy" }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.rhizas).toEqual([])
+  expect(registry.dormant[0]?.reason).toContain('no api')
 })
 
 it('keeps germinating after one spore fails', async () => {

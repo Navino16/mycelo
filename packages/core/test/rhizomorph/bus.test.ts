@@ -26,7 +26,7 @@ function setup(
     manifest: { kind: 'enzyme', name: 'ping', septum: '^1.0', commands },
     instance,
   }]
-  return { registry: { hyphae, enzymes, dormant: [], routes: buildRoutes(enzymes) }, sent }
+  return { registry: { hyphae, enzymes, rhizas: [], dormant: [], routes: buildRoutes(enzymes) }, sent }
 }
 
 function message(text: string): IncomingMessage {
@@ -215,7 +215,7 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
     },
     instance: { handlers: { ping: async () => { throw new Error('boom') } } },
   }]
-  const registry: Registry = { hyphae, enzymes, dormant: [], routes: buildRoutes(enzymes) }
+  const registry: Registry = { hyphae, enzymes, rhizas: [], dormant: [], routes: buildRoutes(enzymes) }
   // A bespoke logger, not createLogger(): distinguishes "contained by the specific
   // recovery-send try" from "contained by the outer catch-all" — both would make the
   // promise resolve, but only the former logs both failures under their own messages.
