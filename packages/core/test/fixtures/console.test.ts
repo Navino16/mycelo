@@ -5,7 +5,8 @@ import module from '../../../../fixtures/console/src/index.js'
 function start(): { feed: (t: string) => void; seen: IncomingMessage[]; sent: unknown[] } {
   const instance = module.create()
   const seen: IncomingMessage[] = []
-  void instance.start({ emit: (m: unknown) => seen.push(m as IncomingMessage) } as unknown as HyphaContext)
+  void instance.connect({ emit: (m: unknown) => seen.push(m as IncomingMessage) } as unknown as HyphaContext)
+  instance.listen()
   return { feed: (t: string) => instance.feed(t), seen, sent: instance.sent }
 }
 
@@ -28,4 +29,16 @@ it('records what is sent to it', async () => {
   const instance = module.create()
   await instance.send('stdin', { text: 'pong' })
   expect(instance.sent).toEqual([{ text: 'pong' }])
+})
+
+it('emits nothing before listen() opens the gate', async () => {
+  const instance = module.create()
+  const seen: IncomingMessage[] = []
+  await instance.connect({ emit: (m: unknown) => seen.push(m as IncomingMessage) } as unknown as HyphaContext)
+  instance.feed('/before')
+  expect(seen).toEqual([])
+  instance.listen()
+  instance.feed('/after')
+  expect(seen).toHaveLength(1)
+  expect(seen[0]?.text).toBe('/after')
 })

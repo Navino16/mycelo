@@ -1,12 +1,11 @@
 import { createInterface } from 'node:readline/promises'
 import { resolve } from 'node:path'
-import { bootstrap } from './mycelium.js'
+import { bootstrap, germinationBanner } from './mycelium.js'
 
 const configFile = resolve(process.cwd(), 'mycelo.yaml')
 const { registry } = await bootstrap(configFile)
 
-const names = [...registry.hyphae, ...registry.enzymes].map((s) => s.name).join(', ')
-console.log(`mycelium: germinated ${String(registry.hyphae.length + registry.enzymes.length)} spores (${names})`)
+console.log(`mycelium: ${germinationBanner(registry)}`)
 
 // The console hypha is driven by stdin here and by feed() in tests. Nothing else in
 // the core knows this method exists — it is not part of the Hypha contract, so it

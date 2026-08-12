@@ -1,5 +1,5 @@
 {
-  "name": "@mycelo/fixture-console",
+  "name": "@mycelo/fixture-mock",
   "version": "0.0.0",
   "private": true,
   "type": "module",

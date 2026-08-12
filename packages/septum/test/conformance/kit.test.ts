@@ -24,7 +24,8 @@ const goodHarness: HyphaHarness = {
   module: {
     configSchema: config,
     create: () => ({
-      async start() {},
+      async connect() {},
+      listen() {},
       async stop() {},
       async send() {},
       async listGroupMembers() {
@@ -55,10 +56,21 @@ describe('hypha conformance checks', () => {
       ...goodHarness,
       module: {
         configSchema: config,
-        create: () => ({ async start() {}, async stop() {}, async send() {} }),
+        create: () => ({ async connect() {}, listen() {}, async stop() {}, async send() {} }),
       },
     })
     expect(failures.join(' ')).toContain('listGroupMembers')
+  })
+
+  it('reports a hypha with no listen()', async () => {
+    const failures = await hyphaChecks({
+      ...goodHarness,
+      module: {
+        configSchema: config,
+        create: () => ({ async connect() {}, async stop() {}, async send() {} }) as never,
+      },
+    })
+    expect(failures.join(' ')).toContain('listen')
   })
 
   it('catches a config schema that accepts invalid config', async () => {
@@ -507,7 +519,8 @@ describe('regressions', () => {
         configSchema: config,
         create: () =>
           ({
-            async start() {},
+            async connect() {},
+            listen() {},
             async send() {},
             async listGroupMembers() {
               return []

@@ -27,16 +27,3 @@ export class CapabilityMissingError extends Error {
     this.capability = capability
   }
 }
-
-/**
- * A plugin called a mycelium-rhiza method outside the scopes its manifest declared.
- * A bug in the plugin, not a runtime condition — hence a distinct error class.
- */
-export class ScopeDeniedError extends Error {
-  readonly scope: string
-  constructor(scope: string) {
-    super(`scope '${scope}' was not declared in the manifest`)
-    this.name = 'ScopeDeniedError'
-    this.scope = scope
-  }
-}

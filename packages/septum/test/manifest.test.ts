@@ -163,3 +163,53 @@ it('rejects a malformed args entry without blaming exclusivity', () => {
     expect((e as ManifestError).path).toBe('commands.0')
   }
 })
+
+describe('mycelium scopes', () => {
+  const base = { kind: 'rhiza', name: 'probe', septum: '^0.4' }
+
+  it('accepts a known scope on rhiza mycelium', () => {
+    const m = parseManifest({ ...base, requires: [{ rhiza: 'mycelium', scopes: ['plugins.read'] }] })
+    expect(m.requires?.[0]).toEqual({ rhiza: 'mycelium', scopes: ['plugins.read'], optional: false })
+  })
+
+  it('names a misspelled scope rather than reporting Invalid input', () => {
+    try {
+      parseManifest({ ...base, requires: [{ rhiza: 'mycelium', scopes: ['role.assign'] }] })
+      throw new Error('should have thrown')
+    } catch (e) {
+      expect(e).toBeInstanceOf(ManifestError)
+      expect((e as ManifestError).message).toMatch(/expected one of/)
+      expect((e as ManifestError).path).toBe('requires.0.scopes.0')
+    }
+  })
+
+  it('rejects scopes on any rhiza other than mycelium', () => {
+    expect(() => parseManifest({ ...base, requires: [{ rhiza: 'radarr', scopes: ['plugins.read'] }] }))
+      .toThrow(/scopes apply only to rhiza 'mycelium'/)
+  })
+})
+
+describe('any_of', () => {
+  const base = { kind: 'rhiza', name: 'probe', septum: '^0.4' }
+
+  it('rejects optional on an any_of requirement rather than silently dropping it', () => {
+    expect(() => parseManifest({
+      ...base,
+      requires: [{ any_of: [{ rhiza: 'plex' }, { rhiza: 'jellyfin' }], optional: true }],
+    })).toThrow(ManifestError)
+  })
+
+  it('rejects scopes on an any_of requirement rather than silently dropping it', () => {
+    expect(() => parseManifest({
+      ...base,
+      requires: [{ any_of: [{ rhiza: 'plex' }, { rhiza: 'jellyfin' }], scopes: ['plugins.read'] }],
+    })).toThrow(ManifestError)
+  })
+
+  it('rejects scopes on an any_of alternative rather than silently dropping it', () => {
+    expect(() => parseManifest({
+      ...base,
+      requires: [{ any_of: [{ rhiza: 'plex', scopes: ['plugins.read'] }, { rhiza: 'jellyfin' }] }],
+    })).toThrow(ManifestError)
+  })
+})

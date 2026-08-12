@@ -6,10 +6,12 @@ import type {
   IncomingMessage,
   Invocation,
   Logger,
+  MyceliumScope,
   OutgoingContent,
   Principal,
 } from '@mycelo/septum'
-import type { GerminatedHypha, Registry } from '../germination/registry.js'
+import type { GerminatedHypha, GerminatedRhiza, Registry } from '../germination/registry.js'
+import { createMyceliumApi } from '../mycelium-rhiza.js'
 import { bindArgs, parseCommand } from './parse.js'
 import { normalize } from './normalize.js'
 
@@ -26,35 +28,69 @@ function capabilitiesOf(hypha: GerminatedHypha | undefined): Capabilities {
   }
 }
 
+export async function sendVia(
+  hyphaByName: ReadonlyMap<string, GerminatedHypha>,
+  channel: string,
+  conversationId: string,
+  out: OutgoingContent,
+): Promise<void> {
+  const hypha = hyphaByName.get(channel)
+  if (hypha === undefined) throw new Error(`no hypha named '${channel}'`)
+  // The published contract (septum's OutgoingContent) promises this is enforced by
+  // the core. It previously was not: ctx.reply({}) reached the hypha untouched.
+  if (out.text === undefined && out.attachments === undefined && out.reactTo === undefined) {
+    throw new Error('OutgoingContent must set at least one of text, attachments, or reactTo')
+  }
+  await hypha.instance.send(conversationId, out)
+}
+
+/** A calling spore's own resolved set and mycelium scopes — never the registry's. */
+export interface SporeAccess {
+  resolved: ReadonlySet<string>
+  scopes: readonly MyceliumScope[]
+}
+
+export interface StartContextOptions {
+  hyphae: readonly GerminatedHypha[]
+  rhizas: readonly GerminatedRhiza[]
+  logger: Logger
+  access: SporeAccess
+  /** Injected so bus.ts does not import mycelium-rhiza.ts, which imports Registry. */
+  mycelium: (scopes: readonly MyceliumScope[]) => object
+}
+
 /**
  * The message-independent slice of EnzymeContext — push, capabilitiesOf, rhiza, has,
- * on — built once here so mycelium.ts's Enzyme.start() call (before any message
- * exists) and createBus()'s per-message context below share one implementation of
- * the phase-3 "not yet" wiring instead of two.
+ * on — built once per spore so mycelium.ts's Enzyme.start() call (before any message
+ * exists) and createBus()'s per-message context below share one implementation.
  */
-export function createEnzymeStartContext(hyphae: readonly GerminatedHypha[], logger: Logger): EnzymeStartContext {
+export function createEnzymeStartContext(options: StartContextOptions): EnzymeStartContext {
+  const { hyphae, rhizas, logger, access, mycelium } = options
   const hyphaByName = new Map(hyphae.map((h) => [h.name, h]))
+  const rhizaByName = new Map(rhizas.map((r) => [r.name, r]))
 
-  async function send(channel: string, conversationId: string, out: OutgoingContent): Promise<void> {
-    const hypha = hyphaByName.get(channel)
-    if (hypha === undefined) throw new Error(`no hypha named '${channel}'`)
-    // The published contract (septum's OutgoingContent) promises this is enforced by
-    // the core. It previously was not: ctx.reply({}) reached the hypha untouched.
-    if (out.text === undefined && out.attachments === undefined && out.reactTo === undefined) {
-      throw new Error('OutgoingContent must set at least one of text, attachments, or reactTo')
+  function rhiza<TApi>(name: string): TApi {
+    if (!access.resolved.has(name)) {
+      throw new Error(`rhiza '${name}' is not declared in this spore's requires`)
     }
-    await hypha.instance.send(conversationId, out)
+    if (name === 'mycelium') return mycelium(access.scopes) as TApi
+    const found = rhizaByName.get(name)
+    // Resolution (anastomoses.ts) only ever puts a genuine rhiza in `access.resolved`,
+    // so reaching here with no match means that rhiza's own start() failed at runtime —
+    // never that it was never installed (core spec §8; the cascade to this enzyme is deferred).
+    if (found === undefined) throw new Error(`rhiza '${name}' resolved but failed to start and is unavailable`)
+    return found.instance.api as TApi
   }
 
   return {
     // Plugin settings live in the database from phase 5; nothing supplies them yet.
     config: {},
     logger,
-    push: async (target, content) => { await send(target.channel, target.conversationId, content) },
+    push: async (target, content) => { await sendVia(hyphaByName, target.channel, target.conversationId, content) },
     capabilitiesOf: (target) => capabilitiesOf(hyphaByName.get(target.channel)),
-    rhiza: () => notYet('ctx.rhiza()', 'phase 3 (anastomoses)'),
-    has: () => false,
-    on: () => notYet('ctx.on()', 'phase 3 (anastomoses)'),
+    rhiza,
+    has: (name) => access.resolved.has(name),
+    on: () => notYet('ctx.on()', 'a phase not yet scheduled for rhiza domain events (design §12)'),
   }
 }
 
@@ -68,16 +104,36 @@ export interface BusOptions {
   logger: Logger
   /** Called when text carries no command, or names one nothing declares. */
   onUnrouted?: (message: IncomingMessage, command: string | null) => Promise<void>
+  /** Defaults to the real mycelium-as-rhiza API, grounded in this bus's own registry (design §2.4). */
+  mycelium?: (scopes: readonly MyceliumScope[]) => object
 }
 
-export function createBus({ registry, prefix, logger, onUnrouted }: BusOptions): Bus {
+export function createBus({ registry, prefix, logger, onUnrouted, mycelium }: BusOptions): Bus {
   const hyphaByName = new Map(registry.hyphae.map((h) => [h.name, h]))
-  const startContext = createEnzymeStartContext(registry.hyphae, logger)
   const send = (channel: string, conversationId: string, out: OutgoingContent): Promise<void> =>
-    startContext.push({ channel, conversationId }, out)
+    sendVia(hyphaByName, channel, conversationId, out)
+  const mounted = mycelium ?? ((scopes: readonly MyceliumScope[]) =>
+    createMyceliumApi(registry, scopes, (target, content) => send(target.channel, target.conversationId, content)))
 
-  function contextFor(message: IncomingMessage): EnzymeContext {
+  // One context per enzyme, because `resolved` and `scopes` differ per spore
+  // (design §2.4). Built once here rather than per message.
+  const startContextByEnzyme = new Map(
+    registry.enzymes.map((enzyme) => [
+      enzyme.name,
+      createEnzymeStartContext({
+        hyphae: registry.hyphae,
+        rhizas: registry.rhizas,
+        logger,
+        access: { resolved: enzyme.resolved, scopes: enzyme.scopes },
+        mycelium: mounted,
+      }),
+    ]),
+  )
+
+  function contextFor(message: IncomingMessage, enzymeName: string): EnzymeContext {
     const origin = hyphaByName.get(message.channel)
+    const startContext = startContextByEnzyme.get(enzymeName)
+    if (startContext === undefined) throw new Error(`no start context built for enzyme '${enzymeName}'`)
     return {
       ...startContext,
       logger: logger.child({ channel: message.channel }),
@@ -107,7 +163,15 @@ export function createBus({ registry, prefix, logger, onUnrouted }: BusOptions):
         }
         const spec = route.spec
         if (spec.respond !== undefined) {
-          await send(message.channel, message.conversationId, { text: spec.respond })
+          try {
+            await send(message.channel, message.conversationId, { text: spec.respond })
+          } catch (e) {
+            // Named the same way the code: path already does, so an operator can tell
+            // which command was lost rather than only which channel failed.
+            logger.error(`failed to send the reply for '${route.qualified}'`, {
+              error: (e as Error).message,
+            })
+          }
           return
         }
         const invocation: Invocation = {
@@ -140,7 +204,7 @@ export function createBus({ registry, prefix, logger, onUnrouted }: BusOptions):
           return
         }
         try {
-          await handler(invocation, contextFor(message))
+          await handler(invocation, contextFor(message, route.plugin))
         } catch (e) {
           // A handler that throws is contained: clean error on the channel, trace logged.
           logger.error(`enzyme '${route.plugin}' threw handling '${route.qualified}'`, {

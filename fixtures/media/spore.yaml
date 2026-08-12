@@ -1,0 +1,14 @@
+kind: enzyme
+name: media
+septum: "^0.4"
+description: Depends on a rhiza and on an any_of group. Test fixture, never distributed.
+requires:
+  - rhiza: mock
+  - any_of: [{ rhiza: nowhere }, { rhiza: mock }]
+commands:
+  - name: movies
+    description: Look a title up
+    code: handleMovies
+  - name: where
+    description: Report which alternative resolved
+    code: handleWhere

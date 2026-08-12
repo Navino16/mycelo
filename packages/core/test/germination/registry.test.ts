@@ -13,6 +13,8 @@ function enzyme(name: string, commands: string[]): GerminatedEnzyme {
       commands: commands.map((c) => ({ name: c, description: c, code: c })),
     },
     instance,
+    resolved: new Set(),
+    scopes: [],
   }
 }
 

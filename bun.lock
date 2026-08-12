@@ -12,18 +12,39 @@
         "typescript-eslint": "^8.66.0",
       },
     },
+    "fixtures/admin": {
+      "name": "@mycelo/fixture-admin",
+      "version": "0.0.0",
+      "dependencies": {
+        "@mycelo/septum": "^0.4.0",
+      },
+    },
     "fixtures/console": {
       "name": "@mycelo/fixture-console",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.3.0",
+        "@mycelo/septum": "^0.4.0",
       },
     },
     "fixtures/helpdesk": {
       "name": "@mycelo/fixture-helpdesk",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.3.0",
+        "@mycelo/septum": "^0.4.0",
+      },
+    },
+    "fixtures/media": {
+      "name": "@mycelo/fixture-media",
+      "version": "0.0.0",
+      "dependencies": {
+        "@mycelo/septum": "^0.4.0",
+      },
+    },
+    "fixtures/mock": {
+      "name": "@mycelo/fixture-mock",
+      "version": "0.0.0",
+      "dependencies": {
+        "@mycelo/septum": "^0.4.0",
       },
     },
     "fixtures/ping": {
@@ -34,21 +55,21 @@
       "name": "@mycelo/fixture-twofile",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.3.0",
+        "@mycelo/septum": "^0.4.0",
       },
     },
     "packages/core": {
       "name": "@mycelo/core",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.3.0",
+        "@mycelo/septum": "^0.4.0",
         "yaml": "^2.9.0",
         "zod": "^4.4.3",
       },
     },
     "packages/septum": {
       "name": "@mycelo/septum",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "dependencies": {
         "zod": "^4.4.3",
       },
@@ -81,9 +102,15 @@
 
     "@mycelo/core": ["@mycelo/core@workspace:packages/core"],
 
+    "@mycelo/fixture-admin": ["@mycelo/fixture-admin@workspace:fixtures/admin"],
+
     "@mycelo/fixture-console": ["@mycelo/fixture-console@workspace:fixtures/console"],
 
     "@mycelo/fixture-helpdesk": ["@mycelo/fixture-helpdesk@workspace:fixtures/helpdesk"],
+
+    "@mycelo/fixture-media": ["@mycelo/fixture-media@workspace:fixtures/media"],
+
+    "@mycelo/fixture-mock": ["@mycelo/fixture-mock@workspace:fixtures/mock"],
 
     "@mycelo/fixture-ping": ["@mycelo/fixture-ping@workspace:fixtures/ping"],
 

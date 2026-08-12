@@ -1,91 +1,18 @@
 import { existsSync } from 'node:fs'
-import type { CommandSpec, Enzyme, Hypha, HyphaManifest, Logger } from '@mycelo/septum'
+import type { Enzyme, Hypha, Logger, Rhiza } from '@mycelo/septum'
+import { resolve } from './anastomoses.js'
 import { discover } from './discover.js'
 import { loadModule } from './load.js'
 import { isFailure, readManifest } from './manifest.js'
+import type { ReadManifest } from './manifest.js'
 import { buildRoutes } from './registry.js'
-import type { Dormant, GerminatedEnzyme, GerminatedHypha, Registry } from './registry.js'
-
-const REQUIRED_METHODS = {
-  hypha: ['start', 'stop', 'send'],
-} as const
+import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedRhiza, Registry } from './registry.js'
+import { capabilityShapeError, enzymeShapeError, hyphaShapeError, rhizaShapeError, unreferencedHandlers } from './shape.js'
 
 /**
- * Duck-typed, never instanceof: a spore is bundled with its own copy of everything.
- * Without this the cast below would register an instance nothing has checked, and the
- * failure would surface on the first message instead of at germination.
- */
-function shapeError(instance: unknown, kind: 'hypha'): string | null {
-  if (typeof instance !== 'object' || instance === null) {
-    return `create() returned ${String(instance)}, expected an object`
-  }
-  const missing = REQUIRED_METHODS[kind].filter(
-    (m) => typeof (instance as Record<string, unknown>)[m] !== 'function',
-  )
-  return missing.length > 0 ? `create() returned no ${missing.join(', ')}` : null
-}
-
-/**
- * Duck-typed, never instanceof: a spore is bundled with its own copy of everything.
- * `handlers` is a plugin-supplied plain object, so every lookup uses
- * Object.hasOwn — a command named `code: constructor` must not resolve through
- * Object.prototype and pass as if a handler had genuinely been declared.
- */
-function enzymeShapeError(instance: unknown, commands: readonly CommandSpec[]): string | null {
-  if (typeof instance !== 'object' || instance === null) {
-    return `create() returned ${String(instance)}, expected an object`
-  }
-  const handlers = (instance as { handlers?: unknown }).handlers
-  if (typeof handlers !== 'object' || handlers === null) {
-    return 'create() returned no handlers object'
-  }
-  const table = handlers as Record<string, unknown>
-  const missing = [
-    ...new Set(
-      commands
-        .filter((c) => c.respond === undefined)
-        .map((c) => c.code)
-        .filter((name) => !Object.hasOwn(table, name) || typeof table[name] !== 'function'),
-    ),
-  ]
-  if (missing.length > 0) return `handlers has no function for: ${missing.join(', ')}`
-
-  // Matches conformance/enzyme.ts: the kit must not certify a pairing the runtime refuses.
-  const { start, stop } = instance as { start?: unknown; stop?: unknown }
-  if ((start === undefined) !== (stop === undefined)) {
-    return 'start() and stop() must be both present or both absent'
-  }
-  return null
-}
-
-/** Dead code is not a broken plugin: warn and germinate (spec, "An unreferenced handler"). */
-function unreferencedHandlers(instance: Enzyme, commands: readonly CommandSpec[]): string[] {
-  const referenced = new Set(commands.filter((c) => c.respond === undefined).map((c) => c.code))
-  return Object.keys(instance.handlers).filter((name) => !referenced.has(name))
-}
-
-/**
- * Matches packages/septum/src/conformance/hypha.ts exactly, in both directions: the
- * core must not accept a plugin its own published kit would reject. Without this, a
- * hypha could declare group_membership with no listGroupMembers(), and
- * ctx.capabilities.has('group_membership') would answer true for a channel that
- * cannot honour it.
- */
-function capabilityShapeError(instance: Record<string, unknown>, manifest: HyphaManifest): string | null {
-  const declaresMembership = manifest.capabilities.includes('group_membership')
-  const implementsMembership = typeof instance.listGroupMembers === 'function'
-  if (declaresMembership && !implementsMembership) {
-    return 'manifest declares group_membership but there is no listGroupMembers()'
-  }
-  if (!declaresMembership && implementsMembership) {
-    return 'listGroupMembers() exists but the manifest does not declare group_membership'
-  }
-  return null
-}
-
-/**
- * Walks the spores directory. A spore that fails goes dormant with a reason; only a
- * command collision halts the whole phase (spec §8).
+ * Walks the spores directory, resolves dependencies, then loads only the survivors in
+ * topological order. A spore that fails goes dormant with a reason; only a command
+ * collision halts the whole phase (spec §8). CycleError propagates out untouched.
  */
 export async function germinate(sporesDir: string, logger: Logger): Promise<Registry> {
   // A missing directory and a missing config file both resolve quietly to defaults
@@ -96,51 +23,75 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
     logger.warn(`spores directory does not exist: '${sporesDir}' — nothing will germinate`)
   }
 
-  const hyphae: GerminatedHypha[] = []
-  const enzymes: GerminatedEnzyme[] = []
+  const reads: ReadManifest[] = []
   const dormant: Dormant[] = []
-  // Names are unique across every kind, not per kind: createBus and buildRoutes both
-  // key by name, so two spores sharing one silently overwrite each other with no
-  // signal — a reply typed into the first channel would be delivered to the second.
-  const claimedBy = new Map<string, string>()
-
   for (const location of discover(sporesDir)) {
     const read = readManifest(location)
     if (isFailure(read)) {
       dormant.push({ name: location.directory, reason: read.reason })
+    } else {
+      reads.push(read)
+    }
+  }
+
+  const resolution = resolve(reads)
+  dormant.push(...resolution.dormant)
+
+  const hyphae: GerminatedHypha[] = []
+  const enzymes: GerminatedEnzyme[] = []
+  const rhizas: GerminatedRhiza[] = []
+  // Names that went dormant during this walk — resolve() cannot see a module-load or
+  // shape failure, so a dependent's `mandatory`/`resolved` sets may still name one that
+  // just failed.
+  const failed = new Map<string, string>()
+
+  for (const spore of resolution.order) {
+    const { manifest } = spore.read
+    const cause = [...spore.mandatory].find((name) => failed.has(name))
+    if (cause !== undefined) {
+      // No re-collapse (design §2.2); if the cause was an any_of choice, the message
+      // names the untried alternatives alongside it.
+      const anyOf = spore.anyOf.find((choice) => choice.chosen === cause)
+      const reason = anyOf !== undefined
+        ? `requires one of rhiza ${anyOf.alternatives.map((n) => `'${n}'`).join(', ')}; '${cause}' was chosen and is dormant: ${failed.get(cause)}`
+        : `requires rhiza '${cause}', which is dormant: ${failed.get(cause)}`
+      dormant.push({ name: manifest.name, reason })
+      failed.set(manifest.name, reason)
       continue
     }
-    const { manifest } = read
-    // Anastomosis resolution is phase 3. Germinating a spore whose dependencies
-    // nothing resolves would make ctx.has() lie about what is available.
-    if (manifest.requires !== undefined && manifest.requires.length > 0) {
-      dormant.push({ name: manifest.name, reason: 'requires other spores: anastomoses arrive in phase 3' })
-      continue
-    }
-    if (manifest.kind !== 'hypha' && manifest.kind !== 'enzyme') {
-      dormant.push({ name: manifest.name, reason: `kind '${manifest.kind}' is not routed until phase 3` })
+    // An optional dependency that turned out dormant is not this spore's problem (core
+    // spec §6.3): drop it from `resolved` so ctx.has() answers false rather than lying.
+    spore.resolved = new Set([...spore.resolved].filter((name) => !failed.has(name)))
+    if (manifest.kind === 'inhibitor') {
+      const reason = "kind 'inhibitor' is not routed until phase 4"
+      dormant.push({ name: manifest.name, reason })
+      failed.set(manifest.name, reason)
       continue
     }
     try {
-      const module = await loadModule(read)
+      const module = await loadModule(spore.read)
       let instance: unknown = null
       if (module !== null) {
         instance = module.create()
         if (manifest.kind === 'hypha') {
-          const problem = shapeError(instance, manifest.kind)
+          const problem = hyphaShapeError(instance, manifest.kind) ?? capabilityShapeError(instance as Record<string, unknown>, manifest)
           if (problem !== null) {
             dormant.push({ name: manifest.name, reason: problem })
+            failed.set(manifest.name, problem)
             continue
           }
-          const capProblem = capabilityShapeError(instance as Record<string, unknown>, manifest)
-          if (capProblem !== null) {
-            dormant.push({ name: manifest.name, reason: capProblem })
+        } else if (manifest.kind === 'rhiza') {
+          const problem = rhizaShapeError(instance)
+          if (problem !== null) {
+            dormant.push({ name: manifest.name, reason: problem })
+            failed.set(manifest.name, problem)
             continue
           }
         } else {
           const problem = enzymeShapeError(instance, manifest.commands)
           if (problem !== null) {
             dormant.push({ name: manifest.name, reason: problem })
+            failed.set(manifest.name, problem)
             continue
           }
           const enzyme = instance as Enzyme
@@ -153,25 +104,23 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
           }
         }
       }
-      // Checked last, once we know the spore would otherwise actually germinate: an
-      // earlier failure (bad shape, unresolved requires) already frees the name, so
-      // it must not be reported as a collision against a spore that never ran.
-      const claimant = claimedBy.get(manifest.name)
-      if (claimant !== undefined) {
-        dormant.push({
-          name: manifest.name,
-          reason: `name '${manifest.name}' is already claimed by the spore at '${claimant}' (duplicate at '${location.directory}')`,
-        })
-        continue
-      }
-      claimedBy.set(manifest.name, location.directory)
       if (manifest.kind === 'hypha') {
         hyphae.push({ name: manifest.name, manifest, instance: instance as Hypha })
+      } else if (manifest.kind === 'rhiza') {
+        rhizas.push({ name: manifest.name, manifest, instance: instance as Rhiza })
       } else {
-        enzymes.push({ name: manifest.name, manifest, instance: instance as Enzyme | null })
+        enzymes.push({
+          name: manifest.name,
+          manifest,
+          instance: instance as Enzyme | null,
+          resolved: spore.resolved,
+          scopes: spore.scopes,
+        })
       }
     } catch (e) {
-      dormant.push({ name: manifest.name, reason: (e as Error).message })
+      const reason = (e as Error).message
+      dormant.push({ name: manifest.name, reason })
+      failed.set(manifest.name, reason)
     }
   }
 
@@ -179,5 +128,14 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
   if (hyphae.length === 0 && enzymes.length === 0) {
     logger.warn('germination produced zero spores: no channel and no command will ever answer')
   }
-  return { hyphae, enzymes, dormant, routes: buildRoutes(enzymes) }
+
+  // Startup (mycelium.ts) needs rhizas and enzymes in one interleaved, dependency-first
+  // sequence — resolution.order already is that sequence; just drop hyphae, inhibitors
+  // and anything that failed to germinate.
+  const registered = new Set([...rhizas, ...enzymes].map((s) => s.name))
+  const order = resolution.order
+    .map((spore) => spore.read.manifest.name)
+    .filter((name) => registered.has(name))
+
+  return { hyphae, enzymes, rhizas, dormant, routes: buildRoutes(enzymes), order }
 }
