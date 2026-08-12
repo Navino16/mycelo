@@ -87,6 +87,38 @@ it('routes a command to its enzyme and the reply back to the channel', async () 
   expect(sent).toEqual([{ text: 'pong' }])
 })
 
+it('names the failed command, not just the channel, when a respond: send throws', async () => {
+  const hypha: Hypha = {
+    async connect() {}, listen() {}, async stop() {},
+    async send() { throw new Error('channel down') },
+  }
+  const hyphae: GerminatedHypha[] = [{
+    name: 'console',
+    manifest: { kind: 'hypha', name: 'console', septum: '^1.0', capabilities: [] },
+    instance: hypha,
+  }]
+  const enzymes: GerminatedEnzyme[] = [{
+    name: 'ping',
+    manifest: {
+      kind: 'enzyme', name: 'ping', septum: '^1.0',
+      commands: [{ name: 'links', description: 'x', respond: 'Radarr http://radarr:7878' }],
+    },
+    instance: null,
+    resolved: new Set(),
+    scopes: [],
+  }]
+  const registry: Registry = { hyphae, enzymes, rhizas: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'] }
+  const errors: string[] = []
+  const logger: Logger = {
+    debug() {}, info() {}, warn() {},
+    error: (m) => { errors.push(m) },
+    child: () => logger,
+  }
+  const bus = createBus({ registry, prefix: '/', logger })
+  await bus.deliver('console', message('/links'))
+  expect(errors[0]).toContain('ping.links')
+})
+
 it('answers a text command without touching the module', async () => {
   const { registry, sent } = setup(null, [
     { name: 'links', description: 'Service URLs', respond: 'Radarr http://radarr:7878' },

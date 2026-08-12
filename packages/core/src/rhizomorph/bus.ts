@@ -160,7 +160,15 @@ export function createBus({ registry, prefix, logger, onUnrouted, mycelium }: Bu
         }
         const spec = route.spec
         if (spec.respond !== undefined) {
-          await send(message.channel, message.conversationId, { text: spec.respond })
+          try {
+            await send(message.channel, message.conversationId, { text: spec.respond })
+          } catch (e) {
+            // Named the same way the code: path already does, so an operator can tell
+            // which command was lost rather than only which channel failed.
+            logger.error(`failed to send the reply for '${route.qualified}'`, {
+              error: (e as Error).message,
+            })
+          }
           return
         }
         const invocation: Invocation = {
