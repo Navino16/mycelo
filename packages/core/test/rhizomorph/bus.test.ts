@@ -284,6 +284,81 @@ it("answers has() true only for a name this enzyme's own resolved set carries", 
   expect(other).toBe(false)
 })
 
+it('confines each enzyme to its own resolved set and scopes, not a union across every enzyme', async () => {
+  const results: Record<string, unknown> = {}
+  const hypha: Hypha = {
+    async connect() {}, listen() {}, async stop() {}, async send() {},
+  }
+  const hyphae: GerminatedHypha[] = [{
+    name: 'console',
+    manifest: { kind: 'hypha', name: 'console', septum: '^1.0', capabilities: [] },
+    instance: hypha,
+  }]
+  const rhizas: GerminatedRhiza[] = [stubRhiza('mock', {}), stubRhiza('other', {})]
+  const enzymes: GerminatedEnzyme[] = [
+    {
+      name: 'alpha',
+      manifest: {
+        kind: 'enzyme', name: 'alpha', septum: '^1.0',
+        commands: [{ name: 'alpha', description: 'x', code: 'alpha' }],
+      },
+      instance: {
+        handlers: {
+          alpha: async (_inv, ctx) => {
+            results['alphaHasOther'] = ctx.has('other')
+            try { ctx.rhiza('other') } catch (e) { results['alphaOtherError'] = (e as Error).message }
+            const myceliumApi = ctx.rhiza<Record<string, unknown>>('mycelium')
+            results['alphaListPlugins'] = 'listPlugins' in myceliumApi
+            results['alphaHealth'] = 'health' in myceliumApi
+          },
+        },
+      },
+      resolved: new Set(['mock', 'mycelium']),
+      scopes: ['plugins.read'],
+    },
+    {
+      name: 'beta',
+      manifest: {
+        kind: 'enzyme', name: 'beta', septum: '^1.0',
+        commands: [{ name: 'beta', description: 'x', code: 'beta' }],
+      },
+      instance: {
+        handlers: {
+          beta: async (_inv, ctx) => {
+            results['betaHasMock'] = ctx.has('mock')
+            try { ctx.rhiza('mock') } catch (e) { results['betaMockError'] = (e as Error).message }
+            const myceliumApi = ctx.rhiza<Record<string, unknown>>('mycelium')
+            results['betaListPlugins'] = 'listPlugins' in myceliumApi
+            results['betaHealth'] = 'health' in myceliumApi
+          },
+        },
+      },
+      resolved: new Set(['other', 'mycelium']),
+      scopes: ['health.read'],
+    },
+  ]
+  const registry: Registry = {
+    hyphae, enzymes, rhizas, dormant: [],
+    routes: buildRoutes(enzymes),
+    order: ['mock', 'other', 'alpha', 'beta'],
+  }
+  const bus = createBus({ registry, prefix: '/', logger: createLogger() })
+  await bus.deliver('console', message('/alpha'))
+  await bus.deliver('console', message('/beta'))
+
+  expect(results['alphaHasOther']).toBe(false)
+  expect(results['alphaOtherError']).toContain("'other'")
+  expect(results['alphaOtherError']).toContain('not declared')
+  expect(results['alphaListPlugins']).toBe(true)
+  expect(results['alphaHealth']).toBe(false)
+
+  expect(results['betaHasMock']).toBe(false)
+  expect(results['betaMockError']).toContain("'mock'")
+  expect(results['betaMockError']).toContain('not declared')
+  expect(results['betaListPlugins']).toBe(false)
+  expect(results['betaHealth']).toBe(true)
+})
+
 it('contains a malformed message instead of rejecting the fire-and-forget deliver()', async () => {
   const ping = mock()
   const { registry } = setup({ handlers: { ping } })

@@ -315,6 +315,108 @@ it("wires ctx.rhiza('mycelium') to the real, scope-gated API during an enzyme's 
   ])
 })
 
+it("confines each enzyme's start() to its own resolved set and scopes, not a union across every enzyme", async () => {
+  spore('mock', {
+    'spore.yaml': 'kind: rhiza\nname: mock\nseptum: "^0.4"\n',
+    'src/index.ts': [
+      'export default {',
+      '  create: () => ({',
+      '    async start() {},',
+      '    async stop() {},',
+      "    health: async () => ({ state: 'healthy', checkedAt: new Date() }),",
+      '    api: {},',
+      '  }),',
+      '}',
+    ].join('\n'),
+  })
+  spore('other', {
+    'spore.yaml': 'kind: rhiza\nname: other\nseptum: "^0.4"\n',
+    'src/index.ts': [
+      'export default {',
+      '  create: () => ({',
+      '    async start() {},',
+      '    async stop() {},',
+      "    health: async () => ({ state: 'healthy', checkedAt: new Date() }),",
+      '    api: {},',
+      '  }),',
+      '}',
+    ].join('\n'),
+  })
+  spore('alpha', {
+    'spore.yaml': [
+      'kind: enzyme', 'name: alpha', 'septum: "^0.4"',
+      'requires:', '  - rhiza: mock', '  - rhiza: mycelium', '    scopes: [plugins.read]',
+      'commands:', '  - name: alpha', '    description: x', '    code: alpha', '',
+    ].join('\n'),
+    'src/index.ts': [
+      'export default {',
+      '  create: () => {',
+      '    const observed = {}',
+      '    return {',
+      '      observed,',
+      '      async start(ctx) {',
+      '        observed.hasOther = ctx.has("other")',
+      '        try { ctx.rhiza("other") } catch (e) { observed.otherError = e.message }',
+      '        const api = ctx.rhiza("mycelium")',
+      '        observed.listPlugins = "listPlugins" in api',
+      '        observed.health = "health" in api',
+      '      },',
+      '      async stop() {},',
+      '      handlers: { alpha: async () => {} },',
+      '    }',
+      '  },',
+      '}',
+    ].join('\n'),
+  })
+  spore('beta', {
+    'spore.yaml': [
+      'kind: enzyme', 'name: beta', 'septum: "^0.4"',
+      'requires:', '  - rhiza: other', '  - rhiza: mycelium', '    scopes: [health.read]',
+      'commands:', '  - name: beta', '    description: x', '    code: beta', '',
+    ].join('\n'),
+    'src/index.ts': [
+      'export default {',
+      '  create: () => {',
+      '    const observed = {}',
+      '    return {',
+      '      observed,',
+      '      async start(ctx) {',
+      '        observed.hasMock = ctx.has("mock")',
+      '        try { ctx.rhiza("mock") } catch (e) { observed.mockError = e.message }',
+      '        const api = ctx.rhiza("mycelium")',
+      '        observed.listPlugins = "listPlugins" in api',
+      '        observed.health = "health" in api',
+      '      },',
+      '      async stop() {},',
+      '      handlers: { beta: async () => {} },',
+      '    }',
+      '  },',
+      '}',
+    ].join('\n'),
+  })
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\n`, 'utf8')
+
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+
+  const alpha = registry.enzymes.find((e) => e.name === 'alpha')
+  const alphaObserved = (alpha?.instance as unknown as { observed: Record<string, unknown> }).observed
+  expect(alphaObserved.hasOther).toBe(false)
+  expect(alphaObserved.otherError).toContain("'other'")
+  expect(alphaObserved.otherError).toContain('not declared')
+  expect(alphaObserved.listPlugins).toBe(true)
+  expect(alphaObserved.health).toBe(false)
+
+  const beta = registry.enzymes.find((e) => e.name === 'beta')
+  const betaObserved = (beta?.instance as unknown as { observed: Record<string, unknown> }).observed
+  expect(betaObserved.hasMock).toBe(false)
+  expect(betaObserved.mockError).toContain("'mock'")
+  expect(betaObserved.mockError).toContain('not declared')
+  expect(betaObserved.listPlugins).toBe(false)
+  expect(betaObserved.health).toBe(true)
+})
+
 it("keeps the mycelium's plugin list consistent with bootstrap()'s own registry when listen() throws", async () => {
   spore('good', {
     'spore.yaml': 'kind: hypha\nname: good\nseptum: "^1.0"\n',

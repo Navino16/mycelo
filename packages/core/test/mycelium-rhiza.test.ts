@@ -18,6 +18,10 @@ it('mounts only what the scopes grant', () => {
   expect('health' in api).toBe(false)
 })
 
+it('does not mount listPlugins when plugins.read is not granted', () => {
+  expect('listPlugins' in createMyceliumApi(registry, ['health.read'], stubSend)).toBe(false)
+})
+
 it('lists germinated and dormant plugins with their reasons', () => {
   const api = createMyceliumApi(registry, ['plugins.read'], stubSend) as PluginsRead
   expect(api.listPlugins()).toEqual([
