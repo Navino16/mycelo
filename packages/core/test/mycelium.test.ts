@@ -463,7 +463,8 @@ it("keeps the mycelium's plugin list consistent with bootstrap()'s own registry 
     ].join('\n'),
   })
   const configFile = join(dir, 'mycelo.yaml')
-  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\n`, 'utf8')
+  // owner matches message()'s fixed sender ('local'), so /probe is authorized (phase 4).
+  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\nowner:\n  channel: good\n  userId: local\n`, 'utf8')
 
   const { registry, bus } = await bootstrap(configFile)
   expect(registry.hyphae.map((h) => h.name)).toEqual(['good'])
@@ -478,6 +479,69 @@ it("keeps the mycelium's plugin list consistent with bootstrap()'s own registry 
     { name: 'good', kind: 'hypha', commands: [], state: 'germinated' },
     { name: 'admin', kind: 'enzyme', commands: ['probe'], state: 'germinated' },
     { name: 'bad', commands: [], state: 'dormant', reason: 'boom' },
+  ])
+})
+
+// The same property as the test above, for the one kind whose filtering was missing: an
+// inhibitor listed both germinated and dormant reports a broken gate as healthy.
+it("keeps the mycelium's plugin list consistent when an inhibitor's start() throws", async () => {
+  spore('good', {
+    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^1.0"\n',
+    'src/index.ts': [
+      'export default {',
+      '  create: () => ({',
+      '    connect: async () => {},',
+      '    listen: () => {},',
+      '    stop: async () => {},',
+      '    send: async () => {},',
+      '  }),',
+      '}',
+    ].join('\n'),
+  })
+  // Advisory, so admission still lets /probe through and the listing can be observed.
+  spore('softgate', {
+    'spore.yaml': 'kind: inhibitor\nname: softgate\nseptum: "^1.0"\n',
+    'src/index.ts': [
+      'export default {',
+      '  create: () => ({',
+      "    start: () => { throw new Error('gate cannot start') },",
+      '    stop: async () => {},',
+      '    inspect: async () => ({ allow: true }),',
+      '  }),',
+      '}',
+    ].join('\n'),
+  })
+  spore('admin', {
+    'spore.yaml': [
+      'kind: enzyme', 'name: admin', 'septum: "^0.4"',
+      'requires:', '  - rhiza: mycelium', '    scopes: [plugins.read]',
+      'commands:', '  - name: probe', '    description: x', '    code: probe', '',
+    ].join('\n'),
+    'src/index.ts': [
+      'export default {',
+      '  create: () => {',
+      '    const observed = {}',
+      '    return {',
+      '      observed,',
+      '      handlers: { probe: async (_inv, ctx) => { observed.plugins = ctx.rhiza("mycelium").listPlugins() } },',
+      '    }',
+      '  },',
+      '}',
+    ].join('\n'),
+  })
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\nowner:\n  channel: good\n  userId: local\n`, 'utf8')
+
+  const { registry, bus } = await bootstrap(configFile)
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.dormant.find((d) => d.name === 'softgate')?.reason).toContain('gate cannot start')
+
+  await bus.deliver('good', message('good', '/probe'))
+  const admin = registry.enzymes.find((e) => e.name === 'admin')
+  const observed = (admin?.instance as unknown as { observed: Record<string, unknown> }).observed
+  const listed = observed.plugins as Record<string, unknown>[]
+  expect(listed.filter((p) => p.name === 'softgate')).toEqual([
+    { name: 'softgate', commands: [], state: 'dormant', reason: 'gate cannot start' },
   ])
 })
 
@@ -598,4 +662,71 @@ it("counts and names a rhiza in the germination banner, not just hyphae and enzy
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
   expect(germinationBanner(registry)).toBe('germinated 2 spores (channel, store)')
+})
+
+// The next three exercise both halves of the brokenEnforcing merge (design §7) through
+// the real bootstrap(). Assertions read mycelium.admission directly, since bus.ts does
+// not consult it until task 11.
+
+it('admits when an enforcing inhibitor starts cleanly', async () => {
+  spore('cleangate', {
+    'spore.yaml': 'kind: inhibitor\nname: cleangate\nseptum: "^1.0"\nenforcing: true\n',
+    'src/index.ts': [
+      'export default {',
+      '  create: () => ({',
+      '    async start() {},',
+      '    async stop() {},',
+      '    inspect: () => Promise.resolve({ allow: true }),',
+      '  }),',
+      '}',
+    ].join('\n'),
+  })
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\n`, 'utf8')
+
+  const { registry, admission } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+  expect(registry.inhibitors.map((i) => i.name)).toEqual(['cleangate'])
+  expect(await admission.admit(message('console', '/ping'))).toEqual({ allow: true })
+})
+
+it('refuses all traffic when an enforcing inhibitor throws in start() — the startup half of the design §7 merge', async () => {
+  spore('throwgate', {
+    'spore.yaml': 'kind: inhibitor\nname: throwgate\nseptum: "^1.0"\nenforcing: true\n',
+    'src/index.ts': [
+      'export default {',
+      '  create: () => ({',
+      "    async start() { throw new Error('boom') },",
+      '    async stop() {},',
+      '    inspect: () => Promise.resolve({ allow: true }),',
+      '  }),',
+      '}',
+    ].join('\n'),
+  })
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\n`, 'utf8')
+
+  const { registry, admission } = await bootstrap(configFile)
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.dormant.find((d) => d.name === 'throwgate')?.reason).toContain('boom')
+  expect((await admission.admit(message('console', '/ping'))).allow).toBe(false)
+})
+
+it('refuses all traffic when an enforcing inhibitor is dormant from a rejected config — the germination half of the design §7 merge', async () => {
+  spore('badconfiggate', {
+    'spore.yaml': 'kind: inhibitor\nname: badconfiggate\nseptum: "^1.0"\nenforcing: true\n',
+    'src/index.ts': [
+      'export default {',
+      '  configSchema: { safeParse: () => ({ success: false, error: "groupId is required" }) },',
+      '  create: () => ({ inspect: () => Promise.resolve({ allow: true }) }),',
+      '}',
+    ].join('\n'),
+  })
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\n`, 'utf8')
+
+  const { registry, admission } = await bootstrap(configFile)
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.dormant.find((d) => d.name === 'badconfiggate')?.reason).toContain('groupId')
+  expect((await admission.admit(message('console', '/ping'))).allow).toBe(false)
 })

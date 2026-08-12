@@ -1,12 +1,18 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { afterEach, beforeEach, expect, it } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { BootstrapError, loadBootstrap } from '../src/config.js'
 
 let dir: string
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'mycelo-cfg-')) })
 afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
+
+function writeConfig(content: string): string {
+  const file = join(dir, 'mycelo.yaml')
+  writeFileSync(file, content, 'utf8')
+  return file
+}
 
 it('defaults every field when the file is absent', () => {
   const config = loadBootstrap(join(dir, 'mycelo.yaml'))
@@ -15,21 +21,75 @@ it('defaults every field when the file is absent', () => {
 })
 
 it('reads what the file declares', () => {
-  const file = join(dir, 'mycelo.yaml')
-  writeFileSync(file, 'prefix: "!"\nspores: ./plugins\n', 'utf8')
+  const file = writeConfig('prefix: "!"\nspores: ./plugins\n')
   const config = loadBootstrap(file)
   expect(config.prefix).toBe('!')
   expect(config.sporesDir).toBe(resolve(dir, 'plugins'))
 })
 
 it('ignores fields later phases will add', () => {
-  const file = join(dir, 'mycelo.yaml')
-  writeFileSync(file, 'prefix: "/"\ndatabase: /data/mycelo.db\nui:\n  port: 8730\n', 'utf8')
+  const file = writeConfig('prefix: "/"\nui:\n  port: 8730\n')
   expect(loadBootstrap(file).prefix).toBe('/')
 })
 
+// BootstrapError.message is Zod's generic text, identical for any field of that type, so
+// `.path` is the only thing that tells an operator which line to fix. Asserted, not implied.
 it('names the offending path when a field has the wrong type', () => {
-  const file = join(dir, 'mycelo.yaml')
-  writeFileSync(file, 'prefix: 42\n', 'utf8')
+  const file = writeConfig('prefix: 42\n')
   expect(() => loadBootstrap(file)).toThrow(BootstrapError)
+  try {
+    loadBootstrap(file)
+    throw new Error('loadBootstrap should have thrown')
+  } catch (e) {
+    expect((e as BootstrapError).path).toBe('prefix')
+  }
+})
+
+it('names the offending path inside a nested object', () => {
+  const file = writeConfig('owner:\n  channel: console\n  userId: 42\n')
+  try {
+    loadBootstrap(file)
+    throw new Error('loadBootstrap should have thrown')
+  } catch (e) {
+    expect((e as BootstrapError).path).toBe('owner.userId')
+  }
+})
+
+describe('loadBootstrap, phase 4 fields', () => {
+  it('defaults the database beside the config file', () => {
+    const file = writeConfig('prefix: "!"\n')
+    const config = loadBootstrap(file)
+    expect(config.database).toBe('./mycelo.db')
+    expect(config.databaseFile).toBe(resolve(file, '..', './mycelo.db'))
+  })
+
+  it('resolves a relative database path against the config file, not the cwd', () => {
+    const file = writeConfig('database: ./data/state.db\n')
+    expect(loadBootstrap(file).databaseFile).toBe(resolve(file, '..', './data/state.db'))
+  })
+
+  it('reads the owner identity', () => {
+    const file = writeConfig('owner:\n  channel: console\n  userId: alice\n')
+    expect(loadBootstrap(file).owner).toEqual({ channel: 'console', userId: 'alice' })
+  })
+
+  it('leaves owner undefined when the key is absent', () => {
+    expect(loadBootstrap(writeConfig('prefix: "/"\n')).owner).toBeUndefined()
+  })
+
+  it('rejects a partial owner rather than accepting half an identity', () => {
+    const file = writeConfig('owner:\n  channel: console\n')
+    expect(() => loadBootstrap(file)).toThrow(BootstrapError)
+  })
+
+  it('reads defaultRole and keeps plugins opaque', () => {
+    const file = writeConfig('defaultRole: guest\nplugins:\n  gate:\n    groupId: household\n')
+    const config = loadBootstrap(file)
+    expect(config.defaultRole).toBe('guest')
+    expect(config.plugins['gate']).toEqual({ groupId: 'household' })
+  })
+
+  it('defaults plugins to an empty record', () => {
+    expect(loadBootstrap(writeConfig('prefix: "/"\n')).plugins).toEqual({})
+  })
 })

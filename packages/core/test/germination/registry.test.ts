@@ -15,6 +15,7 @@ function enzyme(name: string, commands: string[]): GerminatedEnzyme {
     instance,
     resolved: new Set(),
     scopes: [],
+    config: {},
   }
 }
 

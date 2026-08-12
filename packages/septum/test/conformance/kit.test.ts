@@ -62,6 +62,46 @@ describe('hypha conformance checks', () => {
     expect(failures.join(' ')).toContain('listGroupMembers')
   })
 
+  // The core normalises a non-array to null, so the rule an inhibitor wrote against the
+  // contract stops applying instead of throwing. The kit is where that surfaces.
+  it('calls listGroupMembers when a group id is supplied', async () => {
+    expect(await hyphaChecks({ ...goodHarness, membershipGroupId: 'household' })).toEqual([])
+  })
+
+  it.each([['undefined', undefined], ['null', null], ['an object', {}]])(
+    'catches a listGroupMembers resolving %s instead of an array',
+    async (_label, value) => {
+      const failures = await hyphaChecks({
+        ...goodHarness,
+        membershipGroupId: 'household',
+        module: {
+          configSchema: config,
+          create: () => ({
+            async connect() {}, listen() {}, async stop() {}, async send() {},
+            listGroupMembers: () => Promise.resolve(value),
+          }) as never,
+        },
+      })
+      expect(failures.join(' ')).toContain('expected an array')
+    },
+  )
+
+  it('does not call listGroupMembers unless a group id is supplied', async () => {
+    let called = false
+    const failures = await hyphaChecks({
+      ...goodHarness,
+      module: {
+        configSchema: config,
+        create: () => ({
+          async connect() {}, listen() {}, async stop() {}, async send() {},
+          async listGroupMembers() { called = true; return [] },
+        }),
+      },
+    })
+    expect(failures).toEqual([])
+    expect(called).toBe(false)
+  })
+
   it('reports a hypha with no listen()', async () => {
     const failures = await hyphaChecks({
       ...goodHarness,
@@ -297,6 +337,7 @@ function inhibitorContext(): InhibitorContext<unknown> {
     async groupMembers() {
       return null
     },
+    requireCapability: () => {},
     rhiza: <T,>() => ({}) as T,
     has: () => false,
   }
@@ -470,6 +511,47 @@ describe('regressions', () => {
       },
     })
     expect(failures).toEqual([])
+  })
+
+  // The runtime hands start() an EnzymeStartContext; EnzymeContext extends it, so passing
+  // the fuller stub typechecked and certified an enzyme that throws in the bot.
+  it('hands start() a context with no reply, principal or capabilities', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        create: () => ({
+          handlers: { links: async () => {} },
+          async start(ctx) {
+            const seen = ctx as unknown as Record<string, unknown>
+            for (const absent of ['reply', 'principal', 'capabilities']) {
+              if (seen[absent] !== undefined) throw new Error(`start() saw ${absent}`)
+            }
+            if (typeof ctx.push !== 'function') throw new Error('start() lost push')
+          },
+          async stop() {},
+        }),
+      },
+    })
+    expect(failures).toEqual([])
+  })
+
+  it('lets a harness stub the start context itself', async () => {
+    let sawOwnStub = false
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      startContext: () => ({ ...enzymeContext(), config: { ownStub: true } }),
+      module: {
+        create: () => ({
+          handlers: { links: async () => {} },
+          async start(ctx) {
+            sawOwnStub = (ctx.config as { ownStub?: boolean }).ownStub === true
+          },
+          async stop() {},
+        }),
+      },
+    })
+    expect(failures).toEqual([])
+    expect(sawOwnStub).toBe(true)
   })
 
   it('catches a start that is present but not callable', async () => {

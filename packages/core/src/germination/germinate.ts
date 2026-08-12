@@ -1,20 +1,24 @@
 import { existsSync } from 'node:fs'
-import type { Enzyme, Hypha, Logger, Rhiza } from '@mycelo/septum'
+import type { Enzyme, Hypha, Inhibitor, Logger, Rhiza } from '@mycelo/septum'
 import { resolve } from './anastomoses.js'
 import { discover } from './discover.js'
 import { loadModule } from './load.js'
 import { isFailure, readManifest } from './manifest.js'
 import type { ReadManifest } from './manifest.js'
 import { buildRoutes } from './registry.js'
-import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedRhiza, Registry } from './registry.js'
-import { capabilityShapeError, enzymeShapeError, hyphaShapeError, rhizaShapeError, unreferencedHandlers } from './shape.js'
+import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor, GerminatedRhiza, Registry } from './registry.js'
+import { capabilityShapeError, enzymeShapeError, hyphaShapeError, inhibitorShapeError, rhizaShapeError, unreferencedHandlers } from './shape.js'
 
 /**
  * Walks the spores directory, resolves dependencies, then loads only the survivors in
  * topological order. A spore that fails goes dormant with a reason; only a command
  * collision halts the whole phase (spec §8). CycleError propagates out untouched.
  */
-export async function germinate(sporesDir: string, logger: Logger): Promise<Registry> {
+export async function germinate(
+  sporesDir: string,
+  logger: Logger,
+  pluginConfig: Readonly<Record<string, unknown>> = {},
+): Promise<Registry> {
   // A missing directory and a missing config file both resolve quietly to defaults
   // (spec-compliant on their own), but their combination — run from the wrong cwd —
   // produced "germinated 0 spores" and exit 0 with no word said. Not a crash, but not
@@ -25,10 +29,15 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
 
   const reads: ReadManifest[] = []
   const dormant: Dormant[] = []
+  // Design §7: an enforcing inhibitor that fails to germinate must still refuse all
+  // traffic. Only germinate() holds both facts at once — the manifest and the dormancy.
+  const brokenEnforcing: string[] = []
   for (const location of discover(sporesDir)) {
     const read = readManifest(location)
     if (isFailure(read)) {
       dormant.push({ name: location.directory, reason: read.reason })
+      // No validated name to report: the directory is all a failed manifest leaves.
+      if (read.enforcingInhibitor) brokenEnforcing.push(location.directory)
     } else {
       reads.push(read)
     }
@@ -40,6 +49,7 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
   const hyphae: GerminatedHypha[] = []
   const enzymes: GerminatedEnzyme[] = []
   const rhizas: GerminatedRhiza[] = []
+  const inhibitors: GerminatedInhibitor[] = []
   // Names that went dormant during this walk — resolve() cannot see a module-load or
   // shape failure, so a dependent's `mandatory`/`resolved` sets may still name one that
   // just failed.
@@ -47,6 +57,9 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
 
   for (const spore of resolution.order) {
     const { manifest } = spore.read
+    const markBroken = (): void => {
+      if (manifest.kind === 'inhibitor' && manifest.enforcing) brokenEnforcing.push(manifest.name)
+    }
     const cause = [...spore.mandatory].find((name) => failed.has(name))
     if (cause !== undefined) {
       // No re-collapse (design §2.2); if the cause was an any_of choice, the message
@@ -57,21 +70,30 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
         : `requires rhiza '${cause}', which is dormant: ${failed.get(cause)}`
       dormant.push({ name: manifest.name, reason })
       failed.set(manifest.name, reason)
+      markBroken()
       continue
     }
     // An optional dependency that turned out dormant is not this spore's problem (core
     // spec §6.3): drop it from `resolved` so ctx.has() answers false rather than lying.
     spore.resolved = new Set([...spore.resolved].filter((name) => !failed.has(name)))
-    if (manifest.kind === 'inhibitor') {
-      const reason = "kind 'inhibitor' is not routed until phase 4"
-      dormant.push({ name: manifest.name, reason })
-      failed.set(manifest.name, reason)
-      continue
-    }
     try {
       const module = await loadModule(spore.read)
       let instance: unknown = null
+      let config: unknown = {}
       if (module !== null) {
+        if (module.configSchema !== undefined) {
+          const declared = pluginConfig[manifest.name] ?? {}
+          // Duck-typed, never instanceof: a spore is bundled with its own copy of Zod.
+          const parsed = module.configSchema.safeParse(declared)
+          if (!parsed.success) {
+            const reason = `configuration rejected: ${String(parsed.error)}`
+            dormant.push({ name: manifest.name, reason })
+            failed.set(manifest.name, reason)
+            markBroken()
+            continue
+          }
+          config = parsed.data
+        }
         instance = module.create()
         if (manifest.kind === 'hypha') {
           const problem = hyphaShapeError(instance, manifest.kind) ?? capabilityShapeError(instance as Record<string, unknown>, manifest)
@@ -85,6 +107,14 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
           if (problem !== null) {
             dormant.push({ name: manifest.name, reason: problem })
             failed.set(manifest.name, problem)
+            continue
+          }
+        } else if (manifest.kind === 'inhibitor') {
+          const problem = inhibitorShapeError(instance)
+          if (problem !== null) {
+            dormant.push({ name: manifest.name, reason: problem })
+            failed.set(manifest.name, problem)
+            markBroken()
             continue
           }
         } else {
@@ -105,9 +135,18 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
         }
       }
       if (manifest.kind === 'hypha') {
-        hyphae.push({ name: manifest.name, manifest, instance: instance as Hypha })
+        hyphae.push({ name: manifest.name, manifest, instance: instance as Hypha, config })
       } else if (manifest.kind === 'rhiza') {
-        rhizas.push({ name: manifest.name, manifest, instance: instance as Rhiza })
+        rhizas.push({ name: manifest.name, manifest, instance: instance as Rhiza, config })
+      } else if (manifest.kind === 'inhibitor') {
+        inhibitors.push({
+          name: manifest.name,
+          manifest,
+          instance: instance as Inhibitor,
+          resolved: spore.resolved,
+          scopes: spore.scopes,
+          config,
+        })
       } else {
         enzymes.push({
           name: manifest.name,
@@ -115,12 +154,14 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
           instance: instance as Enzyme | null,
           resolved: spore.resolved,
           scopes: spore.scopes,
+          config,
         })
       }
     } catch (e) {
       const reason = (e as Error).message
       dormant.push({ name: manifest.name, reason })
       failed.set(manifest.name, reason)
+      markBroken()
     }
   }
 
@@ -137,5 +178,5 @@ export async function germinate(sporesDir: string, logger: Logger): Promise<Regi
     .map((spore) => spore.read.manifest.name)
     .filter((name) => registered.has(name))
 
-  return { hyphae, enzymes, rhizas, dormant, routes: buildRoutes(enzymes), order }
+  return { hyphae, enzymes, rhizas, inhibitors, dormant, routes: buildRoutes(enzymes), order, brokenEnforcing }
 }

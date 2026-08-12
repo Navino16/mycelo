@@ -1,4 +1,4 @@
-import type { Capabilities } from './capabilities.js'
+import type { Capabilities, ChannelCapability } from './capabilities.js'
 import type { Logger } from './logger.js'
 import type { ChannelIdentity, IncomingMessage, OutgoingContent } from './message.js'
 
@@ -46,16 +46,19 @@ export interface HyphaContext<TConfig = unknown> extends BaseContext<TConfig> {
 }
 
 export interface RhizaContext<TConfig = unknown> extends BaseContext<TConfig> {
-  /** Emit a domain event enzymes can subscribe to via EnzymeContext.on(). */
+  /** Reserved: no subscriber exists yet, so the core discards what this emits. */
   emit(event: string, payload: unknown): void
 }
 
 export interface InhibitorContext<TConfig = unknown> extends BaseContext<TConfig> {
   /**
-   * Members of a group on a channel, or null when the channel cannot report them
-   * and no rhiza provides them. Cached with a TTL by the core (spec §5.1).
+   * Members of a group on a channel, or null when the channel cannot report them.
+   * Cached with a TTL by the core (spec §5.1). An inhibitor wanting a fallback source
+   * fetches its own through rhiza().
    */
   groupMembers(channel: string, groupId: string): Promise<readonly ChannelIdentity[] | null>
+  /** Throws when the channel cannot enforce a rule this inhibitor needs (design §7). */
+  requireCapability(channel: string, capability: ChannelCapability): void
   rhiza<TApi>(name: string): TApi
   has(name: string): boolean
 }
@@ -79,7 +82,7 @@ export interface EnzymeStartContext<TConfig = unknown> extends BaseContext<TConf
   /** Whether an optional or any_of dependency resolved. */
   has(name: string): boolean
   capabilitiesOf(target: PushTarget): Capabilities
-  /** Subscribe to a rhiza event. */
+  /** Reserved: not implemented yet — the core throws (design §12). */
   on(rhiza: string, event: string, handler: (payload: unknown) => void): void
 }
 

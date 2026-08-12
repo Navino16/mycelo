@@ -49,12 +49,162 @@ it('leaves a spore dormant when a declared requires target is not installed', as
   expect(registry.dormant[0]?.reason).toContain("requires rhiza 'radarr', which is not installed")
 })
 
-it('refuses to germinate an inhibitor: phase 4 routes them', async () => {
-  spore('gate', {
-    'spore.yaml': 'kind: inhibitor\nname: gate\nseptum: "^1.0"\n',
+it('germinates an inhibitor instead of refusing its kind', async () => {
+  spore('gatefix', {
+    'spore.yaml': 'kind: inhibitor\nname: gatefix\nseptum: "^1.0"\nenforcing: true\n',
+    'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
   })
   const registry = await germinate(dir, createLogger())
-  expect(registry.dormant[0]?.reason).toBe("kind 'inhibitor' is not routed until phase 4")
+  expect(registry.dormant).toEqual([])
+  expect(registry.inhibitors.map((i) => i.name)).toEqual(['gatefix'])
+  expect(registry.inhibitors[0]?.manifest.enforcing).toBe(true)
+})
+
+it('leaves an inhibitor with no inspect() dormant', async () => {
+  spore('badgate', {
+    'spore.yaml': 'kind: inhibitor\nname: badgate\nseptum: "^1.0"\n',
+    'src/index.ts': 'export default { create: () => ({}) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.dormant[0]?.reason).toContain('inspect')
+  // 'badgate' declares no `enforcing`, so its own shape failure must not fail closed.
+  expect(registry.brokenEnforcing).toEqual([])
+})
+
+it('refuses all traffic when an enforcing inhibitor has a shape failure', async () => {
+  spore('shapegate', {
+    'spore.yaml': 'kind: inhibitor\nname: shapegate\nseptum: "^1.0"\nenforcing: true\n',
+    'src/index.ts': 'export default { create: () => ({}) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.brokenEnforcing).toEqual(['shapegate'])
+})
+
+it('refuses all traffic when an enforcing inhibitor throws on module load', async () => {
+  spore('throwloadgate', {
+    'spore.yaml': 'kind: inhibitor\nname: throwloadgate\nseptum: "^1.0"\nenforcing: true\n',
+    'src/index.ts': 'throw new Error("import explodes")\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.brokenEnforcing).toEqual(['throwloadgate'])
+})
+
+it('does not refuse all traffic when an advisory inhibitor throws on module load', async () => {
+  spore('throwloadgate2', {
+    'spore.yaml': 'kind: inhibitor\nname: throwloadgate2\nseptum: "^1.0"\n',
+    'src/index.ts': 'throw new Error("import explodes")\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.brokenEnforcing).toEqual([])
+})
+
+it('refuses all traffic when an enforcing inhibitor throws in create()', async () => {
+  spore('throwcreategate', {
+    'spore.yaml': 'kind: inhibitor\nname: throwcreategate\nseptum: "^1.0"\nenforcing: true\n',
+    'src/index.ts': 'export default { create: () => { throw new Error("create explodes") } }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.brokenEnforcing).toEqual(['throwcreategate'])
+})
+
+it('refuses all traffic when an enforcing inhibitor has a dormant mandatory dependency', async () => {
+  spore('brokenstore', {
+    'spore.yaml': 'kind: rhiza\nname: brokenstore\nseptum: "^1.0"\n',
+    'src/index.ts': 'throw new Error("store explodes")\n',
+  })
+  spore('depgate', {
+    'spore.yaml': 'kind: inhibitor\nname: depgate\nseptum: "^1.0"\nenforcing: true\nrequires:\n  - rhiza: brokenstore\n',
+    'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.brokenEnforcing).toEqual(['depgate'])
+})
+
+it('does not refuse all traffic when an advisory inhibitor has a dormant mandatory dependency', async () => {
+  spore('brokenstore', {
+    'spore.yaml': 'kind: rhiza\nname: brokenstore\nseptum: "^1.0"\n',
+    'src/index.ts': 'throw new Error("store explodes")\n',
+  })
+  spore('depgate2', {
+    'spore.yaml': 'kind: inhibitor\nname: depgate2\nseptum: "^1.0"\nrequires:\n  - rhiza: brokenstore\n',
+    'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.dormant.find((d) => d.name === 'depgate2')).toBeDefined()
+  expect(registry.brokenEnforcing).toEqual([])
+})
+
+it('refuses all traffic when an enforcing inhibitor is dormant from a rejected config', async () => {
+  spore('strictgate', {
+    'spore.yaml': 'kind: inhibitor\nname: strictgate\nseptum: "^1.0"\nenforcing: true\n',
+    'src/index.ts': [
+      'export default {',
+      '  configSchema: { safeParse: () => ({ success: false, error: "groupId is required" }) },',
+      '  create: () => ({ inspect: () => Promise.resolve({ allow: true }) }),',
+      '}',
+    ].join('\n'),
+  })
+  const registry = await germinate(dir, createLogger(), {})
+  expect(registry.inhibitors).toEqual([])
+  expect(registry.brokenEnforcing).toEqual(['strictgate'])
+})
+
+it('does not refuse all traffic when a dormant inhibitor is only advisory', async () => {
+  spore('softgate', {
+    'spore.yaml': 'kind: inhibitor\nname: softgate\nseptum: "^1.0"\n',
+    'src/index.ts': [
+      'export default {',
+      '  configSchema: { safeParse: () => ({ success: false, error: "groupId is required" }) },',
+      '  create: () => ({ inspect: () => Promise.resolve({ allow: true }) }),',
+      '}',
+    ].join('\n'),
+  })
+  const registry = await germinate(dir, createLogger(), {})
+  expect(registry.dormant).toHaveLength(1)
+  expect(registry.brokenEnforcing).toEqual([])
+})
+
+// Every other brokenEnforcing test uses a valid manifest, so a typo in spore.yaml was the
+// one path to dormancy that left the guarded channel open with only a warning (design §7).
+it('refuses all traffic when an enforcing inhibitor\'s manifest does not parse', async () => {
+  spore('typogate', {
+    'spore.yaml': 'kind: inhibitor\nname: typogate\nenforcing: true\nseptem: "^1.0"\n',
+    'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.inhibitors).toEqual([])
+  // No validated name exists, so the directory is what identifies it.
+  expect(registry.brokenEnforcing).toEqual(['typogate'])
+})
+
+it('does not refuse all traffic when an unparseable manifest is not an enforcing inhibitor', async () => {
+  spore('typosoft', {
+    'spore.yaml': 'kind: inhibitor\nname: typosoft\nseptem: "^1.0"\n',
+    'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
+  })
+  spore('typoenzyme', {
+    'spore.yaml': 'kind: enzyme\nname: typoenzyme\nenforcing: true\nseptem: "^1.0"\n',
+    'src/index.ts': 'export default { create: () => ({ handlers: {} }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.dormant).toHaveLength(2)
+  expect(registry.brokenEnforcing).toEqual([])
+})
+
+it('does not read a truthy-but-not-true enforcing out of an unvalidated manifest', async () => {
+  spore('sneakygate', {
+    'spore.yaml': 'kind: inhibitor\nname: sneakygate\nenforcing: "yes"\nseptem: "^1.0"\n',
+    'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.brokenEnforcing).toEqual([])
 })
 
 it('makes a dependent dormant when a MANDATORY dependency fails to load, never importing its own module', async () => {
@@ -318,4 +468,59 @@ it('germinates when the handler is genuinely declared and named "constructor"', 
   const registry = await germinate(dir, createLogger())
   expect(registry.enzymes.map((e) => e.name)).toEqual(['legit'])
   expect(registry.dormant).toEqual([])
+})
+
+const CONFIGURABLE_RHIZA_MODULE = `
+  export default {
+    // Duck-typed on purpose: a real spore is bundled with its own Zod.
+    configSchema: { safeParse: (input) => {
+      // undefined and {} are reported differently on purpose: without it, dropping
+      // germinate()'s \`?? {}\` would leave the absent-key test green.
+      if (input === undefined) return { success: false, error: 'config was passed as undefined' }
+      const token = input === null || typeof input !== 'object' ? undefined : input.token
+      return typeof token === 'string'
+        ? { success: true, data: { token } }
+        : { success: false, error: 'token must be a string' }
+    } },
+    create: () => ({ ${RHIZA_BODY} }),
+  }
+`
+
+function confRhiza(): void {
+  spore('confrhiza', {
+    'spore.yaml': 'kind: rhiza\nname: confrhiza\nseptum: "^0.4"\n',
+    'src/index.ts': CONFIGURABLE_RHIZA_MODULE,
+  })
+}
+
+it('serves a spore its config from mycelo.yaml', async () => {
+  confRhiza()
+  const registry = await germinate(dir, createLogger(), { confrhiza: { token: 'abc' } })
+  expect(registry.dormant).toEqual([])
+  expect(registry.rhizas[0]?.config).toEqual({ token: 'abc' })
+})
+
+it('leaves a spore dormant, with the reason, when its config is rejected', async () => {
+  confRhiza()
+  const registry = await germinate(dir, createLogger(), { confrhiza: { token: 42 } })
+  expect(registry.rhizas).toEqual([])
+  expect(registry.dormant[0]?.reason).toContain('token must be a string')
+})
+
+it('rejects a spore whose config key is absent entirely, rather than passing undefined', async () => {
+  confRhiza()
+  const registry = await germinate(dir, createLogger(), {})
+  expect(registry.rhizas).toEqual([])
+  // The absent key must arrive as {}, so the schema's own undefined branch stays unreached.
+  expect(registry.dormant[0]?.reason).toContain('token must be a string')
+  expect(registry.dormant[0]?.reason).not.toContain('passed as undefined')
+})
+
+it('gives a spore with no configSchema an empty config', async () => {
+  spore('plainrhiza', {
+    'spore.yaml': 'kind: rhiza\nname: plainrhiza\nseptum: "^0.4"\n',
+    'src/index.ts': `export default { create: () => ({ ${RHIZA_BODY} }) }\n`,
+  })
+  const registry = await germinate(dir, createLogger(), {})
+  expect(registry.rhizas[0]?.config).toEqual({})
 })

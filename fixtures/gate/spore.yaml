@@ -1,0 +1,5 @@
+kind: inhibitor
+name: gate
+septum: "^0.5"
+enforcing: true
+description: Admits only members of a configured group. Test fixture, never distributed.

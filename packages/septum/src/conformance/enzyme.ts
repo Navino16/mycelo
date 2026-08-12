@@ -1,6 +1,6 @@
 import { parseManifest } from '../manifest.js'
 import type { EnzymeModule } from '../enzyme.js'
-import type { EnzymeContext, Invocation } from '../context.js'
+import type { EnzymeContext, EnzymeStartContext, Invocation } from '../context.js'
 import type { IncomingMessage } from '../message.js'
 
 export interface EnzymeHarness {
@@ -13,6 +13,27 @@ export interface EnzymeHarness {
   /** Builds the context the enzyme will receive. The author supplies stubs for
    *  whatever their enzyme actually uses — the kit cannot know its dependencies. */
   context(): EnzymeContext<unknown>
+  /** The context `start()` gets. Omit to have the kit narrow `context()` down to it. */
+  startContext?(): EnzymeStartContext<unknown>
+}
+
+/**
+ * EnzymeContext extends EnzymeStartContext, so handing start() the fuller one
+ * typechecks — and hides that the runtime's has no reply, principal or capabilities.
+ * Narrowing by picking members is what makes the kit fail where the bot would.
+ */
+function startContextFor(harness: EnzymeHarness): EnzymeStartContext<unknown> {
+  if (harness.startContext !== undefined) return harness.startContext()
+  const ctx = harness.context()
+  return {
+    config: ctx.config,
+    logger: ctx.logger,
+    push: (target, content) => ctx.push(target, content),
+    rhiza<TApi>(name: string): TApi { return ctx.rhiza<TApi>(name) },
+    has: (name) => ctx.has(name),
+    capabilitiesOf: (target) => ctx.capabilitiesOf(target),
+    on: (rhiza, event, handler) => { ctx.on(rhiza, event, handler) },
+  }
 }
 
 function stubMessage(): IncomingMessage {
@@ -106,7 +127,7 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
   // client in start() would otherwise be reported as broken.
   if (typeof instance.start === 'function') {
     try {
-      await instance.start(harness.context())
+      await instance.start(startContextFor(harness))
     } catch (e) {
       return [...failures, `start() threw: ${(e as Error).message}`]
     }

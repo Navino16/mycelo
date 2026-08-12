@@ -1,9 +1,11 @@
-import type { CommandSpec, Enzyme, Hypha, Manifest, MyceliumScope, Rhiza } from '@mycelo/septum'
+import type { CommandSpec, Enzyme, Hypha, Inhibitor, Manifest, MyceliumScope, Rhiza } from '@mycelo/septum'
 
 export interface GerminatedHypha {
   name: string
   manifest: Extract<Manifest, { kind: 'hypha' }>
   instance: Hypha
+  /** Validated against the module's own configSchema during germination. */
+  config: unknown
 }
 
 export interface GerminatedEnzyme {
@@ -13,12 +15,27 @@ export interface GerminatedEnzyme {
   /** This spore's own resolved set (anastomoses.ts), for ctx.rhiza()/ctx.has(). */
   resolved: ReadonlySet<string>
   scopes: readonly MyceliumScope[]
+  /** Validated against the module's own configSchema during germination. */
+  config: unknown
 }
 
 export interface GerminatedRhiza {
   name: string
   manifest: Extract<Manifest, { kind: 'rhiza' }>
   instance: Rhiza
+  /** Validated against the module's own configSchema during germination. */
+  config: unknown
+}
+
+export interface GerminatedInhibitor {
+  name: string
+  manifest: Extract<Manifest, { kind: 'inhibitor' }>
+  instance: Inhibitor
+  /** This spore's own resolved set (anastomoses.ts), for ctx.rhiza()/ctx.has(). */
+  resolved: ReadonlySet<string>
+  scopes: readonly MyceliumScope[]
+  /** Validated against the module's own configSchema during germination. */
+  config: unknown
 }
 
 export interface Dormant {
@@ -54,10 +71,13 @@ export interface Registry {
   hyphae: readonly GerminatedHypha[]
   enzymes: readonly GerminatedEnzyme[]
   rhizas: readonly GerminatedRhiza[]
+  inhibitors: readonly GerminatedInhibitor[]
   dormant: readonly Dormant[]
   routes: ReadonlyMap<string, CommandRoute>
   /** Names of germinated rhizas and enzymes only, dependency-first (anastomoses.ts). */
   order: readonly string[]
+  /** Enforcing inhibitors that did not germinate. Any one of them refuses all traffic (design §7). */
+  brokenEnforcing: readonly string[]
 }
 
 /**

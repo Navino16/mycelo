@@ -13,6 +13,19 @@ export interface ReadManifest {
 export interface ManifestFailure {
   location: SporeLocation
   reason: string
+  /**
+   * True only when the unvalidated YAML literally declares an enforcing inhibitor, so
+   * design §7 can still refuse all traffic for one whose manifest never parsed.
+   */
+  enforcingInhibitor: boolean
+}
+
+// Nothing here validated, so nothing here is trusted: two exact literals, no coercion
+// and no defaulting. Anything else leaves the spore merely dormant.
+function declaresEnforcingInhibitor(raw: unknown): boolean {
+  if (typeof raw !== 'object' || raw === null) return false
+  const { kind, enforcing } = raw as Record<string, unknown>
+  return kind === 'inhibitor' && enforcing === true
 }
 
 // ManifestError.message alone is Zod's generic text ("Invalid input: expected string,
@@ -29,12 +42,14 @@ export function readManifest(location: SporeLocation): ReadManifest | ManifestFa
   try {
     raw = parseYaml(readFileSync(location.manifestPath, 'utf8'))
   } catch (e) {
-    return { location, reason: `cannot read spore.yaml: ${(e as Error).message}` }
+    // Unreadable YAML yields no fields at all, so an enforcing inhibitor cannot be
+    // recognised here — the only case design §7 cannot cover.
+    return { location, reason: `cannot read spore.yaml: ${(e as Error).message}`, enforcingInhibitor: false }
   }
   try {
     return { location, manifest: parseManifest(raw) }
   } catch (e) {
-    return { location, reason: manifestFailureReason(e) }
+    return { location, reason: manifestFailureReason(e), enforcingInhibitor: declaresEnforcingInhibitor(raw) }
   }
 }
 

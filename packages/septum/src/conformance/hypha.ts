@@ -16,6 +16,12 @@ export interface HyphaHarness {
   validConfig?: unknown
   /** A config the schema must reject. Omit only if every input is valid. */
   invalidConfig?: unknown
+  /**
+   * A group id to call `listGroupMembers` with. Opt-in, because the kit never calls
+   * `connect()` — a hypha needing its connection first would fail on a correct
+   * implementation. Supply it when the method answers without one.
+   */
+  membershipGroupId?: string
 }
 
 /** Returns the failures, so the same logic serves a describe() block or a bare assertion. */
@@ -66,6 +72,18 @@ export async function hyphaChecks(harness: HyphaHarness): Promise<string[]> {
   }
   if (!declaresMembership && implementsMembership) {
     failures.push('listGroupMembers() exists but the manifest does not declare group_membership')
+  }
+  // An array, never null: the core reads anything else as "membership unavailable", which
+  // makes an enforcing inhibitor refuse every message on the channel.
+  if (implementsMembership && harness.membershipGroupId !== undefined) {
+    try {
+      const members: unknown = await instance.listGroupMembers?.(harness.membershipGroupId)
+      if (!Array.isArray(members)) {
+        failures.push(`listGroupMembers() resolved ${members === null ? 'null' : typeof members}, expected an array`)
+      }
+    } catch (e) {
+      failures.push(`listGroupMembers() threw: ${(e as Error).message}`)
+    }
   }
 
   // stop() must be safe after a connect() that never ran: the core calls it during
