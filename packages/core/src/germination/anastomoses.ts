@@ -4,14 +4,14 @@ import type { ReadManifest } from './manifest.js'
 
 export const MOUNTABLE_SCOPES: readonly MyceliumScope[] = [
   'plugins.read', 'health.read', 'messages.send',
-  'principals.read', 'roles.read', 'roles.assign', 'roles.manage',
+  'principals.read', 'principals.manage', 'roles.read', 'roles.assign', 'roles.manage',
 ]
 
 // Every scope MYCELIUM_SCOPES carries that MOUNTABLE_SCOPES does not yet mount, and the
-// phase it arrives in. Adding a scope in phase 4 is then one line here.
+// phase it arrives in. Mounting a scope moves its entry from here into MOUNTABLE_SCOPES.
 const SCOPE_PHASE: Partial<Record<MyceliumScope, number>> = {
-  'principals.manage': 4,
-  'plugins.toggle': 4,
+  // Plugin enable/disable, not identity — arrives with phase 5.
+  'plugins.toggle': 5,
 }
 
 /** One `any_of` requirement's outcome: which alternative was chosen, and the full list offered. */
@@ -116,7 +116,9 @@ function evaluate(requires: readonly Requirement[], candidates: ReadonlyMap<stri
     if ('any_of' in requirement || targetName(requirement.rhiza) !== 'mycelium') continue
     for (const scope of requirement.scopes ?? []) {
       if (!MOUNTABLE_SCOPES.includes(scope)) {
-        const phase = SCOPE_PHASE[scope] ?? 4
+        // Falls back to the next phase after this one, so a scope added to MyceliumScope
+        // but not yet classified here never reports a phase already past.
+        const phase = SCOPE_PHASE[scope] ?? 5
         return { ...FAILED, dormantReason: `requires mycelium scope '${scope}', which arrives in phase ${phase}` }
       }
       scopes.push(scope)
