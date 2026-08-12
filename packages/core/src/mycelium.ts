@@ -134,8 +134,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     mycelium,
     onUnrouted: async (message, command) => {
       if (command === null) return
-      const hypha = routedRegistry.hyphae.find((h) => h.name === message.channel)
-      await hypha?.instance.send(message.conversationId, { text: `unknown command '${command}'` })
+      await sendVia(hyphaByName, message.channel, message.conversationId, { text: `unknown command '${command}'` })
     },
   })
   busBox.current = bus

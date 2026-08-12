@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, expect, it } from 'bun:test'
+import { afterEach, beforeEach, expect, it, spyOn } from 'bun:test'
 import type { IncomingMessage } from '@mycelo/septum'
 import { bootstrap, germinationBanner } from '../src/mycelium.js'
 
@@ -377,6 +377,36 @@ it("keeps the mycelium's plugin list consistent with bootstrap()'s own registry 
     { name: 'admin', kind: 'enzyme', commands: ['probe'], state: 'germinated' },
     { name: 'bad', commands: [], state: 'dormant', reason: 'boom' },
   ])
+})
+
+it('routes onUnrouted through the shared send path, so an unregistered channel is a contained, logged failure rather than a silent no-op', async () => {
+  spore('good', {
+    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^1.0"\n',
+    'src/index.ts': [
+      'export default {',
+      '  create: () => ({',
+      '    connect: async () => {},',
+      '    listen: () => {},',
+      '    stop: async () => {},',
+      '    send: async () => {},',
+      '  }),',
+      '}',
+    ].join('\n'),
+  })
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\n`, 'utf8')
+
+  const { bus } = await bootstrap(configFile)
+  const logs: string[] = []
+  const spy = spyOn(console, 'log').mockImplementation((line: unknown) => { logs.push(String(line)) })
+  try {
+    // 'phantom' is not a registered hypha: the old direct hypha?.instance.send() call
+    // silently did nothing here, unlike every other send in the bus.
+    await bus.deliver('phantom', message('phantom', '/nope'))
+  } finally {
+    spy.mockRestore()
+  }
+  expect(logs.some((l) => l.includes("no hypha named 'phantom'"))).toBe(true)
 })
 
 it("counts and names a rhiza in the germination banner, not just hyphae and enzymes", async () => {
