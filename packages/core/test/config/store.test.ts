@@ -1,7 +1,8 @@
 import { expect, it } from 'bun:test'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import {
-  listInstalls, readAllSettings, readSettings, recordInstall, setEnabled, writeSetting,
+  clearSetting, getInstall, listInstalls, readAllSettings, readSettings, recordInstall,
+  removeInstall, setEnabled, writeSetting,
 } from '../../src/config/store.js'
 
 function fresh() {
@@ -45,5 +46,43 @@ it('recording an install twice does not reset its enabled flag', () => {
   recordInstall(db, 'radarr', 'rhiza')
   // An upsert here would silently disable a plugin the operator had turned on.
   expect(listInstalls(db)[0]?.enabled).toBe(true)
+  close()
+})
+
+it('getInstall returns null for a plugin that was never installed', () => {
+  const { db, close } = fresh()
+  expect(getInstall(db, 'ghost')).toBeNull()
+  close()
+})
+
+it('removeInstall takes its settings with it', () => {
+  const { db, close } = fresh()
+  recordInstall(db, 'radarr', 'rhiza')
+  writeSetting(db, 'radarr', 'url', 'http://x', false)
+  removeInstall(db, 'radarr')
+  expect(getInstall(db, 'radarr')).toBeNull()
+  expect(readSettings(db, 'radarr')).toEqual({})
+  close()
+})
+
+it('clearSetting removes only the named key, not every setting on the plugin', () => {
+  const { db, close } = fresh()
+  recordInstall(db, 'radarr', 'rhiza')
+  writeSetting(db, 'radarr', 'url', 'http://x', false)
+  writeSetting(db, 'radarr', 'port', 8080, false)
+  clearSetting(db, 'radarr', 'url')
+  expect(readSettings(db, 'radarr')).toEqual({ port: 8080 })
+  close()
+})
+
+it('setEnabled throws for a plugin that is not installed', () => {
+  const { db, close } = fresh()
+  expect(() => setEnabled(db, 'ghost', true)).toThrow("plugin 'ghost' is not installed")
+  close()
+})
+
+it('writeSetting throws for a plugin that is not installed', () => {
+  const { db, close } = fresh()
+  expect(() => writeSetting(db, 'ghost', 'url', 'x', false)).toThrow("plugin 'ghost' is not installed")
   close()
 })
