@@ -1,7 +1,10 @@
 import { and, eq } from 'drizzle-orm'
 import type {
+  BroadcastResult,
+  ConversationsRead,
   FormSchema,
   HealthRead,
+  MessagesBroadcast,
   MessagesSend,
   MyceliumScope,
   OutgoingContent,
@@ -23,6 +26,7 @@ import type {
 import { formSchemaFor } from './config/jsonschema.js'
 import { enablePlugin, findSpore, loadSporeModule } from './config/lifecycle.js'
 import { getInstall, listInstalls, setEnabled, writeSetting } from './config/store.js'
+import { listBroadcastTargets, listConversations } from './conversations/registry.js'
 import type { Registry } from './germination/registry.js'
 import type { Db } from './persistence/db.js'
 import { channelIdentity, pluginSetting, principal, principalRole, role, roleCommand } from './persistence/schema.js'
@@ -303,6 +307,23 @@ function toPromise<T>(fn: () => T): Promise<T> {
   return Promise.resolve().then(fn)
 }
 
+// Promise.all over per-target catches, never a bare Promise.all of the sends: one dead
+// channel must not cancel the others, and the operator has to learn which one failed.
+async function broadcast(
+  db: Db,
+  send: (target: PushTarget, content: OutgoingContent) => Promise<void>,
+  content: OutgoingContent,
+): Promise<readonly BroadcastResult[]> {
+  return Promise.all(listBroadcastTargets(db).map(async (target): Promise<BroadcastResult> => {
+    try {
+      await send(target, content)
+      return { target, ok: true }
+    } catch (e) {
+      return { target, ok: false, error: describeThrown(e) }
+    }
+  }))
+}
+
 /**
  * Mounts one key per granted scope onto a fresh object — never the full API with keys
  * deleted — so a plugin without a scope has no property to find, not a rejected call.
@@ -320,12 +341,15 @@ export function createMyceliumApi(
   // as present through `in`, which is exactly how a caller is expected to check.
   const api = Object.create(null) as Partial<
     PluginsRead & HealthRead & MessagesSend & PrincipalsRead & PrincipalsManage &
-    RolesRead & RolesAssign & RolesManage & PluginsToggle & PluginsConfigure
+    RolesRead & RolesAssign & RolesManage & PluginsToggle & PluginsConfigure &
+    ConversationsRead & MessagesBroadcast
   >
 
   if (granted.has('plugins.read')) api.listPlugins = () => listPlugins(registry, sporesDir, db)
   if (granted.has('health.read')) api.health = () => aggregateHealth(registry)
   if (granted.has('messages.send')) api.send = send
+  if (granted.has('conversations.read')) api.listConversations = () => toPromise(() => listConversations(db))
+  if (granted.has('messages.broadcast')) api.broadcast = (content) => broadcast(db, send, content)
 
   if (granted.has('principals.read')) {
     api.listPrincipals = () => toPromise(() => listPrincipals(db))

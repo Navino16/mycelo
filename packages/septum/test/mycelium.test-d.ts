@@ -28,6 +28,7 @@ export type ScopeNamesAreExact = Expect<Equal<MyceliumScope,
   | 'roles.read' | 'roles.assign' | 'roles.manage'
   | 'plugins.read' | 'plugins.toggle' | 'plugins.configure'
   | 'health.read' | 'messages.send'
+  | 'messages.broadcast' | 'conversations.read'
 >>
 
 export type ScopesAreReadonly = Expect<Equal<typeof MYCELIUM_SCOPES, readonly [
@@ -35,6 +36,7 @@ export type ScopesAreReadonly = Expect<Equal<typeof MYCELIUM_SCOPES, readonly [
   'roles.read', 'roles.assign', 'roles.manage',
   'plugins.read', 'plugins.toggle', 'plugins.configure',
   'health.read', 'messages.send',
+  'messages.broadcast', 'conversations.read',
 ]>>
 
 // One entry per scope, `never` for a scope no phase mounts yet. A scope added to
@@ -50,6 +52,8 @@ interface ScopeApi {
   'plugins.configure': PluginsConfigure
   'health.read': HealthRead
   'messages.send': MessagesSend
+  'messages.broadcast': MessagesBroadcast
+  'conversations.read': ConversationsRead
 }
 
 export type EveryScopeIsClassified = Expect<Equal<keyof ScopeApi, MyceliumScope>>

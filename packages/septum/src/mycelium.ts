@@ -18,6 +18,8 @@ export const MYCELIUM_SCOPES = [
   'plugins.configure',
   'health.read',
   'messages.send',
+  'messages.broadcast',
+  'conversations.read',
 ] as const
 
 export type MyceliumScope = (typeof MYCELIUM_SCOPES)[number]
