@@ -2,7 +2,9 @@ import type { SporeModule } from '@mycelo/septum'
 import { discover } from '../germination/discover.js'
 import { loadModule } from '../germination/load.js'
 import { isFailure, readManifest } from '../germination/manifest.js'
+import type { ManifestFailure, ReadManifest } from '../germination/manifest.js'
 import type { Db } from '../persistence/db.js'
+import { describeThrown } from '../support/thrown.js'
 import { getInstall, listInstalls, readSettings, recordInstall, setEnabled } from './store.js'
 
 export interface EnableOk { ok: true }
@@ -31,19 +33,33 @@ export function syncInstalls(db: Db, sporesDir: string): { added: readonly strin
 }
 
 /**
+ * The spore of that name on disk. A manifest that failed to parse carries no validated
+ * name, so it is matched on its directory instead — all a failed manifest leaves.
+ */
+function findSpore(sporesDir: string, name: string): ReadManifest | ManifestFailure | undefined {
+  for (const location of discover(sporesDir)) {
+    const read = readManifest(location)
+    if (isFailure(read)) {
+      if (location.directory === name) return read
+      continue
+    }
+    if (read.manifest.name === name) return read
+  }
+  return undefined
+}
+
+/**
  * The loaded module of a spore present on disk. `undefined` means no such spore is
- * there; `null` means it was found but is text-only and has no module.
+ * there; `null` means it was found but is text-only and has no module. Propagates
+ * whatever loadModule() throws — enablePlugin() is where that becomes a refusal.
  */
 export async function loadSporeModule(
   sporesDir: string,
   name: string,
 ): Promise<SporeModule<unknown, unknown> | null | undefined> {
-  for (const location of discover(sporesDir)) {
-    const read = readManifest(location)
-    if (isFailure(read) || read.manifest.name !== name) continue
-    return await loadModule(read)
-  }
-  return undefined
+  const found = findSpore(sporesDir, name)
+  if (found === undefined || isFailure(found)) return undefined
+  return await loadModule(found)
 }
 
 /**
@@ -53,8 +69,17 @@ export async function loadSporeModule(
  */
 export async function enablePlugin(db: Db, sporesDir: string, name: string): Promise<EnableOk | EnableRefusal> {
   if (getInstall(db, name) === null) return { ok: false, reason: `plugin '${name}' is not installed` }
-  const module = await loadSporeModule(sporesDir, name)
-  if (module === undefined) return { ok: false, reason: `no spore named '${name}' is present on disk` }
+  const found = findSpore(sporesDir, name)
+  if (found === undefined) return { ok: false, reason: `no spore named '${name}' is present on disk` }
+  if (isFailure(found)) return { ok: false, reason: `spore '${name}' has an unreadable manifest: ${found.reason}` }
+  let module: SporeModule<unknown, unknown> | null
+  try {
+    // loadModule throws on a missing entry point, a default export with no create(), and
+    // anything the spore itself throws at import. All three reach an operator from here.
+    module = await loadModule(found)
+  } catch (e) {
+    return { ok: false, reason: `spore '${name}' failed to load: ${describeThrown(e)}` }
+  }
   if (module?.configSchema !== undefined) {
     // Duck-typed, never instanceof: the schema came from the spore's own bundled Zod.
     const parsed = module.configSchema.safeParse(readSettings(db, name))

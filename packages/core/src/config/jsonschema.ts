@@ -1,14 +1,5 @@
 import type { FormSchema } from '@mycelo/septum'
-
-/** Coercion to string happens in here too: a hostile `message` can return an object that resists it. */
-function describeThrown(e: unknown): string {
-  try {
-    const detail: unknown = e instanceof Error ? `${e.message}` : 'unknown error'
-    return typeof detail === 'string' ? detail : 'unknown error'
-  } catch {
-    return 'unknown error'
-  }
-}
+import { describeThrown } from '../support/thrown.js'
 
 /**
  * Duck-typed throughout: the argument was built by the plugin's own copy of Zod and septum,

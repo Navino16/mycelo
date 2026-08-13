@@ -92,7 +92,9 @@ it('sync leaves the row of a spore that has disappeared from disk', () => {
   close()
 })
 
-it('enabling refuses while a required setting is missing, and names the path', async () => {
+// Renamed from 'and names the path': the temp spore's schema is hand-written, so what
+// this proves is that enablePlugin carries the schema's own reason through unaltered.
+it('enabling refuses while a required setting is missing, and carries the schema\'s reason through', async () => {
   const { db, close } = fresh()
   needsConfig()
   recordInstall(db, 'needs-config', 'enzyme')
@@ -130,6 +132,67 @@ it('enabling refuses a plugin whose directory is absent from disk', async () => 
   expect(result.ok).toBe(false)
   if (!result.ok) expect(result.reason).toContain('present on disk')
   expect(getInstall(db, 'ghost')?.enabled).toBe(false)
+  close()
+})
+
+// The three ways loadModule() throws. germinate() catches them; enablePlugin declares
+// EnableRefusal, and task 8 prints its reason into a chat channel, so a throw here
+// reaches the operator as a broken command instead of a diagnostic.
+it('enabling refuses, rather than throwing, when the module throws at import', async () => {
+  const { db, close } = fresh()
+  spore('boomspore', {
+    'spore.yaml': 'kind: enzyme\nname: boomspore\nseptum: "^0.6"\n'
+      + 'commands:\n  - name: boom\n    description: x\n    code: handleBoom\n',
+    'src/index.ts': 'throw new Error("import explodes")\n',
+  })
+  recordInstall(db, 'boomspore', 'enzyme')
+  const result = await enablePlugin(db, dir, 'boomspore')
+  expect(result.ok).toBe(false)
+  if (!result.ok) expect(result.reason).toContain('import explodes')
+  expect(getInstall(db, 'boomspore')?.enabled).toBe(false)
+  close()
+})
+
+it('enabling refuses, rather than throwing, when the spore has no entry point', async () => {
+  const { db, close } = fresh()
+  spore('nocode', {
+    'spore.yaml': 'kind: enzyme\nname: nocode\nseptum: "^0.6"\n'
+      + 'commands:\n  - name: nocode\n    description: x\n    code: handleNocode\n',
+  })
+  recordInstall(db, 'nocode', 'enzyme')
+  const result = await enablePlugin(db, dir, 'nocode')
+  expect(result.ok).toBe(false)
+  if (!result.ok) expect(result.reason).toContain('no entry point')
+  close()
+})
+
+it('enabling refuses, rather than throwing, when the default export has no create()', async () => {
+  const { db, close } = fresh()
+  spore('nocreate', {
+    'spore.yaml': 'kind: enzyme\nname: nocreate\nseptum: "^0.6"\n'
+      + 'commands:\n  - name: nocreate\n    description: x\n    code: handleNocreate\n',
+    'src/index.ts': 'export default { }\n',
+  })
+  recordInstall(db, 'nocreate', 'enzyme')
+  const result = await enablePlugin(db, dir, 'nocreate')
+  expect(result.ok).toBe(false)
+  if (!result.ok) expect(result.reason).toContain('create()')
+  close()
+})
+
+it('enabling names the manifest fault instead of claiming the spore is absent', async () => {
+  const { db, close } = fresh()
+  spore('brokenyaml', { 'spore.yaml': 'kind: enzyme\nname: brokenyaml\n' })
+  recordInstall(db, 'brokenyaml', 'enzyme')
+  const result = await enablePlugin(db, dir, 'brokenyaml')
+  expect(result.ok).toBe(false)
+  if (!result.ok) {
+    // A YAML typo told the operator the directory was missing: no path to the fix.
+    expect(result.reason).not.toContain('present on disk')
+    // 'septum' is the field this manifest omits. Asserting the word 'manifest' alone
+    // passed with the guard removed, off a TypeError reading `manifest.kind`.
+    expect(result.reason).toContain("unreadable manifest: invalid manifest at 'septum'")
+  }
   close()
 })
 
