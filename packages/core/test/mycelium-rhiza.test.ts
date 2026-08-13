@@ -6,7 +6,7 @@ import type {
   HealthRead, PluginsConfigure, PluginsRead, PluginsToggle, PrincipalsManage, PrincipalsRead,
   RolesAssign, RolesManage, RolesRead,
 } from '@mycelo/septum'
-import { getInstall, recordInstall, writeSetting } from '../src/config/store.js'
+import { getInstall, recordInstall, setEnabled, writeSetting } from '../src/config/store.js'
 import { bootstrapIdentity } from '../src/identity/bootstrap.js'
 import { resolvePrincipal } from '../src/identity/resolve.js'
 import type { Registry } from '../src/germination/registry.js'
@@ -54,8 +54,8 @@ it('does not mount listPlugins when plugins.read is not granted', () => {
 it('lists germinated and dormant plugins with their reasons', () => {
   const api = createMyceliumApi(registry, ['plugins.read'], stubSend, fresh(), SPORES) as PluginsRead
   expect(api.listPlugins()).toEqual([
-    { name: 'media', kind: 'enzyme', commands: ['movies'], state: 'germinated' },
-    { name: 'broken', commands: [], state: 'dormant', reason: 'create() returned no api' },
+    { name: 'media', kind: 'enzyme', commands: ['movies'], state: 'germinated', enabled: true },
+    { name: 'broken', commands: [], state: 'dormant', reason: 'create() returned no api', enabled: true },
   ])
 })
 
@@ -72,7 +72,20 @@ it('lists a germinated inhibitor with an empty command list', () => {
     inhibitors: [{ name: 'gate', manifest: { kind: 'inhibitor', name: 'gate', septum: '^0.5', enforcing: true } }],
   } as unknown as Registry
   const api = createMyceliumApi(withInhibitor, ['plugins.read'], stubSend, fresh(), SPORES) as PluginsRead
-  expect(api.listPlugins()).toContainEqual({ name: 'gate', kind: 'inhibitor', commands: [], state: 'germinated' })
+  expect(api.listPlugins()).toContainEqual({ name: 'gate', kind: 'inhibitor', commands: [], state: 'germinated', enabled: true })
+})
+
+it('lists a disabled install that never reached the registry, distinct from dormant', () => {
+  // germinate.ts skips a disabled install before resolve() runs, so it never becomes a
+  // registry entry at all — 'quiet', an enzyme that would germinate cleanly if enabled,
+  // proves the entry comes from the install row, not from anything the registry reports.
+  const db = fresh()
+  recordInstall(db, 'quiet', 'enzyme')
+  setEnabled(db, 'quiet', false)
+  const api = createMyceliumApi(registry, ['plugins.read'], stubSend, db, SPORES) as PluginsRead
+  expect(api.listPlugins()).toContainEqual({ name: 'quiet', kind: 'enzyme', commands: [], state: 'disabled', enabled: false })
+  const quiet = api.listPlugins().find((p) => p.name === 'quiet')
+  expect(quiet?.state).not.toBe('dormant')
 })
 
 it('aggregates each germinated rhiza health', async () => {

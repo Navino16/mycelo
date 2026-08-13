@@ -37,8 +37,9 @@ it('plugin-enable reports the refusal reason verbatim', async () => {
     replies,
   )
   await module.create().handlers['handlePluginEnable']?.(invocation({ name: 'needs-config' }), ctx)
-  // Verbatim: a swallowed reason leaves the operator with "failed" and nothing to act on.
-  expect(replies[0]).toContain('url')
+  // Verbatim, not merely "contains": a swallowed or truncated reason leaves the operator
+  // with nothing to act on.
+  expect(replies[0]).toBe('configuration is incomplete: url')
 })
 
 it('plugin-disable reports success', async () => {
@@ -53,13 +54,34 @@ it('plugin-disable reports success', async () => {
   expect(replies[0]).toBe('disabled radarr')
 })
 
-it('plugin-list reports each plugin\'s kind and state', async () => {
+it('plugin-disable reports the refusal reason verbatim, not "command failed"', async () => {
+  const replies: string[] = []
+  const ctx = stubContext(
+    { disable: () => Promise.reject(new Error("plugin 'ghost' is not installed")) },
+    replies,
+  )
+  await module.create().handlers['handlePluginDisable']?.(invocation({ name: 'ghost' }), ctx)
+  expect(replies[0]).toBe("plugin 'ghost' is not installed")
+})
+
+it('plugin-set reports the refusal reason verbatim, not "command failed"', async () => {
+  const replies: string[] = []
+  const ctx = stubContext(
+    { setSetting: () => Promise.reject(new Error("plugin 'ghost' is not installed")) },
+    replies,
+  )
+  await module.create().handlers['handlePluginSet']?.(invocation({ name: 'ghost', key: 'x', value: '1' }), ctx)
+  expect(replies[0]).toBe("plugin 'ghost' is not installed")
+})
+
+it('plugin-list reports each plugin\'s kind and state, including a disabled plugin', async () => {
   const replies: string[] = []
   const ctx = stubContext(
     {
       listPlugins: () => [
-        { name: 'radarr', kind: 'rhiza', commands: [], state: 'germinated' },
-        { name: 'broken', commands: [], state: 'dormant', reason: 'manifest did not parse' },
+        { name: 'radarr', kind: 'rhiza', commands: [], state: 'germinated', enabled: true },
+        { name: 'broken', commands: [], state: 'dormant', reason: 'manifest did not parse', enabled: true },
+        { name: 'sonarr', kind: 'rhiza', commands: [], state: 'disabled', enabled: false },
       ],
     },
     replies,
@@ -67,6 +89,7 @@ it('plugin-list reports each plugin\'s kind and state', async () => {
   await module.create().handlers['handlePluginList']?.(invocation({}), ctx)
   expect(replies[0]).toContain('radarr (rhiza) — germinated')
   expect(replies[0]).toContain('broken (unknown) — dormant')
+  expect(replies[0]).toContain('sonarr (rhiza) — disabled')
 })
 
 it('plugin-config reports no settings when there are none', async () => {

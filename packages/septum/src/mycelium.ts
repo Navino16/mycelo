@@ -28,9 +28,12 @@ export interface PluginInfo {
   kind?: SporeKind
   /** Short command names, empty for any kind that declares none. */
   commands: readonly string[]
-  state: 'germinated' | 'dormant'
+  /** 'disabled' never germinated: an operator's choice, checked before dormancy is even possible. */
+  state: 'germinated' | 'dormant' | 'disabled'
   /** Present only when dormant. */
   reason?: string
+  /** Whether an operator has enabled this plugin. Always true for 'germinated' and 'dormant'. */
+  enabled: boolean
 }
 
 export interface RhizaHealth {
@@ -105,7 +108,7 @@ export interface PluginsToggle {
 }
 
 export interface PluginsConfigure {
-  /** Secret values are redacted, never returned. */
+  /** Secret values come back as the literal string '••••', never the value itself. */
   settings(name: string): Promise<Record<string, unknown>>
   /** Rejects when the plugin is not installed. */
   setSetting(name: string, key: string, value: unknown): Promise<void>

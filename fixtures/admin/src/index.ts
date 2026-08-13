@@ -107,14 +107,22 @@ export default {
       },
       handlePluginDisable: async (invocation, ctx) => {
         const mycelium = ctx.rhiza<PluginsToggle>('mycelium')
-        await mycelium.disable(invocation.args['name'] ?? '')
-        await ctx.reply({ text: `disabled ${invocation.args['name'] ?? ''}` })
+        try {
+          await mycelium.disable(invocation.args['name'] ?? '')
+          await ctx.reply({ text: `disabled ${invocation.args['name'] ?? ''}` })
+        } catch (e) {
+          await ctx.reply({ text: (e as Error).message })
+        }
       },
       handlePluginSet: async (invocation, ctx) => {
         const mycelium = ctx.rhiza<PluginsConfigure>('mycelium')
         const { name, key, value } = invocation.args
-        await mycelium.setSetting(name ?? '', key ?? '', coerce(value ?? ''))
-        await ctx.reply({ text: `set ${key ?? ''} on ${name ?? ''}` })
+        try {
+          await mycelium.setSetting(name ?? '', key ?? '', coerce(value ?? ''))
+          await ctx.reply({ text: `set ${key ?? ''} on ${name ?? ''}` })
+        } catch (e) {
+          await ctx.reply({ text: (e as Error).message })
+        }
       },
       handlePluginConfig: async (invocation, ctx) => {
         const mycelium = ctx.rhiza<PluginsConfigure>('mycelium')

@@ -18,35 +18,47 @@ import type {
   RolesAssign,
   RolesManage,
   RolesRead,
+  SporeKind,
 } from '@mycelo/septum'
 import { formSchemaFor } from './config/jsonschema.js'
 import { enablePlugin, loadSporeModule } from './config/lifecycle.js'
-import { getInstall, setEnabled, writeSetting } from './config/store.js'
+import { getInstall, listInstalls, setEnabled, writeSetting } from './config/store.js'
 import type { Registry } from './germination/registry.js'
 import type { Db } from './persistence/db.js'
 import { channelIdentity, pluginSetting, principal, principalRole, role, roleCommand } from './persistence/schema.js'
 import { describeThrown } from './support/thrown.js'
 
-function listPlugins(registry: Registry): readonly PluginInfo[] {
+// germinate.ts skips a disabled install before it can ever become a registry entry —
+// germinated or dormant — so this is the only place that can still name it.
+function listPlugins(registry: Registry, db?: Db): readonly PluginInfo[] {
   const germinated: PluginInfo[] = [
-    ...registry.hyphae.map((h) => ({ name: h.name, kind: h.manifest.kind, commands: [], state: 'germinated' as const })),
+    ...registry.hyphae.map((h) => ({ name: h.name, kind: h.manifest.kind, commands: [], state: 'germinated' as const, enabled: true })),
     ...registry.enzymes.map((e) => ({
       name: e.name,
       kind: e.manifest.kind,
       commands: e.manifest.commands.map((c) => c.name),
       state: 'germinated' as const,
+      enabled: true,
     })),
-    ...registry.rhizas.map((r) => ({ name: r.name, kind: r.manifest.kind, commands: [], state: 'germinated' as const })),
-    ...registry.inhibitors.map((i) => ({ name: i.name, kind: i.manifest.kind, commands: [], state: 'germinated' as const })),
+    ...registry.rhizas.map((r) => ({ name: r.name, kind: r.manifest.kind, commands: [], state: 'germinated' as const, enabled: true })),
+    ...registry.inhibitors.map((i) => ({ name: i.name, kind: i.manifest.kind, commands: [], state: 'germinated' as const, enabled: true })),
   ]
-  // Dormant carries no kind: a spore may fail before its manifest ever parses.
+  // Dormant carries no kind: a spore may fail before its manifest ever parses. Reaching
+  // dormant at all means germinate() did not skip it for being disabled, so enabled is true.
   const dormant: PluginInfo[] = registry.dormant.map((d) => ({
     name: d.name,
     commands: [],
     state: 'dormant' as const,
     reason: d.reason,
+    enabled: true,
   }))
-  return [...germinated, ...dormant]
+  const known = new Set([...germinated, ...dormant].map((p) => p.name))
+  const disabled: PluginInfo[] = db === undefined ? [] : listInstalls(db)
+    .filter((install) => !install.enabled && !known.has(install.name))
+    // install.kind came from manifest.kind at record time (lifecycle.ts), so this is a
+    // re-widening, not a real cast across the plugin boundary.
+    .map((install) => ({ name: install.name, kind: install.kind as SporeKind, commands: [], state: 'disabled' as const, enabled: false }))
+  return [...germinated, ...dormant, ...disabled]
 }
 
 async function aggregateHealth(registry: Registry): Promise<readonly RhizaHealth[]> {
@@ -263,7 +275,7 @@ export function createMyceliumApi(
     RolesRead & RolesAssign & RolesManage & PluginsToggle & PluginsConfigure
   >
 
-  if (granted.has('plugins.read')) api.listPlugins = () => listPlugins(registry)
+  if (granted.has('plugins.read')) api.listPlugins = () => listPlugins(registry, db)
   if (granted.has('health.read')) api.health = () => aggregateHealth(registry)
   if (granted.has('messages.send')) api.send = send
 

@@ -13,6 +13,9 @@ Added:
   `settings(name)` (secrets redacted to `••••`), `setSetting(name, key, value)`, `formSchema(name)`.
 - `PluginsToggle`, the interface `plugins.toggle` mounts: `enable(name)`, `disable(name)`. The scope
   already parsed but mounted nothing and left the spore dormant; it now works.
+- `PluginInfo.enabled`, and a third `state` value, `'disabled'`: a plugin an operator disabled
+  never reaches germination, so it never had a registry entry to report through `listPlugins()`
+  at all until now.
 
 The conformance kit now rejects a `configSchema.toJsonSchema` that is present but not callable,
 across `hyphaChecks`, `rhizaChecks`, `enzymeChecks` and `inhibitorChecks`.

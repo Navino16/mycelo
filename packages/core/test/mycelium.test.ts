@@ -311,7 +311,7 @@ it("wires ctx.rhiza('mycelium') to the real, scope-gated API during an enzyme's 
   // Hyphae connect before any enzyme starts (design §2.1), so 'channel' is already
   // germinated when 'admin' calls this from its own start().
   expect(observed.plugins).toEqual([
-    { name: 'channel', kind: 'hypha', commands: [], state: 'germinated' },
+    { name: 'channel', kind: 'hypha', commands: [], state: 'germinated', enabled: true },
   ])
 })
 
@@ -476,9 +476,9 @@ it("keeps the mycelium's plugin list consistent with bootstrap()'s own registry 
   // 'bad' failed listen() and bootstrap()'s own registry demotes it to dormant-only
   // (registry.hyphae above); the mycelium's own view must agree, not list it twice.
   expect(observed.plugins).toEqual([
-    { name: 'good', kind: 'hypha', commands: [], state: 'germinated' },
-    { name: 'admin', kind: 'enzyme', commands: ['probe'], state: 'germinated' },
-    { name: 'bad', commands: [], state: 'dormant', reason: 'boom' },
+    { name: 'good', kind: 'hypha', commands: [], state: 'germinated', enabled: true },
+    { name: 'admin', kind: 'enzyme', commands: ['probe'], state: 'germinated', enabled: true },
+    { name: 'bad', commands: [], state: 'dormant', reason: 'boom', enabled: true },
   ])
 })
 
@@ -541,7 +541,7 @@ it("keeps the mycelium's plugin list consistent when an inhibitor's start() thro
   const observed = (admin?.instance as unknown as { observed: Record<string, unknown> }).observed
   const listed = observed.plugins as Record<string, unknown>[]
   expect(listed.filter((p) => p.name === 'softgate')).toEqual([
-    { name: 'softgate', commands: [], state: 'dormant', reason: 'gate cannot start' },
+    { name: 'softgate', commands: [], state: 'dormant', reason: 'gate cannot start', enabled: true },
   ])
 })
 
