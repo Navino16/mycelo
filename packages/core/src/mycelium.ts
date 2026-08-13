@@ -101,6 +101,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     (target, content) => sendVia(hyphaByName, target.channel, target.conversationId, content),
     db,
     config.sporesDir,
+    config.defaultRole,
   )
   for (const name of registry.order) {
     const rhiza = rhizaByName.get(name)

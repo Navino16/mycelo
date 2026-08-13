@@ -133,6 +133,7 @@ export function createBus({
       (target, content) => send(target.channel, target.conversationId, content),
       db,
       sporesDir,
+      defaultRole,
     ))
 
   // One context per enzyme, because `resolved` and `scopes` differ per spore

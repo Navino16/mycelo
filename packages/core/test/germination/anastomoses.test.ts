@@ -187,4 +187,19 @@ describe('MOUNTABLE_SCOPES against MYCELIUM_SCOPES', () => {
     expect(r.dormant[0]?.reason).toContain("scope 'future.scope'")
     expect(r.dormant[0]?.reason).not.toContain('phase 5')
   })
+
+  it('a scope with no SCOPE_PHASE entry does not claim a phase', () => {
+    // SCOPE_PHASE is empty since phase 5 mounted every scope MYCELIUM_SCOPES declares;
+    // the `?? 5` literal it once fell back to would now announce a phase already shipped.
+    const r = resolve([{
+      location: { path: '/spores/other', directory: 'other', manifestPath: '/spores/other/spore.yaml' },
+      manifest: {
+        kind: 'enzyme', name: 'other', septum: '^0.6',
+        commands: [{ name: 'other', description: 'x', respond: 'hi' }],
+        requires: [{ rhiza: 'mycelium', scopes: ['another.scope'] }],
+      },
+    }] as unknown as Parameters<typeof resolve>[0])
+    expect(r.dormant[0]?.reason).not.toContain('phase')
+    expect(r.dormant[0]?.reason).toContain('does not mount')
+  })
 })

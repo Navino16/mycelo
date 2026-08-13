@@ -155,6 +155,15 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
     await rejectsWith(manage.deleteRole('typo'), /typo/)
   })
 
+  it('refuses to delete the configured default role', async () => {
+    const db = fresh()
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES, 'newcomer') as RolesManage
+    await manage.createRole('newcomer', [])
+    // Boot refuses this state with a StartupError; deleting into it at runtime must not
+    // leave first contact throwing on every new sender.
+    await rejectsWith(manage.deleteRole('newcomer'), /default role/)
+  })
+
   it('rejects rewriting a role that does not exist, naming it', async () => {
     const db = fresh()
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage

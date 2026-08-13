@@ -194,10 +194,15 @@ function setRoleCommands(db: Db, name: string, patterns: readonly string[]): voi
   })
 }
 
-function deleteRole(db: Db, name: string): void {
+function deleteRole(db: Db, name: string, defaultRole?: string): void {
   const found = findRole(db, name)
   if (found === undefined) throw new Error(`role '${name}' does not exist`)
   if (found.builtin) throw new Error(`role '${name}' is builtin and cannot be deleted`)
+  // Boot raises a StartupError for a missing defaultRole; deleting into that state would
+  // leave every first contact throwing until someone restarts and sees why.
+  if (defaultRole !== undefined && name === defaultRole) {
+    throw new Error(`role '${name}' is the configured default role and cannot be deleted`)
+  }
   db.delete(role).where(eq(role.id, found.id)).run()
 }
 
@@ -266,6 +271,7 @@ export function createMyceliumApi(
   send: (target: PushTarget, content: OutgoingContent) => Promise<void>,
   db: Db,
   sporesDir: string,
+  defaultRole?: string,
 ): object {
   const granted = new Set(scopes)
   // No prototype: a global Object.prototype pollution must not forge an absent scope
@@ -299,7 +305,7 @@ export function createMyceliumApi(
   if (granted.has('roles.manage')) {
     api.createRole = (name, patterns) => toPromise(() => createRole(db, name, patterns))
     api.setRoleCommands = (name, patterns) => toPromise(() => setRoleCommands(db, name, patterns))
-    api.deleteRole = (name) => toPromise(() => deleteRole(db, name))
+    api.deleteRole = (name) => toPromise(() => deleteRole(db, name, defaultRole))
   }
   if (granted.has('plugins.toggle')) {
     api.enable = (name) => enableOrThrow(db, sporesDir, name)
