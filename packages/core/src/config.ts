@@ -49,7 +49,13 @@ export function loadBootstrap(file: string): Bootstrap {
   const result = bootstrapSchema.safeParse(raw)
   if (!result.success) {
     const issue = result.error.issues[0]
-    throw new BootstrapError(issue?.message ?? 'invalid bootstrap', issue?.path.join('.') ?? '')
+    const path = issue?.path.join('.') ?? ''
+    // index.ts prints the message and nothing else, and Zod's text is identical for any
+    // field of the same type. `plugins` is named outright: it is this phase's migration.
+    const message = path === 'plugins'
+      ? "remove the 'plugins:' block from mycelo.yaml — plugin settings now live in the database"
+      : `${path === '' ? '' : `${path}: `}${issue?.message ?? 'invalid bootstrap'}`
+    throw new BootstrapError(message, path)
   }
   return {
     ...result.data,

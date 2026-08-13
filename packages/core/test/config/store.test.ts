@@ -39,6 +39,15 @@ it('readAllSettings keys by plugin and includes an install with no settings', ()
   close()
 })
 
+it('records an install already enabled, in one write', () => {
+  const { db, close } = fresh()
+  recordInstall(db, 'radarr', 'rhiza', true)
+  // The first run used to record then enable: a crash between the two left a row the
+  // next boot could no longer recognise as belonging to a first run.
+  expect(getInstall(db, 'radarr')?.enabled).toBe(true)
+  close()
+})
+
 it('recording an install twice does not reset its enabled flag', () => {
   const { db, close } = fresh()
   recordInstall(db, 'radarr', 'rhiza')

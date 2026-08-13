@@ -21,7 +21,7 @@ import type {
   SporeKind,
 } from '@mycelo/septum'
 import { formSchemaFor } from './config/jsonschema.js'
-import { enablePlugin, loadSporeModule } from './config/lifecycle.js'
+import { enablePlugin, findSpore, loadSporeModule } from './config/lifecycle.js'
 import { getInstall, listInstalls, setEnabled, writeSetting } from './config/store.js'
 import type { Registry } from './germination/registry.js'
 import type { Db } from './persistence/db.js'
@@ -29,8 +29,9 @@ import { channelIdentity, pluginSetting, principal, principalRole, role, roleCom
 import { describeThrown } from './support/thrown.js'
 
 // germinate.ts skips a disabled install before it can ever become a registry entry —
-// germinated or dormant — so this is the only place that can still name it.
-function listPlugins(registry: Registry, db?: Db): readonly PluginInfo[] {
+// germinated or dormant — so this is the only place that can still name it, and the only
+// place that can name an install whose spore has gone from disk.
+function listPlugins(registry: Registry, sporesDir: string, db?: Db): readonly PluginInfo[] {
   const germinated: PluginInfo[] = [
     ...registry.hyphae.map((h) => ({ name: h.name, kind: h.manifest.kind, commands: [], state: 'germinated' as const, enabled: true })),
     ...registry.enzymes.map((e) => ({
@@ -43,8 +44,9 @@ function listPlugins(registry: Registry, db?: Db): readonly PluginInfo[] {
     ...registry.rhizas.map((r) => ({ name: r.name, kind: r.manifest.kind, commands: [], state: 'germinated' as const, enabled: true })),
     ...registry.inhibitors.map((i) => ({ name: i.name, kind: i.manifest.kind, commands: [], state: 'germinated' as const, enabled: true })),
   ]
-  // Dormant carries no kind: a spore may fail before its manifest ever parses. Reaching
-  // dormant at all means germinate() did not skip it for being disabled, so enabled is true.
+  // Dormant carries no kind: a spore may fail before its manifest ever parses. `enabled`
+  // is what germination saw, like every other entry here — an operator's later toggle is
+  // only reflected by the next germination.
   const dormant: PluginInfo[] = registry.dormant.map((d) => ({
     name: d.name,
     commands: [],
@@ -53,12 +55,24 @@ function listPlugins(registry: Registry, db?: Db): readonly PluginInfo[] {
     enabled: true,
   }))
   const known = new Set([...germinated, ...dormant].map((p) => p.name))
-  const disabled: PluginInfo[] = db === undefined ? [] : listInstalls(db)
-    .filter((install) => !install.enabled && !known.has(install.name))
-    // install.kind came from manifest.kind at record time (lifecycle.ts), so this is a
-    // re-widening, not a real cast across the plugin boundary.
-    .map((install) => ({ name: install.name, kind: install.kind as SporeKind, commands: [], state: 'disabled' as const, enabled: false }))
-  return [...germinated, ...dormant, ...disabled]
+  // install.kind came from manifest.kind at record time (lifecycle.ts), so widening it
+  // back is not a real cast across the plugin boundary.
+  const rest: PluginInfo[] = db === undefined ? [] : listInstalls(db)
+    .filter((install) => !known.has(install.name))
+    .flatMap((install): PluginInfo[] => {
+      const base = { name: install.name, kind: install.kind as SporeKind, commands: [] }
+      if (!install.enabled) return [{ ...base, state: 'disabled' as const, enabled: false }]
+      // syncInstalls keeps the row of a spore whose directory has gone, so the operator
+      // can recover it — which requires being able to see that it is still there.
+      if (findSpore(sporesDir, install.name) !== undefined) return []
+      return [{
+        ...base,
+        state: 'dormant' as const,
+        reason: `no spore named '${install.name}' is present on disk`,
+        enabled: true,
+      }]
+    })
+  return [...germinated, ...dormant, ...rest]
 }
 
 async function aggregateHealth(registry: Registry): Promise<readonly RhizaHealth[]> {
@@ -234,6 +248,9 @@ async function formSchemaOf(db: Db, sporesDir: string, name: string): Promise<Fo
 // The reason plugins.configure is safe to grant: a scope that lists configuration must
 // not become a way to read every credential in the substrate.
 function redactSecrets(db: Db, name: string): Record<string, unknown> {
+  // Its three siblings on this interface reject for an unknown plugin; resolving {} here
+  // read exactly like a real plugin holding no settings.
+  if (getInstall(db, name) === null) throw new Error(`plugin '${name}' is not installed`)
   const rows = db.select().from(pluginSetting).where(eq(pluginSetting.pluginName, name)).all()
   const out: Record<string, unknown> = {}
   for (const row of rows) {
@@ -241,6 +258,26 @@ function redactSecrets(db: Db, name: string): Record<string, unknown> {
     out[row.key] = parsed
   }
   return out
+}
+
+/**
+ * Refuses a key the plugin's own JSON Schema does not declare. Both Zod and a hand-built
+ * schema strip an unknown key in silence, so the write was confirmed, shown back by
+ * settings(), and ignored by the plugin. A plugin publishing no schema is unguarded.
+ */
+async function writeDeclaredSetting(
+  db: Db, sporesDir: string, name: string, key: string, value: unknown,
+): Promise<void> {
+  const form = await formSchemaOf(db, sporesDir, name)
+  if (form.available) {
+    const properties: unknown = (form.schema as { properties?: unknown }).properties
+    // hasOwn, never `in`: the schema is a plugin-supplied plain object, and 'constructor'
+    // is a key an operator can type.
+    if (typeof properties === 'object' && properties !== null && !Object.hasOwn(properties, key)) {
+      throw new Error(`plugin '${name}' declares no setting '${key}'`)
+    }
+  }
+  rewriteSetting(db, name, key, value)
 }
 
 // Carries the row's is_secret forward: writeSetting() rewrites that column too, so a
@@ -281,7 +318,7 @@ export function createMyceliumApi(
     RolesRead & RolesAssign & RolesManage & PluginsToggle & PluginsConfigure
   >
 
-  if (granted.has('plugins.read')) api.listPlugins = () => listPlugins(registry, db)
+  if (granted.has('plugins.read')) api.listPlugins = () => listPlugins(registry, sporesDir, db)
   if (granted.has('health.read')) api.health = () => aggregateHealth(registry)
   if (granted.has('messages.send')) api.send = send
 
@@ -313,7 +350,7 @@ export function createMyceliumApi(
   }
   if (granted.has('plugins.configure')) {
     api.settings = (name) => toPromise(() => redactSecrets(db, name))
-    api.setSetting = (name, key, value) => toPromise(() => { rewriteSetting(db, name, key, value) })
+    api.setSetting = (name, key, value) => writeDeclaredSetting(db, sporesDir, name, key, value)
     api.formSchema = (name) => formSchemaOf(db, sporesDir, name)
   }
 

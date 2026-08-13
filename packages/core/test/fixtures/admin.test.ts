@@ -99,6 +99,18 @@ it('plugin-config reports no settings when there are none', async () => {
   expect(replies[0]).toBe('no settings')
 })
 
+// settings() now rejects for an uninstalled plugin, so the one handler with no catch
+// would answer "command 'plugin-config' failed" instead of naming the plugin.
+it('plugin-config reports the refusal reason verbatim, not "command failed"', async () => {
+  const replies: string[] = []
+  const ctx = stubContext(
+    { settings: () => Promise.reject(new Error("plugin 'ghost' is not installed")) },
+    replies,
+  )
+  await module.create().handlers['handlePluginConfig']?.(invocation({ name: 'ghost' }), ctx)
+  expect(replies[0]).toBe("plugin 'ghost' is not installed")
+})
+
 it('plugin-config lists settings, secrets already redacted by the mycelium', async () => {
   const replies: string[] = []
   const ctx = stubContext(

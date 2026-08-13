@@ -126,7 +126,13 @@ export default {
       },
       handlePluginConfig: async (invocation, ctx) => {
         const mycelium = ctx.rhiza<PluginsConfigure>('mycelium')
-        const settings = await mycelium.settings(invocation.args['name'] ?? '')
+        let settings: Record<string, unknown>
+        try {
+          settings = await mycelium.settings(invocation.args['name'] ?? '')
+        } catch (e) {
+          await ctx.reply({ text: (e as Error).message })
+          return
+        }
         const entries = Object.entries(settings)
         await ctx.reply({
           text: entries.length === 0 ? 'no settings' : entries.map(([k, v]) => `${k} = ${String(v)}`).join('\n'),

@@ -1,4 +1,4 @@
-import type { SporeModule } from '@mycelo/septum'
+import type { ConfigSchema, SporeModule } from '@mycelo/septum'
 import { discover } from '../germination/discover.js'
 import { loadModule } from '../germination/load.js'
 import { isFailure, readManifest } from '../germination/manifest.js'
@@ -17,18 +17,22 @@ export interface EnableRefusal { ok: false, reason: string }
  */
 export function syncInstalls(db: Db, sporesDir: string): { added: readonly string[] } {
   // An all-disabled first run cannot be undone from a channel: /plugin-enable lives in
-  // `admin`, which would be disabled too.
+  // `admin`, which would be disabled too. Hence one transaction and one write per spore:
+  // a crash mid-walk must leave the table empty, so the next boot is still a first run.
   const firstRun = listInstalls(db).length === 0
   const added: string[] = []
-  for (const location of discover(sporesDir)) {
-    const read = readManifest(location)
-    if (isFailure(read)) continue
-    const { manifest } = read
-    if (getInstall(db, manifest.name) !== null) continue
-    recordInstall(db, manifest.name, manifest.kind)
-    if (firstRun) setEnabled(db, manifest.name, true)
-    added.push(manifest.name)
-  }
+  // Statements issued through `db` inside this callback run on the same connection, and
+  // therefore inside the BEGIN the driver opened for it.
+  db.transaction(() => {
+    for (const location of discover(sporesDir)) {
+      const read = readManifest(location)
+      if (isFailure(read)) continue
+      const { manifest } = read
+      if (getInstall(db, manifest.name) !== null) continue
+      recordInstall(db, manifest.name, manifest.kind, firstRun)
+      added.push(manifest.name)
+    }
+  })
   return { added }
 }
 
@@ -36,7 +40,7 @@ export function syncInstalls(db: Db, sporesDir: string): { added: readonly strin
  * The spore of that name on disk. A manifest that failed to parse carries no validated
  * name, so it is matched on its directory instead — all a failed manifest leaves.
  */
-function findSpore(sporesDir: string, name: string): ReadManifest | ManifestFailure | undefined {
+export function findSpore(sporesDir: string, name: string): ReadManifest | ManifestFailure | undefined {
   for (const location of discover(sporesDir)) {
     const read = readManifest(location)
     if (isFailure(read)) {
@@ -81,8 +85,15 @@ export async function enablePlugin(db: Db, sporesDir: string, name: string): Pro
     return { ok: false, reason: `spore '${name}' failed to load: ${describeThrown(e)}` }
   }
   if (module?.configSchema !== undefined) {
-    // Duck-typed, never instanceof: the schema came from the spore's own bundled Zod.
-    const parsed = module.configSchema.safeParse(readSettings(db, name))
+    let parsed: ReturnType<ConfigSchema<unknown>['safeParse']>
+    try {
+      // Duck-typed, never instanceof: the schema came from the spore's own bundled Zod.
+      // Both calls throw — readSettings on a corrupt row, safeParse on any .refine()
+      // predicate that does — and the declared return type says this one never rejects.
+      parsed = module.configSchema.safeParse(readSettings(db, name))
+    } catch (e) {
+      return { ok: false, reason: `configuration is incomplete: validating it threw: ${describeThrown(e)}` }
+    }
     if (!parsed.success) {
       return { ok: false, reason: `configuration is incomplete: ${String(parsed.error)}` }
     }

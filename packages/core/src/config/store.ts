@@ -19,9 +19,9 @@ export function getInstall(db: Db, name: string): InstalledPlugin | null {
 
 // onConflictDoNothing, never an upsert: re-recording an install must not silently
 // disable a plugin the operator already enabled.
-export function recordInstall(db: Db, name: string, kind: string): void {
+export function recordInstall(db: Db, name: string, kind: string, enabled = false): void {
   db.insert(pluginInstall)
-    .values({ name, kind, enabled: false, installedAt: new Date() })
+    .values({ name, kind, enabled, installedAt: new Date() })
     .onConflictDoNothing()
     .run()
 }

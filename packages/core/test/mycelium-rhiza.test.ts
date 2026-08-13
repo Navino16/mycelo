@@ -393,4 +393,97 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
     const api = createMyceliumApi(emptyRegistry(), ['plugins.toggle'], noSend, fresh(), SPORES) as PluginsToggle
     await rejectsWith(api.disable('ghost'), /'ghost' is not installed/)
   })
+
+  // setSetting, formSchema and enable all reject for an uninstalled plugin; settings()
+  // answered {}, which a caller cannot tell from a real plugin holding no settings.
+  it('rejects settings for a plugin that is not installed', async () => {
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, fresh(), SPORES) as PluginsConfigure
+    await rejectsWith(api.settings('ghost'), /'ghost' is not installed/)
+  })
+})
+
+// A misspelled key was written, confirmed, and then shown back by /plugin-config while the
+// plugin went on using its default — fail-open on a spore whose whole purpose is a rule.
+describe('setSetting against the keys the plugin declares', () => {
+  const DECLARING_MODULE = `
+    export default {
+      configSchema: {
+        safeParse: (input) => ({ success: true, data: input }),
+        toJsonSchema: () => ({ type: 'object', properties: { url: { type: 'string' } } }),
+      },
+      create: () => ({ handlers: { handleIt: async () => {} } }),
+    }
+  `
+
+  function declaring(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'mycelo-declared-'))
+    mkdirSync(join(dir, 'declares', 'src'), { recursive: true })
+    writeFileSync(
+      join(dir, 'declares', 'spore.yaml'),
+      'kind: enzyme\nname: declares\nseptum: "^0.6"\n'
+        + 'commands:\n  - name: declares\n    description: x\n    code: handleIt\n',
+      'utf8',
+    )
+    writeFileSync(join(dir, 'declares', 'src/index.ts'), DECLARING_MODULE, 'utf8')
+    return dir
+  }
+
+  it('rejects a key the published JSON Schema does not declare, and accepts one it does', async () => {
+    const db = fresh()
+    const dir = declaring()
+    try {
+      recordInstall(db, 'declares', 'enzyme')
+      const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, dir) as PluginsConfigure
+      await rejectsWith(api.setSetting('declares', 'ur1', 'http://x'), /'declares' declares no setting 'ur1'/)
+      expect(await api.settings('declares')).toEqual({})
+      await api.setSetting('declares', 'url', 'http://x')
+      expect(await api.settings('declares')).toEqual({ url: 'http://x' })
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('still writes any key for a plugin that publishes no JSON Schema', async () => {
+    const db = fresh()
+    recordInstall(db, 'gate', 'inhibitor')
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, SPORES) as PluginsConfigure
+    // gate builds its ConfigSchema by hand and emits no schema, so nothing here knows
+    // which keys exist. The ledger records that half; it is not closed by this guard.
+    await api.setSetting('gate', 'group_id', 'flatmates')
+    expect(await api.settings('gate')).toEqual({ group_id: 'flatmates' })
+  })
+})
+
+// syncInstalls keeps the row of a spore whose directory has gone, so an operator's
+// settings survive an unmounted volume — and then nothing could report that it exists.
+describe('an install with no spore on disk', () => {
+  it('is reported dormant when it is enabled, rather than vanishing from the listing', () => {
+    const db = fresh()
+    recordInstall(db, 'vanished', 'rhiza')
+    setEnabled(db, 'vanished', true)
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.read'], noSend, db, SPORES) as PluginsRead
+    expect(api.listPlugins()).toContainEqual({
+      name: 'vanished', kind: 'rhiza', commands: [],
+      state: 'dormant', reason: "no spore named 'vanished' is present on disk", enabled: true,
+    })
+  })
+
+  it('is still reported disabled when it is disabled', () => {
+    const db = fresh()
+    recordInstall(db, 'vanished', 'rhiza')
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.read'], noSend, db, SPORES) as PluginsRead
+    expect(api.listPlugins()).toContainEqual({
+      name: 'vanished', kind: 'rhiza', commands: [], state: 'disabled', enabled: false,
+    })
+  })
+
+  // The other half of the same line, deferred to phase 6: a plugin enabled since startup
+  // is on disk and will germinate at the next restart, so it is staleness, not a hole.
+  it('stays absent while the spore is on disk but has not germinated yet', () => {
+    const db = fresh()
+    recordInstall(db, 'ping', 'enzyme')
+    setEnabled(db, 'ping', true)
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.read'], noSend, db, SPORES) as PluginsRead
+    expect(api.listPlugins().map((p) => p.name)).not.toContain('ping')
+  })
 })

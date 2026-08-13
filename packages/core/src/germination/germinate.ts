@@ -38,6 +38,11 @@ export async function germinate(
   for (const location of discover(sporesDir)) {
     const read = readManifest(location)
     if (isFailure(read)) {
+      // Matched on the directory, the identity listPlugins() and findSpore() already use
+      // for a spore with no parseable manifest. Without this, a YAML typo in a disabled
+      // enforcing inhibitor refuses all traffic, and admission runs before parsing — so
+      // /plugin-disable cannot undo what it says it already did.
+      if (db !== undefined && getInstall(db, location.directory)?.enabled === false) continue
       dormant.push({ name: location.directory, reason: read.reason })
       // No validated name to report: the directory is all a failed manifest leaves.
       if (read.enforcingInhibitor) brokenEnforcing.push(location.directory)

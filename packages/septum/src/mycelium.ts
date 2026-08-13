@@ -28,11 +28,18 @@ export interface PluginInfo {
   kind?: SporeKind
   /** Short command names, empty for any kind that declares none. */
   commands: readonly string[]
-  /** 'disabled' never germinated: an operator's choice, checked before dormancy is even possible. */
+  /**
+   * 'germinated' and 'dormant' are what germination reached; 'disabled' is an install
+   * row the operator switched off, which germination skips without loading it.
+   */
   state: 'germinated' | 'dormant' | 'disabled'
   /** Present only when dormant. */
   reason?: string
-  /** Whether an operator has enabled this plugin. Always true for 'germinated' and 'dormant'. */
+  /**
+   * Enabled as of the germination that produced this entry. A later enable() or
+   * disable() is reflected only by the next germination, so a settings UI must not
+   * render its toggle from this field alone.
+   */
   enabled: boolean
 }
 
@@ -108,9 +115,15 @@ export interface PluginsToggle {
 }
 
 export interface PluginsConfigure {
-  /** Secret values come back as the literal string '••••', never the value itself. */
+  /**
+   * Rejects when the plugin is not installed. Secret values come back as the literal
+   * string '••••', never the value itself.
+   */
   settings(name: string): Promise<Record<string, unknown>>
-  /** Rejects when the plugin is not installed. */
+  /**
+   * Rejects when the plugin is not installed, or when it publishes a JSON Schema that
+   * declares no such key — an undeclared key is stripped in silence at validation.
+   */
   setSetting(name: string, key: string, value: unknown): Promise<void>
   /** Resolves an `available: false` FormSchema rather than rejecting, whatever went wrong. */
   formSchema(name: string): Promise<FormSchema>
