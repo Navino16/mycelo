@@ -1,5 +1,14 @@
 import type { FormSchema } from '@mycelo/septum'
 
+/** `instanceof` and the message read can both throw on a hostile `e`; both stay inside this try. */
+function describeThrown(e: unknown): string {
+  try {
+    return e instanceof Error ? e.message : 'unknown error'
+  } catch {
+    return 'unknown error'
+  }
+}
+
 /**
  * Duck-typed throughout: the argument was built by the plugin's own copy of Zod and septum,
  * so nothing here may assume an instance of anything the core owns.
@@ -22,16 +31,6 @@ export function formSchemaFor(configSchema: unknown): FormSchema {
     }
     return { available: true, schema }
   } catch (e) {
-    // instanceof Error holds under Bun's single realm; the nested try guards a subclass
-    // that overrides `message` with a throwing getter.
-    let reason = 'the schema cannot be converted'
-    if (e instanceof Error) {
-      try {
-        reason = `the schema cannot be converted: ${e.message}`
-      } catch {
-        // keep the generic reason
-      }
-    }
-    return { available: false, reason }
+    return { available: false, reason: `the schema cannot be converted: ${describeThrown(e)}` }
   }
 }

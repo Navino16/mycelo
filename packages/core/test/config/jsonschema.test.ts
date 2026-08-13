@@ -60,13 +60,50 @@ it('a toJsonSchema returning a thenable is rejected, not accepted as a form', ()
   expect(result.available).toBe(false)
 })
 
-it('a toJsonSchema that throws a value with a throwing message getter degrades instead of throwing', () => {
+it('a toJsonSchema that throws a non-Error is skipped by instanceof before message is ever read', () => {
   const poisoned = { get message(): string { throw new Error('escaped') } }
   const hostile = {
     toJsonSchema: () => {
       // Cast only to satisfy the type-aware throw-error lint rule: at runtime this is
       // still the plain object above, exercising a foreign, non-Error throw.
       throw poisoned as unknown as Error
+    },
+  }
+  expect(() => formSchemaFor(hostile)).not.toThrow()
+  const result = formSchemaFor(hostile)
+  expect(result.available).toBe(false)
+})
+
+it('a toJsonSchema that throws a Proxy whose getPrototypeOf trap throws degrades instead of throwing', () => {
+  const hostileProxy = new Proxy(
+    {},
+    {
+      getPrototypeOf() {
+        throw new Error('trap threw')
+      },
+    },
+  )
+  const hostile = {
+    toJsonSchema: () => {
+      // Cast only to satisfy the type-aware throw-error lint rule: at runtime this is
+      // still the plain Proxy above, whose prototype trap is what's under test.
+      throw hostileProxy as unknown as Error
+    },
+  }
+  expect(() => formSchemaFor(hostile)).not.toThrow()
+  const result = formSchemaFor(hostile)
+  expect(result.available).toBe(false)
+})
+
+it('an Error subclass overriding message with a throwing getter degrades instead of throwing', () => {
+  class HostileError extends Error {
+    override get message(): string {
+      throw new Error('escaped via subclass')
+    }
+  }
+  const hostile = {
+    toJsonSchema: () => {
+      throw new HostileError()
     },
   }
   expect(() => formSchemaFor(hostile)).not.toThrow()
