@@ -59,3 +59,17 @@ it('a toJsonSchema returning a thenable is rejected, not accepted as a form', ()
   const result = formSchemaFor(handRolled)
   expect(result.available).toBe(false)
 })
+
+it('a toJsonSchema that throws a value with a throwing message getter degrades instead of throwing', () => {
+  const poisoned = { get message(): string { throw new Error('escaped') } }
+  const hostile = {
+    toJsonSchema: () => {
+      // Cast only to satisfy the type-aware throw-error lint rule: at runtime this is
+      // still the plain object above, exercising a foreign, non-Error throw.
+      throw poisoned as unknown as Error
+    },
+  }
+  expect(() => formSchemaFor(hostile)).not.toThrow()
+  const result = formSchemaFor(hostile)
+  expect(result.available).toBe(false)
+})

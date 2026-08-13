@@ -22,6 +22,16 @@ export function formSchemaFor(configSchema: unknown): FormSchema {
     }
     return { available: true, schema }
   } catch (e) {
-    return { available: false, reason: `the schema cannot be converted: ${(e as Error).message}` }
+    // instanceof Error holds under Bun's single realm; the nested try guards a subclass
+    // that overrides `message` with a throwing getter.
+    let reason = 'the schema cannot be converted'
+    if (e instanceof Error) {
+      try {
+        reason = `the schema cannot be converted: ${e.message}`
+      } catch {
+        // keep the generic reason
+      }
+    }
+    return { available: false, reason }
   }
 }
