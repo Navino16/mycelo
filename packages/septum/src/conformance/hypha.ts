@@ -1,4 +1,5 @@
 import { parseManifest } from '../manifest.js'
+import { configSchemaFailures } from './config-checks.js'
 import type { HyphaModule } from '../hypha.js'
 
 export interface HyphaHarness {
@@ -40,18 +41,9 @@ export async function hyphaChecks(harness: HyphaHarness): Promise<string[]> {
     return failures
   }
 
-  // Each sub-check is gated on its own input: safeParse(undefined) fails against
-  // any z.object(), so an ungated check would punish an author who declares only
-  // an invalidConfig.
-  const schema = harness.module.configSchema
-  if (schema !== undefined) {
-    if (harness.validConfig !== undefined && !schema.safeParse(harness.validConfig).success) {
-      failures.push('configSchema rejects the declared valid config')
-    }
-    if (harness.invalidConfig !== undefined && schema.safeParse(harness.invalidConfig).success) {
-      failures.push('configSchema accepts the declared invalid config')
-    }
-  }
+  failures.push(
+    ...configSchemaFailures(harness.module.configSchema, harness.validConfig, harness.invalidConfig),
+  )
 
   let instance
   try {

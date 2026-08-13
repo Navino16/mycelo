@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { parseManifest } from '@mycelo/septum'
-import { CycleError, resolve } from '../../src/germination/anastomoses.js'
+import { MYCELIUM_SCOPES, parseManifest } from '@mycelo/septum'
+import { CycleError, MOUNTABLE_SCOPES, resolve } from '../../src/germination/anastomoses.js'
 import type { ReadManifest } from '../../src/germination/manifest.js'
 
 function read(raw: Record<string, unknown>): ReadManifest {
@@ -99,9 +99,11 @@ describe('resolve', () => {
     expect(r.order[0]?.scopes).toEqual(['plugins.read'])
   })
 
-  it('leaves a spore dormant when it asks for a scope this phase cannot mount', () => {
+  it('resolves a spore requiring plugins.toggle, which phase 5 mounts', () => {
     const r = resolve([enzyme('toggler', [{ rhiza: 'mycelium', scopes: ['plugins.toggle'] }])])
-    expect(r.dormant[0]?.reason).toBe("requires mycelium scope 'plugins.toggle', which arrives in phase 5")
+    expect(names(r)).toEqual(['toggler'])
+    expect(r.dormant).toEqual([])
+    expect(r.order[0]?.scopes).toEqual(['plugins.toggle'])
   })
 
   it('resolves a spore requiring principals.manage, which is mounted', () => {
@@ -157,5 +159,47 @@ describe('resolve', () => {
     const r = resolve([rhiza('mock'), rhiza('mock')])
     expect(names(r)).toEqual(['mock'])
     expect(r.dormant[0]?.reason).toContain('already claimed')
+  })
+})
+
+// The pair phase 4 broke: two correct halves, no test comparing them. Held in both
+// directions, so adding a name to either list alone goes red.
+describe('MOUNTABLE_SCOPES against MYCELIUM_SCOPES', () => {
+  it('mounts every declared scope, and mounts nothing septum does not declare', () => {
+    const declared = new Set<string>(MYCELIUM_SCOPES)
+    expect(MOUNTABLE_SCOPES.filter((s) => !declared.has(s))).toEqual([])
+    const mountable = new Set<string>(MOUNTABLE_SCOPES)
+    expect(MYCELIUM_SCOPES.filter((s) => !mountable.has(s))).toEqual([])
+  })
+
+  it('leaves a spore dormant for a scope the core does not mount, naming it', () => {
+    const r = resolve([{
+      location: { path: '/spores/future', directory: 'future', manifestPath: '/spores/future/spore.yaml' },
+      manifest: {
+        kind: 'enzyme', name: 'future', septum: '^0.6',
+        commands: [{ name: 'future', description: 'x', respond: 'hi' }],
+        // Bypasses parseManifest deliberately: septum's z.enum makes an unmountable scope
+        // unparseable, so the guard is only reachable from a hand-built manifest.
+        requires: [{ rhiza: 'mycelium', scopes: ['future.scope'] }],
+      },
+    }] as unknown as Parameters<typeof resolve>[0])
+    expect(r.order).toEqual([])
+    expect(r.dormant[0]?.reason).toContain("scope 'future.scope'")
+    expect(r.dormant[0]?.reason).not.toContain('phase 5')
+  })
+
+  it('a scope with no SCOPE_PHASE entry does not claim a phase', () => {
+    // SCOPE_PHASE is empty since phase 5 mounted every scope MYCELIUM_SCOPES declares;
+    // the `?? 5` literal it once fell back to would now announce a phase already shipped.
+    const r = resolve([{
+      location: { path: '/spores/other', directory: 'other', manifestPath: '/spores/other/spore.yaml' },
+      manifest: {
+        kind: 'enzyme', name: 'other', septum: '^0.6',
+        commands: [{ name: 'other', description: 'x', respond: 'hi' }],
+        requires: [{ rhiza: 'mycelium', scopes: ['another.scope'] }],
+      },
+    }] as unknown as Parameters<typeof resolve>[0])
+    expect(r.dormant[0]?.reason).not.toContain('phase')
+    expect(r.dormant[0]?.reason).toContain('does not mount')
   })
 })

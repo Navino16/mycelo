@@ -1,4 +1,5 @@
 import { parseManifest } from '../manifest.js'
+import { configSchemaFailures } from './config-checks.js'
 import type { HealthState } from '../context.js'
 import type { Rhiza, RhizaModule } from '../rhiza.js'
 
@@ -31,15 +32,9 @@ export async function rhizaChecks(harness: RhizaHarness): Promise<string[]> {
     return [...failures, `manifest kind is '${manifest.kind}', expected 'rhiza'`]
   }
 
-  const schema = harness.module.configSchema
-  if (schema !== undefined) {
-    if (harness.validConfig !== undefined && !schema.safeParse(harness.validConfig).success) {
-      failures.push('configSchema rejects the declared valid config')
-    }
-    if (harness.invalidConfig !== undefined && schema.safeParse(harness.invalidConfig).success) {
-      failures.push('configSchema accepts the declared invalid config')
-    }
-  }
+  failures.push(
+    ...configSchemaFailures(harness.module.configSchema, harness.validConfig, harness.invalidConfig),
+  )
 
   let instance: Rhiza<unknown, unknown>
   try {

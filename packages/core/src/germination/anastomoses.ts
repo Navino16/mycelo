@@ -3,16 +3,14 @@ import type { Dormant } from './registry.js'
 import type { ReadManifest } from './manifest.js'
 
 export const MOUNTABLE_SCOPES: readonly MyceliumScope[] = [
-  'plugins.read', 'health.read', 'messages.send',
+  'plugins.read', 'plugins.toggle', 'plugins.configure', 'health.read', 'messages.send',
   'principals.read', 'principals.manage', 'roles.read', 'roles.assign', 'roles.manage',
 ]
 
 // Every scope MYCELIUM_SCOPES carries that MOUNTABLE_SCOPES does not yet mount, and the
 // phase it arrives in. Mounting a scope moves its entry from here into MOUNTABLE_SCOPES.
-const SCOPE_PHASE: Partial<Record<MyceliumScope, number>> = {
-  // Plugin enable/disable, not identity — arrives with phase 5.
-  'plugins.toggle': 5,
-}
+// Empty since phase 5: the core now mounts every scope septum declares.
+const SCOPE_PHASE: Partial<Record<MyceliumScope, number>> = {}
 
 /** One `any_of` requirement's outcome: which alternative was chosen, and the full list offered. */
 export interface AnyOfChoice {
@@ -116,10 +114,11 @@ function evaluate(requires: readonly Requirement[], candidates: ReadonlyMap<stri
     if ('any_of' in requirement || targetName(requirement.rhiza) !== 'mycelium') continue
     for (const scope of requirement.scopes ?? []) {
       if (!MOUNTABLE_SCOPES.includes(scope)) {
-        // Falls back to the next phase after this one, so a scope added to MyceliumScope
-        // but not yet classified here never reports a phase already past.
-        const phase = SCOPE_PHASE[scope] ?? 5
-        return { ...FAILED, dormantReason: `requires mycelium scope '${scope}', which arrives in phase ${phase}` }
+        // Names no phase when none is recorded: with SCOPE_PHASE empty, a number here
+        // would always be one that has already shipped.
+        const phase = SCOPE_PHASE[scope]
+        const when = phase === undefined ? 'this core does not mount' : `arrives in phase ${String(phase)}`
+        return { ...FAILED, dormantReason: `requires mycelium scope '${scope}', which ${when}` }
       }
       scopes.push(scope)
     }

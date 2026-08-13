@@ -9,6 +9,11 @@ export interface ConfigSchema<T> {
   safeParse(input: unknown):
     | { success: true; data: T }
     | { success: false; error: unknown }
+  /**
+   * JSON Schema for the settings form. Absent when the plugin provides none — which also
+   * leaves `plugins.configure`'s `setSetting` unable to refuse an undeclared key.
+   */
+  toJsonSchema?(): object
 }
 
 /** What a spore's entry module exports. One alias per kind, all sharing this base. */

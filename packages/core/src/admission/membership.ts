@@ -4,6 +4,7 @@ import type { GerminatedHypha } from '../germination/registry.js'
 export interface MembershipOptions {
   ttlMs?: number
   now?: () => number
+  maxEntries?: number
 }
 
 export interface MembershipCache {
@@ -17,6 +18,8 @@ interface Entry {
 }
 
 const DEFAULT_TTL_MS = 60_000
+// Far above any real operator's (channel, group) count, low enough to bound memory.
+const DEFAULT_MAX_ENTRIES = 512
 
 /** Querying the channel on every message is not viable (spec §5.1), hence the TTL. */
 export function createMembershipCache(
@@ -25,6 +28,7 @@ export function createMembershipCache(
 ): MembershipCache {
   const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS
   const now = options.now ?? ((): number => Date.now())
+  const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES
   const byName = new Map(hyphae.map((h) => [h.name, h]))
   const cache = new Map<string, Entry>()
 
@@ -45,6 +49,11 @@ export function createMembershipCache(
       if (!Array.isArray(returned)) return null
       const members = returned as readonly ChannelIdentity[]
       cache.set(key, { at: now(), members })
+      // Insertion-ordered Map: the oldest (channel, group) pair is evicted first.
+      if (cache.size > maxEntries) {
+        const oldest = cache.keys().next()
+        if (!oldest.done) cache.delete(oldest.value)
+      }
       return members
     },
     requireCapability(channel, capability) {

@@ -1,3 +1,4 @@
+import { resolve as resolvePath } from 'node:path'
 import { describe, expect, it } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import type { RolesManage } from '@mycelo/septum'
@@ -10,6 +11,7 @@ import { StartupError, bootstrapIdentity } from '../../src/identity/bootstrap.js
 import { rejectsWith } from '../support/rejects.js'
 
 const noSend = async () => {}
+const SPORES = resolvePath(import.meta.dirname, '../../../../fixtures')
 
 function emptyRegistry(): Registry {
   return {
@@ -110,7 +112,7 @@ describe('bootstrapIdentity', () => {
   // roles.manage create a plain role named 'owner', then add owner: and reboot.
   it('repairs the builtin flag on a role named owner that a spore created', async () => {
     const db = fresh()
-    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
     bootstrapIdentity(db, {})
     await manage.createRole('owner', ['media.*'])
     expect(db.select().from(role).where(eq(role.name, 'owner')).get()?.builtin).toBe(false)

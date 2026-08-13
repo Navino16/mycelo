@@ -1,6 +1,13 @@
 import type {
-  EnzymeModule, PluginsRead, PrincipalsRead, RolesAssign, RolesManage, RolesRead,
+  EnzymeModule, PluginsConfigure, PluginsRead, PluginsToggle, PrincipalsRead, RolesAssign,
+  RolesManage, RolesRead,
 } from '@mycelo/septum'
+
+// JSON first, raw string as the fallback: a chat channel has no types, and Zod must receive
+// 8080 as a number while http://x is not valid JSON and has to stay a string.
+function coerce(raw: string): unknown {
+  try { return JSON.parse(raw) } catch { return raw }
+}
 
 export default {
   create: () => ({
@@ -81,6 +88,55 @@ export default {
           return
         }
         await ctx.reply({ text: `created role '${name}' with patterns: ${patterns.join(', ') || 'none'}` })
+      },
+      handlePluginList: async (_invocation, ctx) => {
+        const mycelium = ctx.rhiza<PluginsRead>('mycelium')
+        const lines = mycelium.listPlugins().map((p) => `${p.name} (${p.kind ?? 'unknown'}) — ${p.state}`)
+        await ctx.reply({ text: lines.length === 0 ? 'no plugins' : lines.join('\n') })
+      },
+      handlePluginEnable: async (invocation, ctx) => {
+        const mycelium = ctx.rhiza<PluginsToggle>('mycelium')
+        // The refusal reason is what tells the operator what to fix; swallowing it
+        // would leave nothing but "failed".
+        try {
+          await mycelium.enable(invocation.args['name'] ?? '')
+          await ctx.reply({ text: `enabled ${invocation.args['name'] ?? ''}` })
+        } catch (e) {
+          await ctx.reply({ text: (e as Error).message })
+        }
+      },
+      handlePluginDisable: async (invocation, ctx) => {
+        const mycelium = ctx.rhiza<PluginsToggle>('mycelium')
+        try {
+          await mycelium.disable(invocation.args['name'] ?? '')
+          await ctx.reply({ text: `disabled ${invocation.args['name'] ?? ''}` })
+        } catch (e) {
+          await ctx.reply({ text: (e as Error).message })
+        }
+      },
+      handlePluginSet: async (invocation, ctx) => {
+        const mycelium = ctx.rhiza<PluginsConfigure>('mycelium')
+        const { name, key, value } = invocation.args
+        try {
+          await mycelium.setSetting(name ?? '', key ?? '', coerce(value ?? ''))
+          await ctx.reply({ text: `set ${key ?? ''} on ${name ?? ''}` })
+        } catch (e) {
+          await ctx.reply({ text: (e as Error).message })
+        }
+      },
+      handlePluginConfig: async (invocation, ctx) => {
+        const mycelium = ctx.rhiza<PluginsConfigure>('mycelium')
+        let settings: Record<string, unknown>
+        try {
+          settings = await mycelium.settings(invocation.args['name'] ?? '')
+        } catch (e) {
+          await ctx.reply({ text: (e as Error).message })
+          return
+        }
+        const entries = Object.entries(settings)
+        await ctx.reply({
+          text: entries.length === 0 ? 'no settings' : entries.map(([k, v]) => `${k} = ${String(v)}`).join('\n'),
+        })
       },
     },
   }),

@@ -47,3 +47,26 @@ export const principalRole = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.principalId, t.roleId] })],
 )
+
+// `name` is the primary key: a spore name is already unique across the substrate and every
+// lookup in phase 5 is by name. The sporangium columns of spec §9.3 arrive with phase 8.
+export const pluginInstall = sqliteTable('plugin_install', {
+  name: text('name').primaryKey(),
+  kind: text('kind').notNull(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
+  installedAt: integer('installed_at', { mode: 'timestamp_ms' }).notNull(),
+})
+
+// One row per setting rather than a JSON blob: `is_secret` is per key, and the phase 9 form
+// masks fields one at a time.
+export const pluginSetting = sqliteTable(
+  'plugin_setting',
+  {
+    pluginName: text('plugin_name').notNull()
+      .references(() => pluginInstall.name, { onDelete: 'cascade' }),
+    key: text('key').notNull(),
+    value: text('value').notNull(),
+    isSecret: integer('is_secret', { mode: 'boolean' }).notNull().default(false),
+  },
+  (t) => [primaryKey({ columns: [t.pluginName, t.key] })],
+)

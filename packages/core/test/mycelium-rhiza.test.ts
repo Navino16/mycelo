@@ -1,7 +1,13 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve as resolvePath } from 'node:path'
 import { describe, expect, it } from 'bun:test'
+import { z } from 'zod'
 import type {
-  HealthRead, PluginsRead, PrincipalsManage, PrincipalsRead, RolesAssign, RolesManage, RolesRead,
+  HealthRead, PluginsConfigure, PluginsRead, PluginsToggle, PrincipalsManage, PrincipalsRead,
+  RolesAssign, RolesManage, RolesRead,
 } from '@mycelo/septum'
+import { getInstall, recordInstall, setEnabled, writeSetting } from '../src/config/store.js'
 import { bootstrapIdentity } from '../src/identity/bootstrap.js'
 import { resolvePrincipal } from '../src/identity/resolve.js'
 import type { Registry } from '../src/germination/registry.js'
@@ -16,6 +22,7 @@ import { rejectsWith } from './support/rejects.js'
 
 const stubSend = async () => {}
 const noSend = stubSend
+const SPORES = resolvePath(import.meta.dirname, '../../../fixtures')
 
 function fresh(): Db {
   const { db } = openDatabase(':memory:')
@@ -35,26 +42,26 @@ const registry = {
 } as unknown as Registry
 
 it('mounts only what the scopes grant', () => {
-  const api = createMyceliumApi(registry, ['plugins.read'], stubSend, fresh())
+  const api = createMyceliumApi(registry, ['plugins.read'], stubSend, fresh(), SPORES)
   expect(typeof (api as PluginsRead).listPlugins).toBe('function')
   expect('send' in api).toBe(false)
   expect('health' in api).toBe(false)
 })
 
 it('does not mount listPlugins when plugins.read is not granted', () => {
-  expect('listPlugins' in createMyceliumApi(registry, ['health.read'], stubSend, fresh())).toBe(false)
+  expect('listPlugins' in createMyceliumApi(registry, ['health.read'], stubSend, fresh(), SPORES)).toBe(false)
 })
 
 it('lists germinated and dormant plugins with their reasons', () => {
-  const api = createMyceliumApi(registry, ['plugins.read'], stubSend, fresh()) as PluginsRead
+  const api = createMyceliumApi(registry, ['plugins.read'], stubSend, fresh(), SPORES) as PluginsRead
   expect(api.listPlugins()).toEqual([
-    { name: 'media', kind: 'enzyme', commands: ['movies'], state: 'germinated' },
-    { name: 'broken', commands: [], state: 'dormant', reason: 'create() returned no api' },
+    { name: 'media', kind: 'enzyme', commands: ['movies'], state: 'germinated', enabled: true },
+    { name: 'broken', commands: [], state: 'dormant', reason: 'create() returned no api', enabled: true },
   ])
 })
 
 it('omits kind for a dormant plugin rather than inventing one, since none was ever known', () => {
-  const api = createMyceliumApi(registry, ['plugins.read'], stubSend, fresh()) as PluginsRead
+  const api = createMyceliumApi(registry, ['plugins.read'], stubSend, fresh(), SPORES) as PluginsRead
   const broken = api.listPlugins().find((p) => p.name === 'broken')
   expect(broken).toBeDefined()
   expect(broken).not.toHaveProperty('kind')
@@ -65,21 +72,34 @@ it('lists a germinated inhibitor with an empty command list', () => {
     ...registry,
     inhibitors: [{ name: 'gate', manifest: { kind: 'inhibitor', name: 'gate', septum: '^0.5', enforcing: true } }],
   } as unknown as Registry
-  const api = createMyceliumApi(withInhibitor, ['plugins.read'], stubSend, fresh()) as PluginsRead
-  expect(api.listPlugins()).toContainEqual({ name: 'gate', kind: 'inhibitor', commands: [], state: 'germinated' })
+  const api = createMyceliumApi(withInhibitor, ['plugins.read'], stubSend, fresh(), SPORES) as PluginsRead
+  expect(api.listPlugins()).toContainEqual({ name: 'gate', kind: 'inhibitor', commands: [], state: 'germinated', enabled: true })
+})
+
+it('lists a disabled install that never reached the registry, distinct from dormant', () => {
+  // germinate.ts skips a disabled install before resolve() runs, so it never becomes a
+  // registry entry at all — 'quiet', an enzyme that would germinate cleanly if enabled,
+  // proves the entry comes from the install row, not from anything the registry reports.
+  const db = fresh()
+  recordInstall(db, 'quiet', 'enzyme')
+  setEnabled(db, 'quiet', false)
+  const api = createMyceliumApi(registry, ['plugins.read'], stubSend, db, SPORES) as PluginsRead
+  expect(api.listPlugins()).toContainEqual({ name: 'quiet', kind: 'enzyme', commands: [], state: 'disabled', enabled: false })
+  const quiet = api.listPlugins().find((p) => p.name === 'quiet')
+  expect(quiet?.state).not.toBe('dormant')
 })
 
 it('aggregates each germinated rhiza health', async () => {
   const checkedAt = new Date(0)
   const withRhiza = { ...registry, rhizas: [{ name: 'mock', manifest: {},
     instance: { health: async () => ({ state: 'healthy', checkedAt }) } }] } as unknown as Registry
-  const api = createMyceliumApi(withRhiza, ['health.read'], stubSend, fresh()) as HealthRead
+  const api = createMyceliumApi(withRhiza, ['health.read'], stubSend, fresh(), SPORES) as HealthRead
   expect(await api.health()).toEqual([{ rhiza: 'mock', status: { state: 'healthy', checkedAt } }])
 })
 
 describe('createMyceliumApi, the phase 4 scopes', () => {
   it('mounts no principal or role method when no scope grants it', () => {
-    const api = createMyceliumApi(emptyRegistry(), ['plugins.read'], noSend, fresh())
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.read'], noSend, fresh(), SPORES)
     for (const method of [
       'listPrincipals', 'getPrincipal', 'findByIdentity', 'markReviewed', 'setDisplayName',
       'listRoles', 'rolesOf', 'assignRole', 'revokeRole', 'createRole', 'setRoleCommands', 'deleteRole',
@@ -89,7 +109,7 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
   })
 
   it('mounts principals.read alone without principals.manage', () => {
-    const api = createMyceliumApi(emptyRegistry(), ['principals.read'], noSend, fresh())
+    const api = createMyceliumApi(emptyRegistry(), ['principals.read'], noSend, fresh(), SPORES)
     expect('listPrincipals' in api).toBe(true)
     expect('markReviewed' in api).toBe(false)
   })
@@ -97,7 +117,7 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
   it('finds a principal by its channel identity', async () => {
     const db = fresh()
     const p = resolvePrincipal(db, { channel: 'console', externalId: 'alice', displayName: 'alice' })
-    const api = createMyceliumApi(emptyRegistry(), ['principals.read'], noSend, db) as PrincipalsRead
+    const api = createMyceliumApi(emptyRegistry(), ['principals.read'], noSend, db, SPORES) as PrincipalsRead
     expect((await api.findByIdentity('console', 'alice'))?.id).toBe(p.id)
     expect(await api.findByIdentity('console', 'nobody')).toBeNull()
   })
@@ -105,9 +125,9 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
   it('assigns and revokes a role by name', async () => {
     const db = fresh()
     const p = resolvePrincipal(db, { channel: 'console', externalId: 'bob' })
-    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
-    const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db) as RolesAssign
-    const read = createMyceliumApi(emptyRegistry(), ['roles.read'], noSend, db) as RolesRead
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
+    const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db, SPORES) as RolesAssign
+    const read = createMyceliumApi(emptyRegistry(), ['roles.read'], noSend, db, SPORES) as RolesRead
     await manage.createRole('guest', ['media.*'])
     await assign.assignRole(p.id, 'guest')
     expect(await read.rolesOf(p.id)).toEqual(['guest'])
@@ -118,34 +138,43 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
   it('rejects assigning a role that does not exist', async () => {
     const db = fresh()
     const p = resolvePrincipal(db, { channel: 'console', externalId: 'bob' })
-    const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db) as RolesAssign
+    const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db, SPORES) as RolesAssign
     await rejectsWith(assign.assignRole(p.id, 'ghost'), /ghost/)
   })
 
   it('refuses to delete or rewrite a builtin role', async () => {
     const db = fresh()
     bootstrapIdentity(db, { owner: { channel: 'console', userId: 'alice' } })
-    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
     await rejectsWith(manage.deleteRole('owner'), /builtin/)
     await rejectsWith(manage.setRoleCommands('owner', ['media.*']), /builtin/)
   })
 
   it('rejects deleting a role that does not exist, naming it', async () => {
     const db = fresh()
-    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
     await rejectsWith(manage.deleteRole('typo'), /typo/)
+  })
+
+  it('refuses to delete the configured default role', async () => {
+    const db = fresh()
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES, 'newcomer') as RolesManage
+    await manage.createRole('newcomer', [])
+    // Boot refuses this state with a StartupError; deleting into it at runtime must not
+    // leave first contact throwing on every new sender.
+    await rejectsWith(manage.deleteRole('newcomer'), /default role/)
   })
 
   it('rejects rewriting a role that does not exist, naming it', async () => {
     const db = fresh()
-    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
     await rejectsWith(manage.setRoleCommands('typo', ['media.*']), /typo/)
   })
 
   it('replaces a role\'s patterns wholesale rather than appending', async () => {
     const db = fresh()
-    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
-    const read = createMyceliumApi(emptyRegistry(), ['roles.read'], noSend, db) as RolesRead
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
+    const read = createMyceliumApi(emptyRegistry(), ['roles.read'], noSend, db, SPORES) as RolesRead
     await manage.createRole('guest', ['media.*', 'admin.plugins'])
     await manage.setRoleCommands('guest', ['media.movies'])
     expect((await read.listRoles()).find((r) => r.name === 'guest')?.patterns).toEqual(['media.movies'])
@@ -155,7 +184,7 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
     // A caller probes for a scope with `in`, so a polluted prototype must not answer for it.
     Object.defineProperty(Object.prototype, 'assignRole', { value: () => {}, configurable: true, enumerable: false })
     try {
-      const api = createMyceliumApi(emptyRegistry(), ['plugins.read'], noSend, fresh())
+      const api = createMyceliumApi(emptyRegistry(), ['plugins.read'], noSend, fresh(), SPORES)
       expect('assignRole' in api).toBe(false)
     } finally {
       Reflect.deleteProperty(Object.prototype, 'assignRole')
@@ -165,7 +194,7 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
   it('marks a principal reviewed and renames it', async () => {
     const db = fresh()
     const p = resolvePrincipal(db, { channel: 'console', externalId: 'carol' })
-    const api = createMyceliumApi(emptyRegistry(), ['principals.manage', 'principals.read'], noSend, db) as
+    const api = createMyceliumApi(emptyRegistry(), ['principals.manage', 'principals.read'], noSend, db, SPORES) as
       PrincipalsManage & PrincipalsRead
     await api.markReviewed(p.id)
     await api.setDisplayName(p.id, 'Carol')
@@ -175,35 +204,16 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
 })
 
 // The worst defect of phase 4 was a scope mounted in one place and gated in the other, and
-// it was found by a fixture rather than a test. Phase 5's plugins.toggle walks the same path.
+// it was found by a fixture rather than a test. Phase 5 mounts the last two.
 describe('MOUNTABLE_SCOPES against what createMyceliumApi actually mounts', () => {
-  // Every scope MYCELIUM_SCOPES carries that no phase mounts yet. Mounting one means
-  // deleting its entry here and adding it to MOUNTABLE_SCOPES in the same commit.
-  const GATED: readonly MyceliumScope[] = ['plugins.toggle']
-
-  it('mounts exactly the scopes MOUNTABLE_SCOPES declares, and gates the rest', () => {
+  it('mounts exactly the scopes MOUNTABLE_SCOPES declares, and declares every scope septum has', () => {
     const mounted = MYCELIUM_SCOPES.filter((scope) => {
-      const api = createMyceliumApi(emptyRegistry(), [scope], noSend, fresh())
+      const api = createMyceliumApi(emptyRegistry(), [scope], noSend, fresh(), SPORES)
       return Object.keys(api).length > 0
     })
     expect(new Set(mounted)).toEqual(new Set(MOUNTABLE_SCOPES))
     const mountable = new Set<MyceliumScope>(MOUNTABLE_SCOPES)
-    expect(MYCELIUM_SCOPES.filter((s) => !mountable.has(s))).toEqual([...GATED])
-  })
-
-  it('leaves a spore dormant for every scope it does not mount', () => {
-    for (const scope of GATED) {
-      const r = resolve([{
-        location: { directory: 'toggler', manifestPath: 'toggler/spore.yaml' },
-        manifest: {
-          kind: 'enzyme', name: 'toggler', septum: '^0.5',
-          commands: [{ name: 'toggler', description: 'x', respond: 'hi' }],
-          requires: [{ rhiza: 'mycelium', scopes: [scope] }],
-        },
-      }] as unknown as Parameters<typeof resolve>[0])
-      expect(r.order).toEqual([])
-      expect(r.dormant[0]?.reason).toContain(`scope '${scope}'`)
-    }
+    expect(MYCELIUM_SCOPES.filter((s) => !mountable.has(s))).toEqual([])
   })
 
   it('grants every mountable scope without leaving the spore dormant', () => {
@@ -227,17 +237,17 @@ describe('MOUNTABLE_SCOPES against what createMyceliumApi actually mounts', () =
 describe('rejections a caller can act on', () => {
   it('rejects creating a role whose name is taken, or empty', async () => {
     const db = fresh()
-    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
     await manage.createRole('guest', ['media.*'])
     await rejectsWith(manage.createRole('guest', ['admin.*']), /'guest' already exists/)
     await rejectsWith(manage.createRole('', []), /cannot be empty/)
-    expect(await (createMyceliumApi(emptyRegistry(), ['roles.read'], noSend, db) as RolesRead).listRoles())
+    expect(await (createMyceliumApi(emptyRegistry(), ['roles.read'], noSend, db, SPORES) as RolesRead).listRoles())
       .toHaveLength(1)
   })
 
   it('rejects a pattern listed twice in one call, on create and on rewrite', async () => {
     const db = fresh()
-    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db) as RolesManage
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
     await rejectsWith(manage.createRole('guest', ['media.*', 'media.*']), /'media.\*' is listed twice/)
     await manage.createRole('guest', ['media.*'])
     await rejectsWith(manage.setRoleCommands('guest', ['admin.*', 'admin.*']), /listed twice/)
@@ -246,8 +256,8 @@ describe('rejections a caller can act on', () => {
   it('rejects markReviewed, setDisplayName, assignRole and revokeRole for an unknown principal', async () => {
     const db = fresh()
     bootstrapIdentity(db, { owner: { channel: 'console', userId: 'alice' } })
-    const manage = createMyceliumApi(emptyRegistry(), ['principals.manage'], noSend, db) as PrincipalsManage
-    const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db) as RolesAssign
+    const manage = createMyceliumApi(emptyRegistry(), ['principals.manage'], noSend, db, SPORES) as PrincipalsManage
+    const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db, SPORES) as RolesAssign
     await rejectsWith(manage.markReviewed('nobody'), /principal 'nobody' does not exist/)
     await rejectsWith(manage.setDisplayName('nobody', 'X'), /principal 'nobody' does not exist/)
     await rejectsWith(assign.assignRole('nobody', 'owner'), /principal 'nobody' does not exist/)
@@ -256,7 +266,257 @@ describe('rejections a caller can act on', () => {
 
   it('still reports an unknown role before an unknown principal, so the first fault named is the caller\'s', async () => {
     const db = fresh()
-    const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db) as RolesAssign
+    const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db, SPORES) as RolesAssign
     await rejectsWith(assign.assignRole('nobody', 'ghost'), /role 'ghost'/)
+  })
+})
+
+describe('createMyceliumApi, the phase 5 scopes', () => {
+  it('mounts no toggle or configure method when no scope grants it', () => {
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.read'], noSend, fresh(), SPORES)
+    // Absent, not rejecting: the phase 3 contract is that an ungranted scope leaves no key.
+    for (const method of ['enable', 'disable', 'settings', 'setSetting', 'formSchema']) {
+      expect(method in api).toBe(false)
+    }
+  })
+
+  it('mounts plugins.toggle alone without plugins.configure', () => {
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.toggle'], noSend, fresh(), SPORES)
+    expect('enable' in api).toBe(true)
+    expect('settings' in api).toBe(false)
+  })
+
+  it('redacts a secret rather than returning it', async () => {
+    const db = fresh()
+    recordInstall(db, 'radarr', 'rhiza')
+    writeSetting(db, 'radarr', 'url', 'http://x', false)
+    writeSetting(db, 'radarr', 'apiKey', 'sk-real-secret', true)
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, SPORES) as PluginsConfigure
+    const settings = await api.settings('radarr')
+    expect(settings['url']).toBe('http://x')
+    expect(settings['apiKey']).not.toBe('sk-real-secret')
+    expect(settings['apiKey']).toBe('••••')
+  })
+
+  it('writes a setting through setSetting, leaving it readable', async () => {
+    const db = fresh()
+    recordInstall(db, 'radarr', 'rhiza')
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, SPORES) as PluginsConfigure
+    await api.setSetting('radarr', 'url', 'http://y')
+    expect((await api.settings('radarr'))['url']).toBe('http://y')
+  })
+
+  // writeSetting() rewrites is_secret too, so the naive call would un-redact a credential
+  // the moment an operator updated it through this very scope.
+  it('keeps a setting secret when setSetting rewrites it', async () => {
+    const db = fresh()
+    recordInstall(db, 'radarr', 'rhiza')
+    writeSetting(db, 'radarr', 'apiKey', 'sk-old', true)
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, SPORES) as PluginsConfigure
+    await api.setSetting('radarr', 'apiKey', 'sk-new')
+    expect((await api.settings('radarr'))['apiKey']).toBe('••••')
+  })
+
+  it('rejects setSetting for a plugin that is not installed', async () => {
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, fresh(), SPORES) as PluginsConfigure
+    await rejectsWith(api.setSetting('ghost', 'url', 'x'), /'ghost' is not installed/)
+  })
+
+  it('reports formSchema unavailable for a plugin that is not installed', async () => {
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, fresh(), SPORES) as PluginsConfigure
+    expect(await api.formSchema('ghost')).toEqual({ available: false, reason: "plugin 'ghost' is not installed" })
+  })
+
+  it('reports formSchema unavailable for an install whose spore is gone from disk', async () => {
+    const db = fresh()
+    recordInstall(db, 'vanished', 'rhiza')
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, SPORES) as PluginsConfigure
+    expect(await api.formSchema('vanished'))
+      .toEqual({ available: false, reason: "no spore named 'vanished' is present on disk" })
+  })
+
+  // loadSporeModule propagates whatever the spore throws at import; formSchema() has an
+  // available: false branch and must use it, since the contract says it resolves a
+  // FormSchema. A spore absent from disk does NOT reach that catch — discover() answers []
+  // for a missing directory rather than throwing — so only a real import throw pins it.
+  it('answers formSchema with the import failure rather than rejecting', async () => {
+    const db = fresh()
+    const dir = mkdtempSync(join(tmpdir(), 'mycelo-formschema-'))
+    try {
+      mkdirSync(join(dir, 'boomspore', 'src'), { recursive: true })
+      writeFileSync(
+        join(dir, 'boomspore', 'spore.yaml'),
+        'kind: enzyme\nname: boomspore\nseptum: "^0.6"\n'
+          + 'commands:\n  - name: boom\n    description: x\n    code: handleBoom\n',
+        'utf8',
+      )
+      writeFileSync(join(dir, 'boomspore', 'src/index.ts'), 'throw new Error("import explodes")\n', 'utf8')
+      recordInstall(db, 'boomspore', 'enzyme')
+      const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, dir) as PluginsConfigure
+      const schema = await api.formSchema('boomspore')
+      expect(schema.available).toBe(false)
+      // The real cause, not merely "unavailable": an operator cannot act on the latter.
+      if (!schema.available) expect(schema.reason).toContain('import explodes')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('answers formSchema for a spore whose configSchema emits no JSON Schema', async () => {
+    const db = fresh()
+    recordInstall(db, 'gate', 'inhibitor')
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, SPORES) as PluginsConfigure
+    expect(await api.formSchema('gate'))
+      .toEqual({ available: false, reason: 'this plugin publishes no JSON Schema: configure it by hand' })
+  })
+
+  it('enables a plugin on disk and disables it again', async () => {
+    const db = fresh()
+    recordInstall(db, 'ping', 'enzyme')
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.toggle'], noSend, db, SPORES) as PluginsToggle
+    await api.enable('ping')
+    expect(getInstall(db, 'ping')?.enabled).toBe(true)
+    await api.disable('ping')
+    expect(getInstall(db, 'ping')?.enabled).toBe(false)
+  })
+
+  // enablePlugin() returns a refusal object; the published contract says enable() rejects,
+  // so a caller reading `undefined` as success is the defect this pins.
+  it('rejects enable with the refusal reason rather than resolving', async () => {
+    const db = fresh()
+    recordInstall(db, 'gate', 'inhibitor')
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.toggle'], noSend, db, SPORES) as PluginsToggle
+    await rejectsWith(api.enable('ghost'), /'ghost' is not installed/)
+    expect(getInstall(db, 'gate')?.enabled).toBe(false)
+  })
+
+  it('rejects disable for a plugin that is not installed', async () => {
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.toggle'], noSend, fresh(), SPORES) as PluginsToggle
+    await rejectsWith(api.disable('ghost'), /'ghost' is not installed/)
+  })
+
+  // setSetting, formSchema and enable all reject for an uninstalled plugin; settings()
+  // answered {}, which a caller cannot tell from a real plugin holding no settings.
+  it('rejects settings for a plugin that is not installed', async () => {
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, fresh(), SPORES) as PluginsConfigure
+    await rejectsWith(api.settings('ghost'), /'ghost' is not installed/)
+  })
+})
+
+// A misspelled key was written, confirmed, and then shown back by /plugin-config while the
+// plugin went on using its default — fail-open on a spore whose whole purpose is a rule.
+describe('setSetting against the keys the plugin declares', () => {
+  // The emitted JSON is computed here with the workspace's own Zod and inlined, rather than
+  // hand-written: what the guard reads is whatever z.toJSONSchema actually produces, and a
+  // temp spore cannot resolve zod from a tmpdir.
+  function declaring(jsonSchema: object): string {
+    const dir = mkdtempSync(join(tmpdir(), 'mycelo-declared-'))
+    mkdirSync(join(dir, 'declares', 'src'), { recursive: true })
+    writeFileSync(
+      join(dir, 'declares', 'spore.yaml'),
+      'kind: enzyme\nname: declares\nseptum: "^0.6"\n'
+        + 'commands:\n  - name: declares\n    description: x\n    code: handleIt\n',
+      'utf8',
+    )
+    writeFileSync(
+      join(dir, 'declares', 'src/index.ts'),
+      'export default {\n'
+        + '  configSchema: {\n'
+        + '    safeParse: (input) => ({ success: true, data: input }),\n'
+        + `    toJsonSchema: () => (${JSON.stringify(jsonSchema)}),\n`
+        + '  },\n'
+        + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+        + '}\n',
+      'utf8',
+    )
+    return dir
+  }
+
+  async function withSpore(jsonSchema: object, body: (api: PluginsConfigure) => Promise<void>): Promise<void> {
+    const db = fresh()
+    const dir = declaring(jsonSchema)
+    try {
+      recordInstall(db, 'declares', 'enzyme')
+      await body(createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, dir) as PluginsConfigure)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  const CLOSED = z.toJSONSchema(z.object({ url: z.string() }), { io: 'input' })
+  const LOOSE = z.toJSONSchema(z.looseObject({ url: z.string() }), { io: 'input' })
+  const STRICT = z.toJSONSchema(z.strictObject({ url: z.string() }), { io: 'input' })
+
+  it('rejects a key the published JSON Schema does not declare, and accepts one it does', async () => {
+    await withSpore(CLOSED, async (api) => {
+      await rejectsWith(api.setSetting('declares', 'ur1', 'http://x'), /'declares' declares no setting 'ur1'/)
+      expect(await api.settings('declares')).toEqual({})
+      await api.setSetting('declares', 'url', 'http://x')
+      expect(await api.settings('declares')).toEqual({ url: 'http://x' })
+    })
+  })
+
+  // z.object emits no additionalProperties at all, z.looseObject emits `{}`. Refusing an
+  // undeclared key there would shut a deliberately open plugin out of the only
+  // configuration surface this phase provides, with no channel workaround.
+  it('writes any key when the schema declares itself open', async () => {
+    expect(LOOSE).toHaveProperty('additionalProperties')
+    expect(CLOSED).not.toHaveProperty('additionalProperties')
+    await withSpore(LOOSE, async (api) => {
+      await api.setSetting('declares', 'anything', 'x')
+      expect(await api.settings('declares')).toEqual({ anything: 'x' })
+    })
+  })
+
+  it('still refuses an undeclared key when the schema closes itself explicitly', async () => {
+    // z.strictObject emits additionalProperties: false, which says the opposite of `{}`.
+    expect(STRICT).toHaveProperty('additionalProperties', false)
+    await withSpore(STRICT, async (api) => {
+      await rejectsWith(api.setSetting('declares', 'ur1', 'x'), /declares no setting 'ur1'/)
+    })
+  })
+
+  it('still writes any key for a plugin that publishes no JSON Schema', async () => {
+    const db = fresh()
+    recordInstall(db, 'gate', 'inhibitor')
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, SPORES) as PluginsConfigure
+    // gate builds its ConfigSchema by hand and emits no schema, so nothing here knows
+    // which keys exist. The ledger records that half; it is not closed by this guard.
+    await api.setSetting('gate', 'group_id', 'flatmates')
+    expect(await api.settings('gate')).toEqual({ group_id: 'flatmates' })
+  })
+})
+
+// syncInstalls keeps the row of a spore whose directory has gone, so an operator's
+// settings survive an unmounted volume — and then nothing could report that it exists.
+describe('an install with no spore on disk', () => {
+  it('is reported dormant when it is enabled, rather than vanishing from the listing', () => {
+    const db = fresh()
+    recordInstall(db, 'vanished', 'rhiza')
+    setEnabled(db, 'vanished', true)
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.read'], noSend, db, SPORES) as PluginsRead
+    expect(api.listPlugins()).toContainEqual({
+      name: 'vanished', kind: 'rhiza', commands: [],
+      state: 'dormant', reason: "no spore named 'vanished' is present on disk", enabled: true,
+    })
+  })
+
+  it('is still reported disabled when it is disabled', () => {
+    const db = fresh()
+    recordInstall(db, 'vanished', 'rhiza')
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.read'], noSend, db, SPORES) as PluginsRead
+    expect(api.listPlugins()).toContainEqual({
+      name: 'vanished', kind: 'rhiza', commands: [], state: 'disabled', enabled: false,
+    })
+  })
+
+  // The other half of the same line, deferred to phase 6: a plugin enabled since startup
+  // is on disk and will germinate at the next restart, so it is staleness, not a hole.
+  it('stays absent while the spore is on disk but has not germinated yet', () => {
+    const db = fresh()
+    recordInstall(db, 'ping', 'enzyme')
+    setEnabled(db, 'ping', true)
+    const api = createMyceliumApi(emptyRegistry(), ['plugins.read'], noSend, db, SPORES) as PluginsRead
+    expect(api.listPlugins().map((p) => p.name)).not.toContain('ping')
   })
 })

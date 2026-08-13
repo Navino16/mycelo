@@ -1,3 +1,4 @@
+import type { FormSchema } from './config.js'
 import type { HealthStatus, Principal, PushTarget } from './context.js'
 import type { SporeKind } from './manifest.js'
 import type { OutgoingContent } from './message.js'
@@ -14,6 +15,7 @@ export const MYCELIUM_SCOPES = [
   'roles.manage',
   'plugins.read',
   'plugins.toggle',
+  'plugins.configure',
   'health.read',
   'messages.send',
 ] as const
@@ -26,9 +28,19 @@ export interface PluginInfo {
   kind?: SporeKind
   /** Short command names, empty for any kind that declares none. */
   commands: readonly string[]
-  state: 'germinated' | 'dormant'
+  /**
+   * 'germinated' and 'dormant' are what germination reached; 'disabled' is an install
+   * row the operator switched off, which germination skips without loading it.
+   */
+  state: 'germinated' | 'dormant' | 'disabled'
   /** Present only when dormant. */
   reason?: string
+  /**
+   * Enabled as of the germination that produced this entry. A later enable() or
+   * disable() is reflected only by the next germination, so a settings UI must not
+   * render its toggle from this field alone.
+   */
+  enabled: boolean
 }
 
 export interface RhizaHealth {
@@ -93,4 +105,27 @@ export interface RolesManage {
   setRoleCommands(name: string, patterns: readonly string[]): Promise<void>
   /** Rejects when the role does not exist or is `builtin`. */
   deleteRole(name: string): Promise<void>
+}
+
+export interface PluginsToggle {
+  /** Rejects when the stored settings fail the plugin's own configSchema, quoting what it reported. */
+  enable(name: string): Promise<void>
+  /** Rejects when the plugin is not installed. */
+  disable(name: string): Promise<void>
+}
+
+export interface PluginsConfigure {
+  /**
+   * Rejects when the plugin is not installed. Secret values come back as the literal
+   * string '••••', never the value itself.
+   */
+  settings(name: string): Promise<Record<string, unknown>>
+  /**
+   * Rejects when the plugin is not installed, and when it publishes a JSON Schema that
+   * neither declares the key nor allows additional properties — such a key would be
+   * dropped at validation for a loose schema, or rejected outright by a strict one.
+   */
+  setSetting(name: string, key: string, value: unknown): Promise<void>
+  /** Resolves an `available: false` FormSchema rather than rejecting, whatever went wrong. */
+  formSchema(name: string): Promise<FormSchema>
 }

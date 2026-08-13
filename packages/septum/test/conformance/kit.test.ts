@@ -120,6 +120,17 @@ describe('hypha conformance checks', () => {
     })
     expect(failures.join(' ')).toContain('invalid config')
   })
+
+  it('catches a configSchema.toJsonSchema that is present but not callable', async () => {
+    const failures = await hyphaChecks({
+      ...goodHarness,
+      module: {
+        configSchema: { safeParse: (v: unknown) => config.safeParse(v), toJsonSchema: true } as never,
+        create: () => goodHarness.module.create(),
+      },
+    })
+    expect(failures.join(' ')).toContain('toJsonSchema is present but is not a function')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -309,6 +320,43 @@ describe('enzyme conformance checks', () => {
     expect(failures.join(' ').match(/mutate/g)).toHaveLength(1)
   })
 
+  it('catches a configSchema.toJsonSchema that is present but not callable', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        configSchema: { safeParse: () => ({ success: true, data: {} }), toJsonSchema: true } as never,
+        create: () => ({ handlers: { links: async () => {} } }),
+      },
+    })
+    expect(failures.join(' ')).toContain('toJsonSchema is present but is not a function')
+  })
+
+  // safeParse is mandatory and is only ever invoked, and only when the harness declares a
+  // config — so the kit certified a spore germination makes dormant and enable() rejects.
+  it('catches a configSchema whose safeParse is not callable', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        configSchema: { safeParse: 'not a function' } as never,
+        create: () => ({ handlers: { links: async () => {} } }),
+      },
+    })
+    expect(failures.join(' ')).toContain('configSchema.safeParse is not a function')
+  })
+
+  it('catches a safeParse that accepts the valid config but returns no data', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        configSchema: { safeParse: () => ({ success: true }) } as never,
+        create: () => ({ handlers: { links: async () => {} } }),
+      },
+      validConfig: { account: 'x' },
+    })
+    // ctx.config would be undefined at runtime, and every read off it would throw.
+    expect(failures.join(' ')).toContain('no data')
+  })
+
   it('does not certify a handler resolved through Object.prototype', async () => {
     const failures = await enzymeChecks({
       name: 'sneaky',
@@ -418,6 +466,17 @@ describe('inhibitor conformance checks', () => {
     })
     expect(failures.join(' ')).toContain('expected to be denied')
   })
+
+  it('catches a configSchema.toJsonSchema that is present but not callable', async () => {
+    const failures = await inhibitorChecks({
+      ...goodInhibitor,
+      module: {
+        configSchema: { safeParse: () => ({ success: true, data: {} }), toJsonSchema: true } as never,
+        create: () => goodInhibitor.module.create(),
+      },
+    })
+    expect(failures.join(' ')).toContain('toJsonSchema is present but is not a function')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -484,6 +543,17 @@ describe('rhiza conformance checks', () => {
       },
     })
     expect(failures.join(' ')).toContain('threw instead of reporting')
+  })
+
+  it('catches a configSchema.toJsonSchema that is present but not callable', async () => {
+    const failures = await rhizaChecks({
+      ...goodRhiza,
+      module: {
+        configSchema: { safeParse: () => ({ success: true, data: {} }), toJsonSchema: true } as never,
+        create: () => goodRhiza.module.create(),
+      },
+    })
+    expect(failures.join(' ')).toContain('toJsonSchema is present but is not a function')
   })
 })
 

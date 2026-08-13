@@ -30,7 +30,7 @@ capabilities are declared here rather than in the module.
 ```yaml
 kind: enzyme
 name: radarr-helper
-septum: "^0.5"
+septum: "^0.6"
 description: Movie shortcuts for Radarr
 commands:
   - name: help
@@ -138,6 +138,8 @@ present-but-rejecting:
 | `roles.read` | `RolesRead` | `listRoles()`, `rolesOf(principalId)` |
 | `roles.assign` | `RolesAssign` | `assignRole(principalId, roleName)`, `revokeRole(principalId, roleName)` |
 | `roles.manage` | `RolesManage` | `createRole(name, patterns)`, `setRoleCommands(name, patterns)`, `deleteRole(name)` |
+| `plugins.toggle` | `PluginsToggle` | `enable(name)`, `disable(name)` |
+| `plugins.configure` | `PluginsConfigure` | `settings(name)`, `setSetting(name, key, value)`, `formSchema(name)` |
 
 `listPlugins()` alone is synchronous; every other method returns a promise. The identity and role
 methods **reject** rather than resolve quietly when asked about something that does not exist — an
@@ -147,8 +149,18 @@ pattern listed twice. Three exceptions answer instead of rejecting: `getPrincipa
 `findByIdentity` answer `null` for "not found", since asking is their whole purpose, and `rolesOf`
 answers `[]` for an unknown principal, who holds no role either way.
 
-`plugins.toggle` is the one `MyceliumScope` value with no interface and nothing mounted: it parses,
-and leaves the spore dormant naming the phase that mounts it (phase 5).
+`enable(name)` validates the stored settings against the plugin's own `configSchema` before it
+flips the row, and **rejects** with `configuration is incomplete:` followed by whatever that
+schema reported — a Zod error dump, or the string a hand-built `ConfigSchema` returned; how
+precisely the fault is named is the plugin author's choice, not the core's. `disable(name)`,
+`settings(name)` and `setSetting(...)` reject for a plugin that is not installed. `setSetting`
+also rejects a key the plugin's published JSON Schema neither declares nor allows as an
+additional property — such a key would be dropped silently by a loose schema, or block
+`enable()` outright by a strict one; either way the write would be confirmed and never take
+effect. `settings(name)` never returns a value stored as a secret: it answers `••••` in its
+place, which is what makes `plugins.configure` a lesser grant than the credential store it would
+otherwise expose. `formSchema(name)` is the one method that never rejects — every fault,
+including a spore that throws at import, comes back as `{ available: false, reason }`.
 
 ```yaml
 requires:
@@ -188,6 +200,21 @@ export default {
 Add a `configSchema` when the plugin takes configuration. It is duck-typed rather than typed
 as a Zod schema: a plugin is bundled with its own copy of Zod, so its schemas are not
 instances of the core's. Anything with a compatible `safeParse` is accepted.
+
+`defineConfig` wraps a Zod schema into that shape and adds `toJsonSchema()`, which the settings
+form is generated from. It uses septum's own bundled Zod, so the schema and the converter always
+come from the same copy:
+
+```ts
+import { defineConfig } from '@mycelo/septum'
+import { z } from 'zod'
+
+const configSchema = defineConfig(z.object({ apiKey: z.string().min(1) }))
+```
+
+`toJsonSchema` is optional on `ConfigSchema` itself, so a plugin author who builds the shape by
+hand rather than through `defineConfig` may omit it — the plugin still germinates, it just gets
+no generated form.
 
 A plugin whose commands all carry `respond:` needs no module at all — `help` above answers
 without one. The manifest is then the entire plugin: no `src/index.ts`, nothing to bundle,
@@ -244,7 +271,7 @@ it('conforms to the Enzyme contract', async () => {
   const failures = await enzymeChecks({
     name: 'radarr-helper',
     manifest: {
-      kind: 'enzyme', name: 'radarr-helper', septum: '^0.5',
+      kind: 'enzyme', name: 'radarr-helper', septum: '^0.6',
       commands: [
         { name: 'help', description: 'Show what this plugin can do', respond: 'Try /add <title> to queue a movie.' },
         { name: 'add', description: 'Queue a movie by title', code: 'addMovie',

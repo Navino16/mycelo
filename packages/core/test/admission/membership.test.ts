@@ -102,6 +102,19 @@ describe('createMembershipCache', () => {
     const cache = createMembershipCache([], { now: () => 0 })
     expect(() => cache.requireCapability('signal', 'group_membership')).toThrow(/signal/)
   })
+
+  it('the cache evicts its oldest entry past the bound', async () => {
+    // Asserted through behaviour, never through a size(): MembershipCache exposes only
+    // members() and requireCapability(), and widening a public shape for a test is backwards.
+    const a = hypha('a', ['group_membership'], [])
+    const cache = createMembershipCache([a.germinated], { maxEntries: 2 })
+    await cache.members('a', 'g1')
+    await cache.members('a', 'g2')
+    await cache.members('a', 'g3') // evicts g1
+    const before = a.calls()
+    await cache.members('a', 'g1') // evicted, so it must go back to the channel
+    expect(a.calls()).toBe(before + 1)
+  })
 })
 
 // listGroupMembers is plugin code: the contract promises an array or null, and an
