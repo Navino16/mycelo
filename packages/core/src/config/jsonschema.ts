@@ -1,9 +1,10 @@
 import type { FormSchema } from '@mycelo/septum'
 
-/** `instanceof` and the message read can both throw on a hostile `e`; both stay inside this try. */
+/** Coercion to string happens in here too: a hostile `message` can return an object that resists it. */
 function describeThrown(e: unknown): string {
   try {
-    return e instanceof Error ? e.message : 'unknown error'
+    const detail: unknown = e instanceof Error ? `${e.message}` : 'unknown error'
+    return typeof detail === 'string' ? detail : 'unknown error'
   } catch {
     return 'unknown error'
   }

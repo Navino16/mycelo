@@ -110,3 +110,27 @@ it('an Error subclass overriding message with a throwing getter degrades instead
   const result = formSchemaFor(hostile)
   expect(result.available).toBe(false)
 })
+
+it('an Error subclass whose message getter returns an uncoercible object degrades instead of throwing', () => {
+  class HostileError extends Error {
+    override get message(): string {
+      // Returns successfully; the object itself is what refuses to become a string.
+      return {
+        toString() {
+          throw new Error('toString exploded')
+        },
+        [Symbol.toPrimitive]() {
+          throw new Error('toPrimitive exploded')
+        },
+      } as unknown as string
+    }
+  }
+  const hostile = {
+    toJsonSchema: () => {
+      throw new HostileError()
+    },
+  }
+  expect(() => formSchemaFor(hostile)).not.toThrow()
+  const result = formSchemaFor(hostile)
+  expect(result.available).toBe(false)
+})
