@@ -1,4 +1,5 @@
 import { parseManifest } from '../manifest.js'
+import { configSchemaFailures } from './config-checks.js'
 import type { EnzymeModule } from '../enzyme.js'
 import type { EnzymeContext, EnzymeStartContext, Invocation } from '../context.js'
 import type { IncomingMessage } from '../message.js'
@@ -74,21 +75,9 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
     return failures
   }
 
-  // Each sub-check is gated on its own input, not on validConfig: gating both on
-  // validConfig would silently skip the over-permissive-schema check whenever an
-  // author supplies only invalidConfig.
-  const schema = harness.module.configSchema
-  if (schema !== undefined) {
-    if (harness.validConfig !== undefined && !schema.safeParse(harness.validConfig).success) {
-      failures.push('configSchema rejects the declared valid config')
-    }
-    if (harness.invalidConfig !== undefined && schema.safeParse(harness.invalidConfig).success) {
-      failures.push('configSchema accepts the declared invalid config')
-    }
-    if (schema.toJsonSchema !== undefined && typeof schema.toJsonSchema !== 'function') {
-      failures.push('configSchema.toJsonSchema is present but is not a function')
-    }
-  }
+  failures.push(
+    ...configSchemaFailures(harness.module.configSchema, harness.validConfig, harness.invalidConfig),
+  )
 
   let instance
   try {

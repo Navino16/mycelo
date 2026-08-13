@@ -1,4 +1,5 @@
 import { parseManifest } from '../manifest.js'
+import { configSchemaFailures } from './config-checks.js'
 import type { Inhibitor, InhibitorModule, Verdict } from '../inhibitor.js'
 import type { InhibitorContext } from '../context.js'
 import type { IncomingMessage } from '../message.js'
@@ -41,18 +42,9 @@ export async function inhibitorChecks(harness: InhibitorHarness): Promise<string
     return [...failures, `manifest kind is '${manifest.kind}', expected 'inhibitor'`]
   }
 
-  const schema = harness.module.configSchema
-  if (schema !== undefined) {
-    if (harness.validConfig !== undefined && !schema.safeParse(harness.validConfig).success) {
-      failures.push('configSchema rejects the declared valid config')
-    }
-    if (harness.invalidConfig !== undefined && schema.safeParse(harness.invalidConfig).success) {
-      failures.push('configSchema accepts the declared invalid config')
-    }
-    if (schema.toJsonSchema !== undefined && typeof schema.toJsonSchema !== 'function') {
-      failures.push('configSchema.toJsonSchema is present but is not a function')
-    }
-  }
+  failures.push(
+    ...configSchemaFailures(harness.module.configSchema, harness.validConfig, harness.invalidConfig),
+  )
 
   let instance: Inhibitor<unknown>
   try {
