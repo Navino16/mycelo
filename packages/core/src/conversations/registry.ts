@@ -17,12 +17,13 @@ function labelOf(message: IncomingMessage): string | undefined {
  * carries one: a platform that omits it intermittently would otherwise blank a good label.
  */
 export function recordConversation(db: Db, message: IncomingMessage): void {
+  const kind = conversationKind(message)
   const label = labelOf(message)
   db.insert(conversation)
     .values({
       channel: message.channel,
       conversationId: message.conversationId,
-      kind: conversationKind(message),
+      kind,
       label: label ?? null,
       firstSeenAt: message.receivedAt,
       lastMessageAt: message.receivedAt,
@@ -30,7 +31,7 @@ export function recordConversation(db: Db, message: IncomingMessage): void {
     .onConflictDoUpdate({
       target: [conversation.channel, conversation.conversationId],
       set: {
-        kind: conversationKind(message),
+        kind,
         lastMessageAt: message.receivedAt,
         ...(label === undefined ? {} : { label }),
       },

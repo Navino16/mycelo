@@ -65,6 +65,15 @@ describe('recordConversation', () => {
     expect(rows[0]?.label).toBe('weekend')
   })
 
+  it('replaces a known label when a later message carries a different one', () => {
+    const { db, close } = fresh()
+    recordConversation(db, message({ group: { id: 'g1', name: 'weekend' } }))
+    recordConversation(db, message({ messageId: 'm2', group: { id: 'g1', name: 'renamed' } }))
+    const rows = listConversations(db)
+    close()
+    expect(rows[0]?.label).toBe('renamed')
+  })
+
   it('omits label entirely when the channel has never given one', () => {
     const { db, close } = fresh()
     recordConversation(db, message({ sender: { channel: 'console', externalId: 'alice' } }))
