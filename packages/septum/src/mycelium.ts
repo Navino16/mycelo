@@ -121,8 +121,9 @@ export interface PluginsConfigure {
    */
   settings(name: string): Promise<Record<string, unknown>>
   /**
-   * Rejects when the plugin is not installed, or when it publishes a JSON Schema that
-   * declares no such key — an undeclared key is stripped in silence at validation.
+   * Rejects when the plugin is not installed, and when it publishes a JSON Schema that
+   * neither declares the key nor allows additional properties — such a key would be
+   * dropped at validation and the plugin would go on using its default.
    */
   setSetting(name: string, key: string, value: unknown): Promise<void>
   /** Resolves an `available: false` FormSchema rather than rejecting, whatever went wrong. */

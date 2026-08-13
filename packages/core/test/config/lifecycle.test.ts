@@ -309,6 +309,9 @@ describe('enablePlugin refuses rather than rejecting when validation itself thro
     db.insert(pluginSetting).values({ pluginName: 'needs-config', key: 'url', value: 'not json', isSecret: false }).run()
     const result = await enablePlugin(db, dir, 'needs-config')
     expect(result.ok).toBe(false)
+    // Not merely refused: the ordinary "url is missing" refusal satisfies ok === false too,
+    // so only the reason distinguishes a caught throw from a rejected config.
+    if (!result.ok) expect(result.reason).toContain('validating it threw')
     close()
   })
 })

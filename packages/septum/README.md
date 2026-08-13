@@ -152,12 +152,14 @@ answers `[]` for an unknown principal, who holds no role either way.
 `enable(name)` validates the stored settings against the plugin's own `configSchema` before it
 flips the row, and **rejects** with `configuration is incomplete:` followed by whatever that
 schema reported — a Zod error dump, or the string a hand-built `ConfigSchema` returned; how
-precisely the fault is named is the plugin author's choice, not the core's. `disable(name)`
-and `setSetting(...)` reject for a plugin that is not installed. `settings(name)` never returns a
-value stored as a secret: it answers `••••` in its place, which is what makes `plugins.configure` a
-lesser grant than the credential store it would otherwise expose. `formSchema(name)` is the one
-method that never rejects — every fault, including a spore that throws at import, comes back as
-`{ available: false, reason }`.
+precisely the fault is named is the plugin author's choice, not the core's. `disable(name)`,
+`settings(name)` and `setSetting(...)` reject for a plugin that is not installed. `setSetting`
+also rejects a key the plugin's published JSON Schema neither declares nor allows as an
+additional property — such a key is dropped at validation, so the write would be confirmed and
+then ignored. `settings(name)` never returns a value stored as a secret: it answers `••••` in its
+place, which is what makes `plugins.configure` a lesser grant than the credential store it would
+otherwise expose. `formSchema(name)` is the one method that never rejects — every fault,
+including a spore that throws at import, comes back as `{ available: false, reason }`.
 
 ```yaml
 requires:

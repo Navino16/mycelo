@@ -1,4 +1,6 @@
 import { expect, it } from 'bun:test'
+import { sql } from 'drizzle-orm'
+import type { Db } from '../../src/persistence/db.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import {
   clearSetting, getInstall, listInstalls, readAllSettings, readSettings, recordInstall,
@@ -39,11 +41,19 @@ it('readAllSettings keys by plugin and includes an install with no settings', ()
   close()
 })
 
+// A raw sql query with no `fields` answers a positional array, never a keyed object.
+function totalChanges(db: Db): number {
+  return db.get<[number]>(sql`SELECT total_changes()`)?.[0] ?? 0
+}
+
 it('records an install already enabled, in one write', () => {
   const { db, close } = fresh()
+  const before = totalChanges(db)
   recordInstall(db, 'radarr', 'rhiza', true)
   // The first run used to record then enable: a crash between the two left a row the
-  // next boot could no longer recognise as belonging to a first run.
+  // next boot could no longer recognise as belonging to a first run. The count is the
+  // claim — reading the column back cannot tell one write from two.
+  expect(totalChanges(db) - before).toBe(1)
   expect(getInstall(db, 'radarr')?.enabled).toBe(true)
   close()
 })

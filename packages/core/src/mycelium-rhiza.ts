@@ -270,10 +270,15 @@ async function writeDeclaredSetting(
 ): Promise<void> {
   const form = await formSchemaOf(db, sporesDir, name)
   if (form.available) {
-    const properties: unknown = (form.schema as { properties?: unknown }).properties
+    const schema = form.schema as { properties?: unknown, additionalProperties?: unknown }
+    const properties: unknown = schema.properties
+    // z.object emits no additionalProperties, z.looseObject emits `{}` and z.strictObject
+    // `false`. Only an explicitly open schema is exempt: refusing every key a deliberately
+    // open plugin accepts would shut it out of the one configuration surface there is.
+    const open = schema.additionalProperties !== undefined && schema.additionalProperties !== false
     // hasOwn, never `in`: the schema is a plugin-supplied plain object, and 'constructor'
     // is a key an operator can type.
-    if (typeof properties === 'object' && properties !== null && !Object.hasOwn(properties, key)) {
+    if (!open && typeof properties === 'object' && properties !== null && !Object.hasOwn(properties, key)) {
       throw new Error(`plugin '${name}' declares no setting '${key}'`)
     }
   }

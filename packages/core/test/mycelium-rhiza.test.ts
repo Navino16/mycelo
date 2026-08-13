@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve as resolvePath } from 'node:path'
 import { describe, expect, it } from 'bun:test'
+import { z } from 'zod'
 import type {
   HealthRead, PluginsConfigure, PluginsRead, PluginsToggle, PrincipalsManage, PrincipalsRead,
   RolesAssign, RolesManage, RolesRead,
@@ -405,17 +406,10 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
 // A misspelled key was written, confirmed, and then shown back by /plugin-config while the
 // plugin went on using its default — fail-open on a spore whose whole purpose is a rule.
 describe('setSetting against the keys the plugin declares', () => {
-  const DECLARING_MODULE = `
-    export default {
-      configSchema: {
-        safeParse: (input) => ({ success: true, data: input }),
-        toJsonSchema: () => ({ type: 'object', properties: { url: { type: 'string' } } }),
-      },
-      create: () => ({ handlers: { handleIt: async () => {} } }),
-    }
-  `
-
-  function declaring(): string {
+  // The emitted JSON is computed here with the workspace's own Zod and inlined, rather than
+  // hand-written: what the guard reads is whatever z.toJSONSchema actually produces, and a
+  // temp spore cannot resolve zod from a tmpdir.
+  function declaring(jsonSchema: object): string {
     const dir = mkdtempSync(join(tmpdir(), 'mycelo-declared-'))
     mkdirSync(join(dir, 'declares', 'src'), { recursive: true })
     writeFileSync(
@@ -424,23 +418,62 @@ describe('setSetting against the keys the plugin declares', () => {
         + 'commands:\n  - name: declares\n    description: x\n    code: handleIt\n',
       'utf8',
     )
-    writeFileSync(join(dir, 'declares', 'src/index.ts'), DECLARING_MODULE, 'utf8')
+    writeFileSync(
+      join(dir, 'declares', 'src/index.ts'),
+      'export default {\n'
+        + '  configSchema: {\n'
+        + '    safeParse: (input) => ({ success: true, data: input }),\n'
+        + `    toJsonSchema: () => (${JSON.stringify(jsonSchema)}),\n`
+        + '  },\n'
+        + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+        + '}\n',
+      'utf8',
+    )
     return dir
   }
 
-  it('rejects a key the published JSON Schema does not declare, and accepts one it does', async () => {
+  async function withSpore(jsonSchema: object, body: (api: PluginsConfigure) => Promise<void>): Promise<void> {
     const db = fresh()
-    const dir = declaring()
+    const dir = declaring(jsonSchema)
     try {
       recordInstall(db, 'declares', 'enzyme')
-      const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, dir) as PluginsConfigure
+      await body(createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, dir) as PluginsConfigure)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  const CLOSED = z.toJSONSchema(z.object({ url: z.string() }), { io: 'input' })
+  const LOOSE = z.toJSONSchema(z.looseObject({ url: z.string() }), { io: 'input' })
+  const STRICT = z.toJSONSchema(z.strictObject({ url: z.string() }), { io: 'input' })
+
+  it('rejects a key the published JSON Schema does not declare, and accepts one it does', async () => {
+    await withSpore(CLOSED, async (api) => {
       await rejectsWith(api.setSetting('declares', 'ur1', 'http://x'), /'declares' declares no setting 'ur1'/)
       expect(await api.settings('declares')).toEqual({})
       await api.setSetting('declares', 'url', 'http://x')
       expect(await api.settings('declares')).toEqual({ url: 'http://x' })
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
+    })
+  })
+
+  // z.object emits no additionalProperties at all, z.looseObject emits `{}`. Refusing an
+  // undeclared key there would shut a deliberately open plugin out of the only
+  // configuration surface this phase provides, with no channel workaround.
+  it('writes any key when the schema declares itself open', async () => {
+    expect(LOOSE).toHaveProperty('additionalProperties')
+    expect(CLOSED).not.toHaveProperty('additionalProperties')
+    await withSpore(LOOSE, async (api) => {
+      await api.setSetting('declares', 'anything', 'x')
+      expect(await api.settings('declares')).toEqual({ anything: 'x' })
+    })
+  })
+
+  it('still refuses an undeclared key when the schema closes itself explicitly', async () => {
+    // z.strictObject emits additionalProperties: false, which says the opposite of `{}`.
+    expect(STRICT).toHaveProperty('additionalProperties', false)
+    await withSpore(STRICT, async (api) => {
+      await rejectsWith(api.setSetting('declares', 'ur1', 'x'), /declares no setting 'ur1'/)
+    })
   })
 
   it('still writes any key for a plugin that publishes no JSON Schema', async () => {

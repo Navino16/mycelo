@@ -25,6 +25,9 @@ it('a stale plugins: block is rejected, never ignored', () => {
     // names neither the field nor where the settings went.
     expect((e as BootstrapError).message).toContain('plugins')
     expect((e as BootstrapError).message).toContain('database')
+    // The file loadBootstrap was actually given, not a hardcoded 'mycelo.yaml': tests and
+    // phase 6 both pass paths of their own.
+    expect((e as BootstrapError).message).toContain(file)
   }
 })
 
