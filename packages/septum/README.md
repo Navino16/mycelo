@@ -189,6 +189,21 @@ Add a `configSchema` when the plugin takes configuration. It is duck-typed rathe
 as a Zod schema: a plugin is bundled with its own copy of Zod, so its schemas are not
 instances of the core's. Anything with a compatible `safeParse` is accepted.
 
+`defineConfig` wraps a Zod schema into that shape and adds `toJsonSchema()`, which the settings
+form is generated from. It uses septum's own bundled Zod, so the schema and the converter always
+come from the same copy:
+
+```ts
+import { defineConfig } from '@mycelo/septum'
+import { z } from 'zod'
+
+const configSchema = defineConfig(z.object({ apiKey: z.string().min(1) }))
+```
+
+`toJsonSchema` is optional on `ConfigSchema` itself, so a plugin author who builds the shape by
+hand rather than through `defineConfig` may omit it — the plugin still germinates, it just gets
+no generated form.
+
 A plugin whose commands all carry `respond:` needs no module at all — `help` above answers
 without one. The manifest is then the entire plugin: no `src/index.ts`, nothing to bundle,
 nothing that can throw at germination.

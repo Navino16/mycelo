@@ -49,6 +49,9 @@ export async function inhibitorChecks(harness: InhibitorHarness): Promise<string
     if (harness.invalidConfig !== undefined && schema.safeParse(harness.invalidConfig).success) {
       failures.push('configSchema accepts the declared invalid config')
     }
+    if (schema.toJsonSchema !== undefined && typeof schema.toJsonSchema !== 'function') {
+      failures.push('configSchema.toJsonSchema is present but is not a function')
+    }
   }
 
   let instance: Inhibitor<unknown>

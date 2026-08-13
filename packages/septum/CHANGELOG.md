@@ -1,5 +1,18 @@
 # @mycelo/septum
 
+## 0.6.0
+
+Added:
+
+- `defineConfig(schema)`: wraps a Zod schema into `ConfigSchema`, adding `toJsonSchema()` for the
+  phase 9 settings form. Uses septum's own bundled Zod, so the schema and the converter come from
+  the same copy.
+- `ConfigSchema.toJsonSchema?()`, optional so a hand-built `ConfigSchema` need not supply one.
+- `FormSchema`: what `PluginsConfigure.formSchema()` (task 7) resolves to for one plugin's form.
+
+The conformance kit now rejects a `configSchema.toJsonSchema` that is present but not callable,
+across `hyphaChecks`, `rhizaChecks`, `enzymeChecks` and `inhibitorChecks`.
+
 ## 0.4.0
 
 **Breaking.** `Hypha.start(ctx)` is replaced by `connect(ctx)` followed by `listen()`. Migration:

@@ -120,6 +120,17 @@ describe('hypha conformance checks', () => {
     })
     expect(failures.join(' ')).toContain('invalid config')
   })
+
+  it('catches a configSchema.toJsonSchema that is present but not callable', async () => {
+    const failures = await hyphaChecks({
+      ...goodHarness,
+      module: {
+        configSchema: { safeParse: (v: unknown) => config.safeParse(v), toJsonSchema: true } as never,
+        create: () => goodHarness.module.create(),
+      },
+    })
+    expect(failures.join(' ')).toContain('toJsonSchema is present but is not a function')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -309,6 +320,17 @@ describe('enzyme conformance checks', () => {
     expect(failures.join(' ').match(/mutate/g)).toHaveLength(1)
   })
 
+  it('catches a configSchema.toJsonSchema that is present but not callable', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        configSchema: { safeParse: () => ({ success: true, data: {} }), toJsonSchema: true } as never,
+        create: () => ({ handlers: { links: async () => {} } }),
+      },
+    })
+    expect(failures.join(' ')).toContain('toJsonSchema is present but is not a function')
+  })
+
   it('does not certify a handler resolved through Object.prototype', async () => {
     const failures = await enzymeChecks({
       name: 'sneaky',
@@ -418,6 +440,17 @@ describe('inhibitor conformance checks', () => {
     })
     expect(failures.join(' ')).toContain('expected to be denied')
   })
+
+  it('catches a configSchema.toJsonSchema that is present but not callable', async () => {
+    const failures = await inhibitorChecks({
+      ...goodInhibitor,
+      module: {
+        configSchema: { safeParse: () => ({ success: true, data: {} }), toJsonSchema: true } as never,
+        create: () => goodInhibitor.module.create(),
+      },
+    })
+    expect(failures.join(' ')).toContain('toJsonSchema is present but is not a function')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -484,6 +517,17 @@ describe('rhiza conformance checks', () => {
       },
     })
     expect(failures.join(' ')).toContain('threw instead of reporting')
+  })
+
+  it('catches a configSchema.toJsonSchema that is present but not callable', async () => {
+    const failures = await rhizaChecks({
+      ...goodRhiza,
+      module: {
+        configSchema: { safeParse: () => ({ success: true, data: {} }), toJsonSchema: true } as never,
+        create: () => goodRhiza.module.create(),
+      },
+    })
+    expect(failures.join(' ')).toContain('toJsonSchema is present but is not a function')
   })
 })
 

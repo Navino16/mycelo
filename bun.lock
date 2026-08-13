@@ -17,42 +17,42 @@
       "name": "@mycelo/fixture-admin",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.5.0",
+        "@mycelo/septum": "^0.6.0",
       },
     },
     "fixtures/console": {
       "name": "@mycelo/fixture-console",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.5.0",
+        "@mycelo/septum": "^0.6.0",
       },
     },
     "fixtures/gate": {
       "name": "@mycelo/fixture-gate",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.5.0",
+        "@mycelo/septum": "^0.6.0",
       },
     },
     "fixtures/helpdesk": {
       "name": "@mycelo/fixture-helpdesk",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.5.0",
+        "@mycelo/septum": "^0.6.0",
       },
     },
     "fixtures/media": {
       "name": "@mycelo/fixture-media",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.5.0",
+        "@mycelo/septum": "^0.6.0",
       },
     },
     "fixtures/mock": {
       "name": "@mycelo/fixture-mock",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.5.0",
+        "@mycelo/septum": "^0.6.0",
       },
     },
     "fixtures/ping": {
@@ -63,7 +63,7 @@
       "name": "@mycelo/fixture-twofile",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.5.0",
+        "@mycelo/septum": "^0.6.0",
       },
     },
     "packages/core": {
@@ -78,7 +78,7 @@
     },
     "packages/septum": {
       "name": "@mycelo/septum",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "zod": "^4.4.3",
       },
@@ -368,6 +368,8 @@
     "@esbuild-kit/core-utils/esbuild": ["esbuild@0.18.20", "", { "optionalDependencies": { "@esbuild/android-arm": "0.18.20", "@esbuild/android-arm64": "0.18.20", "@esbuild/android-x64": "0.18.20", "@esbuild/darwin-arm64": "0.18.20", "@esbuild/darwin-x64": "0.18.20", "@esbuild/freebsd-arm64": "0.18.20", "@esbuild/freebsd-x64": "0.18.20", "@esbuild/linux-arm": "0.18.20", "@esbuild/linux-arm64": "0.18.20", "@esbuild/linux-ia32": "0.18.20", "@esbuild/linux-loong64": "0.18.20", "@esbuild/linux-mips64el": "0.18.20", "@esbuild/linux-ppc64": "0.18.20", "@esbuild/linux-riscv64": "0.18.20", "@esbuild/linux-s390x": "0.18.20", "@esbuild/linux-x64": "0.18.20", "@esbuild/netbsd-x64": "0.18.20", "@esbuild/openbsd-x64": "0.18.20", "@esbuild/sunos-x64": "0.18.20", "@esbuild/win32-arm64": "0.18.20", "@esbuild/win32-ia32": "0.18.20", "@esbuild/win32-x64": "0.18.20" }, "bin": { "esbuild": "bin/esbuild" } }, "sha512-ceqxoedUrcayh7Y7ZX6NdbbDzGROiyVBgC4PriJThBKSVPWnnFHZAkfI1lJT8QFkOwH4qOS2SJkS4wvpGl8BpA=="],
 
     "@eslint-community/eslint-utils/eslint-visitor-keys": ["eslint-visitor-keys@3.4.3", "", {}, "sha512-wpc+LXeiyiisxPlEkUzU6svyS1frIO3Mgxj1fdy7Pm8Ygzguax2N3Fa/D/ag1WqbOprdI+uY6wMUl8/a2G+iag=="],
+
+    "@mycelo/core/@mycelo/septum": ["@mycelo/septum@0.5.0", "", { "dependencies": { "zod": "^4.4.3" } }, "sha512-CjBgwMOa1/AA7hRMon9z+8xh1SbeXeHUOPNJJkT6gpSXdHbVZ+4MI+jJWdMjDYvMaJOZDgwK/4c5Qj7BMcdkGg=="],
 
     "@typescript-eslint/eslint-plugin/ignore": ["ignore@7.0.6", "", {}, "sha512-BAg6QkE8W+TuQLrrw0Ugr7HegXduRuuj8/ti2kSOc+jz1dmx8/WNcjr6XGnq5YpDWxFwwaavqD0+jIUOKelTsw=="],
 

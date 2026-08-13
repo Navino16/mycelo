@@ -39,6 +39,9 @@ export async function rhizaChecks(harness: RhizaHarness): Promise<string[]> {
     if (harness.invalidConfig !== undefined && schema.safeParse(harness.invalidConfig).success) {
       failures.push('configSchema accepts the declared invalid config')
     }
+    if (schema.toJsonSchema !== undefined && typeof schema.toJsonSchema !== 'function') {
+      failures.push('configSchema.toJsonSchema is present but is not a function')
+    }
   }
 
   let instance: Rhiza<unknown, unknown>
