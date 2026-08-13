@@ -25,6 +25,10 @@ export type ArgSpec = z.infer<typeof argSpecSchema>
 const commandBase = {
   name: nameSchema,
   description: z.string().min(1),
+  // Declared by the author, checked by the core against the emitting hypha. Absent means
+  // the command works on every channel. Optional rather than .default([]): z.infer emits the
+  // output type, and a default would make the field mandatory on every CommandSpec literal.
+  capabilities: z.array(z.enum(CHANNEL_CAPABILITIES)).optional(),
 }
 
 // A union rather than a .refine(): z.infer then yields a type TypeScript narrows,

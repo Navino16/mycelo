@@ -213,3 +213,23 @@ describe('any_of', () => {
     })).toThrow(ManifestError)
   })
 })
+
+it('accepts channel capabilities on a command and leaves them absent when undeclared', () => {
+  const parsed = parseManifest({
+    kind: 'enzyme', name: 'p', septum: '^0.7',
+    commands: [
+      { name: 'react', description: 'needs reactions', respond: 'ok', capabilities: ['reactions'] },
+      { name: 'plain', description: 'needs nothing', respond: 'ok' },
+    ],
+  })
+  if (parsed.kind !== 'enzyme') throw new Error('expected an enzyme manifest')
+  expect(parsed.commands[0]?.capabilities).toEqual(['reactions'])
+  expect(parsed.commands[1]?.capabilities).toBeUndefined()
+})
+
+it('rejects a capability that is not a ChannelCapability', () => {
+  expect(() => parseManifest({
+    kind: 'enzyme', name: 'p', septum: '^0.7',
+    commands: [{ name: 'c', description: 'd', respond: 'ok', capabilities: ['telepathy'] }],
+  })).toThrow(ManifestError)
+})

@@ -25,8 +25,8 @@ export interface IncomingMessage {
   conversationId: string
   /** Opaque, and what makes a reaction addressable. Required from day one. */
   messageId: string
-  /** Present only when the conversation is a group. */
-  group?: { id: string }
+  /** Present only when the conversation is a group. `name` is what the platform calls it. */
+  group?: { id: string; name?: string }
   sender: ChannelIdentity
   text: string
   attachments: Attachment[]

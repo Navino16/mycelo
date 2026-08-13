@@ -30,7 +30,7 @@ capabilities are declared here rather than in the module.
 ```yaml
 kind: enzyme
 name: radarr-helper
-septum: "^0.6"
+septum: "^0.7"
 description: Movie shortcuts for Radarr
 commands:
   - name: help
@@ -39,6 +39,7 @@ commands:
   - name: add
     description: Queue a movie by title
     code: addMovie
+    capabilities: [reactions]
     args:
       - name: title
         description: Movie title
@@ -48,7 +49,9 @@ commands:
 A command carries exactly one of `respond` or `code`, never both and never neither:
 `respond` is a fixed string sent back untouched, `code` names a handler the module
 exports. `args` only makes sense on a `code` command — `respond` has no way to
-interpolate one, so declaring it there is rejected.
+interpolate one, so declaring it there is rejected. `capabilities` is optional on
+every command: the core checks it against the emitting hypha and refuses the command
+where it is missing; a command with none works on every channel.
 
 Every manifest carries `kind`, `name` (lowercase, digits and dashes) and `septum`, the
 contract range it targets. `description`, `externals` and `requires` are optional everywhere.
@@ -58,7 +61,7 @@ Each kind then adds its own:
 |---|---|
 | `hypha` | `capabilities`: any of `attachments`, `reactions`, `threads`, `group_membership` |
 | `rhiza` | — |
-| `enzyme` | `commands`: at least one, each with a `name`, a `description`, and exactly one of `respond` (a fixed text reply) or `code` (a handler name); `code` commands may add `args` |
+| `enzyme` | `commands`: at least one, each with a `name`, a `description`, and exactly one of `respond` (a fixed text reply) or `code` (a handler name); `code` commands may add `args`; either may add `capabilities` |
 | `inhibitor` | `enforcing`: how an *error* from this inhibitor is handled, default `false` |
 
 ### `enforcing` governs errors, never refusals
@@ -140,6 +143,9 @@ present-but-rejecting:
 | `roles.manage` | `RolesManage` | `createRole(name, patterns)`, `setRoleCommands(name, patterns)`, `deleteRole(name)` |
 | `plugins.toggle` | `PluginsToggle` | `enable(name)`, `disable(name)` |
 | `plugins.configure` | `PluginsConfigure` | `settings(name)`, `setSetting(name, key, value)`, `formSchema(name)` |
+| `conversations.read` | `ConversationsRead` | `listConversations()` — every conversation the bot has seen, with a readable `label` |
+| `messages.broadcast` | `MessagesBroadcast` | `broadcast(content)` — sends to every operator-configured target, distinct from `messages.send` so replying to one sender never implies writing to everyone |
+| `restrictions.manage` | `RestrictionsManage` | context rules, an inhibitor's confined channels, and the broadcast target list |
 
 `listPlugins()` alone is synchronous; every other method returns a promise. The identity and role
 methods **reject** rather than resolve quietly when asked about something that does not exist — an
@@ -271,7 +277,7 @@ it('conforms to the Enzyme contract', async () => {
   const failures = await enzymeChecks({
     name: 'radarr-helper',
     manifest: {
-      kind: 'enzyme', name: 'radarr-helper', septum: '^0.6',
+      kind: 'enzyme', name: 'radarr-helper', septum: '^0.7',
       commands: [
         { name: 'help', description: 'Show what this plugin can do', respond: 'Try /add <title> to queue a movie.' },
         { name: 'add', description: 'Queue a movie by title', code: 'addMovie',

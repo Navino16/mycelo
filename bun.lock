@@ -17,42 +17,42 @@
       "name": "@mycelo/fixture-admin",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.6.0",
+        "@mycelo/septum": "^0.7.0",
       },
     },
     "fixtures/console": {
       "name": "@mycelo/fixture-console",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.6.0",
+        "@mycelo/septum": "^0.7.0",
       },
     },
     "fixtures/gate": {
       "name": "@mycelo/fixture-gate",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.6.0",
+        "@mycelo/septum": "^0.7.0",
       },
     },
     "fixtures/helpdesk": {
       "name": "@mycelo/fixture-helpdesk",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.6.0",
+        "@mycelo/septum": "^0.7.0",
       },
     },
     "fixtures/media": {
       "name": "@mycelo/fixture-media",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.6.0",
+        "@mycelo/septum": "^0.7.0",
       },
     },
     "fixtures/mock": {
       "name": "@mycelo/fixture-mock",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.6.0",
+        "@mycelo/septum": "^0.7.0",
       },
     },
     "fixtures/ping": {
@@ -63,14 +63,14 @@
       "name": "@mycelo/fixture-twofile",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.6.0",
+        "@mycelo/septum": "^0.7.0",
       },
     },
     "packages/core": {
       "name": "@mycelo/core",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.6.0",
+        "@mycelo/septum": "^0.7.0",
         "drizzle-orm": "^0.45.2",
         "yaml": "^2.9.0",
         "zod": "^4.4.3",
@@ -78,7 +78,7 @@
     },
     "packages/septum": {
       "name": "@mycelo/septum",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "dependencies": {
         "zod": "^4.4.3",
       },
