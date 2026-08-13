@@ -8,9 +8,13 @@ it('a plugin with no configSchema has nothing to fill in', () => {
   expect(result).toEqual({ available: false, reason: 'this plugin takes no configuration' })
 })
 
-it('a convertible schema yields a form', () => {
+it('a convertible schema yields a form carrying the declared property', () => {
   const result = formSchemaFor(defineConfig(z.object({ url: z.string() })))
   expect(result.available).toBe(true)
+  if (result.available) {
+    const properties = (result.schema as { properties?: Record<string, unknown> }).properties
+    expect(properties).toHaveProperty('url')
+  }
 })
 
 it('a schema that cannot be converted degrades instead of throwing', () => {
@@ -24,4 +28,34 @@ it('a configSchema without toJsonSchema is reported, not treated as absent', () 
   const result = formSchemaFor(handRolled)
   expect(result.available).toBe(false)
   if (!result.available) expect(result.reason).toContain('no JSON Schema')
+})
+
+it('a toJsonSchema getter that throws degrades instead of throwing', () => {
+  const hostile = {
+    get toJsonSchema() {
+      throw new Error('boom')
+    },
+  }
+  expect(() => formSchemaFor(hostile)).not.toThrow()
+  const result = formSchemaFor(hostile)
+  expect(result.available).toBe(false)
+})
+
+it('a toJsonSchema returning a non-object is reported, not accepted', () => {
+  const handRolled = { toJsonSchema: () => 'not a schema' }
+  const result = formSchemaFor(handRolled)
+  expect(result.available).toBe(false)
+  if (!result.available) expect(result.reason).toContain('did not return an object')
+})
+
+it('a toJsonSchema returning an array is rejected, not accepted as a form', () => {
+  const handRolled = { toJsonSchema: () => [] }
+  const result = formSchemaFor(handRolled)
+  expect(result.available).toBe(false)
+})
+
+it('a toJsonSchema returning a thenable is rejected, not accepted as a form', () => {
+  const handRolled = { toJsonSchema: () => ({ then: () => undefined }) }
+  const result = formSchemaFor(handRolled)
+  expect(result.available).toBe(false)
 })

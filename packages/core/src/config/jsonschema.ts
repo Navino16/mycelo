@@ -8,13 +8,16 @@ export function formSchemaFor(configSchema: unknown): FormSchema {
   if (configSchema === undefined || configSchema === null) {
     return { available: false, reason: 'this plugin takes no configuration' }
   }
-  const emit = (configSchema as { toJsonSchema?: unknown }).toJsonSchema
-  if (typeof emit !== 'function') {
-    return { available: false, reason: 'this plugin publishes no JSON Schema: configure it by hand' }
-  }
   try {
+    // The property read is inside the try: a foreign object may expose toJsonSchema
+    // as a getter, and a getter is code the core does not control either.
+    const emit = (configSchema as { toJsonSchema?: unknown }).toJsonSchema
+    if (typeof emit !== 'function') {
+      return { available: false, reason: 'this plugin publishes no JSON Schema: configure it by hand' }
+    }
     const schema: unknown = (emit as () => unknown).call(configSchema)
-    if (typeof schema !== 'object' || schema === null) {
+    // typeof admits arrays and thenables; FormSchema's `object` is neither.
+    if (typeof schema !== 'object' || schema === null || Array.isArray(schema) || typeof (schema as { then?: unknown }).then === 'function') {
       return { available: false, reason: 'toJsonSchema() did not return an object' }
     }
     return { available: true, schema }
