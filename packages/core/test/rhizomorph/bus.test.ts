@@ -1,7 +1,8 @@
 import { resolve as resolvePath } from 'node:path'
 import { describe, expect, it, mock } from 'bun:test'
-import type { CommandSpec, Enzyme, Hypha, IncomingMessage, Logger, OutgoingContent, Principal, Rhiza, Verdict } from '@mycelo/septum'
+import type { ChannelCapability, CommandSpec, Enzyme, Hypha, IncomingMessage, Logger, OutgoingContent, Principal, Rhiza, Verdict } from '@mycelo/septum'
 import type { AdmissionChain } from '../../src/admission/chain.js'
+import { listConversations } from '../../src/conversations/registry.js'
 import { buildRoutes } from '../../src/germination/registry.js'
 import type { GerminatedEnzyme, GerminatedHypha, GerminatedRhiza, Registry } from '../../src/germination/registry.js'
 import { resolvePrincipal } from '../../src/identity/resolve.js'
@@ -471,11 +472,17 @@ function grant(target: Db, principalId: string, roleName: string, patterns: read
   target.insert(principalRole).values({ principalId, roleId: id }).run()
 }
 
+interface DeliverOptions {
+  conversationId?: string
+  group?: { id: string, name?: string }
+  displayName?: string
+}
+
 interface Harness {
   db: Db
   sent: string[]
   seen: { principal?: Principal }
-  deliver(text: string, externalId: string): Promise<void>
+  deliver(text: string, externalId: string, options?: DeliverOptions): Promise<void>
 }
 
 function harness(options: {
@@ -483,6 +490,7 @@ function harness(options: {
   admit?: (message: IncomingMessage) => Promise<Verdict>
   defaultRole?: string
   db?: Db
+  capabilities?: readonly ChannelCapability[]
 }): Harness {
   const harnessDb = options.db ?? fresh()
   const sent: string[] = []
@@ -490,7 +498,7 @@ function harness(options: {
   const hypha = {
     name: 'console',
     config: {},
-    manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.5', capabilities: [] },
+    manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.5', capabilities: options.capabilities ?? [] },
     instance: {
       connect: () => Promise.resolve(),
       listen: () => {},
@@ -537,9 +545,16 @@ function harness(options: {
   })
   return {
     db: harnessDb, sent, seen,
-    deliver: (text, externalId) => bus.deliver('console', {
-      channel: 'console', conversationId: 'c1', messageId: 'm1',
-      sender: { channel: 'console', externalId },
+    deliver: (text, externalId, deliverOptions = {}) => bus.deliver('console', {
+      channel: 'console',
+      conversationId: deliverOptions.conversationId ?? 'c1',
+      messageId: 'm1',
+      ...(deliverOptions.group === undefined ? {} : { group: deliverOptions.group }),
+      sender: {
+        channel: 'console',
+        externalId,
+        ...(deliverOptions.displayName === undefined ? {} : { displayName: deliverOptions.displayName }),
+      },
       text, attachments: [], raw: null, receivedAt: new Date(),
     }),
   }
@@ -634,5 +649,32 @@ describe('deliver, admission and authorization', () => {
     const h = harness({ commands: [codeCommand], defaultRole: 'ghost' })
     await h.deliver('/movies Dune', 'bob')
     expect(h.sent).toEqual([])
+  })
+})
+
+describe('the conversation registry', () => {
+  it('records an admitted conversation and never records a refused one', async () => {
+    const testDb = fresh()
+    const bob = resolvePrincipal(testDb, { channel: 'console', externalId: 'bob' })
+    grant(testDb, bob.id, 'guest', ['media.*'])
+    const h = harness({
+      commands: [codeCommand],
+      db: testDb,
+      admit: (msg) => Promise.resolve(
+        msg.conversationId === 'refused' ? { allow: false, reason: 'no' } : { allow: true },
+      ),
+    })
+    await h.deliver('/movies Dune', 'bob', { conversationId: 'admitted' })
+    await h.deliver('/movies Dune', 'bob', { conversationId: 'refused' })
+    expect(listConversations(testDb).map((c) => c.conversationId)).toEqual(['admitted'])
+  })
+
+  it('records a group conversation with its platform name', async () => {
+    const testDb = fresh()
+    const bob = resolvePrincipal(testDb, { channel: 'console', externalId: 'bob' })
+    grant(testDb, bob.id, 'guest', ['media.*'])
+    const h = harness({ commands: [codeCommand], db: testDb })
+    await h.deliver('/movies Dune', 'bob', { conversationId: 'g1', group: { id: 'g1', name: 'weekend' } })
+    expect(listConversations(testDb)[0]).toMatchObject({ kind: 'group', label: 'weekend' })
   })
 })

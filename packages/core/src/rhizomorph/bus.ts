@@ -11,6 +11,7 @@ import type {
   Principal,
 } from '@mycelo/septum'
 import type { AdmissionChain } from '../admission/chain.js'
+import { recordConversation } from '../conversations/registry.js'
 import type { GerminatedHypha, GerminatedRhiza, Registry } from '../germination/registry.js'
 import { authorize } from '../authorization/check.js'
 import { patternsOf, resolvePrincipal } from '../identity/resolve.js'
@@ -180,6 +181,15 @@ export function createBus({
           // with no right to address it (design §3.1).
           logger.info(`admission refused a message on '${channel}'`, { reason: verdict.reason })
           return
+        }
+
+        // After admission, never before: a refused spammer must not pollute the list an
+        // operator picks broadcast targets from. A failure here is logged and delivery
+        // continues — the registry is a convenience, and losing the message would cost more.
+        try {
+          recordConversation(db, message)
+        } catch (e) {
+          logger.error(`could not record the conversation on '${channel}'`, { error: (e as Error).message })
         }
 
         let principal: Principal
