@@ -138,6 +138,8 @@ present-but-rejecting:
 | `roles.read` | `RolesRead` | `listRoles()`, `rolesOf(principalId)` |
 | `roles.assign` | `RolesAssign` | `assignRole(principalId, roleName)`, `revokeRole(principalId, roleName)` |
 | `roles.manage` | `RolesManage` | `createRole(name, patterns)`, `setRoleCommands(name, patterns)`, `deleteRole(name)` |
+| `plugins.toggle` | `PluginsToggle` | `enable(name)`, `disable(name)` |
+| `plugins.configure` | `PluginsConfigure` | `settings(name)`, `setSetting(name, key, value)`, `formSchema(name)` |
 
 `listPlugins()` alone is synchronous; every other method returns a promise. The identity and role
 methods **reject** rather than resolve quietly when asked about something that does not exist — an
@@ -147,8 +149,13 @@ pattern listed twice. Three exceptions answer instead of rejecting: `getPrincipa
 `findByIdentity` answer `null` for "not found", since asking is their whole purpose, and `rolesOf`
 answers `[]` for an unknown principal, who holds no role either way.
 
-`plugins.toggle` is the one `MyceliumScope` value with no interface and nothing mounted: it parses,
-and leaves the spore dormant naming the phase that mounts it (phase 5).
+`enable(name)` validates the stored settings against the plugin's own `configSchema` before it
+flips the row, and **rejects** naming what is missing when they do not satisfy it; `disable(name)`
+and `setSetting(...)` reject for a plugin that is not installed. `settings(name)` never returns a
+value stored as a secret: it answers `••••` in its place, which is what makes `plugins.configure` a
+lesser grant than the credential store it would otherwise expose. `formSchema(name)` is the one
+method that never rejects — every fault, including a spore that throws at import, comes back as
+`{ available: false, reason }`.
 
 ```yaml
 requires:

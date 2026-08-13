@@ -108,6 +108,8 @@ export interface BusOptions {
   logger: Logger
   db: Db
   admission: AdmissionChain
+  /** Where the mycelium API reaches a spore on disk, for plugins.toggle and plugins.configure. */
+  sporesDir: string
   /** Assigned to a principal on first contact only (identity/resolve.ts). */
   defaultRole?: string
   /** Called when text carries no command, or names one nothing declares. */
@@ -119,13 +121,19 @@ export interface BusOptions {
 }
 
 export function createBus({
-  registry, prefix, logger, db, admission, defaultRole, onUnrouted, onDenied, mycelium,
+  registry, prefix, logger, db, admission, sporesDir, defaultRole, onUnrouted, onDenied, mycelium,
 }: BusOptions): Bus {
   const hyphaByName = new Map(registry.hyphae.map((h) => [h.name, h]))
   const send = (channel: string, conversationId: string, out: OutgoingContent): Promise<void> =>
     sendVia(hyphaByName, channel, conversationId, out)
   const mounted = mycelium ?? ((scopes: readonly MyceliumScope[]) =>
-    createMyceliumApi(registry, scopes, (target, content) => send(target.channel, target.conversationId, content), db))
+    createMyceliumApi(
+      registry,
+      scopes,
+      (target, content) => send(target.channel, target.conversationId, content),
+      db,
+      sporesDir,
+    ))
 
   // One context per enzyme, because `resolved` and `scopes` differ per spore
   // (design §2.4). Built once here rather than per message.

@@ -1,3 +1,4 @@
+import type { FormSchema } from './config.js'
 import type { HealthStatus, Principal, PushTarget } from './context.js'
 import type { SporeKind } from './manifest.js'
 import type { OutgoingContent } from './message.js'
@@ -14,6 +15,7 @@ export const MYCELIUM_SCOPES = [
   'roles.manage',
   'plugins.read',
   'plugins.toggle',
+  'plugins.configure',
   'health.read',
   'messages.send',
 ] as const
@@ -93,4 +95,20 @@ export interface RolesManage {
   setRoleCommands(name: string, patterns: readonly string[]): Promise<void>
   /** Rejects when the role does not exist or is `builtin`. */
   deleteRole(name: string): Promise<void>
+}
+
+export interface PluginsToggle {
+  /** Rejects, naming the missing setting, when the plugin's schema is not satisfied. */
+  enable(name: string): Promise<void>
+  /** Rejects when the plugin is not installed. */
+  disable(name: string): Promise<void>
+}
+
+export interface PluginsConfigure {
+  /** Secret values are redacted, never returned. */
+  settings(name: string): Promise<Record<string, unknown>>
+  /** Rejects when the plugin is not installed. */
+  setSetting(name: string, key: string, value: unknown): Promise<void>
+  /** Resolves an `available: false` FormSchema rather than rejecting, whatever went wrong. */
+  formSchema(name: string): Promise<FormSchema>
 }

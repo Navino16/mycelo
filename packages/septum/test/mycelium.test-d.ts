@@ -3,7 +3,9 @@ import type {
   HealthRead,
   MessagesSend,
   MyceliumScope,
+  PluginsConfigure,
   PluginsRead,
+  PluginsToggle,
   PrincipalsManage,
   PrincipalsRead,
   RoleInfo,
@@ -21,14 +23,14 @@ type Expect<T extends true> = T
 export type ScopeNamesAreExact = Expect<Equal<MyceliumScope,
   | 'principals.read' | 'principals.manage'
   | 'roles.read' | 'roles.assign' | 'roles.manage'
-  | 'plugins.read' | 'plugins.toggle'
+  | 'plugins.read' | 'plugins.toggle' | 'plugins.configure'
   | 'health.read' | 'messages.send'
 >>
 
 export type ScopesAreReadonly = Expect<Equal<typeof MYCELIUM_SCOPES, readonly [
   'principals.read', 'principals.manage',
   'roles.read', 'roles.assign', 'roles.manage',
-  'plugins.read', 'plugins.toggle',
+  'plugins.read', 'plugins.toggle', 'plugins.configure',
   'health.read', 'messages.send',
 ]>>
 
@@ -41,7 +43,8 @@ interface ScopeApi {
   'roles.assign': RolesAssign
   'roles.manage': RolesManage
   'plugins.read': PluginsRead
-  'plugins.toggle': never
+  'plugins.toggle': PluginsToggle
+  'plugins.configure': PluginsConfigure
   'health.read': HealthRead
   'messages.send': MessagesSend
 }
@@ -50,7 +53,7 @@ export type EveryScopeIsClassified = Expect<Equal<keyof ScopeApi, MyceliumScope>
 
 type Mounted = { [K in MyceliumScope]: ScopeApi[K] extends never ? never : K }[MyceliumScope]
 
-export type EightScopesMountAnInterface = Expect<Equal<Mounted, Exclude<MyceliumScope, 'plugins.toggle'>>>
+export type EveryScopeMountsAnInterface = Expect<Equal<Mounted, MyceliumScope>>
 
 // A plugin author's own implementation must satisfy each interface structurally. Deleting
 // an interface, or widening a signature, stops this file compiling.
@@ -83,4 +86,15 @@ export const rolesManage: RolesManage = {
   createRole: () => Promise.resolve(),
   setRoleCommands: () => Promise.resolve(),
   deleteRole: () => Promise.resolve(),
+}
+
+export const pluginsToggle: PluginsToggle = {
+  enable: () => Promise.resolve(),
+  disable: () => Promise.resolve(),
+}
+
+export const pluginsConfigure: PluginsConfigure = {
+  settings: () => Promise.resolve({ url: 'http://x', apiKey: '••••' }),
+  setSetting: () => Promise.resolve(),
+  formSchema: () => Promise.resolve({ available: true, schema: { type: 'object' } }),
 }

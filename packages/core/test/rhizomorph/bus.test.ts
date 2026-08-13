@@ -1,3 +1,4 @@
+import { resolve as resolvePath } from 'node:path'
 import { describe, expect, it, mock } from 'bun:test'
 import type { CommandSpec, Enzyme, Hypha, IncomingMessage, Logger, OutgoingContent, Principal, Rhiza, Verdict } from '@mycelo/septum'
 import type { AdmissionChain } from '../../src/admission/chain.js'
@@ -12,6 +13,9 @@ import type { SporeAccess } from '../../src/rhizomorph/bus.js'
 import { createLogger } from '../../src/support/logger.js'
 
 const DEFAULT_COMMANDS: CommandSpec[] = [{ name: 'ping', description: 'Health check', code: 'ping' }]
+// No test here reaches the mycelium fallback's disk-backed methods; the real fixtures
+// directory is passed so nothing in this file depends on a path that does not exist.
+const SPORES = resolvePath(import.meta.dirname, '../../../../fixtures')
 // None of this file's scopes touch the database; a shared in-memory instance is enough
 // to satisfy createBus's required db parameter.
 const db = (() => { const { db: opened } = openDatabase(':memory:'); migrateDatabase(opened); return opened })()
@@ -102,7 +106,7 @@ it('routes a command to its enzyme and the reply back to the channel', async () 
   const { registry, sent } = setup({
     handlers: { ping: async (_inv, ctx) => { await ctx.reply({ text: 'pong' }) } },
   })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger() })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
   await bus.deliver('console', message('/ping'))
   expect(sent).toEqual([{ text: 'pong' }])
 })
@@ -136,7 +140,7 @@ it('names the failed command, not just the channel, when a respond: send throws'
     error: (m) => { errors.push(m) },
     child: () => logger,
   }
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger })
   await bus.deliver('console', message('/links'))
   expect(errors[0]).toContain('ping.links')
 })
@@ -145,7 +149,7 @@ it('answers a text command without touching the module', async () => {
   const { registry, sent } = setup(null, [
     { name: 'links', description: 'Service URLs', respond: 'Radarr http://radarr:7878' },
   ])
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger() })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
   await bus.deliver('console', message('/links'))
   expect(sent).toEqual([{ text: 'Radarr http://radarr:7878' }])
 })
@@ -156,7 +160,7 @@ it('never calls a handler when the command answers with respond, even with an in
     { handlers: { links: async () => { calls++ } } },
     [{ name: 'links', description: 'Service URLs', respond: 'Radarr http://radarr:7878' }],
   )
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger() })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
   await bus.deliver('console', message('/links'))
   expect(sent).toEqual([{ text: 'Radarr http://radarr:7878' }])
   expect(calls).toBe(0)
@@ -170,7 +174,7 @@ it('logs and reports failure, rather than staying silent, when a code command ha
     error: (m) => { errors.push(m) },
     child: () => logger,
   }
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger })
   await bus.deliver('console', message('/boom'))
   expect(sent).toEqual([{ text: "command 'boom' failed" }])
   expect(errors[0]).toContain('boom')
@@ -181,7 +185,7 @@ it('reports failure rather than answering with Object.prototype.constructor when
     { handlers: {} },
     [{ name: 'boom', description: 'x', code: 'constructor' }],
   )
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger() })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
   await bus.deliver('console', message('/boom'))
   expect(sent).toEqual([{ text: "command 'boom' failed" }])
 })
@@ -190,7 +194,7 @@ it('reports an unknown command without invoking anything', async () => {
   const ping = mock()
   const { registry } = setup({ handlers: { ping } })
   const onUnrouted = mock(async () => {})
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger(), onUnrouted })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger(), onUnrouted })
   await bus.deliver('console', message('/nope'))
   expect(ping).not.toHaveBeenCalled()
   expect(onUnrouted).toHaveBeenCalledWith(expect.anything(), 'nope')
@@ -199,7 +203,7 @@ it('reports an unknown command without invoking anything', async () => {
 it('ignores text carrying no command', async () => {
   const ping = mock()
   const { registry } = setup({ handlers: { ping } })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger() })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
   await bus.deliver('console', message('just talking'))
   expect(ping).not.toHaveBeenCalled()
 })
@@ -208,7 +212,7 @@ it('contains a handler that throws and answers on the channel', async () => {
   const { registry, sent } = setup({
     handlers: { ping: async () => { throw new Error('boom') } },
   })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger() })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
   await bus.deliver('console', message('/ping'))
   expect(sent[0]?.text).toContain('failed')
 })
@@ -218,7 +222,7 @@ it('exposes the channel capabilities to the enzyme', async () => {
   const { registry } = setup({
     handlers: { ping: async (_inv, ctx) => { reported = ctx.capabilities.list() } },
   })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger() })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
   await bus.deliver('console', message('/ping'))
   expect(reported).toEqual(['reactions'])
 })
@@ -232,7 +236,7 @@ it('throws naming the target when ctx.rhiza() reaches a name this enzyme never d
       },
     },
   })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger() })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
   await bus.deliver('console', message('/ping'))
   expect(caught).toContain("'radarr'")
   expect(caught).toContain('not declared')
@@ -247,7 +251,7 @@ it('resolves a declared rhiza through ctx.rhiza(), reached through the full bus'
     ['mock'],
     [rhiza],
   )
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger() })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
   await bus.deliver('console', message('/ping'))
   expect(looked).toBe('x')
 })
@@ -261,7 +265,7 @@ it('still throws for ctx.on(), naming a phase that has not arrived rather than t
       },
     },
   })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger() })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
   await bus.deliver('console', message('/ping'))
   expect(caught).not.toContain('phase 3')
   expect(caught).toContain('not yet scheduled')
@@ -272,7 +276,7 @@ it('gives ctx.principal the sender resolved for this message', async () => {
   const { registry } = setup({
     handlers: { ping: async (_inv, ctx) => { seen = ctx.principal } },
   })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger() })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
   await bus.deliver('console', message('/ping'))
   expect(seen?.identities).toEqual([{ channel: 'console', externalId: 'local' }])
 })
@@ -282,7 +286,7 @@ it('answers has() false for a name this enzyme never declared', async () => {
   const { registry } = setup({
     handlers: { ping: async (_inv, ctx) => { result = ctx.has('radarr') } },
   })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger() })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
   await bus.deliver('console', message('/ping'))
   expect(result).toBe(false)
 })
@@ -296,7 +300,7 @@ it("answers has() true only for a name this enzyme's own resolved set carries", 
     ['mock'],
     [stubRhiza('mock', {}), stubRhiza('other', {})],
   )
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger() })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
   await bus.deliver('console', message('/ping'))
   expect(mock).toBe(true)
   expect(other).toBe(false)
@@ -364,7 +368,7 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
     order: ['mock', 'other', 'alpha', 'beta'],
     brokenEnforcing: [],
   }
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger() })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
   await bus.deliver('console', message('/alpha'))
   await bus.deliver('console', message('/beta'))
 
@@ -384,7 +388,7 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
 it('contains a malformed message instead of rejecting the fire-and-forget deliver()', async () => {
   const ping = mock()
   const { registry } = setup({ handlers: { ping } })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger() })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
   const malformed = { ...message('/ping'), conversationId: '' }
   expect(bus.deliver('console', malformed)).resolves.toBeUndefined()
   expect(ping).not.toHaveBeenCalled()
@@ -393,7 +397,7 @@ it('contains a malformed message instead of rejecting the fire-and-forget delive
 it('contains an onUnrouted callback that itself throws', async () => {
   const { registry } = setup({ handlers: { ping: async () => {} } })
   const onUnrouted = mock(async () => { throw new Error('onUnrouted exploded') })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger: createLogger(), onUnrouted })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger(), onUnrouted })
   expect(bus.deliver('console', message('/nope'))).resolves.toBeUndefined()
   expect(onUnrouted).toHaveBeenCalled()
 })
@@ -430,7 +434,7 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
     error: (m) => { errors.push(m) },
     child: () => logger,
   }
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger })
   expect(bus.deliver('console', message('/ping'))).resolves.toBeUndefined()
   expect(errors).toHaveLength(2)
   expect(errors[1]).toContain('could not report')
@@ -446,7 +450,7 @@ it('rejects an OutgoingContent with nothing set, before handing it to the hypha'
     error: (m, meta) => { errors.push(`${m} ${JSON.stringify(meta ?? {})}`) },
     child: () => logger,
   }
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', logger })
+  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger })
   expect(bus.deliver('console', message('/ping'))).resolves.toBeUndefined()
   // The empty content never reached the hypha: only the recovery message did, which
   // is how "contained, not process-fatal" is distinguished from "silently accepted".
@@ -519,6 +523,7 @@ function harness(options: {
   } as unknown as Parameters<typeof createBus>[0]['logger']
   const bus = createBus({
     registry, prefix: '/', logger, db: harnessDb,
+    sporesDir: SPORES,
     ...(options.defaultRole === undefined ? {} : { defaultRole: options.defaultRole }),
     admission: { admit: options.admit ?? (() => Promise.resolve({ allow: true })) },
     onUnrouted: async (msg, command) => {

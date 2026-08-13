@@ -100,6 +100,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     scopes,
     (target, content) => sendVia(hyphaByName, target.channel, target.conversationId, content),
     db,
+    config.sporesDir,
   )
   for (const name of registry.order) {
     const rhiza = rhizaByName.get(name)
@@ -204,6 +205,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     logger,
     db,
     admission,
+    sporesDir: config.sporesDir,
     ...(config.defaultRole === undefined ? {} : { defaultRole: config.defaultRole }),
     mycelium,
     onUnrouted: async (message, command) => {

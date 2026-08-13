@@ -8,7 +8,11 @@ Added:
   phase 9 settings form. Uses septum's own bundled Zod, so the schema and the converter come from
   the same copy.
 - `ConfigSchema.toJsonSchema?()`, optional so a hand-built `ConfigSchema` need not supply one.
-- `FormSchema`: what `PluginsConfigure.formSchema()` (task 7) resolves to for one plugin's form.
+- `FormSchema`: what `PluginsConfigure.formSchema()` resolves to for one plugin's form.
+- `plugins.configure`, a tenth `MyceliumScope`, and the `PluginsConfigure` interface it mounts:
+  `settings(name)` (secrets redacted to `••••`), `setSetting(name, key, value)`, `formSchema(name)`.
+- `PluginsToggle`, the interface `plugins.toggle` mounts: `enable(name)`, `disable(name)`. The scope
+  already parsed but mounted nothing and left the spore dormant; it now works.
 
 The conformance kit now rejects a `configSchema.toJsonSchema` that is present but not callable,
 across `hyphaChecks`, `rhizaChecks`, `enzymeChecks` and `inhibitorChecks`.

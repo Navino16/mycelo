@@ -1,12 +1,15 @@
 import { and, eq } from 'drizzle-orm'
 import type {
+  FormSchema,
   HealthRead,
   MessagesSend,
   MyceliumScope,
   OutgoingContent,
   Principal,
   PluginInfo,
+  PluginsConfigure,
   PluginsRead,
+  PluginsToggle,
   PrincipalsManage,
   PrincipalsRead,
   PushTarget,
@@ -16,9 +19,13 @@ import type {
   RolesManage,
   RolesRead,
 } from '@mycelo/septum'
+import { formSchemaFor } from './config/jsonschema.js'
+import { enablePlugin, loadSporeModule } from './config/lifecycle.js'
+import { getInstall, setEnabled, writeSetting } from './config/store.js'
 import type { Registry } from './germination/registry.js'
 import type { Db } from './persistence/db.js'
-import { channelIdentity, principal, principalRole, role, roleCommand } from './persistence/schema.js'
+import { channelIdentity, pluginSetting, principal, principalRole, role, roleCommand } from './persistence/schema.js'
+import { describeThrown } from './support/thrown.js'
 
 function listPlugins(registry: Registry): readonly PluginInfo[] {
   const germinated: PluginInfo[] = [
@@ -182,6 +189,55 @@ function deleteRole(db: Db, name: string): void {
   db.delete(role).where(eq(role.id, found.id)).run()
 }
 
+// The published contract says enable() rejects; enablePlugin() returns a refusal object,
+// so the reason has to be re-thrown or a caller would read `undefined` as success.
+async function enableOrThrow(db: Db, sporesDir: string, name: string): Promise<void> {
+  const result = await enablePlugin(db, sporesDir, name)
+  if (!result.ok) throw new Error(result.reason)
+}
+
+// loadSporeModule() propagates whatever the spore throws at import; formSchema() resolves
+// a FormSchema, so every fault becomes its available: false branch rather than a rejection.
+async function formSchemaOf(db: Db, sporesDir: string, name: string): Promise<FormSchema> {
+  if (getInstall(db, name) === null) {
+    return { available: false, reason: `plugin '${name}' is not installed` }
+  }
+  let module: Awaited<ReturnType<typeof loadSporeModule>>
+  try {
+    module = await loadSporeModule(sporesDir, name)
+  } catch (e) {
+    return { available: false, reason: `spore '${name}' failed to load: ${describeThrown(e)}` }
+  }
+  if (module === undefined) {
+    return { available: false, reason: `no spore named '${name}' is present on disk` }
+  }
+  return formSchemaFor(module?.configSchema)
+}
+
+// The reason plugins.configure is safe to grant: a scope that lists configuration must
+// not become a way to read every credential in the substrate.
+function redactSecrets(db: Db, name: string): Record<string, unknown> {
+  const rows = db.select().from(pluginSetting).where(eq(pluginSetting.pluginName, name)).all()
+  const out: Record<string, unknown> = {}
+  for (const row of rows) {
+    const parsed: unknown = row.isSecret ? '••••' : JSON.parse(row.value)
+    out[row.key] = parsed
+  }
+  return out
+}
+
+// Carries the row's is_secret forward: writeSetting() rewrites that column too, so a
+// secret updated through this scope would come back unredacted from settings().
+// A key with no row yet is not secret — nothing in this phase can declare one.
+function rewriteSetting(db: Db, name: string, key: string, value: unknown): void {
+  const existing = db
+    .select({ isSecret: pluginSetting.isSecret })
+    .from(pluginSetting)
+    .where(and(eq(pluginSetting.pluginName, name), eq(pluginSetting.key, key)))
+    .get()
+  writeSetting(db, name, key, value, existing?.isSecret ?? false)
+}
+
 // Defers the call into .then() so a throwing driver rejects the returned promise
 // instead of throwing synchronously out of what the published contract says is async.
 function toPromise<T>(fn: () => T): Promise<T> {
@@ -197,13 +253,14 @@ export function createMyceliumApi(
   scopes: readonly MyceliumScope[],
   send: (target: PushTarget, content: OutgoingContent) => Promise<void>,
   db: Db,
+  sporesDir: string,
 ): object {
   const granted = new Set(scopes)
   // No prototype: a global Object.prototype pollution must not forge an absent scope
   // as present through `in`, which is exactly how a caller is expected to check.
   const api = Object.create(null) as Partial<
     PluginsRead & HealthRead & MessagesSend & PrincipalsRead & PrincipalsManage &
-    RolesRead & RolesAssign & RolesManage
+    RolesRead & RolesAssign & RolesManage & PluginsToggle & PluginsConfigure
   >
 
   if (granted.has('plugins.read')) api.listPlugins = () => listPlugins(registry)
@@ -231,6 +288,15 @@ export function createMyceliumApi(
     api.createRole = (name, patterns) => toPromise(() => createRole(db, name, patterns))
     api.setRoleCommands = (name, patterns) => toPromise(() => setRoleCommands(db, name, patterns))
     api.deleteRole = (name) => toPromise(() => deleteRole(db, name))
+  }
+  if (granted.has('plugins.toggle')) {
+    api.enable = (name) => enableOrThrow(db, sporesDir, name)
+    api.disable = (name) => toPromise(() => { setEnabled(db, name, false) })
+  }
+  if (granted.has('plugins.configure')) {
+    api.settings = (name) => toPromise(() => redactSecrets(db, name))
+    api.setSetting = (name, key, value) => toPromise(() => { rewriteSetting(db, name, key, value) })
+    api.formSchema = (name) => formSchemaOf(db, sporesDir, name)
   }
 
   return api
