@@ -123,7 +123,7 @@ export interface PluginsConfigure {
   /**
    * Rejects when the plugin is not installed, and when it publishes a JSON Schema that
    * neither declares the key nor allows additional properties — such a key would be
-   * dropped at validation and the plugin would go on using its default.
+   * dropped at validation for a loose schema, or rejected outright by a strict one.
    */
   setSetting(name: string, key: string, value: unknown): Promise<void>
   /** Resolves an `available: false` FormSchema rather than rejecting, whatever went wrong. */

@@ -261,9 +261,9 @@ function redactSecrets(db: Db, name: string): Record<string, unknown> {
 }
 
 /**
- * Refuses a key the plugin's own JSON Schema does not declare. Both Zod and a hand-built
- * schema strip an unknown key in silence, so the write was confirmed, shown back by
- * settings(), and ignored by the plugin. A plugin publishing no schema is unguarded.
+ * Refuses a key the plugin's own JSON Schema does not declare. An undeclared key would
+ * otherwise be dropped in silence by a loose schema, or block enable() by a strict one.
+ * A plugin publishing no schema is unguarded.
  */
 async function writeDeclaredSetting(
   db: Db, sporesDir: string, name: string, key: string, value: unknown,

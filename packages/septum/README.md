@@ -30,7 +30,7 @@ capabilities are declared here rather than in the module.
 ```yaml
 kind: enzyme
 name: radarr-helper
-septum: "^0.5"
+septum: "^0.6"
 description: Movie shortcuts for Radarr
 commands:
   - name: help
@@ -155,8 +155,9 @@ schema reported — a Zod error dump, or the string a hand-built `ConfigSchema` 
 precisely the fault is named is the plugin author's choice, not the core's. `disable(name)`,
 `settings(name)` and `setSetting(...)` reject for a plugin that is not installed. `setSetting`
 also rejects a key the plugin's published JSON Schema neither declares nor allows as an
-additional property — such a key is dropped at validation, so the write would be confirmed and
-then ignored. `settings(name)` never returns a value stored as a secret: it answers `••••` in its
+additional property — such a key would be dropped silently by a loose schema, or block
+`enable()` outright by a strict one; either way the write would be confirmed and never take
+effect. `settings(name)` never returns a value stored as a secret: it answers `••••` in its
 place, which is what makes `plugins.configure` a lesser grant than the credential store it would
 otherwise expose. `formSchema(name)` is the one method that never rejects — every fault,
 including a spore that throws at import, comes back as `{ available: false, reason }`.
@@ -270,7 +271,7 @@ it('conforms to the Enzyme contract', async () => {
   const failures = await enzymeChecks({
     name: 'radarr-helper',
     manifest: {
-      kind: 'enzyme', name: 'radarr-helper', septum: '^0.5',
+      kind: 'enzyme', name: 'radarr-helper', septum: '^0.6',
       commands: [
         { name: 'help', description: 'Show what this plugin can do', respond: 'Try /add <title> to queue a movie.' },
         { name: 'add', description: 'Queue a movie by title', code: 'addMovie',

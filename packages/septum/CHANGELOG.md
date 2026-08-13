@@ -10,7 +10,8 @@ Added:
 - `ConfigSchema.toJsonSchema?()`, optional so a hand-built `ConfigSchema` need not supply one.
 - `FormSchema`: what `PluginsConfigure.formSchema()` resolves to for one plugin's form.
 - `plugins.configure`, a tenth `MyceliumScope`, and the `PluginsConfigure` interface it mounts:
-  `settings(name)` (secrets redacted to `••••`), `setSetting(name, key, value)`, `formSchema(name)`.
+  `settings(name)` (secrets redacted to `••••`), `setSetting(name, key, value)` (rejects a key
+  the plugin's own JSON Schema neither declares nor allows), `formSchema(name)`.
 - `PluginsToggle`, the interface `plugins.toggle` mounts: `enable(name)`, `disable(name)`. The scope
   already parsed but mounted nothing and left the spore dormant; it now works.
 - `PluginInfo.enabled`, and a third `state` value, `'disabled'`: a plugin an operator disabled
