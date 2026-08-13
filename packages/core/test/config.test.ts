@@ -82,14 +82,9 @@ describe('loadBootstrap, phase 4 fields', () => {
     expect(() => loadBootstrap(file)).toThrow(BootstrapError)
   })
 
-  it('reads defaultRole and keeps plugins opaque', () => {
-    const file = writeConfig('defaultRole: guest\nplugins:\n  gate:\n    groupId: household\n')
+  it('reads defaultRole', () => {
+    const file = writeConfig('defaultRole: guest\n')
     const config = loadBootstrap(file)
     expect(config.defaultRole).toBe('guest')
-    expect(config.plugins['gate']).toEqual({ groupId: 'household' })
-  })
-
-  it('defaults plugins to an empty record', () => {
-    expect(loadBootstrap(writeConfig('prefix: "/"\n')).plugins).toEqual({})
   })
 })

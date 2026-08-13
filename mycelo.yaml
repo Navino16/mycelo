@@ -4,7 +4,3 @@ database: ./mycelo.db
 owner:
   channel: console
   userId: alice
-plugins:
-  gate:
-    channel: console
-    groupId: household

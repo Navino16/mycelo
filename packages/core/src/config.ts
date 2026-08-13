@@ -10,15 +10,16 @@ const ownerSchema = z.object({
 
 export type OwnerIdentity = z.infer<typeof ownerSchema>
 
-// `ui` still arrives with the phase that needs it. `plugins` is unknown per key: the core
-// never knows a spore's config shape — the spore's own configSchema validates it.
+// `ui` still arrives with the phase that needs it.
 const bootstrapSchema = z.object({
   prefix: z.string().min(1).default('/'),
   spores: z.string().default('./fixtures'),
   database: z.string().min(1).default('./mycelo.db'),
   owner: ownerSchema.optional(),
   defaultRole: z.string().min(1).optional(),
-  plugins: z.record(z.string(), z.unknown()).default({}),
+  // Settings moved to the database in phase 5. Rejected rather than dropped: Zod strips
+  // unknown keys, so a stale block would take an operator's configuration with it in silence.
+  plugins: z.never().optional(),
 })
 
 export type Bootstrap = z.infer<typeof bootstrapSchema> & {
