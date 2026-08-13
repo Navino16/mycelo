@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'bun:test'
 import { eq, sql } from 'drizzle-orm'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
-import { channelIdentity, principal, principalRole, role, roleCommand } from '../../src/persistence/schema.js'
+import {
+  channelIdentity,
+  conversation,
+  inhibitorChannel,
+  pluginInstall,
+  principal,
+  principalRole,
+  role,
+  roleCommand,
+} from '../../src/persistence/schema.js'
 
 function fresh() {
   const persistence = openDatabase(':memory:')
@@ -75,5 +84,48 @@ describe('openDatabase', () => {
     close()
     expect(patterns).toEqual([])
     expect(assignments).toEqual([])
+  })
+
+  it('creates the phase 5.5 tables from the committed migrations', () => {
+    const { db, close } = fresh()
+    const rows = db.all<{ name: string }>(sql`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
+    close()
+    const names = rows.map((r) => r.name)
+    expect(names).toContain('conversation')
+    expect(names).toContain('broadcast_target')
+    expect(names).toContain('command_context_rule')
+    expect(names).toContain('inhibitor_channel')
+  })
+
+  it('keys a conversation on (channel, conversation_id) and upserts the timestamp', () => {
+    const { db, close } = fresh()
+    const first = new Date(1_700_000_000_000)
+    const later = new Date(1_700_000_060_000)
+    db.insert(conversation).values({
+      channel: 'console', conversationId: 'c1', kind: 'group', label: 'weekend',
+      firstSeenAt: first, lastMessageAt: first,
+    }).run()
+    db.insert(conversation).values({
+      channel: 'console', conversationId: 'c1', kind: 'group', label: 'weekend',
+      firstSeenAt: later, lastMessageAt: later,
+    }).onConflictDoUpdate({
+      target: [conversation.channel, conversation.conversationId],
+      set: { lastMessageAt: later },
+    }).run()
+    const rows = db.select().from(conversation).all()
+    close()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.firstSeenAt.getTime()).toBe(1_700_000_000_000)
+    expect(rows[0]?.lastMessageAt.getTime()).toBe(1_700_000_060_000)
+  })
+
+  it('cascades an inhibitor confinement when its install row goes', () => {
+    const { db, close } = fresh()
+    db.insert(pluginInstall).values({ name: 'gate', kind: 'inhibitor', installedAt: new Date() }).run()
+    db.insert(inhibitorChannel).values({ pluginName: 'gate', channel: 'console' }).run()
+    db.delete(pluginInstall).where(eq(pluginInstall.name, 'gate')).run()
+    const rows = db.select().from(inhibitorChannel).all()
+    close()
+    expect(rows).toEqual([])
   })
 })
