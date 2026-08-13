@@ -98,7 +98,7 @@ export interface RolesManage {
 }
 
 export interface PluginsToggle {
-  /** Rejects, naming the missing setting, when the plugin's schema is not satisfied. */
+  /** Rejects when the stored settings fail the plugin's own configSchema, quoting what it reported. */
   enable(name: string): Promise<void>
   /** Rejects when the plugin is not installed. */
   disable(name: string): Promise<void>

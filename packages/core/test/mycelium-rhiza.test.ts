@@ -1,4 +1,6 @@
-import { resolve as resolvePath } from 'node:path'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve as resolvePath } from 'node:path'
 import { describe, expect, it } from 'bun:test'
 import type {
   HealthRead, PluginsConfigure, PluginsRead, PluginsToggle, PrincipalsManage, PrincipalsRead,
@@ -310,14 +312,31 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
       .toEqual({ available: false, reason: "no spore named 'vanished' is present on disk" })
   })
 
-  // loadSporeModule throws by design; formSchema() has an available: false branch and must
-  // use it rather than reject, since the contract says it resolves a FormSchema.
-  it('answers formSchema rather than rejecting when the spore cannot be loaded', async () => {
+  // loadSporeModule propagates whatever the spore throws at import; formSchema() has an
+  // available: false branch and must use it, since the contract says it resolves a
+  // FormSchema. A spore absent from disk does NOT reach that catch — discover() answers []
+  // for a missing directory rather than throwing — so only a real import throw pins it.
+  it('answers formSchema with the import failure rather than rejecting', async () => {
     const db = fresh()
-    recordInstall(db, 'console', 'hypha')
-    const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, '/no/such/dir') as PluginsConfigure
-    const schema = await api.formSchema('console')
-    expect(schema.available).toBe(false)
+    const dir = mkdtempSync(join(tmpdir(), 'mycelo-formschema-'))
+    try {
+      mkdirSync(join(dir, 'boomspore', 'src'), { recursive: true })
+      writeFileSync(
+        join(dir, 'boomspore', 'spore.yaml'),
+        'kind: enzyme\nname: boomspore\nseptum: "^0.6"\n'
+          + 'commands:\n  - name: boom\n    description: x\n    code: handleBoom\n',
+        'utf8',
+      )
+      writeFileSync(join(dir, 'boomspore', 'src/index.ts'), 'throw new Error("import explodes")\n', 'utf8')
+      recordInstall(db, 'boomspore', 'enzyme')
+      const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, dir) as PluginsConfigure
+      const schema = await api.formSchema('boomspore')
+      expect(schema.available).toBe(false)
+      // The real cause, not merely "unavailable": an operator cannot act on the latter.
+      if (!schema.available) expect(schema.reason).toContain('import explodes')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('answers formSchema for a spore whose configSchema emits no JSON Schema', async () => {

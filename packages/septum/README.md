@@ -150,7 +150,9 @@ pattern listed twice. Three exceptions answer instead of rejecting: `getPrincipa
 answers `[]` for an unknown principal, who holds no role either way.
 
 `enable(name)` validates the stored settings against the plugin's own `configSchema` before it
-flips the row, and **rejects** naming what is missing when they do not satisfy it; `disable(name)`
+flips the row, and **rejects** with `configuration is incomplete:` followed by whatever that
+schema reported — a Zod error dump, or the string a hand-built `ConfigSchema` returned; how
+precisely the fault is named is the plugin author's choice, not the core's. `disable(name)`
 and `setSetting(...)` reject for a plugin that is not installed. `settings(name)` never returns a
 value stored as a secret: it answers `••••` in its place, which is what makes `plugins.configure` a
 lesser grant than the credential store it would otherwise expose. `formSchema(name)` is the one
