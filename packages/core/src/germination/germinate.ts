@@ -1,5 +1,7 @@
 import { existsSync } from 'node:fs'
 import type { Enzyme, Hypha, Inhibitor, Logger, Rhiza } from '@mycelo/septum'
+import { getInstall } from '../config/store.js'
+import type { Db } from '../persistence/db.js'
 import { resolve } from './anastomoses.js'
 import { discover } from './discover.js'
 import { loadModule } from './load.js'
@@ -18,6 +20,7 @@ export async function germinate(
   sporesDir: string,
   logger: Logger,
   pluginConfig: Readonly<Record<string, unknown>> = {},
+  db?: Db,
 ): Promise<Registry> {
   // A missing directory and a missing config file both resolve quietly to defaults
   // (spec-compliant on their own), but their combination — run from the wrong cwd —
@@ -39,6 +42,11 @@ export async function germinate(
       // No validated name to report: the directory is all a failed manifest leaves.
       if (read.enforcingInhibitor) brokenEnforcing.push(location.directory)
     } else {
+      if (db !== undefined) {
+        const install = getInstall(db, read.manifest.name)
+        // Absent or disabled is a choice, not a failure: dormant would report it as breakage.
+        if (install === null || !install.enabled) continue
+      }
       reads.push(read)
     }
   }

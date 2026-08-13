@@ -3,6 +3,7 @@ import { createAdmissionChain, createInhibitorContext } from './admission/chain.
 import type { AdmissionChain } from './admission/chain.js'
 import { createMembershipCache } from './admission/membership.js'
 import { loadBootstrap } from './config.js'
+import { syncInstalls } from './config/lifecycle.js'
 import { readAllSettings } from './config/store.js'
 import { germinate } from './germination/germinate.js'
 import { buildRoutes } from './germination/registry.js'
@@ -37,7 +38,9 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
   const { db } = openDatabase(config.databaseFile)
   migrateDatabase(db)
   bootstrapIdentity(db, { owner: config.owner, defaultRole: config.defaultRole })
-  const registry = await germinate(config.sporesDir, logger, readAllSettings(db))
+  const { added } = syncInstalls(db, config.sporesDir)
+  if (added.length > 0) logger.info(`recorded ${String(added.length)} spore(s): ${added.join(', ')}`)
+  const registry = await germinate(config.sporesDir, logger, readAllSettings(db), db)
   const dormant: Dormant[] = [...registry.dormant]
 
   // Step 1: connect() every hypha. `busBox.current` fills in once the bus exists,

@@ -5,6 +5,11 @@ interface Config {
   groupId: string
 }
 
+// Defaults matching the console fixture's own membership, so this spore germinates
+// unconfigured: an enforcing inhibitor that goes dormant refuses all traffic, and a
+// fresh database holds no settings at all.
+const DEFAULTS: Config = { channel: 'console', groupId: 'household' }
+
 // Hand-rolled rather than a Zod schema: ConfigSchema is duck-typed on safeParse, and no
 // other fixture depends on zod, so pulling it in here for one object shape is not worth it.
 const configSchema: ConfigSchema<Config> = {
@@ -12,7 +17,9 @@ const configSchema: ConfigSchema<Config> = {
     if (typeof input !== 'object' || input === null) {
       return { success: false, error: 'gate config must be an object' }
     }
-    const { channel, groupId } = input as Record<string, unknown>
+    const raw = input as Record<string, unknown>
+    const channel = raw.channel ?? DEFAULTS.channel
+    const groupId = raw.groupId ?? DEFAULTS.groupId
     if (typeof channel !== 'string' || channel.length === 0) {
       return { success: false, error: "gate config needs a non-empty 'channel'" }
     }

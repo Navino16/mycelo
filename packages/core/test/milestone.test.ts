@@ -4,13 +4,15 @@ import { join, resolve } from 'node:path'
 import { Database } from 'bun:sqlite'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import type { OutgoingContent } from '@mycelo/septum'
-import { recordInstall, writeSetting } from '../src/config/store.js'
+import { syncInstalls } from '../src/config/lifecycle.js'
+import { writeSetting } from '../src/config/store.js'
 import { bootstrap, germinationBanner } from '../src/mycelium.js'
 import { migrateDatabase, openDatabase } from '../src/persistence/db.js'
 import { waitFor } from './support/wait-for.js'
 
 interface ConsoleFixture {
   feed(text: string, externalId?: string): void
+  setGroup(groupId: string, members: { channel: string, externalId: string }[]): void
   readonly sent: OutgoingContent[]
 }
 
@@ -18,14 +20,14 @@ let dir: string
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'mycelo-milestone-')) })
 afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
 
-// Settings now come from the database (phase 5): seed 'gate' the way the store expects,
-// at the default database path bootstrap() itself will open.
-function seedGate(databaseFile: string): void {
+// Writes a setting into the database bootstrap() will itself open. syncInstalls() runs
+// first because writeSetting refuses a plugin with no install row, and doing it here
+// makes this the first sync, so bootstrap's own finds every spore already enabled.
+function seedSetting(databaseFile: string, sporesDir: string, plugin: string, key: string, value: unknown): void {
   const { db, close } = openDatabase(databaseFile)
   migrateDatabase(db)
-  recordInstall(db, 'gate', 'inhibitor')
-  writeSetting(db, 'gate', 'channel', 'console', false)
-  writeSetting(db, 'gate', 'groupId', 'household', false)
+  syncInstalls(db, sporesDir)
+  writeSetting(db, plugin, key, value, false)
   close()
 }
 
@@ -37,7 +39,6 @@ it('answers /ping with pong, through the real fixtures and the real bootstrap()'
   const configFile = join(dir, 'mycelo.yaml')
   writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
 
-  seedGate(join(dir, 'mycelo.db'))
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
 
@@ -53,7 +54,6 @@ it('answers text and code commands from one plugin, sharing a handler', async ()
   const configFile = join(dir, 'mycelo.yaml')
   writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
 
-  seedGate(join(dir, 'mycelo.db'))
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
 
@@ -78,7 +78,6 @@ it('answers from a plugin split across two unbundled files', async () => {
   const configFile = join(dir, 'mycelo.yaml')
   writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
 
-  seedGate(join(dir, 'mycelo.db'))
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
 
@@ -96,7 +95,6 @@ it('answers a lookup through a rhiza resolved via an any_of collapse', async () 
   const configFile = join(dir, 'mycelo.yaml')
   writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
 
-  seedGate(join(dir, 'mycelo.db'))
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
 
@@ -114,7 +112,6 @@ it('answers unknown for a title that collides with an Object.prototype member', 
   const configFile = join(dir, 'mycelo.yaml')
   writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
 
-  seedGate(join(dir, 'mycelo.db'))
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
 
@@ -132,7 +129,6 @@ it('collapses an any_of to the first installed alternative', async () => {
   const configFile = join(dir, 'mycelo.yaml')
   writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
 
-  seedGate(join(dir, 'mycelo.db'))
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
 
@@ -150,7 +146,6 @@ it('reads the mycelium through a scoped rhiza', async () => {
   const configFile = join(dir, 'mycelo.yaml')
   writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
 
-  seedGate(join(dir, 'mycelo.db'))
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
 
@@ -176,7 +171,6 @@ it('gates admission by group membership and grants/revokes roles through admin',
     'utf8',
   )
 
-  seedGate(join(dir, 'mycelo.db'))
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
 
@@ -239,7 +233,6 @@ it('reports a clear failure granting a role to an identity the mycelium has neve
     'utf8',
   )
 
-  seedGate(join(dir, 'mycelo.db'))
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
 
@@ -265,7 +258,6 @@ it('surfaces the mycelium\'s own diagnostic instead of a generic command failure
     'utf8',
   )
 
-  seedGate(join(dir, 'mycelo.db'))
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
 
@@ -301,7 +293,6 @@ it('lists roles and their patterns through /roles', async () => {
     'utf8',
   )
 
-  seedGate(join(dir, 'mycelo.db'))
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
 
@@ -336,7 +327,6 @@ it('runs the phase 4 milestone: gate admits, media stays denied until granted, c
     'utf8',
   )
 
-  seedGate(join(dir, 'mycelo.db'))
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
   expect(germinationBanner(registry)).toBe(
@@ -392,4 +382,36 @@ it('runs the phase 4 milestone: gate admits, media stays denied until granted, c
     { name: string, builtin: number }[]
   expect(new Set(roles.map((r) => r.name))).toEqual(new Set(['owner', 'guest']))
   db.close()
+})
+
+it('serves a spore the settings stored in the database, overriding its own default', async () => {
+  const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(
+    configFile,
+    'prefix: "/"\n'
+    + `spores: ${sporesDir}\n`
+    + 'owner:\n  channel: console\n  userId: alice\n',
+    'utf8',
+  )
+
+  // gate defaults to 'household', which holds alice and bob; the stored value names a
+  // group holding only alice, so bob's fate is what distinguishes the two sources.
+  seedSetting(join(dir, 'mycelo.db'), sporesDir, 'gate', 'groupId', 'flatmates')
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+
+  const fixture = registry.hyphae.find((h) => h.name === 'console')
+    ?.instance as unknown as ConsoleFixture
+  fixture.setGroup('flatmates', [{ channel: 'console', externalId: 'alice' }])
+
+  fixture.feed('/whoami', 'alice')
+  await waitFor(() => { expect(fixture.sent[0]).toEqual({ text: 'console:alice roles: owner' }) })
+
+  // bob is a household member and not a flatmate: refused, and a refusal is silent.
+  fixture.feed('/whoami', 'bob')
+  // alice's reply is the barrier: fed after his, and its path is strictly longer.
+  fixture.feed('/whoami', 'alice')
+  await waitFor(() => { expect(fixture.sent).toHaveLength(2) })
+  expect(fixture.sent[1]).toEqual({ text: 'console:alice roles: owner' })
 })
