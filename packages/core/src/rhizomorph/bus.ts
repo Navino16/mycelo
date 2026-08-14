@@ -131,13 +131,13 @@ export interface BusOptions {
   /** Resolved per message by resolveLocale(); used as-is for start() contexts. */
   defaultLocale: string
   /** Called when text carries no command, or names one nothing declares. */
-  onUnrouted?: (message: IncomingMessage, command: string | null) => Promise<void>
+  onUnrouted?: (message: IncomingMessage, command: string | null, locale: string) => Promise<void>
   /** Sent verbatim when authorization refuses. */
-  onDenied?: (message: IncomingMessage, qualified: string) => Promise<void>
+  onDenied?: (message: IncomingMessage, qualified: string, locale: string) => Promise<void>
   /** Called when the emitting channel does not declare a capability the command requires. */
-  onUnsupported?: (message: IncomingMessage, qualified: string, capability: ChannelCapability) => Promise<void>
+  onUnsupported?: (message: IncomingMessage, qualified: string, capability: ChannelCapability, locale: string) => Promise<void>
   /** Called when a context rule confines the command to the other conversation kind. */
-  onOutOfContext?: (message: IncomingMessage, qualified: string, where: ConversationKind) => Promise<void>
+  onOutOfContext?: (message: IncomingMessage, qualified: string, where: ConversationKind, locale: string) => Promise<void>
   /** Defaults to the real mycelium-as-rhiza API, grounded in this bus's own registry (design §2.4). */
   mycelium?: (scopes: readonly MyceliumScope[]) => object
 }
@@ -241,19 +241,19 @@ export function createBus({
 
         const parsed = parseCommand(message.text, prefix)
         if (parsed === null) {
-          await onUnrouted?.(message, null)
+          await onUnrouted?.(message, null, locale)
           return
         }
         const route = registry.routes.get(parsed.command)
         if (route === undefined) {
-          await onUnrouted?.(message, parsed.command)
+          await onUnrouted?.(message, parsed.command, locale)
           return
         }
 
         // A respond: command is authorized too: it has no handler, but letting it
         // through unchecked would make respond: a way around authorization entirely.
         if (!authorize(route.qualified, patternsOf(db, principal.id))) {
-          await onDenied?.(message, route.qualified)
+          await onDenied?.(message, route.qualified, locale)
           return
         }
 
@@ -264,7 +264,7 @@ export function createBus({
         const origin = capabilitiesOf(hyphaByName.get(message.channel))
         const missing = (spec.capabilities ?? []).find((capability) => !origin.has(capability))
         if (missing !== undefined) {
-          await onUnsupported?.(message, route.qualified, missing)
+          await onUnsupported?.(message, route.qualified, missing, locale)
           return
         }
 
@@ -272,7 +272,7 @@ export function createBus({
         // one step that knows route.qualified (design note §2b).
         const where = contextRuleFor(db, route.qualified)
         if (where !== null && where !== conversationKind(message)) {
-          await onOutOfContext?.(message, route.qualified, where)
+          await onOutOfContext?.(message, route.qualified, where, locale)
           return
         }
 
@@ -301,7 +301,7 @@ export function createBus({
           // both the user and the operator instead of surfacing it like a thrown handler.
           logger.error(`enzyme '${route.plugin}' has no handler for '${route.qualified}'`, {})
           await send(message.channel, message.conversationId, {
-            text: `command '${parsed.command}' failed`,
+            text: translator.translate('core', 'command.failed', locale, { command: parsed.command }),
           })
           return
         }
@@ -313,7 +313,7 @@ export function createBus({
           // Germination refuses this, so reaching it means the registry was built elsewhere.
           logger.error(`enzyme '${route.plugin}' has no handler '${spec.code}'`)
           await send(message.channel, message.conversationId, {
-            text: `command '${parsed.command}' failed`,
+            text: translator.translate('core', 'command.failed', locale, { command: parsed.command }),
           })
           return
         }
@@ -326,7 +326,7 @@ export function createBus({
           })
           try {
             await send(message.channel, message.conversationId, {
-              text: `command '${parsed.command}' failed`,
+              text: translator.translate('core', 'command.failed', locale, { command: parsed.command }),
             })
           } catch (sendError) {
             // The channel that failed is the same one we would answer on: there is

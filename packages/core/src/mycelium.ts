@@ -25,6 +25,11 @@ export interface Mycelium {
   admission: AdmissionChain
 }
 
+/** The three refusal callbacks below each sliced this out of `qualified` themselves. */
+function shortName(qualified: string): string {
+  return qualified.slice(qualified.indexOf('.') + 1)
+}
+
 export function germinationBanner(registry: Registry): string {
   const spores = [...registry.hyphae, ...registry.enzymes, ...registry.rhizas, ...registry.inhibitors]
   return `germinated ${String(spores.length)} spores (${spores.map((s) => s.name).join(', ')})`
@@ -232,27 +237,27 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     translator,
     defaultLocale: config.defaultLocale,
     mycelium,
-    onUnrouted: async (message, command) => {
+    onUnrouted: async (message, command, locale) => {
       if (command === null) return
-      await sendVia(hyphaByName, message.channel, message.conversationId, { text: `unknown command '${command}'` })
-    },
-    onDenied: async (message, qualified) => {
-      const command = qualified.slice(qualified.indexOf('.') + 1)
       await sendVia(hyphaByName, message.channel, message.conversationId, {
-        text: `you are not allowed to use '${command}'`,
+        text: translator.translate('core', 'command.unknown', locale, { command }),
       })
     },
-    onUnsupported: async (message, qualified, capability) => {
-      const command = qualified.slice(qualified.indexOf('.') + 1)
+    onDenied: async (message, qualified, locale) => {
       await sendVia(hyphaByName, message.channel, message.conversationId, {
-        text: `'${command}' needs ${capability}, which channel '${message.channel}' does not provide`,
+        text: translator.translate('core', 'command.denied', locale, { command: shortName(qualified) }),
       })
     },
-    onOutOfContext: async (message, qualified, where) => {
-      const command = qualified.slice(qualified.indexOf('.') + 1)
-      const place = where === 'dm' ? 'in a direct message' : 'in a group'
+    onUnsupported: async (message, qualified, capability, locale) => {
       await sendVia(hyphaByName, message.channel, message.conversationId, {
-        text: `'${command}' is only available ${place}`,
+        text: translator.translate('core', 'command.unsupported', locale, {
+          command: shortName(qualified), capability, channel: message.channel,
+        }),
+      })
+    },
+    onOutOfContext: async (message, qualified, where, locale) => {
+      await sendVia(hyphaByName, message.channel, message.conversationId, {
+        text: translator.translate('core', `context.${where}`, locale, { command: shortName(qualified) }),
       })
     },
   })

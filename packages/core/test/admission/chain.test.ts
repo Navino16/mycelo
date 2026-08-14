@@ -177,7 +177,10 @@ describe('createAdmissionChain', () => {
     const { admission, errors } = chain([broken])
     const verdict = await admission.admit(message)
     expect(verdict.allow).toBe(false)
-    expect(errors.join(' ')).toContain('radarr')
+    // The exact wording, not merely a substring: Bun's TypeError for a missing `ctx.t`
+    // prints the failed call expression verbatim, which already contains 'radarr' and
+    // would make a looser assertion pass for the wrong reason — t absent, not t refusing.
+    expect(errors.join(' ')).toContain("translation domain 'radarr' is not declared")
   })
 })
 
@@ -311,6 +314,8 @@ describe('createInhibitorContext', () => {
 
   it("refuses a translation domain the inhibitor's requires never declared, naming it", () => {
     const ctx = context({ resolved: [] })
-    expect(() => ctx.t({ domain: 'radarr', key: 'x' })).toThrow(/radarr/)
+    // The exact wording: a bare /radarr/ would also match Bun's TypeError message for a
+    // missing `t`, since it prints the failed call expression verbatim.
+    expect(() => ctx.t({ domain: 'radarr', key: 'x' })).toThrow("translation domain 'radarr' is not declared")
   })
 })

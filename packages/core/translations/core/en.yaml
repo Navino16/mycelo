@@ -1,8 +1,8 @@
 command:
-  unknown: "unknown command '{command}'"
-  denied: "you are not allowed to use '{command}'"
-  unsupported: "'{command}' needs {capability}, which channel '{channel}' does not provide"
-  failed: "command '{command}' failed"
+  unknown: "unknown command ''{command}''"
+  denied: "you are not allowed to use ''{command}''"
+  unsupported: "''{command}'' needs {capability}, which channel ''{channel}'' does not provide"
+  failed: "command ''{command}'' failed"
 context:
-  dm: "'{command}' is only available in a direct message"
-  group: "'{command}' is only available in a group"
+  dm: "''{command}'' is only available in a direct message"
+  group: "''{command}'' is only available in a group"

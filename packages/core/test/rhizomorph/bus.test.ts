@@ -11,8 +11,10 @@ import type { Db } from '../../src/persistence/db.js'
 import { setContextRule } from '../../src/restrictions/rules.js'
 import { channelIdentity, principalRole, role, roleCommand } from '../../src/persistence/schema.js'
 import { catalogsOf } from '../support/catalogs.js'
+import { loadCoreCatalogs } from '../../src/i18n/core-catalogs.js'
 import { setConversationLocale, setPrincipalLocale } from '../../src/i18n/locale.js'
 import { createTranslator } from '../../src/i18n/translator.js'
+import type { Translator } from '../../src/i18n/translator.js'
 import { createBus, createEnzymeStartContext } from '../../src/rhizomorph/bus.js'
 import type { Bus, BusOptions, SporeAccess } from '../../src/rhizomorph/bus.js'
 import { createLogger } from '../../src/support/logger.js'
@@ -34,12 +36,12 @@ db.insert(role).values({ id: 'r:test-all', name: 'test-all' }).run()
 db.insert(roleCommand).values({ roleId: 'r:test-all', pattern: '*' }).run()
 db.insert(principalRole).values({ principalId: localPrincipal.id, roleId: 'r:test-all' }).run()
 
-// None of this file's scopes exercise translation; an empty-catalogue translator is enough
-// to satisfy createBus's now-required parameter.
+// The core catalogue, not an empty one: bus.ts's own "command '<x>' failed" now renders
+// through it, so the pre-existing tests asserting that English sentence need it present.
 function busFor(registry: Registry, overrides: Partial<BusOptions> = {}): Bus {
   return createBus({
     registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger(),
-    translator: createTranslator({ catalogs: new Map(), defaultLocale: 'en', logger: createLogger() }),
+    translator: createTranslator({ catalogs: loadCoreCatalogs(), defaultLocale: 'en', logger: createLogger() }),
     defaultLocale: 'en',
     ...overrides,
   })
@@ -219,7 +221,7 @@ it('reports an unknown command without invoking anything', async () => {
   const bus = busFor(registry, { onUnrouted })
   await bus.deliver('console', message('/nope'))
   expect(ping).not.toHaveBeenCalled()
-  expect(onUnrouted).toHaveBeenCalledWith(expect.anything(), 'nope')
+  expect(onUnrouted).toHaveBeenCalledWith(expect.anything(), 'nope', 'en')
 })
 
 it('ignores text carrying no command', async () => {
@@ -812,6 +814,93 @@ describe('conversation context rules', () => {
     setContextRule(testDb, 'media.movies', 'dm')
     await h.deliver('/movies Dune', 'carol', { conversationId: 'g1', group: { id: 'g1' } })
     expect(h.sent).toEqual(['denied media.movies'])
+  })
+})
+
+// One test per gate would let three of the four regress unseen, since each is a
+// separate `await onX?.(...)` call site in deliver() — the four are asserted together
+// because they share one wiring (the trailing locale argument) and one failure mode
+// (a call site left without it).
+describe('the four refusal callbacks, threaded with the locale bus.ts resolved', () => {
+  it("passes the reader's locale, not the default, to each of onUnrouted/onDenied/onUnsupported/onOutOfContext", async () => {
+    const testDb = fresh()
+    const bob = resolvePrincipal(testDb, { channel: 'console', externalId: 'bob' })
+    setPrincipalLocale(testDb, bob.id, 'fr')
+    grant(testDb, bob.id, 'guest', ['media.react', 'media.whoami'])
+    setContextRule(testDb, 'media.whoami', 'dm')
+
+    const hypha = {
+      name: 'console', config: {},
+      manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.5', capabilities: [] },
+      instance: {
+        connect: () => Promise.resolve(), listen: () => {}, stop: () => Promise.resolve(),
+        send: () => Promise.resolve(),
+      },
+    } as unknown as GerminatedHypha
+    const enzyme = {
+      name: 'media', config: {}, resolved: new Set<string>(), scopes: [],
+      manifest: {
+        kind: 'enzyme' as const, name: 'media', septum: '^0.5',
+        commands: [
+          { name: 'movies', description: 'x', code: 'movies' },
+          { name: 'react', description: 'x', code: 'react', capabilities: ['reactions'] },
+          { name: 'whoami', description: 'x', respond: 'x' },
+        ],
+      },
+      instance: { handlers: { movies: async () => {}, react: async () => {} } },
+    } as unknown as GerminatedEnzyme
+    const registry: Registry = {
+      hyphae: [hypha], enzymes: [enzyme], rhizas: [], inhibitors: [], dormant: [],
+      routes: buildRoutes([enzyme]), order: ['media'], brokenEnforcing: [], catalogs: new Map(),
+    }
+
+    // Mirrors mycelium.ts's own four callbacks, so a passing test here proves bus.ts's
+    // plumbing, not merely that some translator was called.
+    const locales: string[] = []
+    const stub: Translator = {
+      translate: (domain, key, locale) => { locales.push(locale); return `${domain}:${key}` },
+      availableLocales: () => ['en', 'fr'],
+    }
+    const shortName = (qualified: string): string => qualified.slice(qualified.indexOf('.') + 1)
+    const sent: string[] = []
+    const logger: Logger = {
+      debug() {}, info() {}, warn() {}, error() {},
+      child: () => logger,
+    }
+    const bus = createBus({
+      registry, prefix: '/', logger, db: testDb, sporesDir: SPORES,
+      admission: admitAll,
+      translator: stub, defaultLocale: 'en',
+      onUnrouted: async (_msg, command, locale) => {
+        if (command === null) return
+        sent.push(stub.translate('core', 'command.unknown', locale, { command }))
+      },
+      onDenied: async (_msg, qualified, locale) => {
+        sent.push(stub.translate('core', 'command.denied', locale, { command: shortName(qualified) }))
+      },
+      onUnsupported: async (_msg, qualified, capability, locale) => {
+        sent.push(stub.translate('core', 'command.unsupported', locale, { command: shortName(qualified), capability }))
+      },
+      onOutOfContext: async (_msg, qualified, where, locale) => {
+        sent.push(stub.translate('core', `context.${where}`, locale, { command: shortName(qualified) }))
+      },
+    })
+    const send = (text: string, group?: { id: string }): Promise<void> => bus.deliver('console', {
+      channel: 'console', conversationId: group?.id ?? 'c1', messageId: 'm1',
+      ...(group === undefined ? {} : { group }),
+      sender: { channel: 'console', externalId: 'bob' },
+      text, attachments: [], raw: null, receivedAt: new Date(),
+    })
+
+    await send('/nosuch')
+    await send('/movies Dune')
+    await send('/react')
+    await send('/whoami', { id: 'g1' })
+
+    expect(sent).toEqual([
+      'core:command.unknown', 'core:command.denied', 'core:command.unsupported', 'core:context.dm',
+    ])
+    expect(locales).toEqual(['fr', 'fr', 'fr', 'fr'])
   })
 })
 
