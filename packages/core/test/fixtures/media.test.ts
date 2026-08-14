@@ -4,8 +4,11 @@ import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import type { OutgoingContent } from '@mycelo/septum'
 import { bindTranslate } from '../../src/i18n/bind.js'
+import { resolvePrincipal } from '../../src/identity/resolve.js'
+import { setPrincipalLocale } from '../../src/i18n/locale.js'
 import type { Translator } from '../../src/i18n/translator.js'
 import { bootstrap } from '../../src/mycelium.js'
+import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import { waitFor } from '../support/wait-for.js'
 
 interface ConsoleFixture {
@@ -43,8 +46,16 @@ it('renders a rhiza\'s ref in the reader\'s language, through the declaring mani
 })
 
 it('counts in Russian, reaching the many form', async () => {
-  const { registry } = await bootstrapWithLocale('ru')
+  // The bot's own default stays 'en' — the core ships no Russian catalogue, and
+  // assertCoreCatalogs now refuses to boot with a default it cannot cover. Only the
+  // reader's own locale is Russian, exactly the per-message cascade design §5.1 describes.
+  const { registry } = await bootstrapWithLocale('en')
   expect(registry.dormant).toEqual([])
+  const { db, close } = openDatabase(join(dir, 'mycelo.db'))
+  migrateDatabase(db)
+  const owner = resolvePrincipal(db, { channel: 'console', externalId: 'local' })
+  setPrincipalLocale(db, owner.id, 'ru')
+  close()
 
   const fixture = registry.hyphae.find((h) => h.name === 'console')?.instance as unknown as ConsoleFixture
   fixture.feed('/count 1')

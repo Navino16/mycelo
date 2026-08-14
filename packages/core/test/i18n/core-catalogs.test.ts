@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'bun:test'
-import { loadCoreCatalogs } from '../../src/i18n/core-catalogs.js'
+import { CONVERSATION_KINDS } from '@mycelo/septum'
+import { assertCoreCatalogs, loadCoreCatalogs } from '../../src/i18n/core-catalogs.js'
+import { StartupError } from '../../src/identity/bootstrap.js'
 import type { Catalogs } from '../../src/i18n/catalog.js'
 
 const catalogs = loadCoreCatalogs()
@@ -103,5 +105,61 @@ describe('the core-owned catalogues', () => {
       }
     }
     expect(broken).toEqual([])
+  })
+})
+
+// mycelium.ts's onOutOfContext computes `context.${where}` from a ConversationKind with no
+// static check that the key exists. Pinned bidirectionally, as this project already pins
+// MYCELIUM_SCOPES against MOUNTABLE_SCOPES: a third ConversationKind with no matching key
+// would render raw, and a stale `context.*` key with no ConversationKind is dead weight.
+describe("CONVERSATION_KINDS against the core catalogue's context.* keys", () => {
+  it('carries a context.<kind> key, in every locale, for every ConversationKind', () => {
+    const core = catalogs.get('core')
+    for (const locale of core?.keys() ?? []) {
+      for (const kind of CONVERSATION_KINDS) {
+        expect(core?.get(locale)?.has(`context.${kind}`)).toBe(true)
+      }
+    }
+  })
+
+  it('declares no context.* key that names a kind CONVERSATION_KINDS does not have', () => {
+    const core = catalogs.get('core')
+    const known = new Set<string>(CONVERSATION_KINDS)
+    for (const messages of core?.values() ?? []) {
+      const contextKinds = [...messages.keys()]
+        .filter((key) => key.startsWith('context.'))
+        .map((key) => key.slice('context.'.length))
+      expect(contextKinds.filter((kind) => !known.has(kind))).toEqual([])
+    }
+  })
+})
+
+// Finding 3 of the phase 5.6 whole-branch review: nothing asserted these catalogues exist
+// at boot, so a deployment missing packages/core/translations/ started clean and answered
+// every refusal with a raw catalogue key.
+describe('assertCoreCatalogs', () => {
+  it("does not throw for the real catalogues and the locale they actually ship, 'en'", () => {
+    expect(() => { assertCoreCatalogs(catalogs, 'en') }).not.toThrow()
+  })
+
+  it('refuses a default locale neither real catalogue ships', () => {
+    expect(() => { assertCoreCatalogs(catalogs, 'ru') }).toThrow(StartupError)
+    expect(() => { assertCoreCatalogs(catalogs, 'ru') }).toThrow("'core' translation catalogue")
+  })
+
+  it('refuses when the core domain is missing entirely', () => {
+    const missingCore: Catalogs = new Map([['common', catalogs.get('common') ?? new Map()]])
+    expect(() => { assertCoreCatalogs(missingCore, 'en') }).toThrow("'core' translation catalogue")
+  })
+
+  it('refuses when the common domain is missing entirely, not just the core one', () => {
+    // Both, not one: a guard written against a single literal is the cardinality mutation
+    // phase 5.5's campaign kept surviving.
+    const missingCommon: Catalogs = new Map([['core', catalogs.get('core') ?? new Map()]])
+    expect(() => { assertCoreCatalogs(missingCommon, 'en') }).toThrow("'common' translation catalogue")
+  })
+
+  it('refuses an entirely empty set of catalogues, as a deployment with no translations/ at all would produce', () => {
+    expect(() => { assertCoreCatalogs(new Map(), 'en') }).toThrow(StartupError)
   })
 })

@@ -9,7 +9,7 @@ import { germinate } from './germination/germinate.js'
 import { buildRoutes } from './germination/registry.js'
 import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor, GerminatedRhiza, Registry } from './germination/registry.js'
 import { bootstrapIdentity } from './identity/bootstrap.js'
-import { loadCoreCatalogs } from './i18n/core-catalogs.js'
+import { assertCoreCatalogs, loadCoreCatalogs } from './i18n/core-catalogs.js'
 import { createTranslator } from './i18n/translator.js'
 import type { Catalogs } from './i18n/catalog.js'
 import { createMyceliumApi } from './mycelium-rhiza.js'
@@ -55,6 +55,9 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
   // Spore-first would let a plugin shadow the core's own domain; germination already
   // refuses those two names, so the order here is belt and braces.
   const catalogs: Catalogs = new Map([...registry.catalogs, ...loadCoreCatalogs()])
+  // No degraded mode here either: a deployment missing packages/core/translations/ must
+  // not boot clean and answer every refusal with a raw catalogue key (spec §5).
+  assertCoreCatalogs(catalogs, config.defaultLocale)
   const translator = createTranslator({ catalogs, defaultLocale: config.defaultLocale, logger })
   if (!translator.availableLocales().includes(config.defaultLocale)) {
     logger.warn(`no catalogue provides the default locale '${config.defaultLocale}'`)
