@@ -67,6 +67,9 @@ function catalogFailures(catalogs: Record<string, unknown> | undefined): string[
   if (catalogs === undefined) return []
   const failures: string[] = []
   for (const [locale, raw] of Object.entries(catalogs)) {
+    // An empty or comment-only file parses to null: catalog.ts treats that as a
+    // catalogue with no keys, not a fault, and the kit must agree.
+    if (raw === null || raw === undefined) continue
     const flat = new Map<string, string>()
     const badKey = flatten(raw, '', flat)
     if (badKey !== null) {

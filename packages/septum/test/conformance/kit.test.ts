@@ -655,6 +655,14 @@ describe('regressions', () => {
     expect(failures.join(' ')).toContain('not a string')
   })
 
+  // catalog.ts treats an empty or comment-only YAML file (parses to null) as a catalogue
+  // with no keys, not a fault. A kit stricter than the runtime would fail a plugin the
+  // bot germinates happily — exactly a scaffolded translations/fr.yaml left empty.
+  it('passes a null catalogue root, exactly as the runtime does for an empty translation file', async () => {
+    const failures = await enzymeChecks({ ...goodEnzyme, catalogs: { en: { links: { usage: 'x' } }, fr: null } })
+    expect(failures).toEqual([])
+  })
+
   // The inverted phase-2 divergence: the kit's stub t used to accept every domain while
   // the runtime throws for one the manifest never declared.
   it('throws in start() for a domain the manifest does not require, exactly as the bot would', async () => {
