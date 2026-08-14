@@ -175,6 +175,13 @@ describe('inhibitor channel confinement', () => {
     expect((await admission.admit(messageOn('signal'))).allow).toBe(false)
   })
 
+  it('treats an explicit empty channel list the same as no entry at all', async () => {
+    const gate = inhibitor('gate', false, () => Promise.resolve({ allow: false, reason: 'no' }))
+    const { admission } = chain([gate], [], new Map([['gate', []]]))
+    expect((await admission.admit(messageOn('console'))).allow).toBe(false)
+    expect((await admission.admit(messageOn('signal'))).allow).toBe(false)
+  })
+
   it('confines a broken enforcing inhibitor refusal to its own channels', async () => {
     const { admission } = chain([], ['gate'], new Map([['gate', ['signal']]]))
     expect(await admission.admit(messageOn('console'))).toEqual({ allow: true })
