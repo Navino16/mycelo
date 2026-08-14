@@ -694,9 +694,8 @@ describe('channel capabilities on a command', () => {
     const testDb = fresh()
     const bob = resolvePrincipal(testDb, { channel: 'console', externalId: 'bob' })
     grant(testDb, bob.id, 'guest', ['media.*'])
-    const refusals: string[] = []
     const h = harness({ commands, db: testDb, capabilities })
-    return { h, refusals, testDb }
+    return { h, testDb }
   }
 
   it('refuses a code: command whose capability the emitting channel does not declare', async () => {
