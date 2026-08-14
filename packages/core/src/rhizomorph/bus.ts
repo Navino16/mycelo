@@ -117,12 +117,14 @@ export interface BusOptions {
   onUnrouted?: (message: IncomingMessage, command: string | null) => Promise<void>
   /** Sent verbatim when authorization refuses. */
   onDenied?: (message: IncomingMessage, qualified: string) => Promise<void>
+  /** Called when the emitting channel does not declare a capability the command requires. */
+  onUnsupported?: (message: IncomingMessage, qualified: string, capability: ChannelCapability) => Promise<void>
   /** Defaults to the real mycelium-as-rhiza API, grounded in this bus's own registry (design §2.4). */
   mycelium?: (scopes: readonly MyceliumScope[]) => object
 }
 
 export function createBus({
-  registry, prefix, logger, db, admission, sporesDir, defaultRole, onUnrouted, onDenied, mycelium,
+  registry, prefix, logger, db, admission, sporesDir, defaultRole, onUnrouted, onDenied, onUnsupported, mycelium,
 }: BusOptions): Bus {
   const hyphaByName = new Map(registry.hyphae.map((h) => [h.name, h]))
   const send = (channel: string, conversationId: string, out: OutgoingContent): Promise<void> =>
@@ -220,6 +222,16 @@ export function createBus({
         }
 
         const spec = route.spec
+
+        // After authorization, never before: a refusal that named a command to someone with
+        // no right to it would leak the command's existence.
+        const origin = capabilitiesOf(hyphaByName.get(message.channel))
+        const missing = (spec.capabilities ?? []).find((capability) => !origin.has(capability))
+        if (missing !== undefined) {
+          await onUnsupported?.(message, route.qualified, missing)
+          return
+        }
+
         if (spec.respond !== undefined) {
           try {
             await send(message.channel, message.conversationId, { text: spec.respond })

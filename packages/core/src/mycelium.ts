@@ -219,6 +219,12 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
         text: `you are not allowed to use '${command}'`,
       })
     },
+    onUnsupported: async (message, qualified, capability) => {
+      const command = qualified.slice(qualified.indexOf('.') + 1)
+      await sendVia(hyphaByName, message.channel, message.conversationId, {
+        text: `'${command}' needs ${capability}, which channel '${message.channel}' does not provide`,
+      })
+    },
   })
   busBox.current = bus
 

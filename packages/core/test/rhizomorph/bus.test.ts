@@ -542,6 +542,10 @@ function harness(options: {
       sent.push(`denied ${qualified}`)
       await Promise.resolve()
     },
+    onUnsupported: async (_msg, qualified, capability) => {
+      sent.push(`unsupported ${qualified} ${capability}`)
+      await Promise.resolve()
+    },
   })
   return {
     db: harnessDb, sent, seen,
@@ -562,6 +566,12 @@ function harness(options: {
 
 const codeCommand: CommandSpec = { name: 'movies', description: 'Search', code: 'handleMovies' }
 const respondCommand: CommandSpec = { name: 'where', description: 'Where', respond: 'nowhere' }
+const reactRespondCommand: CommandSpec = {
+  name: 'where', description: 'Where', respond: 'nowhere', capabilities: ['reactions'],
+}
+const reactCodeCommand: CommandSpec = {
+  name: 'movies', description: 'Search', code: 'handleMovies', capabilities: ['reactions'],
+}
 
 describe('deliver, admission and authorization', () => {
   it('refuses a command the principal holds no pattern for, and says so', async () => {
@@ -676,5 +686,40 @@ describe('the conversation registry', () => {
     const h = harness({ commands: [codeCommand], db: testDb })
     await h.deliver('/movies Dune', 'bob', { conversationId: 'g1', group: { id: 'g1', name: 'weekend' } })
     expect(listConversations(testDb)[0]).toMatchObject({ kind: 'group', label: 'weekend' })
+  })
+})
+
+describe('channel capabilities on a command', () => {
+  function granted(commands: readonly CommandSpec[], capabilities: readonly ChannelCapability[]) {
+    const testDb = fresh()
+    const bob = resolvePrincipal(testDb, { channel: 'console', externalId: 'bob' })
+    grant(testDb, bob.id, 'guest', ['media.*'])
+    const refusals: string[] = []
+    const h = harness({ commands, db: testDb, capabilities })
+    return { h, refusals, testDb }
+  }
+
+  it('refuses a code: command whose capability the emitting channel does not declare', async () => {
+    const { h } = granted([reactCodeCommand], [])
+    await h.deliver('/movies Dune', 'bob')
+    expect(h.sent).toEqual(['unsupported media.movies reactions'])
+  })
+
+  it('refuses a respond: command on capability exactly as it refuses a code: one', async () => {
+    const { h } = granted([reactRespondCommand], [])
+    await h.deliver('/where', 'bob')
+    expect(h.sent).toEqual(['unsupported media.where reactions'])
+  })
+
+  it('dispatches when the channel declares every capability the command needs', async () => {
+    const { h } = granted([reactCodeCommand], ['reactions'])
+    await h.deliver('/movies Dune', 'bob')
+    expect(h.sent).toEqual(['Dune (2021) via mock'])
+  })
+
+  it('dispatches a command that declares no capability at all', async () => {
+    const { h } = granted([codeCommand], [])
+    await h.deliver('/movies Dune', 'bob')
+    expect(h.sent).toEqual(['Dune (2021) via mock'])
   })
 })
