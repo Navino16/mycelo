@@ -134,7 +134,11 @@ export interface PluginsConfigure {
   formSchema(name: string): Promise<FormSchema>
 }
 
-export type ConversationKind = 'dm' | 'group'
+// A runtime constant, not just a type: the core's onOutOfContext renders `context.${where}`
+// against its own catalogue, so both sides need one source of truth to pin against.
+export const CONVERSATION_KINDS = ['dm', 'group'] as const
+
+export type ConversationKind = (typeof CONVERSATION_KINDS)[number]
 
 /** One conversation the bot has seen. No message is ever stored. */
 export interface ConversationInfo {

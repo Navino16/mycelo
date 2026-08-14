@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { MYCELIUM_SCOPES } from '../src/mycelium.js'
+import { CONVERSATION_KINDS, MYCELIUM_SCOPES } from '../src/mycelium.js'
 
 // The scope *interfaces* are types, erased at runtime: their claims live in
 // mycelium.test-d.ts, which `bun run typecheck` checks. Only the constant is testable here.
@@ -23,5 +23,14 @@ describe('MYCELIUM_SCOPES', () => {
       'restrictions.manage',
       'locale.manage',
     ])
+  })
+})
+
+describe('CONVERSATION_KINDS', () => {
+  // The core's onOutOfContext computes `context.${where}` against its own catalogue
+  // (packages/core/translations/core/*.yaml); a third value here with no matching key
+  // would render raw. Asserted whole, not sampled.
+  it('publishes exactly these two conversation kinds', () => {
+    expect(CONVERSATION_KINDS).toEqual(['dm', 'group'])
   })
 })
