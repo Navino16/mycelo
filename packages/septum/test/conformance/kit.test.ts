@@ -565,6 +565,36 @@ describe('rhiza conformance checks', () => {
 // ---------------------------------------------------------------------------
 
 describe('regressions', () => {
+  // A spread (`{ ...ctx, t: ... }`) copies only own enumerable properties: a class
+  // instance's methods live on the prototype and would silently vanish, reporting
+  // 'ctx.reply is not a function' against a perfectly correct plugin.
+  it("does not lose a class-based context()'s prototype methods when guarding t()", async () => {
+    class ClassContext implements EnzymeContext<unknown> {
+      config = {}
+      logger = { debug() {}, info() {}, warn() {}, error() {}, child: (): EnzymeContext<unknown>['logger'] => this.logger }
+      capabilities: EnzymeContext<unknown>['capabilities'] = { has: () => true, list: () => [] }
+      principal = { id: 'p1', identities: [], roles: [] }
+      async reply(): Promise<void> {}
+      async push(): Promise<void> {}
+      rhiza<TApi>(): TApi { return {} as TApi }
+      has(): boolean { return false }
+      capabilitiesOf(): EnzymeContext<unknown>['capabilities'] { return { has: () => true, list: () => [] } }
+      on(): void {}
+      t(key: Parameters<EnzymeContext<unknown>['t']>[0]): string {
+        return typeof key === 'string' ? key : key.key
+      }
+      localeFor(): Promise<string> { return Promise.resolve('en') }
+    }
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        create: () => ({ handlers: { links: async (_i, ctx) => { await ctx.reply({ text: 'ok' }) } } }),
+      },
+      context: () => new ClassContext(),
+    })
+    expect(failures).toEqual([])
+  })
+
   it('calls an enzyme start() before its handlers', async () => {
     let started = false
     const failures = await enzymeChecks({

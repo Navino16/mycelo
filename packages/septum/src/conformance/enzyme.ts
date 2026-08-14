@@ -126,6 +126,29 @@ function startContextFor(
   }
 }
 
+// Member by member, not `{ ...ctx, t: ... }`: a spread copies only own enumerable
+// properties, so a context() returning a class instance would silently lose every
+// prototype method (reply, push, rhiza...) — the same reason startContextFor above
+// does not spread either.
+function withGuardedT(
+  ctx: EnzymeContext<unknown>, manifest: EnzymeManifest, allowed: ReadonlySet<string>,
+): EnzymeContext<unknown> {
+  return {
+    config: ctx.config,
+    logger: ctx.logger,
+    reply: (content) => ctx.reply(content),
+    push: (target, content) => ctx.push(target, content),
+    rhiza<TApi>(name: string): TApi { return ctx.rhiza<TApi>(name) },
+    has: (name) => ctx.has(name),
+    capabilitiesOf: (target) => ctx.capabilitiesOf(target),
+    on: (rhiza, event, handler) => { ctx.on(rhiza, event, handler) },
+    t: guardedT(manifest.name, allowed, (key, params, locale) => ctx.t(key, params, locale)),
+    localeFor: (target) => ctx.localeFor(target),
+    capabilities: ctx.capabilities,
+    principal: ctx.principal,
+  }
+}
+
 function stubMessage(): IncomingMessage {
   return {
     channel: 'conformance',
@@ -233,7 +256,7 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
       (i: Invocation, ctx: EnzymeContext<unknown>) => Promise<void>
     const ctx = harness.context()
     try {
-      await handler(invocation, { ...ctx, t: guardedT(manifest.name, allowed, ctx.t) })
+      await handler(invocation, withGuardedT(ctx, manifest, allowed))
     } catch (e) {
       failures.push(`handler threw for declared command '${command.name}': ${(e as Error).message}`)
     }
