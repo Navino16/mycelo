@@ -692,6 +692,37 @@ describe('the conversation registry', () => {
     await h.deliver('/movies Dune', 'bob', { conversationId: 'g1', group: { id: 'g1', name: 'weekend' } })
     expect(listConversations(testDb)[0]).toMatchObject({ kind: 'group', label: 'weekend' })
   })
+
+  // The registry exists so a silent group can still be picked as a broadcast target;
+  // a message with no command at all must record one exactly like a routed one does.
+  it('records a conversation for text carrying no command at all', async () => {
+    const testDb = fresh()
+    const h = harness({ commands: [codeCommand], db: testDb })
+    await h.deliver('just chatting', 'bob')
+    expect(listConversations(testDb).map((c) => c.conversationId)).toEqual(['c1'])
+  })
+
+  it('still dispatches the command, and logs, when the write itself throws', async () => {
+    const { registry, sent } = setup({
+      handlers: { ping: async (_inv, ctx) => { await ctx.reply({ text: 'pong' }) } },
+    })
+    const throwingDb = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop === 'insert') return () => { throw new Error('disk full') }
+        return Reflect.get(target, prop, receiver) as unknown
+      },
+    })
+    const errors: string[] = []
+    const logger: Logger = {
+      debug() {}, info() {}, warn() {},
+      error: (m) => { errors.push(m) },
+      child: () => logger,
+    }
+    const bus = createBus({ registry, db: throwingDb, admission: admitAll, prefix: '/', sporesDir: SPORES, logger })
+    await bus.deliver('console', message('/ping'))
+    expect(sent).toEqual([{ text: 'pong' }])
+    expect(errors[0]).toContain('could not record the conversation')
+  })
 })
 
 function granted(commands: readonly CommandSpec[], capabilities: readonly ChannelCapability[] = []) {
