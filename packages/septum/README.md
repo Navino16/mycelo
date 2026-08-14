@@ -34,8 +34,8 @@ septum: "^0.7"
 description: Movie shortcuts for Radarr
 commands:
   - name: help
-    description: Show what this plugin can do
-    respond: "Try /add <title> to queue a movie."
+    description: command.help.description
+    respond: help.text
   - name: add
     description: Queue a movie by title
     code: addMovie
@@ -47,11 +47,25 @@ commands:
 ```
 
 A command carries exactly one of `respond` or `code`, never both and never neither:
-`respond` is a fixed string sent back untouched, `code` names a handler the module
+`respond` answers with a resolved catalogue key (below), `code` names a handler the module
 exports. `args` only makes sense on a `code` command — `respond` has no way to
 interpolate one, so declaring it there is rejected. `capabilities` is optional on
 every command: the core checks it against the emitting hypha and refuses the command
 where it is missing; a command with none works on every channel.
+
+`respond` is a **catalogue key**, resolved in the plugin's own domain against the reader's
+locale. A plugin that ships no `translations/` directory is unaffected: an unknown key renders
+as itself, literally and without passing through ICU, so `respond: pong` still answers `pong`.
+The same is true of a command's `description` and of an argument's, which the admin UI renders.
+The keys above resolve through `translations/en.yaml` beside `spore.yaml`:
+
+```yaml
+command:
+  help:
+    description: Show what this plugin can do
+help:
+  text: "Try /add <title> to queue a movie."
+```
 
 Every manifest carries `kind`, `name` (lowercase, digits and dashes) and `septum`, the
 contract range it targets. `description`, `externals` and `requires` are optional everywhere.
@@ -61,7 +75,7 @@ Each kind then adds its own:
 |---|---|
 | `hypha` | `capabilities`: any of `attachments`, `reactions`, `threads`, `group_membership` |
 | `rhiza` | — |
-| `enzyme` | `commands`: at least one, each with a `name`, a `description`, and exactly one of `respond` (a fixed text reply) or `code` (a handler name); `code` commands may add `args`; either may add `capabilities` |
+| `enzyme` | `commands`: at least one, each with a `name`, a `description`, and exactly one of `respond` (a catalogue key resolved as a reply) or `code` (a handler name); `code` commands may add `args`; either may add `capabilities` |
 | `inhibitor` | `enforcing`: how an *error* from this inhibitor is handled, default `false` |
 
 ### `enforcing` governs errors, never refusals

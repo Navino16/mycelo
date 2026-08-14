@@ -190,6 +190,111 @@ it('never calls a handler when the command answers with respond, even with an in
   expect(calls).toBe(0)
 })
 
+describe("respond: resolves through the declaring spore's domain", () => {
+  it("renders a respond: command as a catalogue key in the declaring spore's domain", async () => {
+    const { registry, sent } = setup(null, [
+      { name: 'links', description: 'x', respond: 'links.text' },
+    ])
+    const bus = busFor(registry, {
+      translator: createTranslator({
+        catalogs: catalogsOf({ ping: { en: { 'links.text': 'Radarr http://radarr:7878' } } }),
+        defaultLocale: 'en', logger: createLogger(),
+      }),
+    })
+    await bus.deliver('console', message('/links'))
+    expect(sent).toEqual([{ text: 'Radarr http://radarr:7878' }])
+  })
+
+  it('renders the same key differently for a reader who chose another language', async () => {
+    const { registry, sent } = setup(null, [
+      { name: 'links', description: 'x', respond: 'links.text' },
+    ])
+    const bus = busFor(registry, {
+      translator: createTranslator({
+        catalogs: catalogsOf({
+          ping: {
+            en: { 'links.text': 'Radarr http://radarr:7878' },
+            fr: { 'links.text': 'Radarr, adresse http://radarr:7878' },
+          },
+        }),
+        defaultLocale: 'en', logger: createLogger(),
+      }),
+    })
+    setPrincipalLocale(db, localPrincipal.id, 'fr')
+    await bus.deliver('console', message('/links'))
+    setPrincipalLocale(db, localPrincipal.id, 'en')
+    expect(sent).toEqual([{ text: 'Radarr, adresse http://radarr:7878' }])
+  })
+
+  it('returns a respond: string literally when no catalogue declares it', async () => {
+    const { registry, sent } = setup(null, [
+      { name: 'ping-text', description: 'x', respond: 'pong' },
+    ])
+    const bus = busFor(registry)
+    await bus.deliver('console', message('/ping-text'))
+    expect(sent).toEqual([{ text: 'pong' }])
+  })
+
+  it('does not pass an undeclared respond: through ICU', async () => {
+    const { registry, sent } = setup(null, [
+      { name: 'help-text', description: 'x', respond: 'type {help}' },
+    ])
+    const bus = busFor(registry)
+    await bus.deliver('console', message('/help-text'))
+    expect(sent).toEqual([{ text: 'type {help}' }])
+  })
+
+  // Two enzymes declaring the same key with different text: a mutation collapsing the
+  // domain to a constant would pass one message and fail the other.
+  it("resolves in the declaring spore's domain, not the reader's or the core's", async () => {
+    const sent: OutgoingContent[] = []
+    const hypha: Hypha = {
+      async connect() {}, listen() {}, async stop() {},
+      async send(_c, out) { sent.push(out) },
+    }
+    const hyphae: GerminatedHypha[] = [{
+      name: 'console',
+      manifest: { kind: 'hypha', name: 'console', septum: '^1.0', capabilities: [] },
+      instance: hypha,
+      config: {},
+    }]
+    const enzymes: GerminatedEnzyme[] = [
+      {
+        name: 'alpha',
+        manifest: {
+          kind: 'enzyme', name: 'alpha', septum: '^1.0',
+          commands: [{ name: 'hello-alpha', description: 'x', respond: 'greeting.text' }],
+        },
+        instance: null, resolved: new Set(), scopes: [], config: {},
+      },
+      {
+        name: 'beta',
+        manifest: {
+          kind: 'enzyme', name: 'beta', septum: '^1.0',
+          commands: [{ name: 'hello-beta', description: 'x', respond: 'greeting.text' }],
+        },
+        instance: null, resolved: new Set(), scopes: [], config: {},
+      },
+    ]
+    const registry: Registry = {
+      hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [],
+      routes: buildRoutes(enzymes), order: ['alpha', 'beta'], brokenEnforcing: [], catalogs: new Map(),
+    }
+    const bus = busFor(registry, {
+      translator: createTranslator({
+        catalogs: catalogsOf({
+          alpha: { en: { 'greeting.text': 'Hello from alpha' } },
+          beta: { en: { 'greeting.text': 'Hello from beta' } },
+        }),
+        defaultLocale: 'en', logger: createLogger(),
+      }),
+    })
+    await bus.deliver('console', message('/hello-alpha'))
+    await bus.deliver('console', message('/hello-beta'))
+    expect(sent).toEqual([{ text: 'Hello from alpha' }, { text: 'Hello from beta' }])
+  })
+})
+
 it('logs and reports failure, rather than staying silent, when a code command has no loaded instance', async () => {
   const { registry, sent } = setup(null, [{ name: 'boom', description: 'x', code: 'boom' }])
   const errors: string[] = []

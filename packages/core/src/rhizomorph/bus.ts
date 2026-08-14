@@ -278,7 +278,11 @@ export function createBus({
 
         if (spec.respond !== undefined) {
           try {
-            await send(message.channel, message.conversationId, { text: spec.respond })
+            // design §5.2: respond: is a catalogue key in the declaring spore's domain. An
+            // absent key renders literally, so a plugin with no catalogue is unaffected.
+            await send(message.channel, message.conversationId, {
+              text: translator.translate(route.plugin, spec.respond, locale),
+            })
           } catch (e) {
             // Named the same way the code: path already does, so an operator can tell
             // which command was lost rather than only which channel failed.
