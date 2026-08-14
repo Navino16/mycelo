@@ -16,8 +16,8 @@ import { conversationKind, recordConversation } from '../conversations/registry.
 import type { GerminatedHypha, GerminatedRhiza, Registry } from '../germination/registry.js'
 import { authorize } from '../authorization/check.js'
 import { patternsOf, resolvePrincipal } from '../identity/resolve.js'
+import { bindTranslate } from '../i18n/bind.js'
 import { localeForTarget } from '../i18n/locale.js'
-import { translateFn } from '../i18n/translator.js'
 import type { Translator } from '../i18n/translator.js'
 import { createMyceliumApi } from '../mycelium-rhiza.js'
 import type { Db } from '../persistence/db.js'
@@ -111,7 +111,7 @@ export function createEnzymeStartContext(options: StartContextOptions): EnzymeSt
     rhiza,
     has: (name) => access.resolved.has(name),
     on: () => notYet('ctx.on()', 'a phase not yet scheduled for rhiza domain events (design §12)'),
-    t: translateFn(translator, domain, defaultLocale),
+    t: bindTranslate({ translator, domain, allowed: access.resolved, localeOf: () => defaultLocale }),
     localeFor: (target) => Promise.resolve(localeForTarget(db, target, defaultLocale)),
   }
 }

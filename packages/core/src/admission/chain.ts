@@ -1,6 +1,6 @@
 import type { IncomingMessage, InhibitorContext, Logger, MyceliumScope, Verdict } from '@mycelo/septum'
 import type { GerminatedInhibitor, GerminatedRhiza } from '../germination/registry.js'
-import { translateFn } from '../i18n/translator.js'
+import { bindTranslate } from '../i18n/bind.js'
 import type { Translator } from '../i18n/translator.js'
 import type { MembershipCache } from './membership.js'
 
@@ -35,7 +35,7 @@ export function createInhibitorContext(options: {
       return found.instance.api as TApi
     },
     has: (name) => inhibitor.resolved.has(name),
-    t: translateFn(translator, inhibitor.name, defaultLocale),
+    t: bindTranslate({ translator, domain: inhibitor.name, allowed: inhibitor.resolved, localeOf: () => defaultLocale }),
   }
 }
 
@@ -88,7 +88,7 @@ export function createAdmissionChain(options: {
           requireCapability: (channel, capability) => { membership.requireCapability(channel, capability) },
           rhiza: rhiza(inhibitor),
           has: (name) => inhibitor.resolved.has(name),
-          t: translateFn(translator, inhibitor.name, defaultLocale),
+          t: bindTranslate({ translator, domain: inhibitor.name, allowed: inhibitor.resolved, localeOf: () => defaultLocale }),
         }
         try {
           const verdict = await inhibitor.instance.inspect(message, ctx)

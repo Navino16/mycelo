@@ -159,6 +159,26 @@ describe('createAdmissionChain', () => {
       expect((await chain([absent]).admission.admit(message)).allow).toBe(false)
     })
   })
+
+  // The inline InhibitorContext built inside admit() is a separate object literal from
+  // createInhibitorContext's — a scope granted on one and not the other has shipped before
+  // (phase 4's mount/gate defect), so the domain check needs its own proof here too.
+  it("refuses a domain the inhibitor's requires never declared, from admit()'s own context", async () => {
+    const broken = {
+      name: 'gate', config: {}, resolved: new Set<string>(), scopes: [],
+      manifest: { kind: 'inhibitor', name: 'gate', septum: '^0.5', enforcing: true },
+      instance: {
+        inspect: (_msg: IncomingMessage, ctx: InhibitorContext) => {
+          ctx.t({ domain: 'radarr', key: 'x' })
+          return Promise.resolve({ allow: true })
+        },
+      },
+    } as unknown as GerminatedInhibitor
+    const { admission, errors } = chain([broken])
+    const verdict = await admission.admit(message)
+    expect(verdict.allow).toBe(false)
+    expect(errors.join(' ')).toContain('radarr')
+  })
 })
 
 describe('inhibitor channel confinement', () => {
@@ -287,5 +307,10 @@ describe('createInhibitorContext', () => {
     const ctx = context({ resolved: ['radarr'] })
     expect(ctx.has('radarr')).toBe(true)
     expect(ctx.has('sonarr')).toBe(false)
+  })
+
+  it("refuses a translation domain the inhibitor's requires never declared, naming it", () => {
+    const ctx = context({ resolved: [] })
+    expect(() => ctx.t({ domain: 'radarr', key: 'x' })).toThrow(/radarr/)
   })
 })
