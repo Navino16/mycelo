@@ -69,7 +69,7 @@ function setup(
   }]
   const order = [...rhizas.map((r) => r.name), 'ping']
   return {
-    registry: { hyphae, enzymes, rhizas, inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order, brokenEnforcing: [] },
+    registry: { hyphae, enzymes, rhizas, inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order, brokenEnforcing: [], catalogs: new Map() },
     sent,
   }
 }
@@ -152,7 +152,7 @@ it('names the failed command, not just the channel, when a respond: send throws'
     scopes: [],
     config: {},
   }]
-  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'], brokenEnforcing: [] }
+  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'], brokenEnforcing: [], catalogs: new Map() }
   const errors: string[] = []
   const logger: Logger = {
     debug() {}, info() {}, warn() {},
@@ -386,6 +386,7 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
     routes: buildRoutes(enzymes),
     order: ['mock', 'other', 'alpha', 'beta'],
     brokenEnforcing: [],
+    catalogs: new Map(),
   }
   const bus = busFor(registry)
   await bus.deliver('console', message('/alpha'))
@@ -443,7 +444,7 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
     scopes: [],
     config: {},
   }]
-  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'], brokenEnforcing: [] }
+  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'], brokenEnforcing: [], catalogs: new Map() }
   // A bespoke logger, not createLogger(): distinguishes "contained by the specific
   // recovery-send try" from "contained by the outer catch-all" — both would make the
   // promise resolve, but only the former logs both failures under their own messages.
@@ -541,7 +542,7 @@ function harness(options: {
   } as unknown as GerminatedEnzyme
   const registry: Registry = {
     hyphae: [hypha], enzymes: [enzyme], rhizas: [], inhibitors: [], dormant: [],
-    routes: buildRoutes([enzyme]), order: ['media'], brokenEnforcing: [],
+    routes: buildRoutes([enzyme]), order: ['media'], brokenEnforcing: [], catalogs: new Map(),
   }
   const logger = {
     info: () => {}, debug: () => {}, warn: () => {}, error: () => {},

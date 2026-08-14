@@ -16,7 +16,7 @@ const SPORES = resolvePath(import.meta.dirname, '../../../../fixtures')
 function emptyRegistry(): Registry {
   return {
     hyphae: [], rhizas: [], enzymes: [], inhibitors: [], dormant: [],
-    routes: new Map(), order: [], brokenEnforcing: [],
+    routes: new Map(), order: [], brokenEnforcing: [], catalogs: new Map(),
   }
 }
 

@@ -524,3 +524,47 @@ it('gives a spore with no configSchema an empty config', async () => {
   const registry = await germinate(dir, createLogger(), {})
   expect(registry.rhizas[0]?.config).toEqual({})
 })
+
+function textEnzyme(name: string): Record<string, string> {
+  return { 'spore.yaml': `kind: enzyme\nname: ${name}\nseptum: "^1.0"\ncommands:\n  - name: ${name}\n    description: x\n    respond: hi\n` }
+}
+
+it('loads a spore\'s catalogues into the registry, keyed by the spore name', async () => {
+  spore('greeter', {
+    ...textEnzyme('greeter'),
+    'translations/en.yaml': 'ready: ready\n',
+    'translations/fr.yaml': 'ready: prêt\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.catalogs.get('greeter')?.get('fr')?.get('ready')?.format()).toBe('prêt')
+})
+
+it('makes a spore dormant when one of its catalogues does not compile, naming file and key', async () => {
+  spore('greeter', {
+    ...textEnzyme('greeter'),
+    'translations/en.yaml': 'ready: ready\n',
+    'translations/es.yaml': 'ready: "type {help"\n',
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.enzymes).toHaveLength(0)
+  const reason = registry.dormant.find((d) => d.name === 'greeter')?.reason ?? ''
+  expect(reason).toContain('es.yaml')
+  expect(reason).toContain('ready')
+})
+
+it('germinates a spore with no translations directory at all', async () => {
+  spore('greeter', textEnzyme('greeter'))
+  const registry = await germinate(dir, createLogger())
+  expect(registry.enzymes).toHaveLength(1)
+  expect(registry.catalogs.has('greeter')).toBe(false)
+})
+
+it('refuses a spore that claims a reserved domain name', async () => {
+  for (const reserved of ['core', 'common']) {
+    spore(reserved, textEnzyme(reserved))
+    const registry = await germinate(dir, createLogger())
+    // Both, not one: a guard written against a single literal is the cardinality mutation
+    // phase 5.5's campaign kept surviving.
+    expect(registry.dormant.find((d) => d.name === reserved)?.reason).toContain('reserved')
+  }
+})

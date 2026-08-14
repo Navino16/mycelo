@@ -11,6 +11,7 @@ import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor, G
 import { bootstrapIdentity } from './identity/bootstrap.js'
 import { loadCoreCatalogs } from './i18n/core-catalogs.js'
 import { createTranslator } from './i18n/translator.js'
+import type { Catalogs } from './i18n/catalog.js'
 import { createMyceliumApi } from './mycelium-rhiza.js'
 import { migrateDatabase, openDatabase } from './persistence/db.js'
 import { allInhibitorChannels } from './restrictions/rules.js'
@@ -46,8 +47,13 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
   const registry = await germinate(config.sporesDir, logger, readAllSettings(db), db)
   const dormant: Dormant[] = [...registry.dormant]
 
-  // Placeholder: a later task replaces this with one merging the spores' own catalogues in.
-  const translator = createTranslator({ catalogs: loadCoreCatalogs(), defaultLocale: config.defaultLocale, logger })
+  // Spore-first would let a plugin shadow the core's own domain; germination already
+  // refuses those two names, so the order here is belt and braces.
+  const catalogs: Catalogs = new Map([...registry.catalogs, ...loadCoreCatalogs()])
+  const translator = createTranslator({ catalogs, defaultLocale: config.defaultLocale, logger })
+  if (!translator.availableLocales().includes(config.defaultLocale)) {
+    logger.warn(`no catalogue provides the default locale '${config.defaultLocale}'`)
+  }
 
   // Step 1: connect() every hypha. `busBox.current` fills in once the bus exists,
   // before listen() opens the gate in step 3.
