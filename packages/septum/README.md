@@ -143,9 +143,9 @@ present-but-rejecting:
 | `roles.manage` | `RolesManage` | `createRole(name, patterns)`, `setRoleCommands(name, patterns)`, `deleteRole(name)` |
 | `plugins.toggle` | `PluginsToggle` | `enable(name)`, `disable(name)` |
 | `plugins.configure` | `PluginsConfigure` | `settings(name)`, `setSetting(name, key, value)`, `formSchema(name)` |
-| `conversations.read` | `ConversationsRead` | `listConversations()` — every conversation the bot has seen, with a readable `label` |
 | `messages.broadcast` | `MessagesBroadcast` | `broadcast(content)` — sends to every operator-configured target, distinct from `messages.send` so replying to one sender never implies writing to everyone |
-| `restrictions.manage` | `RestrictionsManage` | context rules, an inhibitor's confined channels, and the broadcast target list |
+| `conversations.read` | `ConversationsRead` | `listConversations()` — every conversation the bot has seen, where the channel supplies one |
+| `restrictions.manage` | `RestrictionsManage` | context rules, an inhibitor's confined channels, and the broadcast target list — confining an inhibitor's channels takes effect immediately, even for one `enforcing`, with no restart |
 
 `listPlugins()` alone is synchronous; every other method returns a promise. The identity and role
 methods **reject** rather than resolve quietly when asked about something that does not exist — an

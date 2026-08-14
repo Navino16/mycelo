@@ -160,7 +160,8 @@ export interface BroadcastResult {
 export interface MessagesBroadcast {
   /**
    * Sends to every target the operator configured — the plugin chooses none of them.
-   * One entry per target, in configuration order: a dead target never cancels the others.
+   * One entry per target, ordered by channel then conversation id (the store keeps no
+   * configuration order): a dead target never cancels the others.
    */
   broadcast(content: OutgoingContent): Promise<readonly BroadcastResult[]>
 }
@@ -171,6 +172,12 @@ export interface ContextRule {
   where: ConversationKind
 }
 
+/**
+ * Confining an inhibitor's channels or clearing a context rule takes effect on the very
+ * next message, with no restart — unlike `plugins.toggle`'s `disable()`, which only
+ * applies at the next germination. Granting this scope can take an `enforcing`
+ * inhibitor off a channel live.
+ */
 export interface RestrictionsManage {
   listContextRules(): Promise<readonly ContextRule[]>
   /**
@@ -181,12 +188,19 @@ export interface RestrictionsManage {
   setContextRule(pattern: string, where: ConversationKind): Promise<void>
   /** Clearing a pattern that carries no rule is a no-op. */
   clearContextRule(pattern: string): Promise<void>
-  /** The channels an inhibitor is confined to. Empty means every channel. */
+  /** The channels an inhibitor is confined to. Empty means every channel. Rejects an uninstalled plugin. */
   inhibitorChannels(name: string): Promise<readonly string[]>
-  /** Replaces the list wholesale; an empty list restores every channel. Rejects an uninstalled plugin. */
+  /**
+   * Replaces the list wholesale; an empty list restores every channel. Rejects an
+   * uninstalled plugin. A channel name is not checked against what is installed — a
+   * typo'd confinement silently does nothing.
+   */
   setInhibitorChannels(name: string, channels: readonly string[]): Promise<void>
   listBroadcastTargets(): Promise<readonly PushTarget[]>
-  /** Adding the same target twice is a no-op. */
+  /**
+   * Adding the same target twice is a no-op. Neither the channel nor the conversation id
+   * is validated — a typo'd target is accepted and never delivers.
+   */
   addBroadcastTarget(target: PushTarget): Promise<void>
   /** Removing one that is not configured is a no-op. */
   removeBroadcastTarget(target: PushTarget): Promise<void>
