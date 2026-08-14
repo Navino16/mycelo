@@ -98,7 +98,8 @@ export const broadcastTarget = sqliteTable(
   (t) => [primaryKey({ columns: [t.channel, t.conversationId] })],
 )
 
-// `where` is a SQL keyword; the column is `where_kind` and only the TS property reads as `where`.
+// `where` is a SQL keyword; the column is `where_kind`, exposed as `whereKind` here.
+// Only septum's `ContextRule.where` reads as `where`.
 export const commandContextRule = sqliteTable('command_context_rule', {
   pattern: text('pattern').primaryKey(),
   whereKind: text('where_kind', { enum: ['dm', 'group'] }).notNull(),

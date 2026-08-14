@@ -44,6 +44,7 @@ export function contextRuleFor(db: Db, qualified: string): ConversationKind | nu
 }
 
 export function inhibitorChannels(db: Db, name: string): readonly string[] {
+  if (getInstall(db, name) === null) throw new Error(`plugin '${name}' is not installed`)
   return db.select({ channel: inhibitorChannel.channel })
     .from(inhibitorChannel)
     .where(eq(inhibitorChannel.pluginName, name))

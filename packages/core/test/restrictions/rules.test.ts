@@ -70,6 +70,12 @@ describe('inhibitor channels', () => {
     close()
   })
 
+  it('rejects reading the confinement of a plugin that is not installed, rather than reading it as universal', () => {
+    const { db, close } = fresh()
+    expect(() => inhibitorChannels(db, 'ghost')).toThrow("plugin 'ghost' is not installed")
+    close()
+  })
+
   it('reads every confinement in one map', () => {
     const { db, close } = fresh()
     recordInstall(db, 'gate', 'inhibitor')
