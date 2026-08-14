@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'bun:test'
 import type { IncomingMessage, InhibitorContext, Logger, Verdict } from '@mycelo/septum'
 import { createAdmissionChain, createInhibitorContext } from '../../src/admission/chain.js'
+import { recordInstall } from '../../src/config/store.js'
 import type { GerminatedInhibitor, GerminatedRhiza } from '../../src/germination/registry.js'
+import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
+import { allInhibitorChannels, setInhibitorChannels } from '../../src/restrictions/rules.js'
 
 function inhibitor(
   name: string,
@@ -21,7 +24,11 @@ const message: IncomingMessage = {
   text: '/ping', attachments: [], raw: null, receivedAt: new Date(),
 }
 
-function chain(inhibitors: readonly GerminatedInhibitor[], brokenEnforcing: string[] = []) {
+function chain(
+  inhibitors: readonly GerminatedInhibitor[],
+  brokenEnforcing: string[] = [],
+  scopes: ReadonlyMap<string, readonly string[]> = new Map(),
+) {
   const warnings: string[] = []
   const errors: string[] = []
   // Records the child bindings each record carried, so attribution is assertable and not
@@ -37,9 +44,12 @@ function chain(inhibitors: readonly GerminatedInhibitor[], brokenEnforcing: stri
     inhibitors, brokenEnforcing, logger: make({}),
     membership: { members: () => Promise.resolve(null), requireCapability: () => {} },
     rhiza: () => <T,>() => ({}) as T,
+    channelScopes: () => scopes,
   })
   return { admission, warnings, errors, bound }
 }
+
+const messageOn = (channel: string): IncomingMessage => ({ ...message, channel })
 
 describe('createAdmissionChain', () => {
   it('admits when there is no inhibitor at all', async () => {
@@ -144,6 +154,63 @@ describe('createAdmissionChain', () => {
       const absent = inhibitor('a', true, () => Promise.resolve(null as unknown as Verdict))
       expect((await chain([absent]).admission.admit(message)).allow).toBe(false)
     })
+  })
+})
+
+describe('inhibitor channel confinement', () => {
+  it('skips an inhibitor on a channel it is not confined to, and runs it on one it is', async () => {
+    const seen: string[] = []
+    const gate = inhibitor('gate', false, () => {
+      seen.push('asked')
+      return Promise.resolve({ allow: false, reason: 'no' })
+    })
+    const { admission } = chain([gate], [], new Map([['gate', ['signal']]]))
+    expect(await admission.admit(messageOn('console'))).toEqual({ allow: true })
+    expect(seen).toEqual([])
+    expect((await admission.admit(messageOn('signal'))).allow).toBe(false)
+    expect(seen).toEqual(['asked'])
+  })
+
+  it('runs an unconfined inhibitor on every channel', async () => {
+    const gate = inhibitor('gate', false, () => Promise.resolve({ allow: false, reason: 'no' }))
+    const { admission } = chain([gate])
+    expect((await admission.admit(messageOn('console'))).allow).toBe(false)
+    expect((await admission.admit(messageOn('signal'))).allow).toBe(false)
+  })
+
+  it('treats an explicit empty channel list the same as no entry at all', async () => {
+    const gate = inhibitor('gate', false, () => Promise.resolve({ allow: false, reason: 'no' }))
+    const { admission } = chain([gate], [], new Map([['gate', []]]))
+    expect((await admission.admit(messageOn('console'))).allow).toBe(false)
+    expect((await admission.admit(messageOn('signal'))).allow).toBe(false)
+  })
+
+  it('confines a broken enforcing inhibitor refusal to its own channels', async () => {
+    const { admission } = chain([], ['gate'], new Map([['gate', ['signal']]]))
+    expect(await admission.admit(messageOn('console'))).toEqual({ allow: true })
+    expect((await admission.admit(messageOn('signal'))).allow).toBe(false)
+  })
+
+  it('still refuses every channel for a broken enforcing inhibitor that is unconfined', async () => {
+    const { admission } = chain([], ['gate'])
+    expect((await admission.admit(messageOn('console'))).allow).toBe(false)
+    expect((await admission.admit(messageOn('signal'))).allow).toBe(false)
+  })
+
+  // Builds the confinement map through the store, not a literal, so a defect in
+  // allInhibitorChannels that collapses multiple channels to one shows up here too.
+  it('confines an inhibitor to every channel recorded for it, not just the last one read', async () => {
+    const { db, close } = openDatabase(':memory:')
+    migrateDatabase(db)
+    recordInstall(db, 'gate', 'inhibitor')
+    setInhibitorChannels(db, 'gate', ['console', 'signal'])
+    const scopes = allInhibitorChannels(db)
+    close()
+    const gate = inhibitor('gate', false, () => Promise.resolve({ allow: false, reason: 'no' }))
+    const { admission } = chain([gate], [], scopes)
+    expect((await admission.admit(messageOn('console'))).allow).toBe(false)
+    expect((await admission.admit(messageOn('signal'))).allow).toBe(false)
+    expect((await admission.admit(messageOn('discord'))).allow).toBe(true)
   })
 })
 

@@ -1,6 +1,6 @@
 import type {
-  EnzymeModule, PluginsConfigure, PluginsRead, PluginsToggle, PrincipalsRead, RolesAssign,
-  RolesManage, RolesRead,
+  ConversationsRead, EnzymeModule, MessagesBroadcast, PluginsConfigure, PluginsRead, PluginsToggle,
+  PrincipalsRead, RestrictionsManage, RolesAssign, RolesManage, RolesRead,
 } from '@mycelo/septum'
 
 // JSON first, raw string as the fallback: a chat channel has no types, and Zod must receive
@@ -136,6 +136,71 @@ export default {
         const entries = Object.entries(settings)
         await ctx.reply({
           text: entries.length === 0 ? 'no settings' : entries.map(([k, v]) => `${k} = ${String(v)}`).join('\n'),
+        })
+      },
+      handleConversations: async (_invocation, ctx) => {
+        const rows = await ctx.rhiza<ConversationsRead>('mycelium').listConversations()
+        await ctx.reply({
+          text: rows.length === 0
+            ? 'no conversations'
+            : rows.map((c) => `${c.label ?? c.conversationId} (${c.kind})`).join('\n'),
+        })
+      },
+      handleWhereRule: async (invocation, ctx) => {
+        const { pattern, where } = invocation.args
+        if (pattern === undefined || (where !== 'dm' && where !== 'group')) {
+          await ctx.reply({ text: 'usage: where-rule <pattern> <dm|group>' })
+          return
+        }
+        try {
+          await ctx.rhiza<RestrictionsManage>('mycelium').setContextRule(pattern, where)
+        } catch (e) {
+          await ctx.reply({ text: (e as Error).message })
+          return
+        }
+        await ctx.reply({ text: `'${pattern}' is now restricted to ${where}` })
+      },
+      handleBroadcastAdd: async (invocation, ctx) => {
+        const { channel, conversation } = invocation.args
+        if (channel === undefined || conversation === undefined) {
+          await ctx.reply({ text: 'usage: broadcast-add <channel> <conversation>' })
+          return
+        }
+        await ctx.rhiza<RestrictionsManage>('mycelium')
+          .addBroadcastTarget({ channel, conversationId: conversation })
+        await ctx.reply({ text: `added ${channel}/${conversation}` })
+      },
+      handleBroadcast: async (invocation, ctx) => {
+        const text = invocation.rest.trim()
+        if (text === '') {
+          await ctx.reply({ text: 'usage: broadcast <text>' })
+          return
+        }
+        const results = await ctx.rhiza<MessagesBroadcast>('mycelium').broadcast({ text })
+        const ok = results.filter((r) => r.ok).length
+        await ctx.reply({ text: `${String(ok)} ok, ${String(results.length - ok)} failed` })
+      },
+      // Only `name` is a declared arg spec, so bindArgs binds the whole remainder to it;
+      // the channels after the name are parsed from invocation.rest instead.
+      handleInhibitorChannels: async (invocation, ctx) => {
+        const rest = invocation.rest.trim()
+        const space = rest.indexOf(' ')
+        const name = space === -1 ? rest : rest.slice(0, space)
+        const channels = space === -1 ? [] : rest.slice(space + 1).trim().split(/\s+/).filter((c) => c !== '')
+        if (name === '') {
+          await ctx.reply({ text: 'usage: inhibitor-channels <name> [channel...]' })
+          return
+        }
+        try {
+          await ctx.rhiza<RestrictionsManage>('mycelium').setInhibitorChannels(name, channels)
+        } catch (e) {
+          await ctx.reply({ text: (e as Error).message })
+          return
+        }
+        await ctx.reply({
+          text: channels.length === 0
+            ? `${name} applies to every channel`
+            : `${name} applies to: ${channels.join(', ')}`,
         })
       },
     },

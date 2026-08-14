@@ -1,6 +1,8 @@
 import { MYCELIUM_SCOPES } from '../src/mycelium.js'
 import type {
+  ConversationsRead,
   HealthRead,
+  MessagesBroadcast,
   MessagesSend,
   MyceliumScope,
   PluginsConfigure,
@@ -8,6 +10,7 @@ import type {
   PluginsToggle,
   PrincipalsManage,
   PrincipalsRead,
+  RestrictionsManage,
   RoleInfo,
   RolesAssign,
   RolesManage,
@@ -25,6 +28,7 @@ export type ScopeNamesAreExact = Expect<Equal<MyceliumScope,
   | 'roles.read' | 'roles.assign' | 'roles.manage'
   | 'plugins.read' | 'plugins.toggle' | 'plugins.configure'
   | 'health.read' | 'messages.send'
+  | 'messages.broadcast' | 'conversations.read' | 'restrictions.manage'
 >>
 
 export type ScopesAreReadonly = Expect<Equal<typeof MYCELIUM_SCOPES, readonly [
@@ -32,6 +36,7 @@ export type ScopesAreReadonly = Expect<Equal<typeof MYCELIUM_SCOPES, readonly [
   'roles.read', 'roles.assign', 'roles.manage',
   'plugins.read', 'plugins.toggle', 'plugins.configure',
   'health.read', 'messages.send',
+  'messages.broadcast', 'conversations.read', 'restrictions.manage',
 ]>>
 
 // One entry per scope, `never` for a scope no phase mounts yet. A scope added to
@@ -47,6 +52,9 @@ interface ScopeApi {
   'plugins.configure': PluginsConfigure
   'health.read': HealthRead
   'messages.send': MessagesSend
+  'messages.broadcast': MessagesBroadcast
+  'conversations.read': ConversationsRead
+  'restrictions.manage': RestrictionsManage
 }
 
 export type EveryScopeIsClassified = Expect<Equal<keyof ScopeApi, MyceliumScope>>
@@ -97,4 +105,30 @@ export const pluginsConfigure: PluginsConfigure = {
   settings: () => Promise.resolve({ url: 'http://x', apiKey: '••••' }),
   setSetting: () => Promise.resolve(),
   formSchema: () => Promise.resolve({ available: true, schema: { type: 'object' } }),
+}
+
+export const conversationsRead: ConversationsRead = {
+  listConversations: () => Promise.resolve([{
+    channel: 'console',
+    conversationId: 'stdin',
+    kind: 'dm' as const,
+    label: 'alice',
+    firstSeenAt: new Date(0),
+    lastMessageAt: new Date(0),
+  }]),
+}
+
+export const messagesBroadcast: MessagesBroadcast = {
+  broadcast: () => Promise.resolve([{ target: { channel: 'console', conversationId: 'stdin' }, ok: true }]),
+}
+
+export const restrictionsManage: RestrictionsManage = {
+  listContextRules: () => Promise.resolve([{ pattern: 'admin.*', where: 'dm' as const }]),
+  setContextRule: () => Promise.resolve(),
+  clearContextRule: () => Promise.resolve(),
+  inhibitorChannels: () => Promise.resolve(['console']),
+  setInhibitorChannels: () => Promise.resolve(),
+  listBroadcastTargets: () => Promise.resolve([{ channel: 'console', conversationId: 'stdin' }]),
+  addBroadcastTarget: () => Promise.resolve(),
+  removeBroadcastTarget: () => Promise.resolve(),
 }

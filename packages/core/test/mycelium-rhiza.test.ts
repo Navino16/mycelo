@@ -4,9 +4,11 @@ import { join, resolve as resolvePath } from 'node:path'
 import { describe, expect, it } from 'bun:test'
 import { z } from 'zod'
 import type {
-  HealthRead, PluginsConfigure, PluginsRead, PluginsToggle, PrincipalsManage, PrincipalsRead,
-  RolesAssign, RolesManage, RolesRead,
+  ConversationsRead, HealthRead, IncomingMessage, MessagesBroadcast, PluginsConfigure, PluginsRead,
+  PluginsToggle, PrincipalsManage, PrincipalsRead, PushTarget, RestrictionsManage, RolesAssign,
+  RolesManage, RolesRead,
 } from '@mycelo/septum'
+import { addBroadcastTarget, recordConversation } from '../src/conversations/registry.js'
 import { getInstall, recordInstall, setEnabled, writeSetting } from '../src/config/store.js'
 import { bootstrapIdentity } from '../src/identity/bootstrap.js'
 import { resolvePrincipal } from '../src/identity/resolve.js'
@@ -518,5 +520,77 @@ describe('an install with no spore on disk', () => {
     setEnabled(db, 'ping', true)
     const api = createMyceliumApi(emptyRegistry(), ['plugins.read'], noSend, db, SPORES) as PluginsRead
     expect(api.listPlugins().map((p) => p.name)).not.toContain('ping')
+  })
+})
+
+describe('conversations.read and messages.broadcast', () => {
+  const seen = (channel: string, conversationId: string): IncomingMessage => ({
+    channel, conversationId, messageId: 'm1',
+    sender: { channel, externalId: 'alice', displayName: 'Alice' },
+    text: '/ping', attachments: [], raw: null, receivedAt: new Date(0),
+  })
+
+  it('mounts listConversations only under conversations.read', async () => {
+    const db = fresh()
+    recordConversation(db, seen('console', 'c1'))
+    const granted = createMyceliumApi(emptyRegistry(), ['conversations.read'], noSend, db, SPORES) as Partial<ConversationsRead>
+    const denied = createMyceliumApi(emptyRegistry(), [], noSend, db, SPORES)
+    expect((await granted.listConversations?.())?.map((c) => c.conversationId)).toEqual(['c1'])
+    expect('listConversations' in denied).toBe(false)
+  })
+
+  it('reports one result per target and does not let a dead target cancel the others', async () => {
+    const db = fresh()
+    addBroadcastTarget(db, { channel: 'console', conversationId: 'alive' })
+    addBroadcastTarget(db, { channel: 'console', conversationId: 'dead' })
+    const send = (target: PushTarget): Promise<void> =>
+      target.conversationId === 'dead' ? Promise.reject(new Error('gone')) : Promise.resolve()
+    const api = createMyceliumApi(emptyRegistry(), ['messages.broadcast'], send, db, SPORES) as Partial<MessagesBroadcast>
+    expect(await api.broadcast?.({ text: 'hello' })).toEqual([
+      { target: { channel: 'console', conversationId: 'alive' }, ok: true },
+      { target: { channel: 'console', conversationId: 'dead' }, ok: false, error: 'gone' },
+    ])
+  })
+
+  it('resolves an empty list when no target is configured', async () => {
+    const api = createMyceliumApi(emptyRegistry(), ['messages.broadcast'], noSend, fresh(), SPORES) as Partial<MessagesBroadcast>
+    expect(await api.broadcast?.({ text: 'hello' })).toEqual([])
+  })
+
+  it('mounts broadcast only under messages.broadcast', () => {
+    const granted = createMyceliumApi(emptyRegistry(), ['messages.broadcast'], noSend, fresh(), SPORES) as Partial<MessagesBroadcast>
+    const denied = createMyceliumApi(emptyRegistry(), [], noSend, fresh(), SPORES)
+    expect(typeof granted.broadcast).toBe('function')
+    expect('broadcast' in denied).toBe(false)
+  })
+})
+
+describe('restrictions.manage', () => {
+  it('mounts the eight methods only under the scope', () => {
+    const db = fresh()
+    const granted = createMyceliumApi(emptyRegistry(), ['restrictions.manage'], noSend, db, SPORES)
+    const denied = createMyceliumApi(emptyRegistry(), [], noSend, db, SPORES)
+    for (const method of [
+      'listContextRules', 'setContextRule', 'clearContextRule', 'inhibitorChannels',
+      'setInhibitorChannels', 'listBroadcastTargets', 'addBroadcastTarget', 'removeBroadcastTarget',
+    ]) {
+      expect(method in granted).toBe(true)
+      expect(method in denied).toBe(false)
+    }
+  })
+
+  it('rejects an invalid pattern with the store diagnostic rather than a generic failure', async () => {
+    const api = createMyceliumApi(emptyRegistry(), ['restrictions.manage'], noSend, fresh(), SPORES) as Partial<RestrictionsManage>
+    // Bare, not awaited: `await expect(...).rejects` trips @typescript-eslint/await-thenable here.
+    expect(api.setContextRule?.('nope!', 'dm')).rejects.toThrow('is not one of')
+    expect(await api.listContextRules?.()).toEqual([])
+  })
+
+  it('round-trips a broadcast target through the scope', async () => {
+    const api = createMyceliumApi(emptyRegistry(), ['restrictions.manage'], noSend, fresh(), SPORES) as Partial<RestrictionsManage>
+    await api.addBroadcastTarget?.({ channel: 'console', conversationId: 'c1' })
+    expect(await api.listBroadcastTargets?.()).toEqual([{ channel: 'console', conversationId: 'c1' }])
+    await api.removeBroadcastTarget?.({ channel: 'console', conversationId: 'c1' })
+    expect(await api.listBroadcastTargets?.()).toEqual([])
   })
 })

@@ -70,3 +70,48 @@ export const pluginSetting = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.pluginName, t.key] })],
 )
+
+// No message is ever stored: this exists so an operator can designate a broadcast target
+// by a readable name instead of an opaque conversation id.
+export const conversation = sqliteTable(
+  'conversation',
+  {
+    channel: text('channel').notNull(),
+    conversationId: text('conversation_id').notNull(),
+    kind: text('kind', { enum: ['dm', 'group'] }).notNull(),
+    /** Denormalised: a DM exposes no join between its conversation id and the sender's identity. */
+    label: text('label'),
+    firstSeenAt: integer('first_seen_at', { mode: 'timestamp_ms' }).notNull(),
+    lastMessageAt: integer('last_message_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.channel, t.conversationId] })],
+)
+
+// Deliberately no foreign key to `conversation`: an operator may register a conversation
+// the bot has not seen yet, which is the only way to broadcast into a silent group.
+export const broadcastTarget = sqliteTable(
+  'broadcast_target',
+  {
+    channel: text('channel').notNull(),
+    conversationId: text('conversation_id').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.channel, t.conversationId] })],
+)
+
+// `where` is a SQL keyword; the column is `where_kind`, exposed as `whereKind` here.
+// Only septum's `ContextRule.where` reads as `where`.
+export const commandContextRule = sqliteTable('command_context_rule', {
+  pattern: text('pattern').primaryKey(),
+  whereKind: text('where_kind', { enum: ['dm', 'group'] }).notNull(),
+})
+
+// No row for a plugin means every channel: an operator opts into confinement, never out of it.
+export const inhibitorChannel = sqliteTable(
+  'inhibitor_channel',
+  {
+    pluginName: text('plugin_name').notNull()
+      .references(() => pluginInstall.name, { onDelete: 'cascade' }),
+    channel: text('channel').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.pluginName, t.channel] })],
+)

@@ -1,12 +1,14 @@
 import { resolve as resolvePath } from 'node:path'
 import { describe, expect, it, mock } from 'bun:test'
-import type { CommandSpec, Enzyme, Hypha, IncomingMessage, Logger, OutgoingContent, Principal, Rhiza, Verdict } from '@mycelo/septum'
+import type { ChannelCapability, CommandSpec, Enzyme, Hypha, IncomingMessage, Logger, OutgoingContent, Principal, Rhiza, Verdict } from '@mycelo/septum'
 import type { AdmissionChain } from '../../src/admission/chain.js'
+import { listConversations } from '../../src/conversations/registry.js'
 import { buildRoutes } from '../../src/germination/registry.js'
 import type { GerminatedEnzyme, GerminatedHypha, GerminatedRhiza, Registry } from '../../src/germination/registry.js'
 import { resolvePrincipal } from '../../src/identity/resolve.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import type { Db } from '../../src/persistence/db.js'
+import { setContextRule } from '../../src/restrictions/rules.js'
 import { channelIdentity, principalRole, role, roleCommand } from '../../src/persistence/schema.js'
 import { createBus, createEnzymeStartContext } from '../../src/rhizomorph/bus.js'
 import type { SporeAccess } from '../../src/rhizomorph/bus.js'
@@ -471,11 +473,17 @@ function grant(target: Db, principalId: string, roleName: string, patterns: read
   target.insert(principalRole).values({ principalId, roleId: id }).run()
 }
 
+interface DeliverOptions {
+  conversationId?: string
+  group?: { id: string, name?: string }
+  displayName?: string
+}
+
 interface Harness {
   db: Db
   sent: string[]
   seen: { principal?: Principal }
-  deliver(text: string, externalId: string): Promise<void>
+  deliver(text: string, externalId: string, options?: DeliverOptions): Promise<void>
 }
 
 function harness(options: {
@@ -483,6 +491,7 @@ function harness(options: {
   admit?: (message: IncomingMessage) => Promise<Verdict>
   defaultRole?: string
   db?: Db
+  capabilities?: readonly ChannelCapability[]
 }): Harness {
   const harnessDb = options.db ?? fresh()
   const sent: string[] = []
@@ -490,7 +499,7 @@ function harness(options: {
   const hypha = {
     name: 'console',
     config: {},
-    manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.5', capabilities: [] },
+    manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.5', capabilities: options.capabilities ?? [] },
     instance: {
       connect: () => Promise.resolve(),
       listen: () => {},
@@ -534,12 +543,27 @@ function harness(options: {
       sent.push(`denied ${qualified}`)
       await Promise.resolve()
     },
+    onUnsupported: async (_msg, qualified, capability) => {
+      sent.push(`unsupported ${qualified} ${capability}`)
+      await Promise.resolve()
+    },
+    onOutOfContext: async (_msg, qualified, where) => {
+      sent.push(`out-of-context ${qualified} ${where}`)
+      await Promise.resolve()
+    },
   })
   return {
     db: harnessDb, sent, seen,
-    deliver: (text, externalId) => bus.deliver('console', {
-      channel: 'console', conversationId: 'c1', messageId: 'm1',
-      sender: { channel: 'console', externalId },
+    deliver: (text, externalId, deliverOptions = {}) => bus.deliver('console', {
+      channel: 'console',
+      conversationId: deliverOptions.conversationId ?? 'c1',
+      messageId: 'm1',
+      ...(deliverOptions.group === undefined ? {} : { group: deliverOptions.group }),
+      sender: {
+        channel: 'console',
+        externalId,
+        ...(deliverOptions.displayName === undefined ? {} : { displayName: deliverOptions.displayName }),
+      },
       text, attachments: [], raw: null, receivedAt: new Date(),
     }),
   }
@@ -547,6 +571,12 @@ function harness(options: {
 
 const codeCommand: CommandSpec = { name: 'movies', description: 'Search', code: 'handleMovies' }
 const respondCommand: CommandSpec = { name: 'where', description: 'Where', respond: 'nowhere' }
+const reactRespondCommand: CommandSpec = {
+  name: 'where', description: 'Where', respond: 'nowhere', capabilities: ['reactions'],
+}
+const reactCodeCommand: CommandSpec = {
+  name: 'movies', description: 'Search', code: 'handleMovies', capabilities: ['reactions'],
+}
 
 describe('deliver, admission and authorization', () => {
   it('refuses a command the principal holds no pattern for, and says so', async () => {
@@ -634,5 +664,130 @@ describe('deliver, admission and authorization', () => {
     const h = harness({ commands: [codeCommand], defaultRole: 'ghost' })
     await h.deliver('/movies Dune', 'bob')
     expect(h.sent).toEqual([])
+  })
+})
+
+describe('the conversation registry', () => {
+  it('records an admitted conversation and never records a refused one', async () => {
+    const testDb = fresh()
+    const bob = resolvePrincipal(testDb, { channel: 'console', externalId: 'bob' })
+    grant(testDb, bob.id, 'guest', ['media.*'])
+    const h = harness({
+      commands: [codeCommand],
+      db: testDb,
+      admit: (msg) => Promise.resolve(
+        msg.conversationId === 'refused' ? { allow: false, reason: 'no' } : { allow: true },
+      ),
+    })
+    await h.deliver('/movies Dune', 'bob', { conversationId: 'admitted' })
+    await h.deliver('/movies Dune', 'bob', { conversationId: 'refused' })
+    expect(listConversations(testDb).map((c) => c.conversationId)).toEqual(['admitted'])
+  })
+
+  it('records a group conversation with its platform name', async () => {
+    const testDb = fresh()
+    const bob = resolvePrincipal(testDb, { channel: 'console', externalId: 'bob' })
+    grant(testDb, bob.id, 'guest', ['media.*'])
+    const h = harness({ commands: [codeCommand], db: testDb })
+    await h.deliver('/movies Dune', 'bob', { conversationId: 'g1', group: { id: 'g1', name: 'weekend' } })
+    expect(listConversations(testDb)[0]).toMatchObject({ kind: 'group', label: 'weekend' })
+  })
+
+  // The registry exists so a silent group can still be picked as a broadcast target;
+  // a message with no command at all must record one exactly like a routed one does.
+  it('records a conversation for text carrying no command at all', async () => {
+    const testDb = fresh()
+    const h = harness({ commands: [codeCommand], db: testDb })
+    await h.deliver('just chatting', 'bob')
+    expect(listConversations(testDb).map((c) => c.conversationId)).toEqual(['c1'])
+  })
+
+  it('still dispatches the command, and logs, when the write itself throws', async () => {
+    const { registry, sent } = setup({
+      handlers: { ping: async (_inv, ctx) => { await ctx.reply({ text: 'pong' }) } },
+    })
+    const throwingDb = new Proxy(db, {
+      get(target, prop, receiver) {
+        if (prop === 'insert') return () => { throw new Error('disk full') }
+        return Reflect.get(target, prop, receiver) as unknown
+      },
+    })
+    const errors: string[] = []
+    const logger: Logger = {
+      debug() {}, info() {}, warn() {},
+      error: (m) => { errors.push(m) },
+      child: () => logger,
+    }
+    const bus = createBus({ registry, db: throwingDb, admission: admitAll, prefix: '/', sporesDir: SPORES, logger })
+    await bus.deliver('console', message('/ping'))
+    expect(sent).toEqual([{ text: 'pong' }])
+    expect(errors[0]).toContain('could not record the conversation')
+  })
+})
+
+function granted(commands: readonly CommandSpec[], capabilities: readonly ChannelCapability[] = []) {
+  const testDb = fresh()
+  const bob = resolvePrincipal(testDb, { channel: 'console', externalId: 'bob' })
+  grant(testDb, bob.id, 'guest', ['media.*'])
+  const h = harness({ commands, db: testDb, capabilities })
+  return { h, testDb }
+}
+
+describe('channel capabilities on a command', () => {
+  it('refuses a code: command whose capability the emitting channel does not declare', async () => {
+    const { h } = granted([reactCodeCommand], [])
+    await h.deliver('/movies Dune', 'bob')
+    expect(h.sent).toEqual(['unsupported media.movies reactions'])
+  })
+
+  it('refuses a respond: command on capability exactly as it refuses a code: one', async () => {
+    const { h } = granted([reactRespondCommand], [])
+    await h.deliver('/where', 'bob')
+    expect(h.sent).toEqual(['unsupported media.where reactions'])
+  })
+
+  it('dispatches when the channel declares every capability the command needs', async () => {
+    const { h } = granted([reactCodeCommand], ['reactions'])
+    await h.deliver('/movies Dune', 'bob')
+    expect(h.sent).toEqual(['Dune (2021) via mock'])
+  })
+
+  it('dispatches a command that declares no capability at all', async () => {
+    const { h } = granted([codeCommand], [])
+    await h.deliver('/movies Dune', 'bob')
+    expect(h.sent).toEqual(['Dune (2021) via mock'])
+  })
+
+  it('denies a sender with no pattern before ever checking the channel capability', async () => {
+    const h = harness({ commands: [reactCodeCommand], capabilities: [] })
+    await h.deliver('/movies Dune', 'bob')
+    expect(h.sent).toEqual(['denied media.movies'])
+  })
+})
+
+describe('conversation context rules', () => {
+  it('refuses a command outside the conversation kind its rule names, and allows it inside', async () => {
+    const { testDb, h } = granted([codeCommand])
+    setContextRule(testDb, 'media.movies', 'dm')
+    await h.deliver('/movies Dune', 'bob', { conversationId: 'g1', group: { id: 'g1', name: 'weekend' } })
+    expect(h.sent).toEqual(['out-of-context media.movies dm'])
+    await h.deliver('/movies Dune', 'bob')
+    expect(h.sent).toEqual(['out-of-context media.movies dm', 'Dune (2021) via mock'])
+  })
+
+  it('applies a context rule to a respond: command exactly as to a code: one', async () => {
+    const { testDb, h } = granted([respondCommand])
+    setContextRule(testDb, '*', 'group')
+    await h.deliver('/where', 'bob')
+    expect(h.sent).toEqual(['out-of-context media.where group'])
+  })
+
+  it('checks the context rule only after the role check', async () => {
+    // carol holds no role at all, so she must hit onDenied and never learn where the
+    // command lives — the ordering the design argues for.
+    const { testDb, h } = granted([codeCommand])
+    setContextRule(testDb, 'media.movies', 'dm')
+    await h.deliver('/movies Dune', 'carol', { conversationId: 'g1', group: { id: 'g1' } })
+    expect(h.sent).toEqual(['denied media.movies'])
   })
 })
