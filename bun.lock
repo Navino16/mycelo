@@ -81,6 +81,7 @@
       "name": "@mycelo/septum",
       "version": "0.7.0",
       "dependencies": {
+        "intl-messageformat": "^11.2.13",
         "zod": "^4.4.3",
       },
     },

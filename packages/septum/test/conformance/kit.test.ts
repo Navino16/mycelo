@@ -627,6 +627,76 @@ describe('regressions', () => {
     expect(failures).toEqual([])
   })
 
+  // Finding 2 of the phase 5.6 whole-branch review: the kit certified two of this
+  // phase's own fixtures whose catalogues made them dormant in the bot.
+  it('passes an enzyme whose supplied catalogues all compile', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      catalogs: { en: { links: { usage: 'usage: links' } }, fr: { links: { usage: 'usage : links' } } },
+    })
+    expect(failures).toEqual([])
+  })
+
+  it('fails a catalogue key that does not compile, naming the locale and the key', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      catalogs: { en: { links: { usage: 'usage: {command' } } },
+    })
+    expect(failures.join(' ')).toContain("'en'")
+    expect(failures.join(' ')).toContain('links.usage')
+  })
+
+  it('fails a catalogue value that is not a string, naming the key', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      catalogs: { en: { links: { usage: ['not', 'a', 'string'] } } },
+    })
+    expect(failures.join(' ')).toContain('links.usage')
+    expect(failures.join(' ')).toContain('not a string')
+  })
+
+  // The inverted phase-2 divergence: the kit's stub t used to accept every domain while
+  // the runtime throws for one the manifest never declared.
+  it('throws in start() for a domain the manifest does not require, exactly as the bot would', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        create: () => ({
+          handlers: { links: async () => {} },
+          async start(ctx) { ctx.t({ domain: 'radarr', key: 'x' }) },
+          async stop() {},
+        }),
+      },
+    })
+    expect(failures.join(' ')).toContain("start() threw")
+    expect(failures.join(' ')).toContain("translation domain 'radarr' is not declared")
+  })
+
+  it("refuses the core's own domain even from a handler, which the runtime closes to plugins", async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        create: () => ({ handlers: { links: async (_i, ctx) => { ctx.t({ domain: 'core', key: 'command.denied' }) } } }),
+      },
+    })
+    expect(failures.join(' ')).toContain("translation domain 'core' is not declared")
+  })
+
+  it('lets a handler render a domain the manifest declares as a rhiza dependency', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      manifest: {
+        kind: 'enzyme', name: 'links', septum: '^1.0',
+        requires: [{ rhiza: 'radarr' }],
+        commands: [{ name: 'links', description: 'Show links', code: 'links' }],
+      },
+      module: {
+        create: () => ({ handlers: { links: async (_i, ctx) => { ctx.t({ domain: 'radarr', key: 'x' }) } } }),
+      },
+    })
+    expect(failures).toEqual([])
+  })
+
   it('lets a harness stub the start context itself', async () => {
     let sawOwnStub = false
     const failures = await enzymeChecks({

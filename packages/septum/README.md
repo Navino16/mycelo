@@ -292,7 +292,7 @@ implementation. Each returns a list of failure strings, so it works with any tes
 |---|---|
 | `hyphaChecks` | manifest, config schema, `connect`/`listen`/`stop`/`send`, `group_membership` consistency, and — given a `membershipGroupId` — that `listGroupMembers` resolves an array |
 | `rhizaChecks` | manifest, config schema, `api`, and that `health()` reports rather than throws |
-| `enzymeChecks` | manifest, config schema, lifecycle, and every command with no required args |
+| `enzymeChecks` | manifest, config schema, lifecycle, every command with no required args, and — given `catalogs` — that every translation key compiles and that `ctx.t()` refuses a domain the manifest does not declare |
 | `inhibitorChecks` | manifest, config schema, lifecycle, and a verdict per expected allow/deny |
 
 The harness is yours to build: the kit cannot know what your plugin depends on, so you supply
@@ -345,6 +345,11 @@ it('conforms to the Enzyme contract', async () => {
 
 Commands with required arguments are skipped: the kit cannot invent a value your enzyme would
 accept, so calling them would report correct validation as a failure. Those are yours to test.
+
+Pass `catalogs` — already-parsed translation files keyed by locale, such as
+`{ en: parse(readFileSync('translations/en.yaml', 'utf8')) }` — to have `enzymeChecks` compile
+every key the same way germination does, and to have `ctx.t()` throw for a domain your manifest
+does not declare in `requires`, exactly as the bot would.
 
 ## Status
 
