@@ -56,12 +56,11 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
   // refuses those two names, so the order here is belt and braces.
   const catalogs: Catalogs = new Map([...registry.catalogs, ...loadCoreCatalogs()])
   // No degraded mode here either: a deployment missing packages/core/translations/ must
-  // not boot clean and answer every refusal with a raw catalogue key (spec §5).
+  // not boot clean and answer every refusal with a raw catalogue key (spec §5). This also
+  // subsumes the old availableLocales()-union warning: once core and common are asserted
+  // to carry defaultLocale, that union always contains it too.
   assertCoreCatalogs(catalogs, config.defaultLocale)
   const translator = createTranslator({ catalogs, defaultLocale: config.defaultLocale, logger })
-  if (!translator.availableLocales().includes(config.defaultLocale)) {
-    logger.warn(`no catalogue provides the default locale '${config.defaultLocale}'`)
-  }
 
   // Step 1: connect() every hypha. `busBox.current` fills in once the bus exists,
   // before listen() opens the gate in step 3.

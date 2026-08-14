@@ -142,9 +142,12 @@ describe('assertCoreCatalogs', () => {
     expect(() => { assertCoreCatalogs(catalogs, 'en') }).not.toThrow()
   })
 
-  it('refuses a default locale neither real catalogue ships', () => {
+  it('refuses a default locale neither real catalogue ships, naming what it does provide', () => {
     expect(() => { assertCoreCatalogs(catalogs, 'ru') }).toThrow(StartupError)
     expect(() => { assertCoreCatalogs(catalogs, 'ru') }).toThrow("'core' translation catalogue")
+    // Same register as requireAvailable's refusal, not a container path an operator
+    // running an image cannot act on.
+    expect(() => { assertCoreCatalogs(catalogs, 'ru') }).toThrow('available: en, fr')
   })
 
   it('refuses when the core domain is missing entirely', () => {

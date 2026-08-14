@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, spyOn } from 'bun:test'
 import type { IncomingMessage } from '@mycelo/septum'
 import { recordConversation } from '../src/conversations/registry.js'
+import { StartupError } from '../src/identity/bootstrap.js'
 import { resolvePrincipal } from '../src/identity/resolve.js'
 import { setConversationLocale, setPrincipalLocale } from '../src/i18n/locale.js'
 import { bootstrap, germinationBanner } from '../src/mycelium.js'
@@ -790,4 +791,13 @@ it("lets an enzyme's start() push into the target conversation's own locale, nev
   const good = registry.hyphae.find((h) => h.name === 'good')
   const sent = (good?.instance as unknown as { sent: { text: string }[] }).sent
   expect(sent).toEqual([{ text: 'привет' }])
+})
+
+// Pins the assertCoreCatalogs call site itself: every other test of it in
+// core-catalogs.test.ts calls the function directly, so deleting the call from
+// bootstrap() left the whole suite green — the exact defect finding 3 exists to close.
+it('refuses to boot when the default locale has no core catalogue', async () => {
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\ndefaultLocale: ru\n`, 'utf8')
+  expect(bootstrap(configFile)).rejects.toThrow(StartupError)
 })

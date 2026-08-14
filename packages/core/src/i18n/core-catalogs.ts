@@ -33,10 +33,13 @@ export function loadCoreCatalogs(): Catalogs {
  */
 export function assertCoreCatalogs(catalogs: Catalogs, defaultLocale: string): void {
   for (const domain of CORE_OWNED_DOMAINS) {
-    if (!(catalogs.get(domain)?.has(defaultLocale) ?? false)) {
+    const byLocale = catalogs.get(domain)
+    if (!(byLocale?.has(defaultLocale) ?? false)) {
+      // Same register as requireAvailable's refusal: name what the domain does provide,
+      // not a container path an operator running an image cannot act on.
+      const available = [...(byLocale?.keys() ?? [])].sort()
       throw new StartupError(
-        `the '${domain}' translation catalogue for the default locale '${defaultLocale}' is missing — `
-        + `packages/core/translations/${domain}/${defaultLocale}.yaml must ship with the core`,
+        `the '${domain}' translation catalogue provides no '${defaultLocale}'; available: ${available.join(', ') || 'none'}`,
       )
     }
   }
