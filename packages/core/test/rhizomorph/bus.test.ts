@@ -8,6 +8,7 @@ import type { GerminatedEnzyme, GerminatedHypha, GerminatedRhiza, Registry } fro
 import { resolvePrincipal } from '../../src/identity/resolve.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import type { Db } from '../../src/persistence/db.js'
+import { setContextRule } from '../../src/restrictions/rules.js'
 import { channelIdentity, principalRole, role, roleCommand } from '../../src/persistence/schema.js'
 import { createBus, createEnzymeStartContext } from '../../src/rhizomorph/bus.js'
 import type { SporeAccess } from '../../src/rhizomorph/bus.js'
@@ -546,6 +547,10 @@ function harness(options: {
       sent.push(`unsupported ${qualified} ${capability}`)
       await Promise.resolve()
     },
+    onOutOfContext: async (_msg, qualified, where) => {
+      sent.push(`out-of-context ${qualified} ${where}`)
+      await Promise.resolve()
+    },
   })
   return {
     db: harnessDb, sent, seen,
@@ -689,15 +694,15 @@ describe('the conversation registry', () => {
   })
 })
 
-describe('channel capabilities on a command', () => {
-  function granted(commands: readonly CommandSpec[], capabilities: readonly ChannelCapability[]) {
-    const testDb = fresh()
-    const bob = resolvePrincipal(testDb, { channel: 'console', externalId: 'bob' })
-    grant(testDb, bob.id, 'guest', ['media.*'])
-    const h = harness({ commands, db: testDb, capabilities })
-    return { h, testDb }
-  }
+function granted(commands: readonly CommandSpec[], capabilities: readonly ChannelCapability[] = []) {
+  const testDb = fresh()
+  const bob = resolvePrincipal(testDb, { channel: 'console', externalId: 'bob' })
+  grant(testDb, bob.id, 'guest', ['media.*'])
+  const h = harness({ commands, db: testDb, capabilities })
+  return { h, testDb }
+}
 
+describe('channel capabilities on a command', () => {
   it('refuses a code: command whose capability the emitting channel does not declare', async () => {
     const { h } = granted([reactCodeCommand], [])
     await h.deliver('/movies Dune', 'bob')
@@ -725,6 +730,33 @@ describe('channel capabilities on a command', () => {
   it('denies a sender with no pattern before ever checking the channel capability', async () => {
     const h = harness({ commands: [reactCodeCommand], capabilities: [] })
     await h.deliver('/movies Dune', 'bob')
+    expect(h.sent).toEqual(['denied media.movies'])
+  })
+})
+
+describe('conversation context rules', () => {
+  it('refuses a command outside the conversation kind its rule names, and allows it inside', async () => {
+    const { testDb, h } = granted([codeCommand])
+    setContextRule(testDb, 'media.movies', 'dm')
+    await h.deliver('/movies Dune', 'bob', { conversationId: 'g1', group: { id: 'g1', name: 'weekend' } })
+    expect(h.sent).toEqual(['out-of-context media.movies dm'])
+    await h.deliver('/movies Dune', 'bob')
+    expect(h.sent).toEqual(['out-of-context media.movies dm', 'Dune (2021) via mock'])
+  })
+
+  it('applies a context rule to a respond: command exactly as to a code: one', async () => {
+    const { testDb, h } = granted([respondCommand])
+    setContextRule(testDb, '*', 'group')
+    await h.deliver('/where', 'bob')
+    expect(h.sent).toEqual(['out-of-context media.where group'])
+  })
+
+  it('checks the context rule only after the role check', async () => {
+    // carol holds no role at all, so she must hit onDenied and never learn where the
+    // command lives — the ordering the design argues for.
+    const { testDb, h } = granted([codeCommand])
+    setContextRule(testDb, 'media.movies', 'dm')
+    await h.deliver('/movies Dune', 'carol', { conversationId: 'g1', group: { id: 'g1' } })
     expect(h.sent).toEqual(['denied media.movies'])
   })
 })

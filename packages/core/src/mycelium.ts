@@ -225,6 +225,13 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
         text: `'${command}' needs ${capability}, which channel '${message.channel}' does not provide`,
       })
     },
+    onOutOfContext: async (message, qualified, where) => {
+      const command = qualified.slice(qualified.indexOf('.') + 1)
+      const place = where === 'dm' ? 'in a direct message' : 'in a group'
+      await sendVia(hyphaByName, message.channel, message.conversationId, {
+        text: `'${command}' is only available ${place}`,
+      })
+    },
   })
   busBox.current = bus
 

@@ -1,6 +1,7 @@
 import type {
   Capabilities,
   ChannelCapability,
+  ConversationKind,
   EnzymeContext,
   EnzymeStartContext,
   IncomingMessage,
@@ -11,12 +12,13 @@ import type {
   Principal,
 } from '@mycelo/septum'
 import type { AdmissionChain } from '../admission/chain.js'
-import { recordConversation } from '../conversations/registry.js'
+import { conversationKind, recordConversation } from '../conversations/registry.js'
 import type { GerminatedHypha, GerminatedRhiza, Registry } from '../germination/registry.js'
 import { authorize } from '../authorization/check.js'
 import { patternsOf, resolvePrincipal } from '../identity/resolve.js'
 import { createMyceliumApi } from '../mycelium-rhiza.js'
 import type { Db } from '../persistence/db.js'
+import { contextRuleFor } from '../restrictions/rules.js'
 import { bindArgs, parseCommand } from './parse.js'
 import { normalize } from './normalize.js'
 
@@ -119,12 +121,15 @@ export interface BusOptions {
   onDenied?: (message: IncomingMessage, qualified: string) => Promise<void>
   /** Called when the emitting channel does not declare a capability the command requires. */
   onUnsupported?: (message: IncomingMessage, qualified: string, capability: ChannelCapability) => Promise<void>
+  /** Called when a context rule confines the command to the other conversation kind. */
+  onOutOfContext?: (message: IncomingMessage, qualified: string, where: ConversationKind) => Promise<void>
   /** Defaults to the real mycelium-as-rhiza API, grounded in this bus's own registry (design §2.4). */
   mycelium?: (scopes: readonly MyceliumScope[]) => object
 }
 
 export function createBus({
-  registry, prefix, logger, db, admission, sporesDir, defaultRole, onUnrouted, onDenied, onUnsupported, mycelium,
+  registry, prefix, logger, db, admission, sporesDir, defaultRole,
+  onUnrouted, onDenied, onUnsupported, onOutOfContext, mycelium,
 }: BusOptions): Bus {
   const hyphaByName = new Map(registry.hyphae.map((h) => [h.name, h]))
   const send = (channel: string, conversationId: string, out: OutgoingContent): Promise<void> =>
@@ -229,6 +234,14 @@ export function createBus({
         const missing = (spec.capabilities ?? []).find((capability) => !origin.has(capability))
         if (missing !== undefined) {
           await onUnsupported?.(message, route.qualified, missing)
+          return
+        }
+
+        // Operator policy, after the author's declaration and after the role check: the
+        // one step that knows route.qualified (design note §2b).
+        const where = contextRuleFor(db, route.qualified)
+        if (where !== null && where !== conversationKind(message)) {
+          await onOutOfContext?.(message, route.qualified, where)
           return
         }
 
