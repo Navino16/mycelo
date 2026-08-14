@@ -26,4 +26,34 @@ describe('parseSenderLine', () => {
   it('trims whitespace around the name and around the text', () => {
     expect(parseSenderLine('  alice  >   /movies Dune  ')).toEqual({ sender: 'alice', text: '/movies Dune' })
   })
+
+  it('reads a group marker after the sender', () => {
+    expect(parseSenderLine('alice@weekend> /whoami')).toEqual({
+      sender: 'alice', group: 'weekend', text: '/whoami',
+    })
+  })
+
+  it('leaves a line with no marker as a direct message', () => {
+    expect(parseSenderLine('alice> /whoami')).toEqual({ sender: 'alice', text: '/whoami' })
+  })
+
+  it('treats an empty group name as no group', () => {
+    expect(parseSenderLine('alice@> /whoami')).toEqual({ sender: 'alice', text: '/whoami' })
+  })
+
+  it('does not read an @ in the text as a group marker', () => {
+    expect(parseSenderLine('alice> write to bob@example.com')).toEqual({
+      sender: 'alice', text: 'write to bob@example.com',
+    })
+  })
+
+  it('splits on the first @ of the sender part when both parts contain one', () => {
+    expect(parseSenderLine('alice@weekend> write to bob@example.com')).toEqual({
+      sender: 'alice', group: 'weekend', text: 'write to bob@example.com',
+    })
+  })
+
+  it('keeps falling back to local for a marker with no sender', () => {
+    expect(parseSenderLine('@weekend> /whoami')).toEqual({ sender: 'local', group: 'weekend', text: '/whoami' })
+  })
 })

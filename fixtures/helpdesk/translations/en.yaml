@@ -1,0 +1,4 @@
+links:
+  text: "Radarr http://radarr:7878"
+rules:
+  text: "No spoilers before Sunday."

@@ -5,8 +5,8 @@ description: Answers pong. Test fixture, never distributed.
 commands:
   - name: ping
     description: Health check
-    respond: pong
+    respond: reply.pong
   - name: react
     description: Answer only where reactions exist
-    respond: reactions are available here
+    respond: reply.reactions
     capabilities: [reactions]

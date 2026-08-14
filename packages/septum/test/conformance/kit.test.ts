@@ -149,6 +149,8 @@ function enzymeContext(): EnzymeContext<unknown> {
     capabilitiesOf: () => ({ has: () => true, list: () => [] }),
     principal: { id: 'p1', identities: [], roles: [] },
     on() {},
+    t: (key) => (typeof key === 'string' ? key : key.key),
+    localeFor: () => Promise.resolve('en'),
   }
 }
 
@@ -388,6 +390,7 @@ function inhibitorContext(): InhibitorContext<unknown> {
     requireCapability: () => {},
     rhiza: <T,>() => ({}) as T,
     has: () => false,
+    t: (key) => (typeof key === 'string' ? key : key.key),
   }
 }
 
@@ -562,6 +565,36 @@ describe('rhiza conformance checks', () => {
 // ---------------------------------------------------------------------------
 
 describe('regressions', () => {
+  // A spread (`{ ...ctx, t: ... }`) copies only own enumerable properties: a class
+  // instance's methods live on the prototype and would silently vanish, reporting
+  // 'ctx.reply is not a function' against a perfectly correct plugin.
+  it("does not lose a class-based context()'s prototype methods when guarding t()", async () => {
+    class ClassContext implements EnzymeContext<unknown> {
+      config = {}
+      logger = { debug() {}, info() {}, warn() {}, error() {}, child: (): EnzymeContext<unknown>['logger'] => this.logger }
+      capabilities: EnzymeContext<unknown>['capabilities'] = { has: () => true, list: () => [] }
+      principal = { id: 'p1', identities: [], roles: [] }
+      async reply(): Promise<void> {}
+      async push(): Promise<void> {}
+      rhiza<TApi>(): TApi { return {} as TApi }
+      has(): boolean { return false }
+      capabilitiesOf(): EnzymeContext<unknown>['capabilities'] { return { has: () => true, list: () => [] } }
+      on(): void {}
+      t(key: Parameters<EnzymeContext<unknown>['t']>[0]): string {
+        return typeof key === 'string' ? key : key.key
+      }
+      localeFor(): Promise<string> { return Promise.resolve('en') }
+    }
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        create: () => ({ handlers: { links: async (_i, ctx) => { await ctx.reply({ text: 'ok' }) } } }),
+      },
+      context: () => new ClassContext(),
+    })
+    expect(failures).toEqual([])
+  })
+
   it('calls an enzyme start() before its handlers', async () => {
     let started = false
     const failures = await enzymeChecks({
@@ -600,6 +633,103 @@ describe('regressions', () => {
           },
           async stop() {},
         }),
+      },
+    })
+    expect(failures).toEqual([])
+  })
+
+  // The runtime and the kit were written the same afternoon phase 2 shipped Enzyme.start()
+  // without it being called at all — the class of defect this pins against t()/localeFor().
+  it('lets start() call ctx.t() and ctx.localeFor()', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        create: () => ({
+          handlers: { links: async () => {} },
+          async start(ctx) {
+            ctx.t('ready')
+            await ctx.localeFor({ channel: 'console', conversationId: 'c1' })
+          },
+          async stop() {},
+        }),
+      },
+    })
+    expect(failures).toEqual([])
+  })
+
+  // Finding 2 of the phase 5.6 whole-branch review: the kit certified two of this
+  // phase's own fixtures whose catalogues made them dormant in the bot.
+  it('passes an enzyme whose supplied catalogues all compile', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      catalogs: { en: { links: { usage: 'usage: links' } }, fr: { links: { usage: 'usage : links' } } },
+    })
+    expect(failures).toEqual([])
+  })
+
+  it('fails a catalogue key that does not compile, naming the locale and the key', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      catalogs: { en: { links: { usage: 'usage: {command' } } },
+    })
+    expect(failures.join(' ')).toContain("'en'")
+    expect(failures.join(' ')).toContain('links.usage')
+  })
+
+  it('fails a catalogue value that is not a string, naming the key', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      catalogs: { en: { links: { usage: ['not', 'a', 'string'] } } },
+    })
+    expect(failures.join(' ')).toContain('links.usage')
+    expect(failures.join(' ')).toContain('not a string')
+  })
+
+  // catalog.ts treats an empty or comment-only YAML file (parses to null) as a catalogue
+  // with no keys, not a fault. A kit stricter than the runtime would fail a plugin the
+  // bot germinates happily — exactly a scaffolded translations/fr.yaml left empty.
+  it('passes a null catalogue root, exactly as the runtime does for an empty translation file', async () => {
+    const failures = await enzymeChecks({ ...goodEnzyme, catalogs: { en: { links: { usage: 'x' } }, fr: null } })
+    expect(failures).toEqual([])
+  })
+
+  // The inverted phase-2 divergence: the kit's stub t used to accept every domain while
+  // the runtime throws for one the manifest never declared.
+  it('throws in start() for a domain the manifest does not require, exactly as the bot would', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        create: () => ({
+          handlers: { links: async () => {} },
+          async start(ctx) { ctx.t({ domain: 'radarr', key: 'x' }) },
+          async stop() {},
+        }),
+      },
+    })
+    expect(failures.join(' ')).toContain("start() threw")
+    expect(failures.join(' ')).toContain("translation domain 'radarr' is not declared")
+  })
+
+  it("refuses the core's own domain even from a handler, which the runtime closes to plugins", async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        create: () => ({ handlers: { links: async (_i, ctx) => { ctx.t({ domain: 'core', key: 'command.denied' }) } } }),
+      },
+    })
+    expect(failures.join(' ')).toContain("translation domain 'core' is not declared")
+  })
+
+  it('lets a handler render a domain the manifest declares as a rhiza dependency', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      manifest: {
+        kind: 'enzyme', name: 'links', septum: '^1.0',
+        requires: [{ rhiza: 'radarr' }],
+        commands: [{ name: 'links', description: 'Show links', code: 'links' }],
+      },
+      module: {
+        create: () => ({ handlers: { links: async (_i, ctx) => { ctx.t({ domain: 'radarr', key: 'x' }) } } }),
       },
     })
     expect(failures).toEqual([])

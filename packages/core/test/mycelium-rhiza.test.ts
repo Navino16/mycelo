@@ -4,9 +4,9 @@ import { join, resolve as resolvePath } from 'node:path'
 import { describe, expect, it } from 'bun:test'
 import { z } from 'zod'
 import type {
-  ConversationsRead, HealthRead, IncomingMessage, MessagesBroadcast, PluginsConfigure, PluginsRead,
-  PluginsToggle, PrincipalsManage, PrincipalsRead, PushTarget, RestrictionsManage, RolesAssign,
-  RolesManage, RolesRead,
+  ConversationsRead, HealthRead, IncomingMessage, LocaleManage, MessagesBroadcast, PluginsConfigure,
+  PluginsRead, PluginsToggle, PrincipalsManage, PrincipalsRead, PushTarget, RestrictionsManage,
+  RolesAssign, RolesManage, RolesRead,
 } from '@mycelo/septum'
 import { addBroadcastTarget, recordConversation } from '../src/conversations/registry.js'
 import { getInstall, recordInstall, setEnabled, writeSetting } from '../src/config/store.js'
@@ -16,11 +16,18 @@ import type { Registry } from '../src/germination/registry.js'
 import { MYCELIUM_SCOPES } from '@mycelo/septum'
 import type { MyceliumScope } from '@mycelo/septum'
 import { MOUNTABLE_SCOPES, resolve } from '../src/germination/anastomoses.js'
+import { resolveLocale } from '../src/i18n/locale.js'
 import { createMyceliumApi } from '../src/mycelium-rhiza.js'
 import { migrateDatabase, openDatabase } from '../src/persistence/db.js'
 import type { Db } from '../src/persistence/db.js'
 import { principal } from '../src/persistence/schema.js'
 import { rejectsWith } from './support/rejects.js'
+
+const stubTranslator = { translate: (_d: string, key: string) => key, availableLocales: () => ['en', 'fr'] }
+
+function seedPrincipal(db: Db, id: string): void {
+  db.insert(principal).values({ id, createdAt: new Date() }).run()
+}
 
 const stubSend = async () => {}
 const noSend = stubSend
@@ -33,7 +40,7 @@ function fresh(): Db {
 }
 
 function emptyRegistry(): Registry {
-  return { hyphae: [], rhizas: [], enzymes: [], inhibitors: [], dormant: [], routes: new Map(), order: [], brokenEnforcing: [] }
+  return { hyphae: [], rhizas: [], enzymes: [], inhibitors: [], dormant: [], routes: new Map(), order: [], brokenEnforcing: [], catalogs: new Map() }
 }
 
 const registry = {
@@ -160,7 +167,7 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
 
   it('refuses to delete the configured default role', async () => {
     const db = fresh()
-    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES, 'newcomer') as RolesManage
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES, { defaultRole: 'newcomer' }) as RolesManage
     await manage.createRole('newcomer', [])
     // Boot refuses this state with a StartupError; deleting into it at runtime must not
     // leave first contact throwing on every new sender.
@@ -210,7 +217,7 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
 describe('MOUNTABLE_SCOPES against what createMyceliumApi actually mounts', () => {
   it('mounts exactly the scopes MOUNTABLE_SCOPES declares, and declares every scope septum has', () => {
     const mounted = MYCELIUM_SCOPES.filter((scope) => {
-      const api = createMyceliumApi(emptyRegistry(), [scope], noSend, fresh(), SPORES)
+      const api = createMyceliumApi(emptyRegistry(), [scope], noSend, fresh(), SPORES, { translator: stubTranslator })
       return Object.keys(api).length > 0
     })
     expect(new Set(mounted)).toEqual(new Set(MOUNTABLE_SCOPES))
@@ -231,6 +238,42 @@ describe('MOUNTABLE_SCOPES against what createMyceliumApi actually mounts', () =
       expect(r.dormant).toEqual([])
       expect(r.order[0]?.scopes).toEqual([scope])
     }
+  })
+})
+
+describe('createMyceliumApi, locale.manage', () => {
+  it('mounts nothing for a spore without the scope', () => {
+    const api = createMyceliumApi(emptyRegistry(), [], noSend, fresh(), SPORES, { translator: stubTranslator })
+    expect('setPrincipalLocale' in api).toBe(false)
+    expect('availableLocales' in api).toBe(false)
+  })
+
+  it('throws rather than mounting a scope with no translator to answer from', () => {
+    expect(() => createMyceliumApi(emptyRegistry(), ['locale.manage'], noSend, fresh(), SPORES))
+      .toThrow(/locale.manage/)
+  })
+
+  it('answers every locale a catalogue provides', () => {
+    const api = createMyceliumApi(emptyRegistry(), ['locale.manage'], noSend, fresh(), SPORES,
+      { translator: stubTranslator }) as LocaleManage
+    expect(api.availableLocales()).toEqual(['en', 'fr'])
+  })
+
+  it('rejects a locale no catalogue provides, naming what is available', async () => {
+    const db = fresh()
+    seedPrincipal(db, 'p1')
+    const api = createMyceliumApi(emptyRegistry(), ['locale.manage'], noSend, db, SPORES,
+      { translator: stubTranslator }) as LocaleManage
+    expect(api.setPrincipalLocale('p1', 'de')).rejects.toThrow(/available: en, fr/)
+  })
+
+  it('writes a canonical tag through', async () => {
+    const db = fresh()
+    seedPrincipal(db, 'p1')
+    const api = createMyceliumApi(emptyRegistry(), ['locale.manage'], noSend, db, SPORES,
+      { translator: { translate: (_d, key) => key, availableLocales: () => ['fr-FR'] } }) as LocaleManage
+    await api.setPrincipalLocale('p1', 'fr-fr')
+    expect(resolveLocale(db, 'console', 'nowhere', 'p1', 'en')).toBe('fr-FR')
   })
 })
 

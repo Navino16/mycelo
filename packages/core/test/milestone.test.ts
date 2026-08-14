@@ -489,3 +489,33 @@ it('runs the phase 5.5 milestone: an operator bounds where a command works and r
     expect(fixture.sent.at(-1)).toEqual({ text: "you are not allowed to use 'whoami'" })
   })
 })
+
+it("reports 'only available in a group' through the real onOutOfContext wiring, not the dm sentence", async () => {
+  // mycelium.ts's onOutOfContext builds the catalogue key as `context.${where}`; the
+  // milestone above only ever exercises the dm branch, which would pass even with that
+  // key hard-coded to 'context.dm'. This drives the group branch through the same
+  // real bootstrap() wiring.
+  const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(
+    configFile,
+    'prefix: "/"\n'
+    + `spores: ${sporesDir}\n`
+    + 'owner:\n  channel: console\n  userId: alice\n',
+    'utf8',
+  )
+
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+
+  const fixture = registry.hyphae.find((h) => h.name === 'console')
+    ?.instance as unknown as ConsoleFixture
+
+  fixture.feed('/where-rule admin.whoami group', 'alice')
+  await waitFor(() => { expect(fixture.sent[0]).toEqual({ text: "'admin.whoami' is now restricted to group" }) })
+
+  fixture.feed('/whoami', 'alice')
+  await waitFor(() => {
+    expect(fixture.sent[1]).toEqual({ text: "'whoami' is only available in a group" })
+  })
+})

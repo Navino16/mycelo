@@ -1,4 +1,5 @@
 import type { CommandSpec, Enzyme, Hypha, Inhibitor, Manifest, MyceliumScope, Rhiza } from '@mycelo/septum'
+import type { Catalogs } from '../i18n/catalog.js'
 
 export interface GerminatedHypha {
   name: string
@@ -78,6 +79,8 @@ export interface Registry {
   order: readonly string[]
   /** Enforcing inhibitors that did not germinate. Any one of them refuses all traffic (design §7). */
   brokenEnforcing: readonly string[]
+  /** One entry per germinated spore that ships a translations/ directory (design §3). */
+  catalogs: Catalogs
 }
 
 /**

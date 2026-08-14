@@ -2,6 +2,7 @@ import { MYCELIUM_SCOPES } from '../src/mycelium.js'
 import type {
   ConversationsRead,
   HealthRead,
+  LocaleManage,
   MessagesBroadcast,
   MessagesSend,
   MyceliumScope,
@@ -16,7 +17,7 @@ import type {
   RolesManage,
   RolesRead,
 } from '../src/mycelium.js'
-import type { Principal } from '../src/context.js'
+import type { EnzymeContext, EnzymeStartContext, InhibitorContext, Principal, TranslatableRef } from '../src/context.js'
 
 // Checked by `tsc -p tsconfig.spec.json`, never by bun test: these are claims about the
 // published types, and `import type` is erased, so a runtime assertion cannot make them.
@@ -28,7 +29,7 @@ export type ScopeNamesAreExact = Expect<Equal<MyceliumScope,
   | 'roles.read' | 'roles.assign' | 'roles.manage'
   | 'plugins.read' | 'plugins.toggle' | 'plugins.configure'
   | 'health.read' | 'messages.send'
-  | 'messages.broadcast' | 'conversations.read' | 'restrictions.manage'
+  | 'messages.broadcast' | 'conversations.read' | 'restrictions.manage' | 'locale.manage'
 >>
 
 export type ScopesAreReadonly = Expect<Equal<typeof MYCELIUM_SCOPES, readonly [
@@ -36,7 +37,7 @@ export type ScopesAreReadonly = Expect<Equal<typeof MYCELIUM_SCOPES, readonly [
   'roles.read', 'roles.assign', 'roles.manage',
   'plugins.read', 'plugins.toggle', 'plugins.configure',
   'health.read', 'messages.send',
-  'messages.broadcast', 'conversations.read', 'restrictions.manage',
+  'messages.broadcast', 'conversations.read', 'restrictions.manage', 'locale.manage',
 ]>>
 
 // One entry per scope, `never` for a scope no phase mounts yet. A scope added to
@@ -55,6 +56,7 @@ interface ScopeApi {
   'messages.broadcast': MessagesBroadcast
   'conversations.read': ConversationsRead
   'restrictions.manage': RestrictionsManage
+  'locale.manage': LocaleManage
 }
 
 export type EveryScopeIsClassified = Expect<Equal<keyof ScopeApi, MyceliumScope>>
@@ -132,3 +134,33 @@ export const restrictionsManage: RestrictionsManage = {
   addBroadcastTarget: () => Promise.resolve(),
   removeBroadcastTarget: () => Promise.resolve(),
 }
+
+export const localeManage: LocaleManage = {
+  setPrincipalLocale: () => Promise.resolve(),
+  setConversationLocale: () => Promise.resolve(),
+  availableLocales: () => ['en', 'fr'],
+}
+
+// t takes a bare key, a key with params, a key with params and an explicit locale, and a ref.
+declare const enzyme: EnzymeContext
+export const _a: string = enzyme.t('ready')
+export const _b: string = enzyme.t('found', { title: 'Dune' })
+export const _c: string = enzyme.t('found', { title: 'Dune' }, 'fr')
+export const _d: string = enzyme.t({ domain: 'mock', key: 'lookup.unknown', params: { title: 'Dune' } })
+
+// The same signature is on the narrow context start() gets, declared once and inherited.
+declare const start: EnzymeStartContext
+export const _e: string = start.t('ready')
+export const _f: Promise<string> = start.localeFor({ channel: 'console', conversationId: 'stdin' })
+
+// An inhibitor's refusal is read by a human too.
+declare const inhibitor: InhibitorContext
+export const _g: string = inhibitor.t('refused')
+
+// A ref's params are optional.
+export const _ref: TranslatableRef = { domain: 'mock', key: 'lookup.unknown' }
+
+declare const locales: LocaleManage
+export const _h: readonly string[] = locales.availableLocales()
+export const _i: Promise<void> = locales.setPrincipalLocale('p1', 'fr')
+export const _j: Promise<void> = locales.setConversationLocale('console', 'weekend', 'ru')

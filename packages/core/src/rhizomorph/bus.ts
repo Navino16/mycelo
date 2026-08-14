@@ -16,6 +16,9 @@ import { conversationKind, recordConversation } from '../conversations/registry.
 import type { GerminatedHypha, GerminatedRhiza, Registry } from '../germination/registry.js'
 import { authorize } from '../authorization/check.js'
 import { patternsOf, resolvePrincipal } from '../identity/resolve.js'
+import { bindTranslate } from '../i18n/bind.js'
+import { localeForTarget, resolveLocale } from '../i18n/locale.js'
+import type { Translator } from '../i18n/translator.js'
 import { createMyceliumApi } from '../mycelium-rhiza.js'
 import type { Db } from '../persistence/db.js'
 import { contextRuleFor } from '../restrictions/rules.js'
@@ -65,6 +68,12 @@ export interface StartContextOptions {
   /** Injected so bus.ts does not import mycelium-rhiza.ts, which imports Registry. */
   mycelium: (scopes: readonly MyceliumScope[]) => object
   config: unknown
+  /** The calling spore's own name: the domain a bare string key in t() resolves against. */
+  domain: string
+  translator: Translator
+  db: Db
+  /** Locale for t() and localeFor() when nothing more specific is known. */
+  defaultLocale: string
 }
 
 /**
@@ -73,7 +82,7 @@ export interface StartContextOptions {
  * exists) and createBus()'s per-message context below share one implementation.
  */
 export function createEnzymeStartContext(options: StartContextOptions): EnzymeStartContext {
-  const { hyphae, rhizas, logger, access, mycelium, config } = options
+  const { hyphae, rhizas, logger, access, mycelium, config, domain, translator, db, defaultLocale } = options
   const hyphaByName = new Map(hyphae.map((h) => [h.name, h]))
   const rhizaByName = new Map(rhizas.map((r) => [r.name, r]))
 
@@ -98,6 +107,8 @@ export function createEnzymeStartContext(options: StartContextOptions): EnzymeSt
     rhiza,
     has: (name) => access.resolved.has(name),
     on: () => notYet('ctx.on()', 'a phase not yet scheduled for rhiza domain events (design §12)'),
+    t: bindTranslate({ translator, domain, allowed: access.resolved, localeOf: () => defaultLocale }),
+    localeFor: (target) => Promise.resolve(localeForTarget(db, target, defaultLocale)),
   }
 }
 
@@ -115,20 +126,24 @@ export interface BusOptions {
   sporesDir: string
   /** Assigned to a principal on first contact only (identity/resolve.ts). */
   defaultRole?: string
+  /** Required by locale.manage and by every enzyme's ctx.t(): every caller has one. */
+  translator: Translator
+  /** Resolved per message by resolveLocale(); used as-is for start() contexts. */
+  defaultLocale: string
   /** Called when text carries no command, or names one nothing declares. */
-  onUnrouted?: (message: IncomingMessage, command: string | null) => Promise<void>
+  onUnrouted?: (message: IncomingMessage, command: string | null, locale: string) => Promise<void>
   /** Sent verbatim when authorization refuses. */
-  onDenied?: (message: IncomingMessage, qualified: string) => Promise<void>
+  onDenied?: (message: IncomingMessage, qualified: string, locale: string) => Promise<void>
   /** Called when the emitting channel does not declare a capability the command requires. */
-  onUnsupported?: (message: IncomingMessage, qualified: string, capability: ChannelCapability) => Promise<void>
+  onUnsupported?: (message: IncomingMessage, qualified: string, capability: ChannelCapability, locale: string) => Promise<void>
   /** Called when a context rule confines the command to the other conversation kind. */
-  onOutOfContext?: (message: IncomingMessage, qualified: string, where: ConversationKind) => Promise<void>
+  onOutOfContext?: (message: IncomingMessage, qualified: string, where: ConversationKind, locale: string) => Promise<void>
   /** Defaults to the real mycelium-as-rhiza API, grounded in this bus's own registry (design §2.4). */
   mycelium?: (scopes: readonly MyceliumScope[]) => object
 }
 
 export function createBus({
-  registry, prefix, logger, db, admission, sporesDir, defaultRole,
+  registry, prefix, logger, db, admission, sporesDir, defaultRole, translator, defaultLocale,
   onUnrouted, onDenied, onUnsupported, onOutOfContext, mycelium,
 }: BusOptions): Bus {
   const hyphaByName = new Map(registry.hyphae.map((h) => [h.name, h]))
@@ -141,7 +156,7 @@ export function createBus({
       (target, content) => send(target.channel, target.conversationId, content),
       db,
       sporesDir,
-      defaultRole,
+      { defaultRole, translator },
     ))
 
   // One context per enzyme, because `resolved` and `scopes` differ per spore
@@ -156,11 +171,18 @@ export function createBus({
         access: { resolved: enzyme.resolved, scopes: enzyme.scopes },
         mycelium: mounted,
         config: enzyme.config,
+        domain: enzyme.name,
+        translator,
+        db,
+        defaultLocale,
       }),
     ]),
   )
+  const enzymeAccess = new Map(registry.enzymes.map((enzyme) => [enzyme.name, enzyme.resolved]))
 
-  function contextFor(message: IncomingMessage, enzymeName: string, principal: Principal): EnzymeContext {
+  function contextFor(
+    message: IncomingMessage, enzymeName: string, principal: Principal, locale: string,
+  ): EnzymeContext {
     const origin = hyphaByName.get(message.channel)
     const startContext = startContextByEnzyme.get(enzymeName)
     if (startContext === undefined) throw new Error(`no start context built for enzyme '${enzymeName}'`)
@@ -168,6 +190,14 @@ export function createBus({
       ...startContext,
       logger: logger.child({ channel: message.channel }),
       reply: async (content) => { await send(message.channel, message.conversationId, content) },
+      // Rebound, not inherited: the start context's t answers in the default locale,
+      // which inside a handler would ignore the reader entirely.
+      t: bindTranslate({
+        translator,
+        domain: enzymeName,
+        allowed: enzymeAccess.get(enzymeName) ?? new Set(),
+        localeOf: () => locale,
+      }),
       capabilities: capabilitiesOf(origin),
       get principal(): Principal { return principal },
     }
@@ -207,22 +237,23 @@ export function createBus({
           logger.error(`could not resolve the sender on '${channel}'`, { error: (e as Error).message })
           return
         }
+        const locale = resolveLocale(db, message.channel, message.conversationId, principal.id, defaultLocale)
 
         const parsed = parseCommand(message.text, prefix)
         if (parsed === null) {
-          await onUnrouted?.(message, null)
+          await onUnrouted?.(message, null, locale)
           return
         }
         const route = registry.routes.get(parsed.command)
         if (route === undefined) {
-          await onUnrouted?.(message, parsed.command)
+          await onUnrouted?.(message, parsed.command, locale)
           return
         }
 
         // A respond: command is authorized too: it has no handler, but letting it
         // through unchecked would make respond: a way around authorization entirely.
         if (!authorize(route.qualified, patternsOf(db, principal.id))) {
-          await onDenied?.(message, route.qualified)
+          await onDenied?.(message, route.qualified, locale)
           return
         }
 
@@ -233,7 +264,7 @@ export function createBus({
         const origin = capabilitiesOf(hyphaByName.get(message.channel))
         const missing = (spec.capabilities ?? []).find((capability) => !origin.has(capability))
         if (missing !== undefined) {
-          await onUnsupported?.(message, route.qualified, missing)
+          await onUnsupported?.(message, route.qualified, missing, locale)
           return
         }
 
@@ -241,13 +272,17 @@ export function createBus({
         // one step that knows route.qualified (design note §2b).
         const where = contextRuleFor(db, route.qualified)
         if (where !== null && where !== conversationKind(message)) {
-          await onOutOfContext?.(message, route.qualified, where)
+          await onOutOfContext?.(message, route.qualified, where, locale)
           return
         }
 
         if (spec.respond !== undefined) {
           try {
-            await send(message.channel, message.conversationId, { text: spec.respond })
+            // design §5.2: respond: is a catalogue key in the declaring spore's domain. An
+            // absent key renders literally, so a plugin with no catalogue is unaffected.
+            await send(message.channel, message.conversationId, {
+              text: translator.translate(route.plugin, spec.respond, locale),
+            })
           } catch (e) {
             // Named the same way the code: path already does, so an operator can tell
             // which command was lost rather than only which channel failed.
@@ -270,7 +305,7 @@ export function createBus({
           // both the user and the operator instead of surfacing it like a thrown handler.
           logger.error(`enzyme '${route.plugin}' has no handler for '${route.qualified}'`, {})
           await send(message.channel, message.conversationId, {
-            text: `command '${parsed.command}' failed`,
+            text: translator.translate('core', 'command.failed', locale, { command: parsed.command }),
           })
           return
         }
@@ -282,12 +317,12 @@ export function createBus({
           // Germination refuses this, so reaching it means the registry was built elsewhere.
           logger.error(`enzyme '${route.plugin}' has no handler '${spec.code}'`)
           await send(message.channel, message.conversationId, {
-            text: `command '${parsed.command}' failed`,
+            text: translator.translate('core', 'command.failed', locale, { command: parsed.command }),
           })
           return
         }
         try {
-          await handler(invocation, contextFor(message, route.plugin, principal))
+          await handler(invocation, contextFor(message, route.plugin, principal, locale))
         } catch (e) {
           // A handler that throws is contained: clean error on the channel, trace logged.
           logger.error(`enzyme '${route.plugin}' threw handling '${route.qualified}'`, {
@@ -295,7 +330,7 @@ export function createBus({
           })
           try {
             await send(message.channel, message.conversationId, {
-              text: `command '${parsed.command}' failed`,
+              text: translator.translate('core', 'command.failed', locale, { command: parsed.command }),
             })
           } catch (sendError) {
             // The channel that failed is the same one we would answer on: there is

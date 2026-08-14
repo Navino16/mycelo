@@ -10,8 +10,13 @@ import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import type { Db } from '../../src/persistence/db.js'
 import { setContextRule } from '../../src/restrictions/rules.js'
 import { channelIdentity, principalRole, role, roleCommand } from '../../src/persistence/schema.js'
+import { catalogsOf } from '../support/catalogs.js'
+import { loadCoreCatalogs } from '../../src/i18n/core-catalogs.js'
+import { setConversationLocale, setPrincipalLocale } from '../../src/i18n/locale.js'
+import { createTranslator } from '../../src/i18n/translator.js'
+import type { Translator } from '../../src/i18n/translator.js'
 import { createBus, createEnzymeStartContext } from '../../src/rhizomorph/bus.js'
-import type { SporeAccess } from '../../src/rhizomorph/bus.js'
+import type { Bus, BusOptions, SporeAccess } from '../../src/rhizomorph/bus.js'
 import { createLogger } from '../../src/support/logger.js'
 
 const DEFAULT_COMMANDS: CommandSpec[] = [{ name: 'ping', description: 'Health check', code: 'ping' }]
@@ -30,6 +35,17 @@ const localPrincipal = resolvePrincipal(db, { channel: 'console', externalId: 'l
 db.insert(role).values({ id: 'r:test-all', name: 'test-all' }).run()
 db.insert(roleCommand).values({ roleId: 'r:test-all', pattern: '*' }).run()
 db.insert(principalRole).values({ principalId: localPrincipal.id, roleId: 'r:test-all' }).run()
+
+// The core catalogue, not an empty one: bus.ts's own "command '<x>' failed" now renders
+// through it, so the pre-existing tests asserting that English sentence need it present.
+function busFor(registry: Registry, overrides: Partial<BusOptions> = {}): Bus {
+  return createBus({
+    registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger(),
+    translator: createTranslator({ catalogs: loadCoreCatalogs(), defaultLocale: 'en', logger: createLogger() }),
+    defaultLocale: 'en',
+    ...overrides,
+  })
+}
 
 function setup(
   instance: Enzyme | null,
@@ -58,7 +74,7 @@ function setup(
   }]
   const order = [...rhizas.map((r) => r.name), 'ping']
   return {
-    registry: { hyphae, enzymes, rhizas, inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order, brokenEnforcing: [] },
+    registry: { hyphae, enzymes, rhizas, inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order, brokenEnforcing: [], catalogs: new Map() },
     sent,
   }
 }
@@ -75,6 +91,8 @@ it('resolves a declared rhiza through ctx.rhiza()', () => {
   const ctx = createEnzymeStartContext({
     hyphae: [], rhizas: [stubRhiza('mock', { lookup: () => 'x' })],
     logger: createLogger(), access: access(['mock']), mycelium: () => ({}), config: {},
+    domain: 'test', translator: createTranslator({ catalogs: new Map(), defaultLocale: 'en', logger: createLogger() }),
+    db, defaultLocale: 'en',
   })
   expect(ctx.rhiza<{ lookup(): string }>('mock').lookup()).toBe('x')
 })
@@ -83,6 +101,8 @@ it('throws when a rhiza was never declared, naming the target', () => {
   const ctx = createEnzymeStartContext({
     hyphae: [], rhizas: [stubRhiza('mock', {})],
     logger: createLogger(), access: access([]), mycelium: () => ({}), config: {},
+    domain: 'test', translator: createTranslator({ catalogs: new Map(), defaultLocale: 'en', logger: createLogger() }),
+    db, defaultLocale: 'en',
   })
   expect(() => ctx.rhiza('mock')).toThrow(/'mock'.*not declared/)
 })
@@ -91,6 +111,8 @@ it('answers has() from the resolved set, not from what is installed', () => {
   const ctx = createEnzymeStartContext({
     hyphae: [], rhizas: [stubRhiza('mock', {}), stubRhiza('other', {})],
     logger: createLogger(), access: access(['mock']), mycelium: () => ({}), config: {},
+    domain: 'test', translator: createTranslator({ catalogs: new Map(), defaultLocale: 'en', logger: createLogger() }),
+    db, defaultLocale: 'en',
   })
   expect(ctx.has('mock')).toBe(true)
   expect(ctx.has('other')).toBe(false)
@@ -108,7 +130,7 @@ it('routes a command to its enzyme and the reply back to the channel', async () 
   const { registry, sent } = setup({
     handlers: { ping: async (_inv, ctx) => { await ctx.reply({ text: 'pong' }) } },
   })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
+  const bus = busFor(registry)
   await bus.deliver('console', message('/ping'))
   expect(sent).toEqual([{ text: 'pong' }])
 })
@@ -135,14 +157,14 @@ it('names the failed command, not just the channel, when a respond: send throws'
     scopes: [],
     config: {},
   }]
-  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'], brokenEnforcing: [] }
+  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'], brokenEnforcing: [], catalogs: new Map() }
   const errors: string[] = []
   const logger: Logger = {
     debug() {}, info() {}, warn() {},
     error: (m) => { errors.push(m) },
     child: () => logger,
   }
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger })
+  const bus = busFor(registry, { logger })
   await bus.deliver('console', message('/links'))
   expect(errors[0]).toContain('ping.links')
 })
@@ -151,7 +173,7 @@ it('answers a text command without touching the module', async () => {
   const { registry, sent } = setup(null, [
     { name: 'links', description: 'Service URLs', respond: 'Radarr http://radarr:7878' },
   ])
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
+  const bus = busFor(registry)
   await bus.deliver('console', message('/links'))
   expect(sent).toEqual([{ text: 'Radarr http://radarr:7878' }])
 })
@@ -162,10 +184,115 @@ it('never calls a handler when the command answers with respond, even with an in
     { handlers: { links: async () => { calls++ } } },
     [{ name: 'links', description: 'Service URLs', respond: 'Radarr http://radarr:7878' }],
   )
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
+  const bus = busFor(registry)
   await bus.deliver('console', message('/links'))
   expect(sent).toEqual([{ text: 'Radarr http://radarr:7878' }])
   expect(calls).toBe(0)
+})
+
+describe("respond: resolves through the declaring spore's domain", () => {
+  it("renders a respond: command as a catalogue key in the declaring spore's domain", async () => {
+    const { registry, sent } = setup(null, [
+      { name: 'links', description: 'x', respond: 'links.text' },
+    ])
+    const bus = busFor(registry, {
+      translator: createTranslator({
+        catalogs: catalogsOf({ ping: { en: { 'links.text': 'Radarr http://radarr:7878' } } }),
+        defaultLocale: 'en', logger: createLogger(),
+      }),
+    })
+    await bus.deliver('console', message('/links'))
+    expect(sent).toEqual([{ text: 'Radarr http://radarr:7878' }])
+  })
+
+  it('renders the same key differently for a reader who chose another language', async () => {
+    const { registry, sent } = setup(null, [
+      { name: 'links', description: 'x', respond: 'links.text' },
+    ])
+    const bus = busFor(registry, {
+      translator: createTranslator({
+        catalogs: catalogsOf({
+          ping: {
+            en: { 'links.text': 'Radarr http://radarr:7878' },
+            fr: { 'links.text': 'Radarr, adresse http://radarr:7878' },
+          },
+        }),
+        defaultLocale: 'en', logger: createLogger(),
+      }),
+    })
+    setPrincipalLocale(db, localPrincipal.id, 'fr')
+    await bus.deliver('console', message('/links'))
+    setPrincipalLocale(db, localPrincipal.id, 'en')
+    expect(sent).toEqual([{ text: 'Radarr, adresse http://radarr:7878' }])
+  })
+
+  it('returns a respond: string literally when no catalogue declares it', async () => {
+    const { registry, sent } = setup(null, [
+      { name: 'ping-text', description: 'x', respond: 'pong' },
+    ])
+    const bus = busFor(registry)
+    await bus.deliver('console', message('/ping-text'))
+    expect(sent).toEqual([{ text: 'pong' }])
+  })
+
+  it('does not pass an undeclared respond: through ICU', async () => {
+    const { registry, sent } = setup(null, [
+      { name: 'help-text', description: 'x', respond: 'type {help}' },
+    ])
+    const bus = busFor(registry)
+    await bus.deliver('console', message('/help-text'))
+    expect(sent).toEqual([{ text: 'type {help}' }])
+  })
+
+  // Two enzymes declaring the same key with different text: a mutation collapsing the
+  // domain to a constant would pass one message and fail the other.
+  it("resolves in the declaring spore's domain, not the reader's or the core's", async () => {
+    const sent: OutgoingContent[] = []
+    const hypha: Hypha = {
+      async connect() {}, listen() {}, async stop() {},
+      async send(_c, out) { sent.push(out) },
+    }
+    const hyphae: GerminatedHypha[] = [{
+      name: 'console',
+      manifest: { kind: 'hypha', name: 'console', septum: '^1.0', capabilities: [] },
+      instance: hypha,
+      config: {},
+    }]
+    const enzymes: GerminatedEnzyme[] = [
+      {
+        name: 'alpha',
+        manifest: {
+          kind: 'enzyme', name: 'alpha', septum: '^1.0',
+          commands: [{ name: 'hello-alpha', description: 'x', respond: 'greeting.text' }],
+        },
+        instance: null, resolved: new Set(), scopes: [], config: {},
+      },
+      {
+        name: 'beta',
+        manifest: {
+          kind: 'enzyme', name: 'beta', septum: '^1.0',
+          commands: [{ name: 'hello-beta', description: 'x', respond: 'greeting.text' }],
+        },
+        instance: null, resolved: new Set(), scopes: [], config: {},
+      },
+    ]
+    const registry: Registry = {
+      hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [],
+      routes: buildRoutes(enzymes), order: ['alpha', 'beta'], brokenEnforcing: [], catalogs: new Map(),
+    }
+    const bus = busFor(registry, {
+      translator: createTranslator({
+        catalogs: catalogsOf({
+          alpha: { en: { 'greeting.text': 'Hello from alpha' } },
+          beta: { en: { 'greeting.text': 'Hello from beta' } },
+        }),
+        defaultLocale: 'en', logger: createLogger(),
+      }),
+    })
+    await bus.deliver('console', message('/hello-alpha'))
+    await bus.deliver('console', message('/hello-beta'))
+    expect(sent).toEqual([{ text: 'Hello from alpha' }, { text: 'Hello from beta' }])
+  })
 })
 
 it('logs and reports failure, rather than staying silent, when a code command has no loaded instance', async () => {
@@ -176,7 +303,7 @@ it('logs and reports failure, rather than staying silent, when a code command ha
     error: (m) => { errors.push(m) },
     child: () => logger,
   }
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger })
+  const bus = busFor(registry, { logger })
   await bus.deliver('console', message('/boom'))
   expect(sent).toEqual([{ text: "command 'boom' failed" }])
   expect(errors[0]).toContain('boom')
@@ -187,7 +314,7 @@ it('reports failure rather than answering with Object.prototype.constructor when
     { handlers: {} },
     [{ name: 'boom', description: 'x', code: 'constructor' }],
   )
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
+  const bus = busFor(registry)
   await bus.deliver('console', message('/boom'))
   expect(sent).toEqual([{ text: "command 'boom' failed" }])
 })
@@ -196,16 +323,16 @@ it('reports an unknown command without invoking anything', async () => {
   const ping = mock()
   const { registry } = setup({ handlers: { ping } })
   const onUnrouted = mock(async () => {})
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger(), onUnrouted })
+  const bus = busFor(registry, { onUnrouted })
   await bus.deliver('console', message('/nope'))
   expect(ping).not.toHaveBeenCalled()
-  expect(onUnrouted).toHaveBeenCalledWith(expect.anything(), 'nope')
+  expect(onUnrouted).toHaveBeenCalledWith(expect.anything(), 'nope', 'en')
 })
 
 it('ignores text carrying no command', async () => {
   const ping = mock()
   const { registry } = setup({ handlers: { ping } })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
+  const bus = busFor(registry)
   await bus.deliver('console', message('just talking'))
   expect(ping).not.toHaveBeenCalled()
 })
@@ -214,7 +341,7 @@ it('contains a handler that throws and answers on the channel', async () => {
   const { registry, sent } = setup({
     handlers: { ping: async () => { throw new Error('boom') } },
   })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
+  const bus = busFor(registry)
   await bus.deliver('console', message('/ping'))
   expect(sent[0]?.text).toContain('failed')
 })
@@ -224,7 +351,7 @@ it('exposes the channel capabilities to the enzyme', async () => {
   const { registry } = setup({
     handlers: { ping: async (_inv, ctx) => { reported = ctx.capabilities.list() } },
   })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
+  const bus = busFor(registry)
   await bus.deliver('console', message('/ping'))
   expect(reported).toEqual(['reactions'])
 })
@@ -238,7 +365,7 @@ it('throws naming the target when ctx.rhiza() reaches a name this enzyme never d
       },
     },
   })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
+  const bus = busFor(registry)
   await bus.deliver('console', message('/ping'))
   expect(caught).toContain("'radarr'")
   expect(caught).toContain('not declared')
@@ -253,7 +380,7 @@ it('resolves a declared rhiza through ctx.rhiza(), reached through the full bus'
     ['mock'],
     [rhiza],
   )
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
+  const bus = busFor(registry)
   await bus.deliver('console', message('/ping'))
   expect(looked).toBe('x')
 })
@@ -267,7 +394,7 @@ it('still throws for ctx.on(), naming a phase that has not arrived rather than t
       },
     },
   })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
+  const bus = busFor(registry)
   await bus.deliver('console', message('/ping'))
   expect(caught).not.toContain('phase 3')
   expect(caught).toContain('not yet scheduled')
@@ -278,7 +405,7 @@ it('gives ctx.principal the sender resolved for this message', async () => {
   const { registry } = setup({
     handlers: { ping: async (_inv, ctx) => { seen = ctx.principal } },
   })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
+  const bus = busFor(registry)
   await bus.deliver('console', message('/ping'))
   expect(seen?.identities).toEqual([{ channel: 'console', externalId: 'local' }])
 })
@@ -288,7 +415,7 @@ it('answers has() false for a name this enzyme never declared', async () => {
   const { registry } = setup({
     handlers: { ping: async (_inv, ctx) => { result = ctx.has('radarr') } },
   })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
+  const bus = busFor(registry)
   await bus.deliver('console', message('/ping'))
   expect(result).toBe(false)
 })
@@ -302,7 +429,7 @@ it("answers has() true only for a name this enzyme's own resolved set carries", 
     ['mock'],
     [stubRhiza('mock', {}), stubRhiza('other', {})],
   )
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
+  const bus = busFor(registry)
   await bus.deliver('console', message('/ping'))
   expect(mock).toBe(true)
   expect(other).toBe(false)
@@ -369,8 +496,9 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
     routes: buildRoutes(enzymes),
     order: ['mock', 'other', 'alpha', 'beta'],
     brokenEnforcing: [],
+    catalogs: new Map(),
   }
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
+  const bus = busFor(registry)
   await bus.deliver('console', message('/alpha'))
   await bus.deliver('console', message('/beta'))
 
@@ -390,7 +518,7 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
 it('contains a malformed message instead of rejecting the fire-and-forget deliver()', async () => {
   const ping = mock()
   const { registry } = setup({ handlers: { ping } })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger() })
+  const bus = busFor(registry)
   const malformed = { ...message('/ping'), conversationId: '' }
   expect(bus.deliver('console', malformed)).resolves.toBeUndefined()
   expect(ping).not.toHaveBeenCalled()
@@ -399,7 +527,7 @@ it('contains a malformed message instead of rejecting the fire-and-forget delive
 it('contains an onUnrouted callback that itself throws', async () => {
   const { registry } = setup({ handlers: { ping: async () => {} } })
   const onUnrouted = mock(async () => { throw new Error('onUnrouted exploded') })
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger(), onUnrouted })
+  const bus = busFor(registry, { onUnrouted })
   expect(bus.deliver('console', message('/nope'))).resolves.toBeUndefined()
   expect(onUnrouted).toHaveBeenCalled()
 })
@@ -426,7 +554,7 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
     scopes: [],
     config: {},
   }]
-  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'], brokenEnforcing: [] }
+  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'], brokenEnforcing: [], catalogs: new Map() }
   // A bespoke logger, not createLogger(): distinguishes "contained by the specific
   // recovery-send try" from "contained by the outer catch-all" — both would make the
   // promise resolve, but only the former logs both failures under their own messages.
@@ -436,7 +564,7 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
     error: (m) => { errors.push(m) },
     child: () => logger,
   }
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger })
+  const bus = busFor(registry, { logger })
   expect(bus.deliver('console', message('/ping'))).resolves.toBeUndefined()
   expect(errors).toHaveLength(2)
   expect(errors[1]).toContain('could not report')
@@ -452,7 +580,7 @@ it('rejects an OutgoingContent with nothing set, before handing it to the hypha'
     error: (m, meta) => { errors.push(`${m} ${JSON.stringify(meta ?? {})}`) },
     child: () => logger,
   }
-  const bus = createBus({ registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger })
+  const bus = busFor(registry, { logger })
   expect(bus.deliver('console', message('/ping'))).resolves.toBeUndefined()
   // The empty content never reached the hypha: only the recovery message did, which
   // is how "contained, not process-fatal" is distinguished from "silently accepted".
@@ -524,7 +652,7 @@ function harness(options: {
   } as unknown as GerminatedEnzyme
   const registry: Registry = {
     hyphae: [hypha], enzymes: [enzyme], rhizas: [], inhibitors: [], dormant: [],
-    routes: buildRoutes([enzyme]), order: ['media'], brokenEnforcing: [],
+    routes: buildRoutes([enzyme]), order: ['media'], brokenEnforcing: [], catalogs: new Map(),
   }
   const logger = {
     info: () => {}, debug: () => {}, warn: () => {}, error: () => {},
@@ -534,6 +662,8 @@ function harness(options: {
     registry, prefix: '/', logger, db: harnessDb,
     sporesDir: SPORES,
     ...(options.defaultRole === undefined ? {} : { defaultRole: options.defaultRole }),
+    translator: createTranslator({ catalogs: new Map(), defaultLocale: 'en', logger: createLogger() }),
+    defaultLocale: 'en',
     admission: { admit: options.admit ?? (() => Promise.resolve({ allow: true })) },
     onUnrouted: async (msg, command) => {
       if (command !== null) sent.push(`unknown command '${command}'`)
@@ -718,7 +848,7 @@ describe('the conversation registry', () => {
       error: (m) => { errors.push(m) },
       child: () => logger,
     }
-    const bus = createBus({ registry, db: throwingDb, admission: admitAll, prefix: '/', sporesDir: SPORES, logger })
+    const bus = busFor(registry, { db: throwingDb, logger })
     await bus.deliver('console', message('/ping'))
     expect(sent).toEqual([{ text: 'pong' }])
     expect(errors[0]).toContain('could not record the conversation')
@@ -789,5 +919,151 @@ describe('conversation context rules', () => {
     setContextRule(testDb, 'media.movies', 'dm')
     await h.deliver('/movies Dune', 'carol', { conversationId: 'g1', group: { id: 'g1' } })
     expect(h.sent).toEqual(['denied media.movies'])
+  })
+})
+
+// One test per gate would let three of the four regress unseen, since each is a
+// separate `await onX?.(...)` call site in deliver() — the four are asserted together
+// because they share one wiring (the trailing locale argument) and one failure mode
+// (a call site left without it).
+describe('the four refusal callbacks, threaded with the locale bus.ts resolved', () => {
+  it("passes the reader's locale, not the default, to each of onUnrouted/onDenied/onUnsupported/onOutOfContext", async () => {
+    const testDb = fresh()
+    const bob = resolvePrincipal(testDb, { channel: 'console', externalId: 'bob' })
+    setPrincipalLocale(testDb, bob.id, 'fr')
+    grant(testDb, bob.id, 'guest', ['media.react', 'media.whoami'])
+    setContextRule(testDb, 'media.whoami', 'dm')
+
+    const hypha = {
+      name: 'console', config: {},
+      manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.5', capabilities: [] },
+      instance: {
+        connect: () => Promise.resolve(), listen: () => {}, stop: () => Promise.resolve(),
+        send: () => Promise.resolve(),
+      },
+    } as unknown as GerminatedHypha
+    const enzyme = {
+      name: 'media', config: {}, resolved: new Set<string>(), scopes: [],
+      manifest: {
+        kind: 'enzyme' as const, name: 'media', septum: '^0.5',
+        commands: [
+          { name: 'movies', description: 'x', code: 'movies' },
+          { name: 'react', description: 'x', code: 'react', capabilities: ['reactions'] },
+          { name: 'whoami', description: 'x', respond: 'x' },
+        ],
+      },
+      instance: { handlers: { movies: async () => {}, react: async () => {} } },
+    } as unknown as GerminatedEnzyme
+    const registry: Registry = {
+      hyphae: [hypha], enzymes: [enzyme], rhizas: [], inhibitors: [], dormant: [],
+      routes: buildRoutes([enzyme]), order: ['media'], brokenEnforcing: [], catalogs: new Map(),
+    }
+
+    // Mirrors mycelium.ts's own four callbacks, so a passing test here proves bus.ts's
+    // plumbing, not merely that some translator was called.
+    const locales: string[] = []
+    const stub: Translator = {
+      translate: (domain, key, locale) => { locales.push(locale); return `${domain}:${key}` },
+      availableLocales: () => ['en', 'fr'],
+    }
+    const shortName = (qualified: string): string => qualified.slice(qualified.indexOf('.') + 1)
+    const sent: string[] = []
+    const logger: Logger = {
+      debug() {}, info() {}, warn() {}, error() {},
+      child: () => logger,
+    }
+    const bus = createBus({
+      registry, prefix: '/', logger, db: testDb, sporesDir: SPORES,
+      admission: admitAll,
+      translator: stub, defaultLocale: 'en',
+      onUnrouted: async (_msg, command, locale) => {
+        if (command === null) return
+        sent.push(stub.translate('core', 'command.unknown', locale, { command }))
+      },
+      onDenied: async (_msg, qualified, locale) => {
+        sent.push(stub.translate('core', 'command.denied', locale, { command: shortName(qualified) }))
+      },
+      onUnsupported: async (_msg, qualified, capability, locale) => {
+        sent.push(stub.translate('core', 'command.unsupported', locale, { command: shortName(qualified), capability }))
+      },
+      onOutOfContext: async (_msg, qualified, where, locale) => {
+        sent.push(stub.translate('core', `context.${where}`, locale, { command: shortName(qualified) }))
+      },
+    })
+    const send = (text: string, group?: { id: string }): Promise<void> => bus.deliver('console', {
+      channel: 'console', conversationId: group?.id ?? 'c1', messageId: 'm1',
+      ...(group === undefined ? {} : { group }),
+      sender: { channel: 'console', externalId: 'bob' },
+      text, attachments: [], raw: null, receivedAt: new Date(),
+    })
+
+    await send('/nosuch')
+    await send('/movies Dune')
+    await send('/react')
+    await send('/whoami', { id: 'g1' })
+
+    expect(sent).toEqual([
+      'core:command.unknown', 'core:command.denied', 'core:command.unsupported', 'core:context.dm',
+    ])
+    expect(locales).toEqual(['fr', 'fr', 'fr', 'fr'])
+  })
+})
+
+describe('per-message locale resolution', () => {
+  const GREETINGS = { ping: { en: { greeting: 'hello' }, fr: { greeting: 'bonjour' }, ru: { greeting: 'привет' } } }
+
+  function greeter(): ReturnType<typeof setup> {
+    return setup({ handlers: { ping: async (_inv, ctx) => { await ctx.reply({ text: ctx.t('greeting') }) } } })
+  }
+
+  it('answers a handler in the locale the sender chose, not the default', async () => {
+    const { registry, sent } = greeter()
+    setPrincipalLocale(db, localPrincipal.id, 'fr')
+    await busFor(registry, {
+      translator: createTranslator({ catalogs: catalogsOf(GREETINGS), defaultLocale: 'en', logger: createLogger() }),
+    }).deliver('console', message('/ping'))
+    setPrincipalLocale(db, localPrincipal.id, 'en')
+    expect(sent).toEqual([{ text: 'bonjour' }])
+  })
+
+  it("answers in the conversation's locale even when the sender chose another", async () => {
+    const { registry, sent } = greeter()
+    setPrincipalLocale(db, localPrincipal.id, 'fr')
+    // The conversation must exist before it can carry a locale: recordConversation runs on
+    // the first admitted message, so deliver once, then set the locale, then deliver again.
+    const bus = busFor(registry, {
+      translator: createTranslator({ catalogs: catalogsOf(GREETINGS), defaultLocale: 'en', logger: createLogger() }),
+    })
+    await bus.deliver('console', message('/ping'))
+    setConversationLocale(db, 'console', 'c:1', 'ru')
+    await bus.deliver('console', message('/ping'))
+    setPrincipalLocale(db, localPrincipal.id, 'en')
+    setConversationLocale(db, 'console', 'c:1', 'en')
+    // Both replies asserted, not only the second: a resolver that ignored the principal
+    // entirely would still produce 'привет' on the second line.
+    expect(sent).toEqual([{ text: 'bonjour' }, { text: 'привет' }])
+  })
+
+  it('gives start() the default locale, since no message exists yet', () => {
+    const ctx = createEnzymeStartContext({
+      hyphae: [], rhizas: [], logger: createLogger(), access: access([]), mycelium: () => ({}),
+      config: {}, db, domain: 'ping', defaultLocale: 'fr',
+      translator: createTranslator({ catalogs: catalogsOf(GREETINGS), defaultLocale: 'en', logger: createLogger() }),
+    })
+    expect(ctx.t('greeting')).toBe('bonjour')
+  })
+
+  it('answers localeFor() from the conversation, falling back to the default', async () => {
+    setConversationLocale(db, 'console', 'c:1', 'ru')
+    const ctx = createEnzymeStartContext({
+      hyphae: [], rhizas: [], logger: createLogger(), access: access([]), mycelium: () => ({}),
+      config: {}, db, domain: 'ping', defaultLocale: 'en',
+      translator: createTranslator({ catalogs: new Map(), defaultLocale: 'en', logger: createLogger() }),
+    })
+    const inConversation = await ctx.localeFor({ channel: 'console', conversationId: 'c:1' })
+    const fallback = await ctx.localeFor({ channel: 'console', conversationId: 'never-seen' })
+    setConversationLocale(db, 'console', 'c:1', 'en')
+    expect(inConversation).toBe('ru')
+    expect(fallback).toBe('en')
   })
 })

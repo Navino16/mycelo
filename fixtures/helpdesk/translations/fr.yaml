@@ -1,0 +1,4 @@
+# rules.text is deliberately absent: it demonstrates the cascade to en plus a warning
+# (phase 5.6 milestone step 4). Do not "fix" this by adding it.
+links:
+  text: "Radarr, adresse http://radarr:7878"

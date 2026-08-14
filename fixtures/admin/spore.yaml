@@ -4,7 +4,7 @@ septum: "^0.7"
 description: Reads and administers the mycelium through scopes. Test fixture, never distributed.
 requires:
   - rhiza: mycelium
-    scopes: [plugins.read, plugins.toggle, plugins.configure, principals.read, roles.read, roles.assign, roles.manage, conversations.read, messages.broadcast, restrictions.manage]
+    scopes: [plugins.read, plugins.toggle, plugins.configure, principals.read, roles.read, roles.assign, roles.manage, conversations.read, messages.broadcast, restrictions.manage, locale.manage]
 commands:
   - name: plugins
     description: List installed plugins
@@ -115,4 +115,18 @@ commands:
     args:
       - name: name
         description: Inhibitor name
+        required: true
+  - name: lang
+    description: command.lang.description
+    code: handleLang
+    args:
+      - name: locale
+        description: arg.locale.description
+        required: true
+  - name: lang-group
+    description: command.lang-group.description
+    code: handleLangGroup
+    args:
+      - name: locale
+        description: arg.locale.description
         required: true

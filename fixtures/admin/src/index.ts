@@ -1,6 +1,6 @@
 import type {
-  ConversationsRead, EnzymeModule, MessagesBroadcast, PluginsConfigure, PluginsRead, PluginsToggle,
-  PrincipalsRead, RestrictionsManage, RolesAssign, RolesManage, RolesRead,
+  ConversationsRead, EnzymeModule, LocaleManage, MessagesBroadcast, PluginsConfigure, PluginsRead,
+  PluginsToggle, PrincipalsRead, RestrictionsManage, RolesAssign, RolesManage, RolesRead,
 } from '@mycelo/septum'
 
 // JSON first, raw string as the fallback: a chat channel has no types, and Zod must receive
@@ -202,6 +202,41 @@ export default {
             ? `${name} applies to every channel`
             : `${name} applies to: ${channels.join(', ')}`,
         })
+      },
+      handleLang: async (invocation, ctx) => {
+        const locale = invocation.args['locale']
+        if (locale === undefined) {
+          await ctx.reply({ text: ctx.t('lang.usage') })
+          return
+        }
+        try {
+          await ctx.rhiza<LocaleManage>('mycelium').setPrincipalLocale(ctx.principal.id, locale)
+        } catch (e) {
+          await ctx.reply({ text: (e as Error).message })
+          return
+        }
+        // Explicit locale: the one resolved for this message is the old one, so a
+        // confirmation without it would answer in the language just abandoned.
+        await ctx.reply({ text: ctx.t('lang.set', { locale }, locale) })
+      },
+      handleLangGroup: async (invocation, ctx) => {
+        const locale = invocation.args['locale']
+        const { group, channel, conversationId } = invocation.message
+        if (locale === undefined) {
+          await ctx.reply({ text: ctx.t('lang.usage-group') })
+          return
+        }
+        if (group === undefined) {
+          await ctx.reply({ text: ctx.t('lang.group-only') })
+          return
+        }
+        try {
+          await ctx.rhiza<LocaleManage>('mycelium').setConversationLocale(channel, conversationId, locale)
+        } catch (e) {
+          await ctx.reply({ text: (e as Error).message })
+          return
+        }
+        await ctx.reply({ text: ctx.t('lang.set-group', { locale }, locale) })
       },
     },
   }),

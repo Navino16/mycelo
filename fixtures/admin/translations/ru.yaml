@@ -1,0 +1,4 @@
+# Deliberately partial, one key: demonstrates design §7.2's cascade to en (with a
+# warning) for everything else. Do not "fix" this by adding the missing keys.
+lang:
+  set-group: "эта беседа теперь отвечает на {locale}"

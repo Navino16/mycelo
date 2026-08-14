@@ -6,6 +6,8 @@ export const principal = sqliteTable('principal', {
   /** Null means never reviewed by a human: a list filter, not an alert (spec §5.3). */
   reviewedAt: integer('reviewed_at', { mode: 'timestamp_ms' }),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  /** Null means no choice, which drops the cascade one rung (design §4). */
+  locale: text('locale'),
 })
 
 // (channel, external_id) is the natural key and the per-message lookup; a surrogate
@@ -83,6 +85,8 @@ export const conversation = sqliteTable(
     label: text('label'),
     firstSeenAt: integer('first_seen_at', { mode: 'timestamp_ms' }).notNull(),
     lastMessageAt: integer('last_message_at', { mode: 'timestamp_ms' }).notNull(),
+    /** A group's own language; wins over the sender's, because a group reply is read by everyone. */
+    locale: text('locale'),
   },
   (t) => [primaryKey({ columns: [t.channel, t.conversationId] })],
 )

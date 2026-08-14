@@ -21,6 +21,7 @@ export const MYCELIUM_SCOPES = [
   'messages.broadcast',
   'conversations.read',
   'restrictions.manage',
+  'locale.manage',
 ] as const
 
 export type MyceliumScope = (typeof MYCELIUM_SCOPES)[number]
@@ -133,7 +134,11 @@ export interface PluginsConfigure {
   formSchema(name: string): Promise<FormSchema>
 }
 
-export type ConversationKind = 'dm' | 'group'
+// A runtime constant, not just a type: the core's onOutOfContext renders `context.${where}`
+// against its own catalogue, so both sides need one source of truth to pin against.
+export const CONVERSATION_KINDS = ['dm', 'group'] as const
+
+export type ConversationKind = (typeof CONVERSATION_KINDS)[number]
 
 /** One conversation the bot has seen. No message is ever stored. */
 export interface ConversationInfo {
@@ -204,4 +209,16 @@ export interface RestrictionsManage {
   addBroadcastTarget(target: PushTarget): Promise<void>
   /** Removing one that is not configured is a no-op. */
   removeBroadcastTarget(target: PushTarget): Promise<void>
+}
+
+export interface LocaleManage {
+  /**
+   * Rejects for an unknown principal, for a tag that is not valid BCP-47, and for a locale
+   * no catalogue provides — accepting the last would silently answer in the fallback forever.
+   */
+  setPrincipalLocale(principalId: string, locale: string): Promise<void>
+  /** Rejects for a conversation the bot has never seen, alongside the same two faults. */
+  setConversationLocale(channel: string, conversationId: string, locale: string): Promise<void>
+  /** Locales at least one catalogue provides, canonical and sorted. Synchronous, like listPlugins(). */
+  availableLocales(): readonly string[]
 }

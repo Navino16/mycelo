@@ -1,6 +1,9 @@
 import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Enzyme, Hypha, Inhibitor, Logger, Rhiza } from '@mycelo/septum'
 import { getInstall } from '../config/store.js'
+import { loadCatalogs } from '../i18n/catalog.js'
+import type { LocaleMessages } from '../i18n/catalog.js'
 import type { Db } from '../persistence/db.js'
 import { resolve } from './anastomoses.js'
 import { discover } from './discover.js'
@@ -67,11 +70,21 @@ export async function germinate(
   // shape failure, so a dependent's `mandatory`/`resolved` sets may still name one that
   // just failed.
   const failed = new Map<string, string>()
+  const catalogs = new Map<string, LocaleMessages>()
 
   for (const spore of resolution.order) {
     const { manifest } = spore.read
     const markBroken = (): void => {
       if (manifest.kind === 'inhibitor' && manifest.enforcing) brokenEnforcing.push(manifest.name)
+    }
+    // design §3: the runtime owns these two domains, and a spore taking either would
+    // replace the bot's own refusal sentences.
+    if (manifest.name === 'core' || manifest.name === 'common') {
+      const reason = `'${manifest.name}' is a reserved translation domain`
+      dormant.push({ name: manifest.name, reason })
+      failed.set(manifest.name, reason)
+      markBroken()
+      continue
     }
     const cause = [...spore.mandatory].find((name) => failed.has(name))
     if (cause !== undefined) {
@@ -89,6 +102,19 @@ export async function germinate(
     // An optional dependency that turned out dormant is not this spore's problem (core
     // spec §6.3): drop it from `resolved` so ctx.has() answers false rather than lying.
     spore.resolved = new Set([...spore.resolved].filter((name) => !failed.has(name)))
+    // Checked before loadModule (design §7.1). Held locally, not committed to `catalogs`
+    // until the spore fully germinates: a later module-load or shape failure must not
+    // leave a dormant spore's catalogue behind.
+    let catalog: LocaleMessages = new Map()
+    try {
+      catalog = loadCatalogs(join(spore.read.location.path, 'translations'))
+    } catch (e) {
+      const reason = (e as Error).message
+      dormant.push({ name: manifest.name, reason })
+      failed.set(manifest.name, reason)
+      markBroken()
+      continue
+    }
     try {
       const module = await loadModule(spore.read)
       let instance: unknown = null
@@ -147,6 +173,7 @@ export async function germinate(
           }
         }
       }
+      if (catalog.size > 0) catalogs.set(manifest.name, catalog)
       if (manifest.kind === 'hypha') {
         hyphae.push({ name: manifest.name, manifest, instance: instance as Hypha, config })
       } else if (manifest.kind === 'rhiza') {
@@ -191,5 +218,5 @@ export async function germinate(
     .map((spore) => spore.read.manifest.name)
     .filter((name) => registered.has(name))
 
-  return { hyphae, enzymes, rhizas, inhibitors, dormant, routes: buildRoutes(enzymes), order, brokenEnforcing }
+  return { hyphae, enzymes, rhizas, inhibitors, dormant, routes: buildRoutes(enzymes), order, brokenEnforcing, catalogs }
 }

@@ -1,5 +1,38 @@
 # @mycelo/septum
 
+## 0.7.0
+
+**Breaking.** `respond:` is resolved as a catalogue key in the declaring spore's own domain by
+the core, rather than sent as literal text. Migration: none required for most plugins — an
+absent key still renders literally, so a `respond:` with no matching translation, or a spore with
+no catalogue at all, is unaffected. By the same contract a command's and an argument's
+`description` are catalogue keys too, though nothing renders them yet (deferred to phase 9).
+
+Added:
+
+- `ctx.t(key, params?, locale?)` on `EnzymeContext`, `EnzymeStartContext` and `InhibitorContext`.
+  A bare string key resolves in the calling spore's own domain; a `TranslatableRef`
+  (`{ domain, key, params? }`) names another domain — the caller's own, `common`, or a rhiza the
+  manifest lists in `requires`. Naming any other domain, including the core's own, throws.
+- `ctx.localeFor(target)` on `EnzymeStartContext` (and `EnzymeContext`, which extends it): the
+  target conversation's own stored locale, or `config.defaultLocale` — never a reader's own
+  `/lang` choice, since a push target carries no principal to consult.
+- `TranslatableRef`, `Translate`: the types `ctx.t` is built from.
+- `LocaleManage`, a 14th `MyceliumScope`, `locale.manage`: `setPrincipalLocale`,
+  `setConversationLocale`, `availableLocales()`.
+- `ConversationInfo`, `ConversationsRead`, `BroadcastResult`, `MessagesBroadcast`: mounted by two
+  new scopes, `conversations.read` and `messages.broadcast`.
+- `ContextRule`, `RestrictionsManage`: mounted by a new scope, `restrictions.manage` — confining
+  an inhibitor to named channels, a command pattern to `dm` or `group`, and configuring broadcast
+  targets.
+- `CONVERSATION_KINDS`: `ConversationKind` is now derived from this runtime constant, the same
+  shape `MyceliumScope` already uses.
+- `EnzymeHarness.catalogs`: already-parsed translation catalogues, keyed by locale, that
+  `enzymeChecks` compiles the same way germination does, and uses to enforce the same
+  domain-declaration rule `ctx.t()` enforces at runtime.
+- A new dependency, `intl-messageformat` (`^11.2.13`), needed for the conformance kit to compile a
+  harness's catalogues the same way the runtime does.
+
 ## 0.6.0
 
 Added:

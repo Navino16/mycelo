@@ -1,0 +1,8 @@
+command:
+  unknown: "commande inconnue « {command} »"
+  denied: "vous n'avez pas le droit d'utiliser « {command} »"
+  unsupported: "« {command} » demande {capability}, que le canal « {channel} » ne fournit pas"
+  failed: "la commande « {command} » a échoué"
+context:
+  dm: "« {command} » n'est disponible qu'en message privé"
+  group: "« {command} » n'est disponible qu'en groupe"

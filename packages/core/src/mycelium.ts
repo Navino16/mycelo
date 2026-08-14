@@ -9,6 +9,9 @@ import { germinate } from './germination/germinate.js'
 import { buildRoutes } from './germination/registry.js'
 import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor, GerminatedRhiza, Registry } from './germination/registry.js'
 import { bootstrapIdentity } from './identity/bootstrap.js'
+import { assertCoreCatalogs, loadCoreCatalogs } from './i18n/core-catalogs.js'
+import { createTranslator } from './i18n/translator.js'
+import type { Catalogs } from './i18n/catalog.js'
 import { createMyceliumApi } from './mycelium-rhiza.js'
 import { migrateDatabase, openDatabase } from './persistence/db.js'
 import { allInhibitorChannels } from './restrictions/rules.js'
@@ -20,6 +23,11 @@ export interface Mycelium {
   registry: Registry
   bus: Bus
   admission: AdmissionChain
+}
+
+/** The three refusal callbacks below each sliced this out of `qualified` themselves. */
+function shortName(qualified: string): string {
+  return qualified.slice(qualified.indexOf('.') + 1)
 }
 
 export function germinationBanner(registry: Registry): string {
@@ -43,6 +51,16 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
   if (added.length > 0) logger.info(`recorded ${String(added.length)} spore(s): ${added.join(', ')}`)
   const registry = await germinate(config.sporesDir, logger, readAllSettings(db), db)
   const dormant: Dormant[] = [...registry.dormant]
+
+  // Spore-first would let a plugin shadow the core's own domain; germination already
+  // refuses those two names, so the order here is belt and braces.
+  const catalogs: Catalogs = new Map([...registry.catalogs, ...loadCoreCatalogs()])
+  // No degraded mode here either: a deployment missing packages/core/translations/ must
+  // not boot clean and answer every refusal with a raw catalogue key (spec §5). This also
+  // subsumes the old availableLocales()-union warning: once core and common are asserted
+  // to carry defaultLocale, that union always contains it too.
+  assertCoreCatalogs(catalogs, config.defaultLocale)
+  const translator = createTranslator({ catalogs, defaultLocale: config.defaultLocale, logger })
 
   // Step 1: connect() every hypha. `busBox.current` fills in once the bus exists,
   // before listen() opens the gate in step 3.
@@ -102,7 +120,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     (target, content) => sendVia(hyphaByName, target.channel, target.conversationId, content),
     db,
     config.sporesDir,
-    config.defaultRole,
+    { defaultRole: config.defaultRole, translator },
   )
   for (const name of registry.order) {
     const rhiza = rhizaByName.get(name)
@@ -138,6 +156,10 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
         access: { resolved: enzyme.resolved, scopes: enzyme.scopes },
         mycelium,
         config: enzyme.config,
+        domain: enzyme.name,
+        translator,
+        db,
+        defaultLocale: config.defaultLocale,
       }))
       startedEnzymes.push(enzyme)
     } catch (e) {
@@ -154,6 +176,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     const ctx = createInhibitorContext({
       inhibitor, membership, rhizas: startedRhizas, mycelium,
       logger: logger.child({ inhibitor: inhibitor.name }),
+      translator, defaultLocale: config.defaultLocale,
     })
     try {
       await inhibitor.instance.start?.(ctx)
@@ -182,11 +205,14 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
       const ctx = createInhibitorContext({
         inhibitor, membership, rhizas: startedRhizas, mycelium,
         logger: logger.child({ inhibitor: inhibitor.name }),
+        translator, defaultLocale: config.defaultLocale,
       })
       // Method-call syntax, not a bare reference: extracting ctx.rhiza would trip
       // @typescript-eslint/unbound-method on the interface's method-shorthand signature.
       return <T>(name: string): T => ctx.rhiza<T>(name)
     },
+    translator,
+    defaultLocale: config.defaultLocale,
   })
 
   // A failed start() must not leave the enzyme routable: routes are rebuilt from
@@ -210,28 +236,30 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     admission,
     sporesDir: config.sporesDir,
     ...(config.defaultRole === undefined ? {} : { defaultRole: config.defaultRole }),
+    translator,
+    defaultLocale: config.defaultLocale,
     mycelium,
-    onUnrouted: async (message, command) => {
+    onUnrouted: async (message, command, locale) => {
       if (command === null) return
-      await sendVia(hyphaByName, message.channel, message.conversationId, { text: `unknown command '${command}'` })
-    },
-    onDenied: async (message, qualified) => {
-      const command = qualified.slice(qualified.indexOf('.') + 1)
       await sendVia(hyphaByName, message.channel, message.conversationId, {
-        text: `you are not allowed to use '${command}'`,
+        text: translator.translate('core', 'command.unknown', locale, { command }),
       })
     },
-    onUnsupported: async (message, qualified, capability) => {
-      const command = qualified.slice(qualified.indexOf('.') + 1)
+    onDenied: async (message, qualified, locale) => {
       await sendVia(hyphaByName, message.channel, message.conversationId, {
-        text: `'${command}' needs ${capability}, which channel '${message.channel}' does not provide`,
+        text: translator.translate('core', 'command.denied', locale, { command: shortName(qualified) }),
       })
     },
-    onOutOfContext: async (message, qualified, where) => {
-      const command = qualified.slice(qualified.indexOf('.') + 1)
-      const place = where === 'dm' ? 'in a direct message' : 'in a group'
+    onUnsupported: async (message, qualified, capability, locale) => {
       await sendVia(hyphaByName, message.channel, message.conversationId, {
-        text: `'${command}' is only available ${place}`,
+        text: translator.translate('core', 'command.unsupported', locale, {
+          command: shortName(qualified), capability, channel: message.channel,
+        }),
+      })
+    },
+    onOutOfContext: async (message, qualified, where, locale) => {
+      await sendVia(hyphaByName, message.channel, message.conversationId, {
+        text: translator.translate('core', `context.${where}`, locale, { command: shortName(qualified) }),
       })
     },
   })

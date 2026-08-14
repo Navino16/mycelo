@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, spyOn } from 'bun:test'
 import type { IncomingMessage } from '@mycelo/septum'
+import { recordConversation } from '../src/conversations/registry.js'
+import { StartupError } from '../src/identity/bootstrap.js'
+import { resolvePrincipal } from '../src/identity/resolve.js'
+import { setConversationLocale, setPrincipalLocale } from '../src/i18n/locale.js'
 import { bootstrap, germinationBanner } from '../src/mycelium.js'
+import { migrateDatabase, openDatabase } from '../src/persistence/db.js'
 
 function message(channel: string, text: string): IncomingMessage {
   return {
@@ -729,4 +734,70 @@ it('refuses all traffic when an enforcing inhibitor is dormant from a rejected c
   expect(registry.inhibitors).toEqual([])
   expect(registry.dormant.find((d) => d.name === 'badconfiggate')?.reason).toContain('groupId')
   expect((await admission.admit(message('console', '/ping'))).allow).toBe(false)
+})
+
+// Finding 1 of the phase 5.6 whole-branch review: nothing exercised ctx.localeFor() end
+// to end. It answers the PUSH TARGET's own locale, never a reader's /lang choice — alice
+// sets hers to 'fr', the target conversation is 'ru', and the push must come back 'ru'.
+it("lets an enzyme's start() push into the target conversation's own locale, never a principal's", async () => {
+  spore('good', {
+    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^1.0"\n',
+    'src/index.ts': [
+      'const sent = []',
+      'export default {',
+      '  create: () => ({',
+      '    sent,',
+      '    connect: async () => {},',
+      '    listen: () => {},',
+      '    stop: async () => {},',
+      '    send: async (_id, out) => { sent.push(out) },',
+      '  }),',
+      '}',
+    ].join('\n'),
+  })
+  spore('greeter', {
+    'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^1.0"\ncommands:\n  - name: greeter\n    description: x\n    code: greeter\n',
+    'src/index.ts': [
+      'export default {',
+      '  create: () => ({',
+      '    async start(ctx) {',
+      '      const target = { channel: "good", conversationId: "c:1" }',
+      '      const locale = await ctx.localeFor(target)',
+      '      await ctx.push(target, { text: ctx.t("greeting", {}, locale) })',
+      '    },',
+      '    async stop() {},',
+      '    handlers: { greeter: async () => {} },',
+      '  }),',
+      '}',
+    ].join('\n'),
+    'translations/en.yaml': 'greeting: hello\n',
+    'translations/ru.yaml': 'greeting: привет\n',
+  })
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\n`, 'utf8')
+
+  // Preset, before boot: the target conversation is 'ru', and alice — who is nobody in
+  // particular to this push, just a principal who happens to have spoken there — is 'fr'.
+  const { db, close } = openDatabase(join(dir, 'mycelo.db'))
+  migrateDatabase(db)
+  recordConversation(db, message('good', '/hi'))
+  setConversationLocale(db, 'good', 'c:1', 'ru')
+  const alice = resolvePrincipal(db, { channel: 'good', externalId: 'local' })
+  setPrincipalLocale(db, alice.id, 'fr')
+  close()
+
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+  const good = registry.hyphae.find((h) => h.name === 'good')
+  const sent = (good?.instance as unknown as { sent: { text: string }[] }).sent
+  expect(sent).toEqual([{ text: 'привет' }])
+})
+
+// Pins the assertCoreCatalogs call site itself: every other test of it in
+// core-catalogs.test.ts calls the function directly, so deleting the call from
+// bootstrap() left the whole suite green — the exact defect finding 3 exists to close.
+it('refuses to boot when the default locale has no core catalogue', async () => {
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\ndefaultLocale: ru\n`, 'utf8')
+  expect(bootstrap(configFile)).rejects.toThrow(StartupError)
 })

@@ -6,6 +6,8 @@ import type { GerminatedInhibitor, GerminatedRhiza } from '../../src/germination
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import { allInhibitorChannels, setInhibitorChannels } from '../../src/restrictions/rules.js'
 
+const stubTranslator = { translate: (_d: string, key: string) => key, availableLocales: () => ['en'] }
+
 function inhibitor(
   name: string,
   enforcing: boolean,
@@ -45,6 +47,8 @@ function chain(
     membership: { members: () => Promise.resolve(null), requireCapability: () => {} },
     rhiza: () => <T,>() => ({}) as T,
     channelScopes: () => scopes,
+    translator: stubTranslator,
+    defaultLocale: 'en',
   })
   return { admission, warnings, errors, bound }
 }
@@ -155,6 +159,64 @@ describe('createAdmissionChain', () => {
       expect((await chain([absent]).admission.admit(message)).allow).toBe(false)
     })
   })
+
+  // The inline InhibitorContext built inside admit() is a separate object literal from
+  // createInhibitorContext's — a scope granted on one and not the other has shipped before
+  // (phase 4's mount/gate defect), so the domain check needs its own proof here too.
+  it("refuses a domain the inhibitor's requires never declared, from admit()'s own context", async () => {
+    const broken = {
+      name: 'gate', config: {}, resolved: new Set<string>(), scopes: [],
+      manifest: { kind: 'inhibitor', name: 'gate', septum: '^0.5', enforcing: true },
+      instance: {
+        inspect: (_msg: IncomingMessage, ctx: InhibitorContext) => {
+          ctx.t({ domain: 'radarr', key: 'x' })
+          return Promise.resolve({ allow: true })
+        },
+      },
+    } as unknown as GerminatedInhibitor
+    const { admission, errors } = chain([broken])
+    const verdict = await admission.admit(message)
+    expect(verdict.allow).toBe(false)
+    // The exact wording, not merely a substring: Bun's TypeError for a missing `ctx.t`
+    // prints the failed call expression verbatim, which already contains 'radarr' and
+    // would make a looser assertion pass for the wrong reason — t absent, not t refusing.
+    expect(errors.join(' ')).toContain("translation domain 'radarr' is not declared")
+  })
+
+  it("binds each inhibitor's own domain in admit()'s context, not the first one processed", async () => {
+    const calls: string[] = []
+    const spyTranslator = {
+      translate: (domain: string, key: string) => { calls.push(`${domain}|${key}`); return key },
+      availableLocales: () => ['en'],
+    }
+    const first = inhibitor('aaa', false, () => Promise.resolve({ allow: true }))
+    const second = {
+      name: 'zzz', config: {}, resolved: new Set<string>(), scopes: [],
+      manifest: { kind: 'inhibitor', name: 'zzz', septum: '^0.5', enforcing: false },
+      instance: {
+        inspect: (_msg: IncomingMessage, ctx: InhibitorContext) => {
+          ctx.t('greeting')
+          return Promise.resolve({ allow: true })
+        },
+      },
+    } as unknown as GerminatedInhibitor
+    const noopLogger: Logger = {
+      info() {}, debug() {}, warn() {}, error() {}, child: () => noopLogger,
+    }
+    const admission = createAdmissionChain({
+      inhibitors: [first, second], brokenEnforcing: [],
+      logger: noopLogger,
+      membership: { members: () => Promise.resolve(null), requireCapability: () => {} },
+      rhiza: () => <T,>() => ({}) as T,
+      channelScopes: () => new Map(),
+      translator: spyTranslator,
+      defaultLocale: 'en',
+    })
+    await admission.admit(message)
+    // Sorted alphabetically ('aaa' before 'zzz'), so a domain fixed to the first
+    // inhibitor processed would still bind 'aaa' here instead of 'zzz'.
+    expect(calls).toEqual(['zzz|greeting'])
+  })
 })
 
 describe('inhibitor channel confinement', () => {
@@ -242,6 +304,8 @@ describe('createInhibitorContext', () => {
       logger: { info: () => {}, debug: () => {}, warn: () => {}, error: () => {}, child: () => ({}) } as unknown as Logger,
       rhizas: options.rhizas ?? [],
       mycelium: (scopes) => { options.onMycelium?.(scopes); return { scoped: scopes } },
+      translator: stubTranslator,
+      defaultLocale: 'en',
     })
   }
 
@@ -281,5 +345,12 @@ describe('createInhibitorContext', () => {
     const ctx = context({ resolved: ['radarr'] })
     expect(ctx.has('radarr')).toBe(true)
     expect(ctx.has('sonarr')).toBe(false)
+  })
+
+  it("refuses a translation domain the inhibitor's requires never declared, naming it", () => {
+    const ctx = context({ resolved: [] })
+    // The exact wording: a bare /radarr/ would also match Bun's TypeError message for a
+    // missing `t`, since it prints the failed call expression verbatim.
+    expect(() => ctx.t({ domain: 'radarr', key: 'x' })).toThrow("translation domain 'radarr' is not declared")
   })
 })

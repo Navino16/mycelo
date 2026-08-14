@@ -34,8 +34,8 @@ septum: "^0.7"
 description: Movie shortcuts for Radarr
 commands:
   - name: help
-    description: Show what this plugin can do
-    respond: "Try /add <title> to queue a movie."
+    description: command.help.description
+    respond: help.text
   - name: add
     description: Queue a movie by title
     code: addMovie
@@ -47,11 +47,42 @@ commands:
 ```
 
 A command carries exactly one of `respond` or `code`, never both and never neither:
-`respond` is a fixed string sent back untouched, `code` names a handler the module
+`respond` answers with a resolved catalogue key (below), `code` names a handler the module
 exports. `args` only makes sense on a `code` command — `respond` has no way to
 interpolate one, so declaring it there is rejected. `capabilities` is optional on
 every command: the core checks it against the emitting hypha and refuses the command
 where it is missing; a command with none works on every channel.
+
+`respond` is a **catalogue key**, resolved in the plugin's own domain against the reader's
+locale. A plugin that ships no `translations/` directory is unaffected: an unknown key renders
+as itself, literally and without passing through ICU, so `respond: pong` still answers `pong`.
+A command's `description` and an argument's are catalogue keys too, by the same contract — but
+nothing in the core reads either field yet, so writing one as a key costs nothing today and
+avoids a rewrite once something does. The keys above resolve through `translations/en.yaml`
+beside `spore.yaml`:
+
+```yaml
+command:
+  help:
+    description: Show what this plugin can do
+help:
+  text: "Try /add <title> to queue a movie."
+```
+
+Catalogues are [ICU MessageFormat](https://formatjs.github.io/docs/core-concepts/icu-syntax/),
+compiled at germination — a syntax error in any key makes the whole spore dormant, not just
+that key. Three interactions are worth knowing before writing one:
+
+- A single quote immediately before `{` opens an ICU quoted section and silently eats the
+  placeholder: `'{name}'` renders the literal text `{name}`. Double the quote to keep both the
+  apostrophe and the interpolation: `''{name}''` renders `'Bob'`.
+- A bare `<...>` is ICU's rich-text tag syntax, not a literal — `Try <title> now` throws
+  `UNCLOSED_TAG` while the catalogue compiles, which makes the spore dormant. Quote it,
+  `'<title>'`, to render it literally.
+- A message that declares a placeholder nothing supplies — `{name}` called with no `name` —
+  throws at format time, not at germination. The core catches it, logs an error, and renders
+  the key in its place, so a bad interpolation degrades to something visible rather than
+  crashing the reply.
 
 Every manifest carries `kind`, `name` (lowercase, digits and dashes) and `septum`, the
 contract range it targets. `description`, `externals` and `requires` are optional everywhere.
@@ -61,7 +92,7 @@ Each kind then adds its own:
 |---|---|
 | `hypha` | `capabilities`: any of `attachments`, `reactions`, `threads`, `group_membership` |
 | `rhiza` | — |
-| `enzyme` | `commands`: at least one, each with a `name`, a `description`, and exactly one of `respond` (a fixed text reply) or `code` (a handler name); `code` commands may add `args`; either may add `capabilities` |
+| `enzyme` | `commands`: at least one, each with a `name`, a `description`, and exactly one of `respond` (a catalogue key resolved as a reply) or `code` (a handler name); `code` commands may add `args`; either may add `capabilities` |
 | `inhibitor` | `enforcing`: how an *error* from this inhibitor is handled, default `false` |
 
 ### `enforcing` governs errors, never refusals
@@ -126,10 +157,10 @@ field.
 ### `requires: [{ rhiza: mycelium, scopes: [...] }]`
 
 `mycelium` is the core itself, reachable like any other rhiza but never declared as installed —
-every spore may require it. `scopes` is mandatory-per-method: each granted scope mounts its
-methods on the object `ctx.rhiza('mycelium')` returns — one for most scopes, three for
-`principals.read` and `roles.manage` — and an ungranted scope's methods are simply absent, not
-present-but-rejecting:
+every spore may require it. `scopes` is mandatory-per-method: each granted scope mounts its own
+methods — one, several, or (for `restrictions.manage`) eight — on the object
+`ctx.rhiza('mycelium')` returns, exactly as listed below. An ungranted scope's methods are simply
+absent, not present-but-rejecting:
 
 | Scope | Interface | Mounts |
 |---|---|---|
@@ -146,8 +177,9 @@ present-but-rejecting:
 | `messages.broadcast` | `MessagesBroadcast` | `broadcast(content)` — sends to every operator-configured target, distinct from `messages.send` so replying to one sender never implies writing to everyone |
 | `conversations.read` | `ConversationsRead` | `listConversations()` — every conversation the bot has seen, where the channel supplies one |
 | `restrictions.manage` | `RestrictionsManage` | context rules, an inhibitor's confined channels, and the broadcast target list — confining an inhibitor's channels takes effect immediately, even for one `enforcing`, with no restart |
+| `locale.manage` | `LocaleManage` | `setPrincipalLocale(principalId, locale)`, `setConversationLocale(channel, conversationId, locale)`, `availableLocales()` — the last is synchronous, like `listPlugins()` |
 
-`listPlugins()` alone is synchronous; every other method returns a promise. The identity and role
+`listPlugins()` and `availableLocales()` alone are synchronous; every other method returns a promise. The identity and role
 methods **reject** rather than resolve quietly when asked about something that does not exist — an
 unknown principal id, an unknown role name — and `deleteRole`/`setRoleCommands` also reject on a
 `builtin` role such as `owner`, while `createRole` rejects an empty name, a name already taken and a
@@ -203,6 +235,24 @@ export default {
 } satisfies EnzymeModule
 ```
 
+### `ctx.t` and `ctx.localeFor`
+
+A handler's context, an inhibitor's, and an enzyme's `start()` context each carry
+`t(key, params?, locale?)` — a hypha's or a rhiza's does not. A bare string key resolves in the
+calling spore's own domain, the same catalogue `respond:` reads. To render another domain's key, pass a `TranslatableRef` instead —
+`{ domain, key, params? }` — naming a domain that is either the caller's own, `common` (readable
+by every spore, owned by none), or a rhiza the manifest lists in `requires`. Naming any other
+domain, including the core's own, **throws**.
+
+Omitting `locale` uses the reader's own language inside a handler, since a message exists to
+resolve it from. Everywhere else — an enzyme's `start()`, and both moments of an inhibitor's
+life, `start()` **and** `inspect()` — it falls back to `config.defaultLocale` instead: admission
+runs before a principal is resolved, so an inhibitor never has a reader to read a language from,
+even while judging a real message. `ctx.localeFor(target)` answers the target conversation's own
+stored locale, or `config.defaultLocale` — **not** a reader's `/lang` choice, since a push target
+carries no principal to consult. Pass its result as `t()`'s third argument for a proactive
+`push()` that has no message to derive one from.
+
 Add a `configSchema` when the plugin takes configuration. It is duck-typed rather than typed
 as a Zod schema: a plugin is bundled with its own copy of Zod, so its schemas are not
 instances of the core's. Anything with a compatible `safeParse` is accepted.
@@ -242,7 +292,7 @@ implementation. Each returns a list of failure strings, so it works with any tes
 |---|---|
 | `hyphaChecks` | manifest, config schema, `connect`/`listen`/`stop`/`send`, `group_membership` consistency, and — given a `membershipGroupId` — that `listGroupMembers` resolves an array |
 | `rhizaChecks` | manifest, config schema, `api`, and that `health()` reports rather than throws |
-| `enzymeChecks` | manifest, config schema, lifecycle, and every command with no required args |
+| `enzymeChecks` | manifest, config schema, lifecycle, every command with no required args, and — given `catalogs` — that every translation key compiles and that `ctx.t()` refuses a domain the manifest does not declare |
 | `inhibitorChecks` | manifest, config schema, lifecycle, and a verdict per expected allow/deny |
 
 The harness is yours to build: the kit cannot know what your plugin depends on, so you supply
@@ -271,6 +321,8 @@ const context = (): EnzymeContext => ({
   capabilitiesOf: () => ({ has: () => true, list: () => [] }),
   principal: { id: 'p1', identities: [], roles: [] },
   on() {},
+  t: (key) => (typeof key === 'string' ? key : key.key),
+  localeFor: () => Promise.resolve('en'),
 })
 
 it('conforms to the Enzyme contract', async () => {
@@ -293,6 +345,11 @@ it('conforms to the Enzyme contract', async () => {
 
 Commands with required arguments are skipped: the kit cannot invent a value your enzyme would
 accept, so calling them would report correct validation as a failure. Those are yours to test.
+
+Pass `catalogs` — already-parsed translation files keyed by locale, such as
+`{ en: parse(readFileSync('translations/en.yaml', 'utf8')) }` — to have `enzymeChecks` compile
+every key the same way germination does, and to have `ctx.t()` throw for a domain your manifest
+does not declare in `requires`, exactly as the bot would.
 
 ## Status
 
