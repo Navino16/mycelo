@@ -248,9 +248,10 @@ Omitting `locale` uses the reader's own language inside a handler, since a messa
 resolve it from. Everywhere else — an enzyme's `start()`, and both moments of an inhibitor's
 life, `start()` **and** `inspect()` — it falls back to `config.defaultLocale` instead: admission
 runs before a principal is resolved, so an inhibitor never has a reader to read a language from,
-even while judging a real message. `ctx.localeFor(target)` answers the language a conversation
-reads in, for a proactive `push()` that has no message to derive one from — pass its result as
-`t()`'s third argument.
+even while judging a real message. `ctx.localeFor(target)` answers the target conversation's own
+stored locale, or `config.defaultLocale` — **not** a reader's `/lang` choice, since a push target
+carries no principal to consult. Pass its result as `t()`'s third argument for a proactive
+`push()` that has no message to derive one from.
 
 Add a `configSchema` when the plugin takes configuration. It is duck-typed rather than typed
 as a Zod schema: a plugin is bundled with its own copy of Zod, so its schemas are not

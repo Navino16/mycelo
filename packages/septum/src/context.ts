@@ -110,7 +110,10 @@ export interface EnzymeStartContext<TConfig = unknown> extends BaseContext<TConf
    * config.defaultLocale in start(), where no message exists (design §5.1).
    */
   readonly t: Translate
-  /** The language a conversation reads in — what a proactive push should pass to t(). */
+  /**
+   * The target conversation's own stored locale, or config.defaultLocale — never a
+   * reader's `/lang` choice, since a push target carries no principal to consult.
+   */
   localeFor: (target: PushTarget) => Promise<string>
 }
 
