@@ -10,6 +10,8 @@ import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import type { Db } from '../../src/persistence/db.js'
 import { setContextRule } from '../../src/restrictions/rules.js'
 import { channelIdentity, principalRole, role, roleCommand } from '../../src/persistence/schema.js'
+import { catalogsOf } from '../support/catalogs.js'
+import { setConversationLocale, setPrincipalLocale } from '../../src/i18n/locale.js'
 import { createTranslator } from '../../src/i18n/translator.js'
 import { createBus, createEnzymeStartContext } from '../../src/rhizomorph/bus.js'
 import type { Bus, BusOptions, SporeAccess } from '../../src/rhizomorph/bus.js'
@@ -38,6 +40,7 @@ function busFor(registry: Registry, overrides: Partial<BusOptions> = {}): Bus {
   return createBus({
     registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger(),
     translator: createTranslator({ catalogs: new Map(), defaultLocale: 'en', logger: createLogger() }),
+    defaultLocale: 'en',
     ...overrides,
   })
 }
@@ -553,6 +556,7 @@ function harness(options: {
     sporesDir: SPORES,
     ...(options.defaultRole === undefined ? {} : { defaultRole: options.defaultRole }),
     translator: createTranslator({ catalogs: new Map(), defaultLocale: 'en', logger: createLogger() }),
+    defaultLocale: 'en',
     admission: { admit: options.admit ?? (() => Promise.resolve({ allow: true })) },
     onUnrouted: async (msg, command) => {
       if (command !== null) sent.push(`unknown command '${command}'`)
@@ -808,5 +812,62 @@ describe('conversation context rules', () => {
     setContextRule(testDb, 'media.movies', 'dm')
     await h.deliver('/movies Dune', 'carol', { conversationId: 'g1', group: { id: 'g1' } })
     expect(h.sent).toEqual(['denied media.movies'])
+  })
+})
+
+describe('per-message locale resolution', () => {
+  const GREETINGS = { ping: { en: { greeting: 'hello' }, fr: { greeting: 'bonjour' }, ru: { greeting: 'привет' } } }
+
+  function greeter(): ReturnType<typeof setup> {
+    return setup({ handlers: { ping: async (_inv, ctx) => { await ctx.reply({ text: ctx.t('greeting') }) } } })
+  }
+
+  it('answers a handler in the locale the sender chose, not the default', async () => {
+    const { registry, sent } = greeter()
+    setPrincipalLocale(db, localPrincipal.id, 'fr')
+    await busFor(registry, {
+      translator: createTranslator({ catalogs: catalogsOf(GREETINGS), defaultLocale: 'en', logger: createLogger() }),
+    }).deliver('console', message('/ping'))
+    expect(sent).toEqual([{ text: 'bonjour' }])
+    setPrincipalLocale(db, localPrincipal.id, 'en')
+  })
+
+  it("answers in the conversation's locale even when the sender chose another", async () => {
+    const { registry, sent } = greeter()
+    setPrincipalLocale(db, localPrincipal.id, 'fr')
+    // The conversation must exist before it can carry a locale: recordConversation runs on
+    // the first admitted message, so deliver once, then set the locale, then deliver again.
+    const bus = busFor(registry, {
+      translator: createTranslator({ catalogs: catalogsOf(GREETINGS), defaultLocale: 'en', logger: createLogger() }),
+    })
+    await bus.deliver('console', message('/ping'))
+    setConversationLocale(db, 'console', 'c:1', 'ru')
+    await bus.deliver('console', message('/ping'))
+    // Both replies asserted, not only the second: a resolver that ignored the principal
+    // entirely would still produce 'привет' on the second line.
+    expect(sent).toEqual([{ text: 'bonjour' }, { text: 'привет' }])
+    setPrincipalLocale(db, localPrincipal.id, 'en')
+    setConversationLocale(db, 'console', 'c:1', 'en')
+  })
+
+  it('gives start() the default locale, since no message exists yet', () => {
+    const ctx = createEnzymeStartContext({
+      hyphae: [], rhizas: [], logger: createLogger(), access: access([]), mycelium: () => ({}),
+      config: {}, db, domain: 'ping', defaultLocale: 'fr',
+      translator: createTranslator({ catalogs: catalogsOf(GREETINGS), defaultLocale: 'en', logger: createLogger() }),
+    })
+    expect(ctx.t('greeting')).toBe('bonjour')
+  })
+
+  it('answers localeFor() from the conversation, falling back to the default', async () => {
+    setConversationLocale(db, 'console', 'c:1', 'ru')
+    const ctx = createEnzymeStartContext({
+      hyphae: [], rhizas: [], logger: createLogger(), access: access([]), mycelium: () => ({}),
+      config: {}, db, domain: 'ping', defaultLocale: 'en',
+      translator: createTranslator({ catalogs: new Map(), defaultLocale: 'en', logger: createLogger() }),
+    })
+    expect(await ctx.localeFor({ channel: 'console', conversationId: 'c:1' })).toBe('ru')
+    expect(await ctx.localeFor({ channel: 'console', conversationId: 'never-seen' })).toBe('en')
+    setConversationLocale(db, 'console', 'c:1', 'en')
   })
 })

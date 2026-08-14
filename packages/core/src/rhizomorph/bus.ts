@@ -17,17 +17,13 @@ import type { GerminatedHypha, GerminatedRhiza, Registry } from '../germination/
 import { authorize } from '../authorization/check.js'
 import { patternsOf, resolvePrincipal } from '../identity/resolve.js'
 import { bindTranslate } from '../i18n/bind.js'
-import { localeForTarget } from '../i18n/locale.js'
+import { localeForTarget, resolveLocale } from '../i18n/locale.js'
 import type { Translator } from '../i18n/translator.js'
 import { createMyceliumApi } from '../mycelium-rhiza.js'
 import type { Db } from '../persistence/db.js'
 import { contextRuleFor } from '../restrictions/rules.js'
 import { bindArgs, parseCommand } from './parse.js'
 import { normalize } from './normalize.js'
-
-// Placeholder until a later task threads BusOptions.defaultLocale through; matches
-// config.ts's own schema default for an unconfigured deployment.
-const FALLBACK_LOCALE = 'en'
 
 /** Reached only by a plugin using a facility this phase does not provide yet. */
 function notYet(what: string, phase: string): never {
@@ -132,6 +128,8 @@ export interface BusOptions {
   defaultRole?: string
   /** Required by locale.manage and by every enzyme's ctx.t(): every caller has one. */
   translator: Translator
+  /** Resolved per message by resolveLocale(); used as-is for start() contexts. */
+  defaultLocale: string
   /** Called when text carries no command, or names one nothing declares. */
   onUnrouted?: (message: IncomingMessage, command: string | null) => Promise<void>
   /** Sent verbatim when authorization refuses. */
@@ -145,7 +143,7 @@ export interface BusOptions {
 }
 
 export function createBus({
-  registry, prefix, logger, db, admission, sporesDir, defaultRole, translator,
+  registry, prefix, logger, db, admission, sporesDir, defaultRole, translator, defaultLocale,
   onUnrouted, onDenied, onUnsupported, onOutOfContext, mycelium,
 }: BusOptions): Bus {
   const hyphaByName = new Map(registry.hyphae.map((h) => [h.name, h]))
@@ -176,12 +174,15 @@ export function createBus({
         domain: enzyme.name,
         translator,
         db,
-        defaultLocale: FALLBACK_LOCALE,
+        defaultLocale,
       }),
     ]),
   )
+  const enzymeAccess = new Map(registry.enzymes.map((enzyme) => [enzyme.name, enzyme.resolved]))
 
-  function contextFor(message: IncomingMessage, enzymeName: string, principal: Principal): EnzymeContext {
+  function contextFor(
+    message: IncomingMessage, enzymeName: string, principal: Principal, locale: string,
+  ): EnzymeContext {
     const origin = hyphaByName.get(message.channel)
     const startContext = startContextByEnzyme.get(enzymeName)
     if (startContext === undefined) throw new Error(`no start context built for enzyme '${enzymeName}'`)
@@ -189,6 +190,14 @@ export function createBus({
       ...startContext,
       logger: logger.child({ channel: message.channel }),
       reply: async (content) => { await send(message.channel, message.conversationId, content) },
+      // Rebound, not inherited: the start context's t answers in the default locale,
+      // which inside a handler would ignore the reader entirely.
+      t: bindTranslate({
+        translator,
+        domain: enzymeName,
+        allowed: enzymeAccess.get(enzymeName) ?? new Set(),
+        localeOf: () => locale,
+      }),
       capabilities: capabilitiesOf(origin),
       get principal(): Principal { return principal },
     }
@@ -228,6 +237,7 @@ export function createBus({
           logger.error(`could not resolve the sender on '${channel}'`, { error: (e as Error).message })
           return
         }
+        const locale = resolveLocale(db, message.channel, message.conversationId, principal.id, defaultLocale)
 
         const parsed = parseCommand(message.text, prefix)
         if (parsed === null) {
@@ -308,7 +318,7 @@ export function createBus({
           return
         }
         try {
-          await handler(invocation, contextFor(message, route.plugin, principal))
+          await handler(invocation, contextFor(message, route.plugin, principal, locale))
         } catch (e) {
           // A handler that throws is contained: clean error on the channel, trace logged.
           logger.error(`enzyme '${route.plugin}' threw handling '${route.qualified}'`, {

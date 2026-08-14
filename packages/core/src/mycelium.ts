@@ -230,6 +230,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     sporesDir: config.sporesDir,
     ...(config.defaultRole === undefined ? {} : { defaultRole: config.defaultRole }),
     translator,
+    defaultLocale: config.defaultLocale,
     mycelium,
     onUnrouted: async (message, command) => {
       if (command === null) return
