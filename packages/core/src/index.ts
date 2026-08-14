@@ -13,7 +13,9 @@ console.log(`mycelium: ${germinationBanner(registry)}`)
 // must be duck-typed like every other plugin-boundary crossing, never cast: a real
 // channel plugin named 'console' with no feed() would otherwise throw unhandled on
 // the first keystroke, inside this top-level for-await, killing the process.
-function hasFeed(instance: unknown): instance is { feed(text: string, externalId?: string): void } {
+function hasFeed(instance: unknown): instance is {
+  feed(text: string, externalId?: string, options?: { conversationId?: string, group?: { id: string, name?: string } }): void
+} {
   return typeof instance === 'object' && instance !== null
     && typeof (instance as Record<string, unknown>).feed === 'function'
 }
@@ -33,8 +35,14 @@ if (!hasFeed(consoleInstance)) {
   // before the loop got back around to listening again, and all but the first were lost.
   for await (const line of rl) {
     if (line.trim() !== '') {
-      const { sender, text } = parseSenderLine(line)
-      if (text !== '') consoleInstance.feed(text, sender)
+      const { sender, group, text } = parseSenderLine(line)
+      if (text !== '') {
+        // The conversation id is the group id: a group's replies and its locale belong to
+        // that conversation, not to the single 'stdin' one every DM shares.
+        consoleInstance.feed(text, sender, group === undefined
+          ? {}
+          : { conversationId: group, group: { id: group, name: group } })
+      }
     }
     rl.prompt()
   }
