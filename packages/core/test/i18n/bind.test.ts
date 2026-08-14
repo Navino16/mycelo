@@ -60,7 +60,7 @@ describe('bindTranslate', () => {
   it('throws for a domain the manifest does not require, naming it', () => {
     const translator = spy()
     const t = bindTranslate({ translator, domain: 'media', allowed: new Set(['mock']), localeOf: () => 'en' })
-    expect(() => t({ domain: 'radarr', key: 'a' })).toThrow(/radarr/)
+    expect(() => t({ domain: 'radarr', key: 'a' })).toThrow("translation domain 'radarr' is not declared")
   })
 
   it("throws for the core's own domain, which is closed to plugins", () => {
@@ -68,7 +68,7 @@ describe('bindTranslate', () => {
     const t = bindTranslate({ translator, domain: 'media', allowed: new Set(['core']), localeOf: () => 'en' })
     // Even with 'core' somehow in the allowed set: the runtime's messages change without
     // notice for plugin authors (design §3.1).
-    expect(() => t({ domain: 'core', key: 'command.denied' })).toThrow(/core/)
+    expect(() => t({ domain: 'core', key: 'command.denied' })).toThrow("translation domain 'core' is not declared")
   })
 
   it("merges a ref's own params with the call's, the call winning", () => {

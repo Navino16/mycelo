@@ -1022,8 +1022,8 @@ describe('per-message locale resolution', () => {
     await busFor(registry, {
       translator: createTranslator({ catalogs: catalogsOf(GREETINGS), defaultLocale: 'en', logger: createLogger() }),
     }).deliver('console', message('/ping'))
-    expect(sent).toEqual([{ text: 'bonjour' }])
     setPrincipalLocale(db, localPrincipal.id, 'en')
+    expect(sent).toEqual([{ text: 'bonjour' }])
   })
 
   it("answers in the conversation's locale even when the sender chose another", async () => {
@@ -1037,11 +1037,11 @@ describe('per-message locale resolution', () => {
     await bus.deliver('console', message('/ping'))
     setConversationLocale(db, 'console', 'c:1', 'ru')
     await bus.deliver('console', message('/ping'))
+    setPrincipalLocale(db, localPrincipal.id, 'en')
+    setConversationLocale(db, 'console', 'c:1', 'en')
     // Both replies asserted, not only the second: a resolver that ignored the principal
     // entirely would still produce 'привет' on the second line.
     expect(sent).toEqual([{ text: 'bonjour' }, { text: 'привет' }])
-    setPrincipalLocale(db, localPrincipal.id, 'en')
-    setConversationLocale(db, 'console', 'c:1', 'en')
   })
 
   it('gives start() the default locale, since no message exists yet', () => {
@@ -1060,8 +1060,10 @@ describe('per-message locale resolution', () => {
       config: {}, db, domain: 'ping', defaultLocale: 'en',
       translator: createTranslator({ catalogs: new Map(), defaultLocale: 'en', logger: createLogger() }),
     })
-    expect(await ctx.localeFor({ channel: 'console', conversationId: 'c:1' })).toBe('ru')
-    expect(await ctx.localeFor({ channel: 'console', conversationId: 'never-seen' })).toBe('en')
+    const inConversation = await ctx.localeFor({ channel: 'console', conversationId: 'c:1' })
+    const fallback = await ctx.localeFor({ channel: 'console', conversationId: 'never-seen' })
     setConversationLocale(db, 'console', 'c:1', 'en')
+    expect(inConversation).toBe('ru')
+    expect(fallback).toBe('en')
   })
 })

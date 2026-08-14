@@ -190,12 +190,12 @@ it('refuses a locale no catalogue provides, naming what is available', async () 
 it('refuses an invalid tag without touching the stored locale', async () => {
   const replies: string[] = []
   const ctx = stubContext(
-    { setPrincipalLocale: () => Promise.reject(new Error("'not-a-tag' is not a locale tag")) },
+    { setPrincipalLocale: () => Promise.reject(new Error("'not-a-tag' is not a valid language tag")) },
     replies,
     { t: stubT(), principal: { id: 'alice' } },
   )
   await module.create().handlers['handleLang']?.(invocation({ locale: 'not-a-tag' }), ctx)
-  expect(replies).toEqual(["'not-a-tag' is not a locale tag"])
+  expect(replies).toEqual(["'not-a-tag' is not a valid language tag"])
 })
 
 it('sets the conversation locale from within a group', async () => {
