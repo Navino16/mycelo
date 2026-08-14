@@ -1,10 +1,10 @@
 kind: enzyme
 name: admin
-septum: "^0.6"
+septum: "^0.7"
 description: Reads and administers the mycelium through scopes. Test fixture, never distributed.
 requires:
   - rhiza: mycelium
-    scopes: [plugins.read, plugins.toggle, plugins.configure, principals.read, roles.read, roles.assign, roles.manage]
+    scopes: [plugins.read, plugins.toggle, plugins.configure, principals.read, roles.read, roles.assign, roles.manage, conversations.read, messages.broadcast, restrictions.manage]
 commands:
   - name: plugins
     description: List installed plugins
@@ -78,4 +78,41 @@ commands:
     args:
       - name: name
         description: Plugin name
+        required: true
+  - name: conversations
+    description: List conversations the bot has seen
+    code: handleConversations
+  - name: where-rule
+    description: Confine a command pattern to direct messages or to groups
+    code: handleWhereRule
+    args:
+      - name: pattern
+        description: Command pattern
+        required: true
+      - name: where
+        description: dm or group
+        required: true
+  - name: broadcast-add
+    description: Add a broadcast target
+    code: handleBroadcastAdd
+    args:
+      - name: channel
+        description: Channel name
+        required: true
+      - name: conversation
+        description: Conversation id
+        required: true
+  - name: broadcast
+    description: Send one message to every configured target
+    code: handleBroadcast
+    args:
+      - name: text
+        description: What to send
+        required: true
+  - name: inhibitor-channels
+    description: Confine an inhibitor to named channels
+    code: handleInhibitorChannels
+    args:
+      - name: name
+        description: Inhibitor name
         required: true

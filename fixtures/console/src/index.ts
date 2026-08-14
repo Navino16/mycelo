@@ -2,6 +2,12 @@ import type { ChannelIdentity, HyphaModule, HyphaContext, OutgoingContent } from
 
 const CONVERSATION = 'stdin'
 
+interface FeedOptions {
+  conversationId?: string
+  group?: { id: string, name?: string }
+  displayName?: string
+}
+
 /** Illustrative membership: alice and bob are a household; local is the demo's own sender. */
 function defaultGroups(): Record<string, ChannelIdentity[]> {
   return {
@@ -19,9 +25,11 @@ export default {
     let counter = 0
     let listening = false
     const sent: OutgoingContent[] = []
+    const deliveries: { conversationId: string, out: OutgoingContent }[] = []
     let groups = defaultGroups()
     return {
       sent,
+      deliveries,
       connect: (context: HyphaContext<unknown>) => {
         ctx = context
         return Promise.resolve()
@@ -34,20 +42,26 @@ export default {
         listening = false
         return Promise.resolve()
       },
-      send: (_conversationId: string, out: OutgoingContent) => {
+      send: (conversationId: string, out: OutgoingContent) => {
         sent.push(out)
+        deliveries.push({ conversationId, out })
         if (out.text !== undefined) console.log(`bot: ${out.text}`)
         return Promise.resolve()
       },
       /** Test seam: what stdin does in the demo, a test does directly. */
-      feed(text: string, externalId = 'local') {
+      feed(text: string, externalId = 'local', options: FeedOptions = {}) {
         if (!listening) return
         counter += 1
         ctx?.emit({
           channel: 'console',
-          conversationId: CONVERSATION,
+          conversationId: options.conversationId ?? CONVERSATION,
           messageId: `m:${String(counter)}`,
-          sender: { channel: 'console', externalId },
+          ...(options.group === undefined ? {} : { group: options.group }),
+          sender: {
+            channel: 'console',
+            externalId,
+            ...(options.displayName === undefined ? {} : { displayName: options.displayName }),
+          },
           text,
           attachments: [],
           raw: null,

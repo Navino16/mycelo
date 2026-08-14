@@ -1,8 +1,12 @@
 kind: enzyme
 name: ping
-septum: "^0.5"
+septum: "^0.7"
 description: Answers pong. Test fixture, never distributed.
 commands:
   - name: ping
     description: Health check
     respond: pong
+  - name: react
+    description: Answer only where reactions exist
+    respond: reactions are available here
+    capabilities: [reactions]

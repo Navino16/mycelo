@@ -11,9 +11,14 @@ import { migrateDatabase, openDatabase } from '../src/persistence/db.js'
 import { waitFor } from './support/wait-for.js'
 
 interface ConsoleFixture {
-  feed(text: string, externalId?: string): void
+  feed(text: string, externalId?: string, options?: {
+    conversationId?: string
+    group?: { id: string, name?: string }
+    displayName?: string
+  }): void
   setGroup(groupId: string, members: { channel: string, externalId: string }[]): void
   readonly sent: OutgoingContent[]
+  readonly deliveries: { conversationId: string, out: OutgoingContent }[]
 }
 
 let dir: string
@@ -414,4 +419,73 @@ it('serves a spore the settings stored in the database, overriding its own defau
   fixture.feed('/whoami', 'alice')
   await waitFor(() => { expect(fixture.sent).toHaveLength(2) })
   expect(fixture.sent[1]).toEqual({ text: 'console:alice roles: owner' })
+})
+
+it('runs the phase 5.5 milestone: an operator bounds where a command works and reaches every conversation', async () => {
+  const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(
+    configFile,
+    'prefix: "/"\n'
+    + `spores: ${sporesDir}\n`
+    + 'owner:\n  channel: console\n  userId: alice\n',
+    'utf8',
+  )
+
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+
+  const fixture = registry.hyphae.find((h) => h.name === 'console')
+    ?.instance as unknown as ConsoleFixture
+
+  // 1 — the author's declaration: /react needs reactions, console declares only group_membership.
+  fixture.feed('/react', 'alice')
+  await waitFor(() => {
+    expect(fixture.sent[0]).toEqual({
+      text: "'react' needs reactions, which channel 'console' does not provide",
+    })
+  })
+
+  // 2 — the registry: one DM and one group, each labelled.
+  fixture.feed('/whoami', 'alice', { displayName: 'Alice' })
+  await waitFor(() => { expect(fixture.sent[1]).toEqual({ text: 'console:alice roles: owner' }) })
+  fixture.feed('/whoami', 'alice', { conversationId: 'g:weekend', group: { id: 'g1', name: 'weekend' } })
+  await waitFor(() => { expect(fixture.sent[2]).toEqual({ text: 'console:alice roles: owner' }) })
+
+  fixture.feed('/conversations', 'alice')
+  await waitFor(() => {
+    expect(fixture.sent[3]).toEqual({ text: 'weekend (group)\nAlice (dm)' })
+  })
+
+  // 3 — the operator's rule: /whoami is a DM command from now on.
+  fixture.feed('/where-rule admin.whoami dm', 'alice')
+  await waitFor(() => { expect(fixture.sent[4]).toEqual({ text: "'admin.whoami' is now restricted to dm" }) })
+
+  fixture.feed('/whoami', 'alice', { conversationId: 'g:weekend', group: { id: 'g1', name: 'weekend' } })
+  await waitFor(() => {
+    expect(fixture.sent[5]).toEqual({ text: "'whoami' is only available in a direct message" })
+  })
+  fixture.feed('/whoami', 'alice')
+  await waitFor(() => { expect(fixture.sent[6]).toEqual({ text: 'console:alice roles: owner' }) })
+
+  // 4 — broadcast reaches a conversation nobody is speaking in.
+  fixture.feed('/broadcast-add console g:weekend', 'alice')
+  await waitFor(() => { expect(fixture.sent[7]).toEqual({ text: 'added console/g:weekend' }) })
+
+  // Broadcast sends to the group and then replies to the caller: two entries, not one.
+  fixture.feed('/broadcast the pub is booked', 'alice')
+  await waitFor(() => { expect(fixture.sent).toHaveLength(10) })
+  expect(fixture.sent[9]).toEqual({ text: '1 ok, 0 failed' })
+  expect(fixture.deliveries.filter((d) => d.conversationId === 'g:weekend').map((d) => d.out))
+    .toContainEqual({ text: 'the pub is booked' })
+
+  // 5 — confining the gate to another channel takes it out of console's path: carol, who is
+  // not in 'household', is no longer refused in silence but by authorization, which answers.
+  fixture.feed('/inhibitor-channels gate signal', 'alice')
+  await waitFor(() => { expect(fixture.sent.at(-1)).toEqual({ text: 'gate applies to: signal' }) })
+
+  fixture.feed('/whoami', 'carol')
+  await waitFor(() => {
+    expect(fixture.sent.at(-1)).toEqual({ text: "you are not allowed to use 'whoami'" })
+  })
 })
