@@ -5,10 +5,10 @@ description: Text and code in one plugin. Test fixture, never distributed.
 commands:
   - name: links
     description: Service URLs
-    respond: "Radarr http://radarr:7878"
+    respond: links.text
   - name: rules
     description: House rules
-    respond: "No spoilers before Sunday."
+    respond: rules.text
   - name: add
     description: Add a title
     code: handleMutation

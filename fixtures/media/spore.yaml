@@ -12,3 +12,6 @@ commands:
   - name: where
     description: Report which alternative resolved
     code: handleWhere
+  - name: count
+    description: Report a count, in the reader's language
+    code: handleCount

@@ -1,0 +1,4 @@
+movies:
+  found: "{title} via mock"
+  count-usage: "usage : count '<nombre>'"
+  count: "{n, plural, one {# film} other {# films}}"

@@ -1,0 +1,6 @@
+movies:
+  found: "{title} via mock"
+  # Bare <number> is ICU rich-text tag syntax and throws UNCLOSED_TAG; quoting it renders
+  # the literal text.
+  count-usage: "usage: count '<number>'"
+  count: "{n, plural, one {# film} other {# films}}"

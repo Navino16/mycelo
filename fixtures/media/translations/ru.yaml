@@ -1,0 +1,5 @@
+movies:
+  found: "{title} via mock"
+  count-usage: "использование: count '<число>'"
+  # Russian's four-way plural reaches 'many' at n=5, which no count === 1 branch can reach.
+  count: "{n, plural, one {# фильм} few {# фильма} many {# фильмов} other {# фильма}}"
