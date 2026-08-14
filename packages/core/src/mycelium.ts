@@ -11,6 +11,7 @@ import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor, G
 import { bootstrapIdentity } from './identity/bootstrap.js'
 import { createMyceliumApi } from './mycelium-rhiza.js'
 import { migrateDatabase, openDatabase } from './persistence/db.js'
+import { allInhibitorChannels } from './restrictions/rules.js'
 import { createBus, createEnzymeStartContext, sendVia } from './rhizomorph/bus.js'
 import type { Bus } from './rhizomorph/bus.js'
 import { createLogger } from './support/logger.js'
@@ -176,6 +177,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     brokenEnforcing,
     membership,
     logger,
+    channelScopes: () => allInhibitorChannels(db),
     rhiza: (inhibitor) => {
       const ctx = createInhibitorContext({
         inhibitor, membership, rhizas: startedRhizas, mycelium,

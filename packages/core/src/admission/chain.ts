@@ -50,8 +50,10 @@ export function createAdmissionChain(options: {
   membership: MembershipCache
   logger: Logger
   rhiza: (inhibitor: GerminatedInhibitor) => <T>(name: string) => T
+  /** Channels each inhibitor is confined to. Read once per message so an operator's change is live. */
+  channelScopes: () => ReadonlyMap<string, readonly string[]>
 }): AdmissionChain {
-  const { inhibitors, brokenEnforcing, membership, logger, rhiza } = options
+  const { inhibitors, brokenEnforcing, membership, logger, rhiza, channelScopes } = options
   const ordered = [...inhibitors].sort((a, b) => a.name.localeCompare(b.name))
   // Same attribution start() gets (mycelium.ts), so an inhibitor's records name it in
   // both moments rather than only during startup.
@@ -59,10 +61,19 @@ export function createAdmissionChain(options: {
 
   return {
     async admit(message) {
-      if (brokenEnforcing.length > 0) {
-        return { allow: false, reason: `inhibitor '${brokenEnforcing[0]}' never started: all traffic is refused` }
+      const scopes = channelScopes()
+      const appliesHere = (name: string): boolean => {
+        const channels = scopes.get(name)
+        return channels === undefined || channels.length === 0 || channels.includes(message.channel)
+      }
+      // Confining an inhibitor that then breaks must not brick the channels it was never
+      // meant to guard — otherwise the confinement is worse than not having it.
+      const broken = brokenEnforcing.find(appliesHere)
+      if (broken !== undefined) {
+        return { allow: false, reason: `inhibitor '${broken}' never started: all traffic is refused` }
       }
       for (const inhibitor of ordered) {
+        if (!appliesHere(inhibitor.name)) continue
         const ctx: InhibitorContext = {
           config: inhibitor.config,
           logger: loggerFor.get(inhibitor.name) ?? logger,

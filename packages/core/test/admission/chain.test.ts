@@ -21,7 +21,11 @@ const message: IncomingMessage = {
   text: '/ping', attachments: [], raw: null, receivedAt: new Date(),
 }
 
-function chain(inhibitors: readonly GerminatedInhibitor[], brokenEnforcing: string[] = []) {
+function chain(
+  inhibitors: readonly GerminatedInhibitor[],
+  brokenEnforcing: string[] = [],
+  scopes: ReadonlyMap<string, readonly string[]> = new Map(),
+) {
   const warnings: string[] = []
   const errors: string[] = []
   // Records the child bindings each record carried, so attribution is assertable and not
@@ -37,9 +41,12 @@ function chain(inhibitors: readonly GerminatedInhibitor[], brokenEnforcing: stri
     inhibitors, brokenEnforcing, logger: make({}),
     membership: { members: () => Promise.resolve(null), requireCapability: () => {} },
     rhiza: () => <T,>() => ({}) as T,
+    channelScopes: () => scopes,
   })
   return { admission, warnings, errors, bound }
 }
+
+const messageOn = (channel: string): IncomingMessage => ({ ...message, channel })
 
 describe('createAdmissionChain', () => {
   it('admits when there is no inhibitor at all', async () => {
@@ -144,6 +151,40 @@ describe('createAdmissionChain', () => {
       const absent = inhibitor('a', true, () => Promise.resolve(null as unknown as Verdict))
       expect((await chain([absent]).admission.admit(message)).allow).toBe(false)
     })
+  })
+})
+
+describe('inhibitor channel confinement', () => {
+  it('skips an inhibitor on a channel it is not confined to, and runs it on one it is', async () => {
+    const seen: string[] = []
+    const gate = inhibitor('gate', false, () => {
+      seen.push('asked')
+      return Promise.resolve({ allow: false, reason: 'no' })
+    })
+    const { admission } = chain([gate], [], new Map([['gate', ['signal']]]))
+    expect(await admission.admit(messageOn('console'))).toEqual({ allow: true })
+    expect(seen).toEqual([])
+    expect((await admission.admit(messageOn('signal'))).allow).toBe(false)
+    expect(seen).toEqual(['asked'])
+  })
+
+  it('runs an unconfined inhibitor on every channel', async () => {
+    const gate = inhibitor('gate', false, () => Promise.resolve({ allow: false, reason: 'no' }))
+    const { admission } = chain([gate])
+    expect((await admission.admit(messageOn('console'))).allow).toBe(false)
+    expect((await admission.admit(messageOn('signal'))).allow).toBe(false)
+  })
+
+  it('confines a broken enforcing inhibitor refusal to its own channels', async () => {
+    const { admission } = chain([], ['gate'], new Map([['gate', ['signal']]]))
+    expect(await admission.admit(messageOn('console'))).toEqual({ allow: true })
+    expect((await admission.admit(messageOn('signal'))).allow).toBe(false)
+  })
+
+  it('still refuses every channel for a broken enforcing inhibitor that is unconfined', async () => {
+    const { admission } = chain([], ['gate'])
+    expect((await admission.admit(messageOn('console'))).allow).toBe(false)
+    expect((await admission.admit(messageOn('signal'))).allow).toBe(false)
   })
 })
 
