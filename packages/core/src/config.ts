@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
+import { canonicalLocale } from './i18n/locale.js'
 
 const ownerSchema = z.object({
   channel: z.string().min(1),
@@ -17,6 +18,7 @@ const bootstrapSchema = z.object({
   database: z.string().min(1).default('./mycelo.db'),
   owner: ownerSchema.optional(),
   defaultRole: z.string().min(1).optional(),
+  defaultLocale: z.string().min(1).default('en'),
   // Settings moved to the database in phase 5. Rejected rather than dropped: Zod strips
   // unknown keys, so a stale block would take an operator's configuration with it in silence.
   plugins: z.never().optional(),
@@ -57,8 +59,15 @@ export function loadBootstrap(file: string): Bootstrap {
       : `${path === '' ? '' : `${path}: `}${issue?.message ?? 'invalid bootstrap'}`
     throw new BootstrapError(message, path)
   }
+  let defaultLocale: string
+  try {
+    defaultLocale = canonicalLocale(result.data.defaultLocale)
+  } catch (e) {
+    throw new BootstrapError((e as Error).message, 'defaultLocale')
+  }
   return {
     ...result.data,
+    defaultLocale,
     sporesDir: resolve(file, '..', result.data.spores),
     databaseFile: resolve(file, '..', result.data.database),
   }

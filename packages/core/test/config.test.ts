@@ -88,3 +88,20 @@ describe('loadBootstrap, phase 4 fields', () => {
     expect(config.defaultRole).toBe('guest')
   })
 })
+
+describe('defaultLocale', () => {
+  it("defaults to 'en' when the file says nothing", () => {
+    const file = writeConfig('prefix: "!"\n')
+    expect(loadBootstrap(file).defaultLocale).toBe('en')
+  })
+
+  it('canonicalises what the operator wrote', () => {
+    const file = writeConfig('defaultLocale: fr-fr\n')
+    expect(loadBootstrap(file).defaultLocale).toBe('fr-FR')
+  })
+
+  it('refuses an invalid tag at boot, naming the field', () => {
+    const file = writeConfig('defaultLocale: "not a locale"\n')
+    expect(() => loadBootstrap(file)).toThrow(/not a locale/)
+  })
+})
