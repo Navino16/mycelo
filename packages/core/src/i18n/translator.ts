@@ -1,4 +1,4 @@
-import type { Logger } from '@mycelo/septum'
+import type { Logger, Translate } from '@mycelo/septum'
 import type { Catalogs } from './catalog.js'
 
 export interface Translator {
@@ -62,5 +62,18 @@ export function createTranslator(options: {
       for (const byLocale of catalogs.values()) for (const locale of byLocale.keys()) all.add(locale)
       return [...all].sort()
     },
+  }
+}
+
+/**
+ * Binds a plugin-facing t() to one domain and a locale to fall back on when the caller
+ * omits one. A string key resolves in `domain`; a ref carries its own domain and key.
+ */
+export function translateFn(translator: Translator, domain: string, defaultLocale: string): Translate {
+  return (key, params, locale) => {
+    const loc = locale ?? defaultLocale
+    return typeof key === 'string'
+      ? translator.translate(domain, key, loc, params)
+      : translator.translate(key.domain, key.key, loc, key.params)
   }
 }

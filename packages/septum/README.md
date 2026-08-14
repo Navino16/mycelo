@@ -146,8 +146,9 @@ present-but-rejecting:
 | `messages.broadcast` | `MessagesBroadcast` | `broadcast(content)` — sends to every operator-configured target, distinct from `messages.send` so replying to one sender never implies writing to everyone |
 | `conversations.read` | `ConversationsRead` | `listConversations()` — every conversation the bot has seen, where the channel supplies one |
 | `restrictions.manage` | `RestrictionsManage` | context rules, an inhibitor's confined channels, and the broadcast target list — confining an inhibitor's channels takes effect immediately, even for one `enforcing`, with no restart |
+| `locale.manage` | `LocaleManage` | `setPrincipalLocale(principalId, locale)`, `setConversationLocale(channel, conversationId, locale)`, `availableLocales()` — the last is synchronous, like `listPlugins()` |
 
-`listPlugins()` alone is synchronous; every other method returns a promise. The identity and role
+`listPlugins()` and `availableLocales()` alone are synchronous; every other method returns a promise. The identity and role
 methods **reject** rather than resolve quietly when asked about something that does not exist — an
 unknown principal id, an unknown role name — and `deleteRole`/`setRoleCommands` also reject on a
 `builtin` role such as `owner`, while `createRole` rejects an empty name, a name already taken and a
@@ -271,6 +272,8 @@ const context = (): EnzymeContext => ({
   capabilitiesOf: () => ({ has: () => true, list: () => [] }),
   principal: { id: 'p1', identities: [], roles: [] },
   on() {},
+  t: (key) => (typeof key === 'string' ? key : key.key),
+  localeFor: () => Promise.resolve('en'),
 })
 
 it('conforms to the Enzyme contract', async () => {

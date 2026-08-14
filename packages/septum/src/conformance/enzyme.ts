@@ -34,6 +34,8 @@ function startContextFor(harness: EnzymeHarness): EnzymeStartContext<unknown> {
     has: (name) => ctx.has(name),
     capabilitiesOf: (target) => ctx.capabilitiesOf(target),
     on: (rhiza, event, handler) => { ctx.on(rhiza, event, handler) },
+    t: (key, params, locale) => ctx.t(key, params, locale),
+    localeFor: (target) => ctx.localeFor(target),
   }
 }
 

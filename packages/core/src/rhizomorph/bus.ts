@@ -16,11 +16,18 @@ import { conversationKind, recordConversation } from '../conversations/registry.
 import type { GerminatedHypha, GerminatedRhiza, Registry } from '../germination/registry.js'
 import { authorize } from '../authorization/check.js'
 import { patternsOf, resolvePrincipal } from '../identity/resolve.js'
+import { localeForTarget } from '../i18n/locale.js'
+import { translateFn } from '../i18n/translator.js'
+import type { Translator } from '../i18n/translator.js'
 import { createMyceliumApi } from '../mycelium-rhiza.js'
 import type { Db } from '../persistence/db.js'
 import { contextRuleFor } from '../restrictions/rules.js'
 import { bindArgs, parseCommand } from './parse.js'
 import { normalize } from './normalize.js'
+
+// Placeholder until a later task threads BusOptions.defaultLocale through; matches
+// config.ts's own schema default for an unconfigured deployment.
+const FALLBACK_LOCALE = 'en'
 
 /** Reached only by a plugin using a facility this phase does not provide yet. */
 function notYet(what: string, phase: string): never {
@@ -65,6 +72,12 @@ export interface StartContextOptions {
   /** Injected so bus.ts does not import mycelium-rhiza.ts, which imports Registry. */
   mycelium: (scopes: readonly MyceliumScope[]) => object
   config: unknown
+  /** The calling spore's own name: the domain a bare string key in t() resolves against. */
+  domain: string
+  translator: Translator
+  db: Db
+  /** Locale for t() and localeFor() when nothing more specific is known. */
+  defaultLocale: string
 }
 
 /**
@@ -73,7 +86,7 @@ export interface StartContextOptions {
  * exists) and createBus()'s per-message context below share one implementation.
  */
 export function createEnzymeStartContext(options: StartContextOptions): EnzymeStartContext {
-  const { hyphae, rhizas, logger, access, mycelium, config } = options
+  const { hyphae, rhizas, logger, access, mycelium, config, domain, translator, db, defaultLocale } = options
   const hyphaByName = new Map(hyphae.map((h) => [h.name, h]))
   const rhizaByName = new Map(rhizas.map((r) => [r.name, r]))
 
@@ -98,6 +111,8 @@ export function createEnzymeStartContext(options: StartContextOptions): EnzymeSt
     rhiza,
     has: (name) => access.resolved.has(name),
     on: () => notYet('ctx.on()', 'a phase not yet scheduled for rhiza domain events (design §12)'),
+    t: translateFn(translator, domain, defaultLocale),
+    localeFor: (target) => Promise.resolve(localeForTarget(db, target, defaultLocale)),
   }
 }
 
@@ -115,6 +130,8 @@ export interface BusOptions {
   sporesDir: string
   /** Assigned to a principal on first contact only (identity/resolve.ts). */
   defaultRole?: string
+  /** Required by locale.manage and by every enzyme's ctx.t(): every caller has one. */
+  translator: Translator
   /** Called when text carries no command, or names one nothing declares. */
   onUnrouted?: (message: IncomingMessage, command: string | null) => Promise<void>
   /** Sent verbatim when authorization refuses. */
@@ -128,7 +145,7 @@ export interface BusOptions {
 }
 
 export function createBus({
-  registry, prefix, logger, db, admission, sporesDir, defaultRole,
+  registry, prefix, logger, db, admission, sporesDir, defaultRole, translator,
   onUnrouted, onDenied, onUnsupported, onOutOfContext, mycelium,
 }: BusOptions): Bus {
   const hyphaByName = new Map(registry.hyphae.map((h) => [h.name, h]))
@@ -141,7 +158,7 @@ export function createBus({
       (target, content) => send(target.channel, target.conversationId, content),
       db,
       sporesDir,
-      defaultRole,
+      { defaultRole, translator },
     ))
 
   // One context per enzyme, because `resolved` and `scopes` differ per spore
@@ -156,6 +173,10 @@ export function createBus({
         access: { resolved: enzyme.resolved, scopes: enzyme.scopes },
         mycelium: mounted,
         config: enzyme.config,
+        domain: enzyme.name,
+        translator,
+        db,
+        defaultLocale: FALLBACK_LOCALE,
       }),
     ]),
   )

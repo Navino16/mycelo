@@ -6,7 +6,7 @@ import { MYCELIUM_SCOPES } from '../src/mycelium.js'
 describe('MYCELIUM_SCOPES', () => {
   // A published runtime constant: consumers read these strings, so renaming one is a
   // breaking change. Asserted whole, not sampled.
-  it('publishes exactly these thirteen scope names, in this order', () => {
+  it('publishes exactly these fourteen scope names, in this order', () => {
     expect(MYCELIUM_SCOPES).toEqual([
       'principals.read',
       'principals.manage',
@@ -21,6 +21,7 @@ describe('MYCELIUM_SCOPES', () => {
       'messages.broadcast',
       'conversations.read',
       'restrictions.manage',
+      'locale.manage',
     ])
   })
 })

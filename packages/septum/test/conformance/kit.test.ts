@@ -149,6 +149,8 @@ function enzymeContext(): EnzymeContext<unknown> {
     capabilitiesOf: () => ({ has: () => true, list: () => [] }),
     principal: { id: 'p1', identities: [], roles: [] },
     on() {},
+    t: (key) => (typeof key === 'string' ? key : key.key),
+    localeFor: () => Promise.resolve('en'),
   }
 }
 
@@ -388,6 +390,7 @@ function inhibitorContext(): InhibitorContext<unknown> {
     requireCapability: () => {},
     rhiza: <T,>() => ({}) as T,
     has: () => false,
+    t: (key) => (typeof key === 'string' ? key : key.key),
   }
 }
 
@@ -597,6 +600,25 @@ describe('regressions', () => {
               if (seen[absent] !== undefined) throw new Error(`start() saw ${absent}`)
             }
             if (typeof ctx.push !== 'function') throw new Error('start() lost push')
+          },
+          async stop() {},
+        }),
+      },
+    })
+    expect(failures).toEqual([])
+  })
+
+  // The runtime and the kit were written the same afternoon phase 2 shipped Enzyme.start()
+  // without it being called at all — the class of defect this pins against t()/localeFor().
+  it('lets start() call ctx.t() and ctx.localeFor()', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        create: () => ({
+          handlers: { links: async () => {} },
+          async start(ctx) {
+            ctx.t('ready')
+            await ctx.localeFor({ channel: 'console', conversationId: 'c1' })
           },
           async stop() {},
         }),

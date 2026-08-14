@@ -9,6 +9,8 @@ import { germinate } from './germination/germinate.js'
 import { buildRoutes } from './germination/registry.js'
 import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor, GerminatedRhiza, Registry } from './germination/registry.js'
 import { bootstrapIdentity } from './identity/bootstrap.js'
+import { loadCoreCatalogs } from './i18n/core-catalogs.js'
+import { createTranslator } from './i18n/translator.js'
 import { createMyceliumApi } from './mycelium-rhiza.js'
 import { migrateDatabase, openDatabase } from './persistence/db.js'
 import { allInhibitorChannels } from './restrictions/rules.js'
@@ -43,6 +45,9 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
   if (added.length > 0) logger.info(`recorded ${String(added.length)} spore(s): ${added.join(', ')}`)
   const registry = await germinate(config.sporesDir, logger, readAllSettings(db), db)
   const dormant: Dormant[] = [...registry.dormant]
+
+  // Placeholder: a later task replaces this with one merging the spores' own catalogues in.
+  const translator = createTranslator({ catalogs: loadCoreCatalogs(), defaultLocale: config.defaultLocale, logger })
 
   // Step 1: connect() every hypha. `busBox.current` fills in once the bus exists,
   // before listen() opens the gate in step 3.
@@ -102,7 +107,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     (target, content) => sendVia(hyphaByName, target.channel, target.conversationId, content),
     db,
     config.sporesDir,
-    config.defaultRole,
+    { defaultRole: config.defaultRole, translator },
   )
   for (const name of registry.order) {
     const rhiza = rhizaByName.get(name)
@@ -138,6 +143,10 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
         access: { resolved: enzyme.resolved, scopes: enzyme.scopes },
         mycelium,
         config: enzyme.config,
+        domain: enzyme.name,
+        translator,
+        db,
+        defaultLocale: config.defaultLocale,
       }))
       startedEnzymes.push(enzyme)
     } catch (e) {
@@ -154,6 +163,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     const ctx = createInhibitorContext({
       inhibitor, membership, rhizas: startedRhizas, mycelium,
       logger: logger.child({ inhibitor: inhibitor.name }),
+      translator, defaultLocale: config.defaultLocale,
     })
     try {
       await inhibitor.instance.start?.(ctx)
@@ -182,11 +192,14 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
       const ctx = createInhibitorContext({
         inhibitor, membership, rhizas: startedRhizas, mycelium,
         logger: logger.child({ inhibitor: inhibitor.name }),
+        translator, defaultLocale: config.defaultLocale,
       })
       // Method-call syntax, not a bare reference: extracting ctx.rhiza would trip
       // @typescript-eslint/unbound-method on the interface's method-shorthand signature.
       return <T>(name: string): T => ctx.rhiza<T>(name)
     },
+    translator,
+    defaultLocale: config.defaultLocale,
   })
 
   // A failed start() must not leave the enzyme routable: routes are rebuilt from
@@ -210,6 +223,7 @@ export async function bootstrap(configFile: string): Promise<Mycelium> {
     admission,
     sporesDir: config.sporesDir,
     ...(config.defaultRole === undefined ? {} : { defaultRole: config.defaultRole }),
+    translator,
     mycelium,
     onUnrouted: async (message, command) => {
       if (command === null) return

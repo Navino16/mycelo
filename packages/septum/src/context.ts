@@ -40,6 +40,24 @@ interface BaseContext<TConfig> {
   readonly logger: Logger
 }
 
+/** A key in a domain the caller does not own — what a rhiza hands back (design §5.3). */
+export interface TranslatableRef {
+  domain: string
+  key: string
+  params?: Record<string, unknown>
+}
+
+/**
+ * Renders a catalogue key in the reader's language. A bare string is a key in the calling
+ * spore's own domain; a ref names another domain, which must be one the manifest requires.
+ * An absent key renders as the key itself rather than throwing (design §7.2).
+ */
+export type Translate = (
+  key: string | TranslatableRef,
+  params?: Record<string, unknown>,
+  locale?: string,
+) => string
+
 export interface HyphaContext<TConfig = unknown> extends BaseContext<TConfig> {
   /** Hands a normalized inbound message to the rhizomorph. */
   emit(message: IncomingMessage): void
@@ -61,6 +79,9 @@ export interface InhibitorContext<TConfig = unknown> extends BaseContext<TConfig
   requireCapability(channel: string, capability: ChannelCapability): void
   rhiza<TApi>(name: string): TApi
   has(name: string): boolean
+  /** Same signature as an enzyme's; `locale` defaults to config.defaultLocale, since
+   *  admission runs before any principal is resolved. */
+  readonly t: Translate
 }
 
 /**
@@ -84,6 +105,13 @@ export interface EnzymeStartContext<TConfig = unknown> extends BaseContext<TConf
   capabilitiesOf(target: PushTarget): Capabilities
   /** Reserved: not implemented yet — the core throws (design §12). */
   on(rhiza: string, event: string, handler: (payload: unknown) => void): void
+  /**
+   * Omitting `locale` yields the locale resolved for the message being answered, or
+   * config.defaultLocale in start(), where no message exists (design §5.1).
+   */
+  readonly t: Translate
+  /** The language a conversation reads in — what a proactive push should pass to t(). */
+  localeFor: (target: PushTarget) => Promise<string>
 }
 
 /**

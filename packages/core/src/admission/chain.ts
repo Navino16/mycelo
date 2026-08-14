@@ -1,5 +1,7 @@
 import type { IncomingMessage, InhibitorContext, Logger, MyceliumScope, Verdict } from '@mycelo/septum'
 import type { GerminatedInhibitor, GerminatedRhiza } from '../germination/registry.js'
+import { translateFn } from '../i18n/translator.js'
+import type { Translator } from '../i18n/translator.js'
 import type { MembershipCache } from './membership.js'
 
 /**
@@ -13,8 +15,10 @@ export function createInhibitorContext(options: {
   logger: Logger
   rhizas: readonly GerminatedRhiza[]
   mycelium: (scopes: readonly MyceliumScope[]) => object
+  translator: Translator
+  defaultLocale: string
 }): InhibitorContext {
-  const { inhibitor, membership, logger, rhizas, mycelium } = options
+  const { inhibitor, membership, logger, rhizas, mycelium, translator, defaultLocale } = options
   const byName = new Map(rhizas.map((r) => [r.name, r]))
   return {
     config: inhibitor.config,
@@ -31,6 +35,7 @@ export function createInhibitorContext(options: {
       return found.instance.api as TApi
     },
     has: (name) => inhibitor.resolved.has(name),
+    t: translateFn(translator, inhibitor.name, defaultLocale),
   }
 }
 
@@ -52,8 +57,10 @@ export function createAdmissionChain(options: {
   rhiza: (inhibitor: GerminatedInhibitor) => <T>(name: string) => T
   /** Channels each inhibitor is confined to. Read once per message so an operator's change is live. */
   channelScopes: () => ReadonlyMap<string, readonly string[]>
+  translator: Translator
+  defaultLocale: string
 }): AdmissionChain {
-  const { inhibitors, brokenEnforcing, membership, logger, rhiza, channelScopes } = options
+  const { inhibitors, brokenEnforcing, membership, logger, rhiza, channelScopes, translator, defaultLocale } = options
   const ordered = [...inhibitors].sort((a, b) => a.name.localeCompare(b.name))
   // Same attribution start() gets (mycelium.ts), so an inhibitor's records name it in
   // both moments rather than only during startup.
@@ -81,6 +88,7 @@ export function createAdmissionChain(options: {
           requireCapability: (channel, capability) => { membership.requireCapability(channel, capability) },
           rhiza: rhiza(inhibitor),
           has: (name) => inhibitor.resolved.has(name),
+          t: translateFn(translator, inhibitor.name, defaultLocale),
         }
         try {
           const verdict = await inhibitor.instance.inspect(message, ctx)

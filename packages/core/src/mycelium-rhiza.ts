@@ -4,6 +4,7 @@ import type {
   ConversationsRead,
   FormSchema,
   HealthRead,
+  LocaleManage,
   MessagesBroadcast,
   MessagesSend,
   MyceliumScope,
@@ -31,6 +32,8 @@ import {
   addBroadcastTarget, listBroadcastTargets, listConversations, removeBroadcastTarget,
 } from './conversations/registry.js'
 import type { Registry } from './germination/registry.js'
+import { canonicalLocale, setConversationLocale, setPrincipalLocale } from './i18n/locale.js'
+import type { Translator } from './i18n/translator.js'
 import type { Db } from './persistence/db.js'
 import { channelIdentity, pluginSetting, principal, principalRole, role, roleCommand } from './persistence/schema.js'
 import {
@@ -330,6 +333,24 @@ async function broadcast(
   }))
 }
 
+export interface MyceliumApiOptions {
+  /** Guards deleteRole against removing the role every first contact is given. */
+  defaultRole?: string
+  /** Required by locale.manage; createMyceliumApi throws if that scope is granted without it. */
+  translator?: Translator
+}
+
+// The writer's guard the reader depends on: a locale nobody has a catalogue for would be
+// stored, resolved, and then answer in the fallback with nothing to explain why.
+function requireAvailable(translator: Translator, locale: string): string {
+  const canonical = canonicalLocale(locale)
+  const available = translator.availableLocales()
+  if (!available.includes(canonical)) {
+    throw new Error(`no catalogue provides '${canonical}'; available: ${available.join(', ') || 'none'}`)
+  }
+  return canonical
+}
+
 /**
  * Mounts one key per granted scope onto a fresh object — never the full API with keys
  * deleted — so a plugin without a scope has no property to find, not a rejected call.
@@ -340,15 +361,16 @@ export function createMyceliumApi(
   send: (target: PushTarget, content: OutgoingContent) => Promise<void>,
   db: Db,
   sporesDir: string,
-  defaultRole?: string,
+  options?: MyceliumApiOptions,
 ): object {
+  const { defaultRole, translator } = options ?? {}
   const granted = new Set(scopes)
   // No prototype: a global Object.prototype pollution must not forge an absent scope
   // as present through `in`, which is exactly how a caller is expected to check.
   const api = Object.create(null) as Partial<
     PluginsRead & HealthRead & MessagesSend & PrincipalsRead & PrincipalsManage &
     RolesRead & RolesAssign & RolesManage & PluginsToggle & PluginsConfigure &
-    ConversationsRead & MessagesBroadcast & RestrictionsManage
+    ConversationsRead & MessagesBroadcast & RestrictionsManage & LocaleManage
   >
 
   if (granted.has('plugins.read')) api.listPlugins = () => listPlugins(registry, sporesDir, db)
@@ -397,6 +419,16 @@ export function createMyceliumApi(
     api.listBroadcastTargets = () => toPromise(() => listBroadcastTargets(db))
     api.addBroadcastTarget = (target) => toPromise(() => { addBroadcastTarget(db, target) })
     api.removeBroadcastTarget = (target) => toPromise(() => { removeBroadcastTarget(db, target) })
+  }
+  if (granted.has('locale.manage')) {
+    // Fail fast rather than mounting a scope whose availableLocales() would answer [] —
+    // an empty list that doubles as a meaningful value is a false report (phase 5.5).
+    if (translator === undefined) throw new Error('locale.manage was granted with no translator')
+    api.setPrincipalLocale = (id, locale) =>
+      toPromise(() => { setPrincipalLocale(db, id, requireAvailable(translator, locale)) })
+    api.setConversationLocale = (channel, conversationId, locale) =>
+      toPromise(() => { setConversationLocale(db, channel, conversationId, requireAvailable(translator, locale)) })
+    api.availableLocales = () => translator.availableLocales()
   }
 
   return api

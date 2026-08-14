@@ -6,6 +6,8 @@ import type { GerminatedInhibitor, GerminatedRhiza } from '../../src/germination
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import { allInhibitorChannels, setInhibitorChannels } from '../../src/restrictions/rules.js'
 
+const stubTranslator = { translate: (_d: string, key: string) => key, availableLocales: () => ['en'] }
+
 function inhibitor(
   name: string,
   enforcing: boolean,
@@ -45,6 +47,8 @@ function chain(
     membership: { members: () => Promise.resolve(null), requireCapability: () => {} },
     rhiza: () => <T,>() => ({}) as T,
     channelScopes: () => scopes,
+    translator: stubTranslator,
+    defaultLocale: 'en',
   })
   return { admission, warnings, errors, bound }
 }
@@ -242,6 +246,8 @@ describe('createInhibitorContext', () => {
       logger: { info: () => {}, debug: () => {}, warn: () => {}, error: () => {}, child: () => ({}) } as unknown as Logger,
       rhizas: options.rhizas ?? [],
       mycelium: (scopes) => { options.onMycelium?.(scopes); return { scoped: scopes } },
+      translator: stubTranslator,
+      defaultLocale: 'en',
     })
   }
 
