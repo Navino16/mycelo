@@ -102,11 +102,12 @@ export async function germinate(
     // An optional dependency that turned out dormant is not this spore's problem (core
     // spec §6.3): drop it from `resolved` so ctx.has() answers false rather than lying.
     spore.resolved = new Set([...spore.resolved].filter((name) => !failed.has(name)))
-    // Checked before loadModule: a catalogue that does not compile must not pay for a
-    // module import, and must go dormant by name rather than surface at first use (design §7.1).
+    // Checked before loadModule (design §7.1). Held locally, not committed to `catalogs`
+    // until the spore fully germinates: a later module-load or shape failure must not
+    // leave a dormant spore's catalogue behind.
+    let catalog: LocaleMessages = new Map()
     try {
-      const loaded = loadCatalogs(join(spore.read.location.path, 'translations'))
-      if (loaded.size > 0) catalogs.set(manifest.name, loaded)
+      catalog = loadCatalogs(join(spore.read.location.path, 'translations'))
     } catch (e) {
       const reason = (e as Error).message
       dormant.push({ name: manifest.name, reason })
@@ -172,6 +173,7 @@ export async function germinate(
           }
         }
       }
+      if (catalog.size > 0) catalogs.set(manifest.name, catalog)
       if (manifest.kind === 'hypha') {
         hyphae.push({ name: manifest.name, manifest, instance: instance as Hypha, config })
       } else if (manifest.kind === 'rhiza') {

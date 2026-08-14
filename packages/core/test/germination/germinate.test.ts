@@ -552,6 +552,17 @@ it('makes a spore dormant when one of its catalogues does not compile, naming fi
   expect(reason).toContain('ready')
 })
 
+it('drops a dormant spore\'s catalogue instead of keeping it from before the failure', async () => {
+  spore('confrhiza', {
+    'spore.yaml': 'kind: rhiza\nname: confrhiza\nseptum: "^0.4"\n',
+    'src/index.ts': CONFIGURABLE_RHIZA_MODULE,
+    'translations/en.yaml': 'ready: ready\n',
+  })
+  const registry = await germinate(dir, createLogger(), { confrhiza: { token: 42 } })
+  expect(registry.rhizas).toEqual([])
+  expect(registry.catalogs.has('confrhiza')).toBe(false)
+})
+
 it('germinates a spore with no translations directory at all', async () => {
   spore('greeter', textEnzyme('greeter'))
   const registry = await germinate(dir, createLogger())
