@@ -722,4 +722,10 @@ describe('channel capabilities on a command', () => {
     await h.deliver('/movies Dune', 'bob')
     expect(h.sent).toEqual(['Dune (2021) via mock'])
   })
+
+  it('denies a sender with no pattern before ever checking the channel capability', async () => {
+    const h = harness({ commands: [reactCodeCommand], capabilities: [] })
+    await h.deliver('/movies Dune', 'bob')
+    expect(h.sent).toEqual(['denied media.movies'])
+  })
 })
