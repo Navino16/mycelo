@@ -41,8 +41,13 @@ describe('parseSenderLine', () => {
     expect(parseSenderLine('alice@> /whoami')).toEqual({ sender: 'alice', text: '/whoami' })
   })
 
-  it('splits on the first @ of the sender part only, leaving the text untouched', () => {
-    // A mail-shaped word in the text must not become a group.
+  it('does not read an @ in the text as a group marker', () => {
+    expect(parseSenderLine('alice> write to bob@example.com')).toEqual({
+      sender: 'alice', text: 'write to bob@example.com',
+    })
+  })
+
+  it('splits on the first @ of the sender part when both parts contain one', () => {
     expect(parseSenderLine('alice@weekend> write to bob@example.com')).toEqual({
       sender: 'alice', group: 'weekend', text: 'write to bob@example.com',
     })
