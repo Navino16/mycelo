@@ -74,6 +74,15 @@ describe('recordConversation', () => {
     expect(rows[0]?.label).toBe('renamed')
   })
 
+  it('updates kind when a later message on the same conversation differs from the first', () => {
+    const { db, close } = fresh()
+    recordConversation(db, message())
+    recordConversation(db, message({ messageId: 'm2', group: { id: 'g1', name: 'now-a-group' } }))
+    const rows = listConversations(db)
+    close()
+    expect(rows[0]?.kind).toBe('group')
+  })
+
   it('omits label entirely when the channel has never given one', () => {
     const { db, close } = fresh()
     recordConversation(db, message({ sender: { channel: 'console', externalId: 'alice' } }))
@@ -95,5 +104,19 @@ describe('broadcast targets', () => {
     const after = listBroadcastTargets(db)
     close()
     expect(after).toEqual([])
+  })
+
+  it('removes only the matching target, leaving one sharing its channel and one sharing its conversation id', () => {
+    const { db, close } = fresh()
+    const target = { channel: 'console', conversationId: 'c1' }
+    const sameChannel = { channel: 'console', conversationId: 'c2' }
+    const sameConversationId = { channel: 'signal', conversationId: 'c1' }
+    addBroadcastTarget(db, target)
+    addBroadcastTarget(db, sameChannel)
+    addBroadcastTarget(db, sameConversationId)
+    removeBroadcastTarget(db, target)
+    const after = listBroadcastTargets(db)
+    close()
+    expect(after).toEqual([sameChannel, sameConversationId])
   })
 })

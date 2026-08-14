@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'bun:test'
 import type { IncomingMessage, InhibitorContext, Logger, Verdict } from '@mycelo/septum'
 import { createAdmissionChain, createInhibitorContext } from '../../src/admission/chain.js'
+import { recordInstall } from '../../src/config/store.js'
 import type { GerminatedInhibitor, GerminatedRhiza } from '../../src/germination/registry.js'
+import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
+import { allInhibitorChannels, setInhibitorChannels } from '../../src/restrictions/rules.js'
 
 function inhibitor(
   name: string,
@@ -192,6 +195,22 @@ describe('inhibitor channel confinement', () => {
     const { admission } = chain([], ['gate'])
     expect((await admission.admit(messageOn('console'))).allow).toBe(false)
     expect((await admission.admit(messageOn('signal'))).allow).toBe(false)
+  })
+
+  // Builds the confinement map through the store, not a literal, so a defect in
+  // allInhibitorChannels that collapses multiple channels to one shows up here too.
+  it('confines an inhibitor to every channel recorded for it, not just the last one read', async () => {
+    const { db, close } = openDatabase(':memory:')
+    migrateDatabase(db)
+    recordInstall(db, 'gate', 'inhibitor')
+    setInhibitorChannels(db, 'gate', ['console', 'signal'])
+    const scopes = allInhibitorChannels(db)
+    close()
+    const gate = inhibitor('gate', false, () => Promise.resolve({ allow: false, reason: 'no' }))
+    const { admission } = chain([gate], [], scopes)
+    expect((await admission.admit(messageOn('console'))).allow).toBe(false)
+    expect((await admission.admit(messageOn('signal'))).allow).toBe(false)
+    expect((await admission.admit(messageOn('discord'))).allow).toBe(true)
   })
 })
 

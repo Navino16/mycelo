@@ -556,6 +556,13 @@ describe('conversations.read and messages.broadcast', () => {
     const api = createMyceliumApi(emptyRegistry(), ['messages.broadcast'], noSend, fresh(), SPORES) as Partial<MessagesBroadcast>
     expect(await api.broadcast?.({ text: 'hello' })).toEqual([])
   })
+
+  it('mounts broadcast only under messages.broadcast', () => {
+    const granted = createMyceliumApi(emptyRegistry(), ['messages.broadcast'], noSend, fresh(), SPORES) as Partial<MessagesBroadcast>
+    const denied = createMyceliumApi(emptyRegistry(), [], noSend, fresh(), SPORES)
+    expect(typeof granted.broadcast).toBe('function')
+    expect('broadcast' in denied).toBe(false)
+  })
 })
 
 describe('restrictions.manage', () => {

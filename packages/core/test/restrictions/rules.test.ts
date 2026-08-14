@@ -26,6 +26,16 @@ describe('context rules', () => {
     expect(after).toEqual([])
   })
 
+  it('clears only the named pattern, leaving other rules in place', () => {
+    const { db, close } = fresh()
+    setContextRule(db, 'admin.*', 'dm')
+    setContextRule(db, 'media.*', 'group')
+    clearContextRule(db, 'admin.*')
+    const after = listContextRules(db)
+    close()
+    expect(after).toEqual([{ pattern: 'media.*', where: 'group' }])
+  })
+
   it('rejects a pattern outside the three known forms', () => {
     const { db, close } = fresh()
     expect(() => setContextRule(db, 'admin.*.x', 'dm')).toThrow("pattern 'admin.*.x' is not one of")
@@ -64,6 +74,15 @@ describe('inhibitor channels', () => {
     expect(restored).toEqual([])
   })
 
+  it('accepts the same channel listed twice, storing it only once', () => {
+    const { db, close } = fresh()
+    recordInstall(db, 'gate', 'inhibitor')
+    setInhibitorChannels(db, 'gate', ['console', 'console'])
+    const channels = inhibitorChannels(db, 'gate')
+    close()
+    expect(channels).toEqual(['console'])
+  })
+
   it('rejects a plugin that is not installed', () => {
     const { db, close } = fresh()
     expect(() => setInhibitorChannels(db, 'ghost', ['console'])).toThrow("plugin 'ghost' is not installed")
@@ -85,5 +104,14 @@ describe('inhibitor channels', () => {
     close()
     expect(map.get('gate')).toEqual(['console'])
     expect(map.get('other')).toBeUndefined()
+  })
+
+  it('confines an inhibitor to every channel it was given, not just the last one read', () => {
+    const { db, close } = fresh()
+    recordInstall(db, 'gate', 'inhibitor')
+    setInhibitorChannels(db, 'gate', ['console', 'signal'])
+    const map = allInhibitorChannels(db)
+    close()
+    expect(map.get('gate')).toEqual(['console', 'signal'])
   })
 })
