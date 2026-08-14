@@ -12,6 +12,7 @@
   "dependencies": {
     "@mycelo/septum": "^0.7.0",
     "drizzle-orm": "^0.45.2",
+    "intl-messageformat": "^11.2.13",
     "yaml": "^2.9.0",
     "zod": "^4.4.3"
   }
