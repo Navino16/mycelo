@@ -1,0 +1,6 @@
+yes: "oui"
+no: "non"
+none: "aucun"
+cancelled: "annulé"
+error: "erreur"
+unknown: "inconnu"
