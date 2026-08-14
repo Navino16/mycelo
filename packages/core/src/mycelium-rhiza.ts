@@ -16,6 +16,7 @@ import type {
   PrincipalsManage,
   PrincipalsRead,
   PushTarget,
+  RestrictionsManage,
   RhizaHealth,
   RoleInfo,
   RolesAssign,
@@ -26,10 +27,15 @@ import type {
 import { formSchemaFor } from './config/jsonschema.js'
 import { enablePlugin, findSpore, loadSporeModule } from './config/lifecycle.js'
 import { getInstall, listInstalls, setEnabled, writeSetting } from './config/store.js'
-import { listBroadcastTargets, listConversations } from './conversations/registry.js'
+import {
+  addBroadcastTarget, listBroadcastTargets, listConversations, removeBroadcastTarget,
+} from './conversations/registry.js'
 import type { Registry } from './germination/registry.js'
 import type { Db } from './persistence/db.js'
 import { channelIdentity, pluginSetting, principal, principalRole, role, roleCommand } from './persistence/schema.js'
+import {
+  clearContextRule, inhibitorChannels, listContextRules, setContextRule, setInhibitorChannels,
+} from './restrictions/rules.js'
 import { describeThrown } from './support/thrown.js'
 
 // germinate.ts skips a disabled install before it can ever become a registry entry —
@@ -342,7 +348,7 @@ export function createMyceliumApi(
   const api = Object.create(null) as Partial<
     PluginsRead & HealthRead & MessagesSend & PrincipalsRead & PrincipalsManage &
     RolesRead & RolesAssign & RolesManage & PluginsToggle & PluginsConfigure &
-    ConversationsRead & MessagesBroadcast
+    ConversationsRead & MessagesBroadcast & RestrictionsManage
   >
 
   if (granted.has('plugins.read')) api.listPlugins = () => listPlugins(registry, sporesDir, db)
@@ -381,6 +387,16 @@ export function createMyceliumApi(
     api.settings = (name) => toPromise(() => redactSecrets(db, name))
     api.setSetting = (name, key, value) => writeDeclaredSetting(db, sporesDir, name, key, value)
     api.formSchema = (name) => formSchemaOf(db, sporesDir, name)
+  }
+  if (granted.has('restrictions.manage')) {
+    api.listContextRules = () => toPromise(() => listContextRules(db))
+    api.setContextRule = (pattern, where) => toPromise(() => { setContextRule(db, pattern, where) })
+    api.clearContextRule = (pattern) => toPromise(() => { clearContextRule(db, pattern) })
+    api.inhibitorChannels = (name) => toPromise(() => inhibitorChannels(db, name))
+    api.setInhibitorChannels = (name, channels) => toPromise(() => { setInhibitorChannels(db, name, channels) })
+    api.listBroadcastTargets = () => toPromise(() => listBroadcastTargets(db))
+    api.addBroadcastTarget = (target) => toPromise(() => { addBroadcastTarget(db, target) })
+    api.removeBroadcastTarget = (target) => toPromise(() => { removeBroadcastTarget(db, target) })
   }
 
   return api

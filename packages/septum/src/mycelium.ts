@@ -20,6 +20,7 @@ export const MYCELIUM_SCOPES = [
   'messages.send',
   'messages.broadcast',
   'conversations.read',
+  'restrictions.manage',
 ] as const
 
 export type MyceliumScope = (typeof MYCELIUM_SCOPES)[number]
