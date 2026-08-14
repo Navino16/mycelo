@@ -182,6 +182,41 @@ describe('createAdmissionChain', () => {
     // would make a looser assertion pass for the wrong reason — t absent, not t refusing.
     expect(errors.join(' ')).toContain("translation domain 'radarr' is not declared")
   })
+
+  it("binds each inhibitor's own domain in admit()'s context, not the first one processed", async () => {
+    const calls: string[] = []
+    const spyTranslator = {
+      translate: (domain: string, key: string) => { calls.push(`${domain}|${key}`); return key },
+      availableLocales: () => ['en'],
+    }
+    const first = inhibitor('aaa', false, () => Promise.resolve({ allow: true }))
+    const second = {
+      name: 'zzz', config: {}, resolved: new Set<string>(), scopes: [],
+      manifest: { kind: 'inhibitor', name: 'zzz', septum: '^0.5', enforcing: false },
+      instance: {
+        inspect: (_msg: IncomingMessage, ctx: InhibitorContext) => {
+          ctx.t('greeting')
+          return Promise.resolve({ allow: true })
+        },
+      },
+    } as unknown as GerminatedInhibitor
+    const noopLogger: Logger = {
+      info() {}, debug() {}, warn() {}, error() {}, child: () => noopLogger,
+    }
+    const admission = createAdmissionChain({
+      inhibitors: [first, second], brokenEnforcing: [],
+      logger: noopLogger,
+      membership: { members: () => Promise.resolve(null), requireCapability: () => {} },
+      rhiza: () => <T,>() => ({}) as T,
+      channelScopes: () => new Map(),
+      translator: spyTranslator,
+      defaultLocale: 'en',
+    })
+    await admission.admit(message)
+    // Sorted alphabetically ('aaa' before 'zzz'), so a domain fixed to the first
+    // inhibitor processed would still bind 'aaa' here instead of 'zzz'.
+    expect(calls).toEqual(['zzz|greeting'])
+  })
 })
 
 describe('inhibitor channel confinement', () => {

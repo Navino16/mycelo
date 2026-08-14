@@ -559,6 +559,26 @@ it('germinates a spore with no translations directory at all', async () => {
   expect(registry.catalogs.has('greeter')).toBe(false)
 })
 
+it('makes a MANDATORY dependent dormant when a broken catalogue fails a rhiza, never importing its own module', async () => {
+  // Marker written at import time, mirroring the module-load-failure cascade test above:
+  // proves the dependent never got far enough to load, not merely that it ended up dormant.
+  const marker = join(dir, 'needs-broken-loaded')
+  spore('broken-rhiza', {
+    'spore.yaml': 'kind: rhiza\nname: broken-rhiza\nseptum: "^0.4"\n',
+    'src/index.ts': 'export default { create: () => ({ ping: async () => "pong" }) }\n',
+    'translations/es.yaml': 'ready: "type {help"\n',
+  })
+  spore('needs-it', {
+    'spore.yaml': 'kind: enzyme\nname: needs-it\nseptum: "^0.4"\nrequires:\n  - rhiza: broken-rhiza\ncommands:\n  - name: hi\n    description: x\n    respond: hi\n',
+    'src/index.ts': `import { writeFileSync } from 'node:fs'\nwriteFileSync(${JSON.stringify(marker)}, 'loaded')\nexport default { create: () => ({ handlers: {} }) }\n`,
+  })
+  const registry = await germinate(dir, createLogger())
+  expect(registry.enzymes).toEqual([])
+  expect(registry.dormant.find((d) => d.name === 'needs-it')?.reason)
+    .toContain("requires rhiza 'broken-rhiza', which is dormant")
+  expect(existsSync(marker)).toBe(false)
+})
+
 it('refuses a spore that claims a reserved domain name', async () => {
   for (const reserved of ['core', 'common']) {
     spore(reserved, textEnzyme(reserved))
