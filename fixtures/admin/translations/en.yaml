@@ -1,0 +1,14 @@
+lang:
+  usage: "usage: lang '<locale>'"
+  usage-group: "usage: lang-group '<locale>'"
+  set: "your language is now {locale}"
+  set-group: "this conversation now answers in {locale}"
+  group-only: "lang-group only makes sense in a group"
+command:
+  lang:
+    description: "Choose the language the bot answers you in"
+  lang-group:
+    description: "Choose the language this conversation answers in"
+arg:
+  locale:
+    description: "A language tag, such as en or fr"
