@@ -45,16 +45,16 @@ describe('aggregateRuntimeHealth', () => {
       status: 'germinated' as const,
       mycelium: {
         registry: registry({
-          dormant: [{ name: 'gate', reason: 'boom' }],
+          dormant: [{ name: 'other', reason: 'boom' }],
           brokenEnforcing: ['gate'],
         }),
       },
     } as unknown as Germination
     const health = await aggregateRuntimeHealth(germination)
-    // Merging them would render a bot that has stopped answering everyone as one
-    // missing feature (spec §11).
+    // Disjoint fixture values: a swap between the two source fields must be distinguishable,
+    // not merely absent from dormant (spec §11).
     expect(health.enforcingBlocked).toEqual(['gate'])
-    expect(health.dormant).toHaveLength(1)
+    expect(health.dormant).toEqual([{ name: 'other', reason: 'boom' }])
   })
 
   it('answers starting as degraded rather than inventing a third mode', async () => {
