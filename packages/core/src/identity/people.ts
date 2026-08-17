@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, count, eq, inArray, isNotNull, isNull, like, or } from 'drizzle-orm'
 import type { Principal } from '@mycelo/septum'
 import type { Db } from '../persistence/db.js'
 import { channelIdentity, principal, principalRole, role } from '../persistence/schema.js'
@@ -75,4 +75,50 @@ export function rolesOf(db: Db, principalId: string): readonly string[] {
     .where(eq(principalRole.principalId, principalId))
     .all()
     .map((r) => r.name)
+}
+
+export interface PeopleQuery {
+  page: number
+  perPage: number
+  search?: string
+  reviewed?: boolean
+}
+
+export interface PeoplePage {
+  items: readonly Principal[]
+  total: number
+  page: number
+  perPage: number
+}
+
+/** A person is one principal across several channel identities (spec §5.4, UI brief §9). */
+export function searchPrincipals(db: Db, query: PeopleQuery): PeoplePage {
+  const conditions = []
+  if (query.search !== undefined && query.search !== '') {
+    const needle = `%${query.search}%`
+    // Two queries, not a raw sql subquery (task-13 brief): matches on either the
+    // channel's own display name or its external id.
+    const matchingIds = db.select({ principalId: channelIdentity.principalId }).from(channelIdentity)
+      .where(or(like(channelIdentity.externalId, needle), like(channelIdentity.displayName, needle)))
+      .all().map((r) => r.principalId)
+    conditions.push(or(like(principal.displayName, needle), inArray(principal.id, matchingIds)))
+  }
+  if (query.reviewed === true) conditions.push(isNotNull(principal.reviewedAt))
+  if (query.reviewed === false) conditions.push(isNull(principal.reviewedAt))
+  const where = conditions.length === 0 ? undefined : and(...conditions)
+
+  const total = db.select({ n: count() }).from(principal).where(where).get()?.n ?? 0
+  const rows = db.select({ id: principal.id }).from(principal).where(where)
+    // (createdAt, id): two principals created in the same millisecond would otherwise
+    // order non-deterministically, and page 2 could repeat a row from page 1.
+    .orderBy(principal.createdAt, principal.id)
+    .limit(query.perPage)
+    .offset((query.page - 1) * query.perPage)
+    .all()
+  const items = rows.map((r) => {
+    const p = loadPrincipal(db, r.id)
+    if (p === null) throw new Error(`principal '${r.id}' vanished mid-listing`)
+    return p
+  })
+  return { items, total, page: query.page, perPage: query.perPage }
 }

@@ -150,10 +150,9 @@ describe('every api.* key renders its own catalogue text, not a fallback key', (
     expect(response.json<{ error: { message: string } }>().error.message).toBe('the request body is invalid')
   })
 
-  it('api.invalidQuery — rendered directly, since no route calls parseQuery yet', () => {
-    // parseQuery has no reachable HTTP route (pre-existing, not introduced by this task),
-    // so this proves the key/catalogue correspondence at the same rendering call the HTTP
-    // cases above use, without a route to carry it.
+  it('api.invalidQuery — rendered directly, at the same call the HTTP route now also uses', () => {
+    // The HTTP path is covered too: test/api/people.test.ts's malformed-query-string test
+    // (GET /api/people). Kept here as the unit-level pin on the key/catalogue correspondence.
     start()
     let caught: unknown
     try { parseQuery(z.object({ x: z.string() }), {}) } catch (e) { caught = e }
