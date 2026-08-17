@@ -68,7 +68,7 @@ export function setRoleCommands(db: Db, name: string, patterns: readonly string[
   })
 }
 
-export function deleteRole(db: Db, name: string, defaultRole?: string): void {
+export function deleteRole(db: Db, name: string, defaultRole: string | undefined): void {
   const found = findRole(db, name)
   if (found === undefined) throw new StoreRefusal('role-unknown', `role '${name}' does not exist`)
   if (found.builtin) {

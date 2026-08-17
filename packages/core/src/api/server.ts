@@ -10,6 +10,8 @@ import { registerContext } from './context.js'
 import { registerAuthRoutes } from './routes/auth.js'
 import { registerPeopleRoutes } from './routes/people.js'
 import { registerPluginRoutes } from './routes/plugins.js'
+import { registerRegistryRoutes } from './routes/registry.js'
+import { registerRoleRoutes } from './routes/roles.js'
 import { describeThrown } from '../support/thrown.js'
 
 export interface ServerOptions {
@@ -80,6 +82,8 @@ export function createServer(options: ServerOptions): FastifyInstance {
     registerAuthRoutes(app, options.state)
     registerPeopleRoutes(app, options.state)
     registerPluginRoutes(app, options.state)
+    registerRoleRoutes(app, options.state)
+    registerRegistryRoutes(app, options.state)
   })
   return app
 }

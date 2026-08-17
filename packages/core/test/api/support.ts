@@ -7,6 +7,8 @@ import { SESSION_COOKIE } from '../../src/api/sessions.js'
 import { germinatePhase } from '../../src/boot/germinate.js'
 import { serve } from '../../src/boot/serve.js'
 import type { Served } from '../../src/boot/serve.js'
+import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
+import { role } from '../../src/persistence/schema.js'
 import { createLogger } from '../../src/support/logger.js'
 
 export interface Booted {
@@ -18,9 +20,18 @@ export function freshDir(): string {
   return mkdtempSync(join(tmpdir(), 'mycelo-api-'))
 }
 
-/** `extra` is raw YAML appended to a minimal `mycelo.yaml`; `trustProxy` defaults to off. */
-export function boot(dir: string, extra = '', trustProxy = false, sporesDir = './none'): Booted {
+/**
+ * `extra` is raw YAML appended to a minimal `mycelo.yaml`; `trustProxy` defaults to off.
+ * `beforeServe`, if given, runs against the database file before `serve()` opens it —
+ * for seeding a row `bootstrapIdentity` must find already there (e.g. a configured
+ * `defaultRole` that has to name an existing role or `serve()` itself throws).
+ */
+export function boot(
+  dir: string, extra = '', trustProxy = false, sporesDir = './none',
+  beforeServe?: (dbFile: string) => void,
+): Booted {
   writeFileSync(join(dir, 'mycelo.yaml'), `spores: ${sporesDir}\ndatabase: ./d.db\n${extra}`, 'utf8')
+  beforeServe?.(join(dir, 'd.db'))
   const served = serve(join(dir, 'mycelo.yaml'))
   const app = createServer({ trustProxy, state: served.state })
   return { app, served }
@@ -94,6 +105,84 @@ export const configurable: SporeWriter = configurableSpore(['token'])
 /** Two required settings: the plural case an `issues[0]` implementation would miss. */
 export const configurableTwoFields: SporeWriter = configurableSpore(['url', 'token'])
 
+// Two plugins, two commands each, and every command name disjoint from its plugin's own
+// name — a fixture where a plugin's name equalled one of its commands could not tell
+// grouping (by plugin) apart from naming (of the command) if either collapsed. Each
+// description is a real catalogue key so the route's translate() call finds it and the
+// test output carries no "no translation for" warning.
+export const twoPluginsTwoCommands: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'greeter', {
+    'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^0.7"\ncommands:\n'
+      + '  - name: hello\n    description: command.hello.description\n    respond: hello.text\n'
+      + '  - name: farewell\n    description: command.farewell.description\n    respond: farewell.text\n',
+    'translations/en.yaml': 'command:\n  hello:\n    description: Say hello\n  farewell:\n    description: Say goodbye\n'
+      + 'hello:\n  text: Hi\nfarewell:\n  text: Bye\n',
+  })
+  writeSpore(sporesDir, 'counter', {
+    'spore.yaml': 'kind: enzyme\nname: counter\nseptum: "^0.7"\ncommands:\n'
+      + '  - name: tally\n    description: command.tally.description\n    respond: tally.text\n'
+      + '  - name: reset\n    description: command.reset.description\n    respond: reset.text\n',
+    'translations/en.yaml': 'command:\n  tally:\n    description: Count things\n  reset:\n    description: Reset the count\n'
+      + 'tally:\n  text: Counted\nreset:\n  text: Zeroed\n',
+  })
+}
+
+// One plugin, two commands, one declaring a capability and one declaring none — the
+// plural case for CommandDto.capabilities, self-contained so it carries no warning from
+// any other fixture's untranslated description.
+export const capabilityCommand: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'signaler', {
+    'spore.yaml': 'kind: enzyme\nname: signaler\nseptum: "^0.7"\ncommands:\n'
+      + '  - name: plain\n    description: command.plain.description\n    respond: plain.text\n'
+      + '  - name: flagged\n    description: command.flagged.description\n    respond: flagged.text\n'
+      + '    capabilities: [reactions]\n',
+    'translations/en.yaml': 'command:\n  plain:\n    description: Plain command\n  flagged:\n    description: Flagged command\n'
+      + 'plain:\n  text: ok\nflagged:\n  text: ok\n',
+  })
+}
+
+// One command whose description is a real catalogue key with distinct en/fr text — the
+// fixture for proving /api/commands renders through the declaring plugin's own domain,
+// in the reader's locale, without the noise of every other fixture's untranslated ones.
+export const translatedCommand: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'announcer', {
+    'spore.yaml': 'kind: enzyme\nname: announcer\nseptum: "^0.7"\ncommands:\n'
+      + '  - name: shout\n    description: command.shout.description\n    respond: shout.text\n',
+    'translations/en.yaml': 'command:\n  shout:\n    description: Announce loudly\nshout:\n  text: Loud!\n',
+    'translations/fr.yaml': 'command:\n  shout:\n    description: Annoncer bruyamment\nshout:\n  text: Fort !\n',
+  })
+}
+
+// Duck-typed, no septum import: a spore under /tmp has no node_modules to resolve it
+// through. Satisfies rhizaShapeError's three required methods and a non-null api.
+const RHIZA_STUB = `
+  export default {
+    create: () => ({
+      start: () => Promise.resolve(),
+      stop: () => Promise.resolve(),
+      health: () => Promise.resolve({ state: 'healthy', checkedAt: new Date() }),
+      api: {},
+    }),
+  }
+`
+
+// One enzyme with two dependencies, mandatory and optional to two different rhizas — the
+// plural case for /api/graph, whose edges must distinguish the two, not just report one.
+export const mandatoryAndOptionalDependency: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'coreconn', {
+    'spore.yaml': 'kind: rhiza\nname: coreconn\nseptum: "^0.7"\n', 'src/index.ts': RHIZA_STUB,
+  })
+  writeSpore(sporesDir, 'sideconn', {
+    'spore.yaml': 'kind: rhiza\nname: sideconn\nseptum: "^0.7"\n', 'src/index.ts': RHIZA_STUB,
+  })
+  writeSpore(sporesDir, 'grapher', {
+    // A respond: command needs no module (enzymeManifestSchema requires at least one command).
+    'spore.yaml': 'kind: enzyme\nname: grapher\nseptum: "^0.7"\ncommands:\n'
+      + '  - name: noop\n    description: No-op\n    respond: noop.text\n'
+      + 'requires:\n  - rhiza: coreconn\n  - rhiza: sideconn\n    optional: true\n',
+  })
+}
+
 export interface Credentials {
   username: string
   password: string
@@ -126,6 +215,14 @@ export interface LoggedIn extends Booted {
 export interface BootAndLoginOptions {
   /** Writes its own spores into a fresh directory; omitted boots against the real fixtures. */
   spores?: SporeWriter
+  /** Extra YAML appended to mycelo.yaml, e.g. 'defaultRole: guest\n'. */
+  config?: string
+  /**
+   * A plain role of this name is inserted before boot. Needed whenever `config` names a
+   * `defaultRole`: `bootstrapIdentity` throws a `StartupError` if that role does not already
+   * exist, before this helper ever gets to open a session.
+   */
+  seedRole?: string
 }
 
 /**
@@ -140,7 +237,14 @@ export async function bootAndLogin(options: BootAndLoginOptions = {}): Promise<L
     mkdirSync(sporesDir, { recursive: true })
     options.spores(sporesDir)
   }
-  const booted = boot(dir, '', false, sporesDir)
+  const seedRole = options.seedRole
+  const beforeServe = seedRole === undefined ? undefined : (dbFile: string): void => {
+    const { db, close } = openDatabase(dbFile)
+    migrateDatabase(db)
+    db.insert(role).values({ id: crypto.randomUUID(), name: seedRole }).run()
+    close()
+  }
+  const booted = boot(dir, options.config ?? '', false, sporesDir, beforeServe)
   await germinatePhase(booted.served.state, createLogger())
   const cookie = await setup(booted.app)
   return { ...booted, cookie, dir }

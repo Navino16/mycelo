@@ -23,3 +23,8 @@ api:
   pluginSettingUndeclared: "le plugin « {plugin} » ne déclare aucun paramètre nommé : {keys}"
   personNotFound: "aucune personne avec l'id « {id} »"
   roleNotFound: "aucun rôle nommé « {role} »"
+  roleExists: "le rôle « {role} » existe déjà"
+  roleNameEmpty: "un nom de rôle ne peut pas être vide"
+  roleBuiltin: "le rôle « {role} » est intégré et ne peut pas être modifié"
+  roleIsDefault: "le rôle « {role} » est le rôle par défaut configuré et ne peut pas être supprimé"
+  patternDuplicate: "un motif est listé deux fois"

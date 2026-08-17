@@ -23,3 +23,8 @@ api:
   pluginSettingUndeclared: "plugin ''{plugin}'' declares no setting named: {keys}"
   personNotFound: "no person with id ''{id}''"
   roleNotFound: "no role named ''{role}''"
+  roleExists: "role ''{role}'' already exists"
+  roleNameEmpty: "a role name cannot be empty"
+  roleBuiltin: "role ''{role}'' is builtin and cannot be changed"
+  roleIsDefault: "role ''{role}'' is the configured default role and cannot be deleted"
+  patternDuplicate: "a pattern is listed twice"
