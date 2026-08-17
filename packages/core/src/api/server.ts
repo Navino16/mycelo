@@ -2,6 +2,7 @@ import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
 import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
+import { ZodError } from 'zod'
 import type { UiConfig } from '../config.js'
 import type { RuntimeState } from '../boot/state.js'
 import { ApiError } from './errors.js'
@@ -31,6 +32,15 @@ export function createServer(options: ServerOptions): FastifyInstance {
           message: error.message,
           ...(error.detail === undefined ? {} : { detail: error.detail }),
         },
+      })
+      return
+    }
+    // §9: a route's own body/query is parsed through parseBody/parseQuery, which already wrap
+    // a ZodError as `badRequest`. This is the fallback for a bare one that reaches here some
+    // other way — core's own zod, never a plugin's, so `instanceof` is sound here.
+    if (error instanceof ZodError) {
+      void reply.status(400).send({
+        error: { code: 'validation', message: 'the request is invalid', detail: error.issues },
       })
       return
     }

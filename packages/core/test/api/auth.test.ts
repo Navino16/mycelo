@@ -1,8 +1,12 @@
 import { rmSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import { count } from 'drizzle-orm'
 import type { FastifyInstance } from 'fastify'
+import { z } from 'zod'
 import { boot, closeBooted, freshDir, setup } from './support.js'
 import type { Booted } from './support.js'
+import { principal, principalRole, uiCredential } from '../../src/persistence/schema.js'
+import type { Db } from '../../src/persistence/db.js'
 
 let dir: string
 let booted: Booted | undefined
@@ -17,6 +21,12 @@ afterEach(async () => {
 function start(extra = '', trustProxy = false): FastifyInstance {
   booted = boot(dir, extra, trustProxy)
   return booted.app
+}
+
+/** Only valid after `start()`: the row-count assertions below need the raw handle. */
+function db(): Db {
+  if (booted === undefined) throw new Error('start() must run before db()')
+  return booted.served.state.db
 }
 
 describe('the setup lock', () => {
@@ -69,13 +79,72 @@ describe('the setup lock', () => {
 
   it('refuses a setup password shorter than 8 characters', async () => {
     // Ruling from task 9's review: the length policy lives in the route schema, as a 400
-    // naming the field, not inside createCredential's throw (which would surface as a 500).
+    // naming the field, not inside the store's own throw (which would surface as a 500).
     const a = start()
     const response = await a.inject({
       method: 'POST', url: '/api/setup', payload: { username: 'alice', password: 'short' },
     })
     expect(response.statusCode).toBe(400)
     expect(response.json<{ error: { code: string } }>().error.code).toBe('validation')
+  })
+
+  it('refuses a whitespace-only username with 400, and leaves no principal behind', async () => {
+    // Review, Important 2 and 3: the exact repro that used to create an orphan owner
+    // principal and answer 409. Zod now rejects it before ownerPrincipal ever runs.
+    const a = start()
+    const response = await a.inject({
+      method: 'POST', url: '/api/setup', payload: { username: '   ', password: 'correct horse' },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(response.json<{ error: { code: string } }>().error.code).toBe('validation')
+    expect(db().select({ n: count() }).from(principal).get()?.n).toBe(0)
+  })
+
+  it('lets exactly one of two concurrent setups win, with no owner configured', async () => {
+    // Review, Critical 1: reproduced with no owner: block — the branch where each request
+    // minted its own principal, so the primary key that "guards" per §6.4 never fired.
+    const a = start()
+    const [r1, r2] = await Promise.all([
+      a.inject({
+        method: 'POST', url: '/api/setup', payload: { username: 'alice', password: 'correct horse' },
+      }),
+      a.inject({
+        method: 'POST', url: '/api/setup', payload: { username: 'attacker', password: 'whatever12' },
+      }),
+    ])
+    expect([r1.statusCode, r2.statusCode].sort()).toEqual([200, 409])
+    expect(db().select({ n: count() }).from(uiCredential).get()?.n).toBe(1)
+    expect(db().select({ n: count() }).from(principal).get()?.n).toBe(1)
+    expect(db().select({ n: count() }).from(principalRole).get()?.n).toBe(1)
+  })
+
+  it('lets exactly one of two concurrent setups win, with a configured owner', async () => {
+    // The PK-collision path the review found already worked (both requests resolve the
+    // same principal), kept as a regression guard alongside the branch that did not.
+    const a = start('owner:\n  channel: console\n  userId: owner-on-console\n')
+    const [r1, r2] = await Promise.all([
+      a.inject({
+        method: 'POST', url: '/api/setup', payload: { username: 'alice', password: 'correct horse' },
+      }),
+      a.inject({
+        method: 'POST', url: '/api/setup', payload: { username: 'attacker', password: 'whatever12' },
+      }),
+    ])
+    expect([r1.statusCode, r2.statusCode].sort()).toEqual([200, 409])
+    expect(db().select({ n: count() }).from(uiCredential).get()?.n).toBe(1)
+  })
+
+  it('maps a bare ZodError to the §9 validation shape', async () => {
+    // Spec gap the review found: setErrorHandler mapped no ZodError. Declared before any
+    // request so it lands before the instance starts (Fastify forbids adding routes after).
+    const a = start()
+    a.get('/test-zod-error', () => { z.object({ x: z.string() }).parse({}) })
+    await setup(a)
+    const response = await a.inject({ method: 'GET', url: '/test-zod-error' })
+    expect(response.statusCode).toBe(400)
+    const body = response.json<{ error: { code: string, detail: unknown } }>()
+    expect(body.error.code).toBe('validation')
+    expect(Array.isArray(body.error.detail)).toBe(true)
   })
 })
 
@@ -125,14 +194,18 @@ describe('authentication', () => {
   })
 
   it('binds the account to the configured owner principal', async () => {
-    const a = start('owner:\n  channel: console\n  userId: alice\n')
+    // userId deliberately differs from setup()'s username ('alice'): a route that looked up
+    // channel_identity by the submitted username instead of config.owner.userId would pass
+    // this test unchanged if the two strings matched (review finding, Important 4).
+    const a = start('owner:\n  channel: console\n  userId: owner-on-console\n')
     const cookie = await setup(a)
     const me = (await a.inject({ method: 'GET', url: '/api/me', headers: { cookie } })).json<Record<string, unknown>>()
     // spec §6.4: the same principal, so the channel identity is already attached and the
     // owner role comes for free.
     expect(me).toMatchObject({
+      username: 'alice',
       roles: ['owner'],
-      identities: [{ channel: 'console', externalId: 'alice' }],
+      identities: [{ channel: 'console', externalId: 'owner-on-console' }],
     })
   })
 

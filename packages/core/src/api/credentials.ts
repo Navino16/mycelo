@@ -6,6 +6,16 @@ export function hasCredential(db: Db): boolean {
   return db.select({ id: uiCredential.principalId }).from(uiCredential).get() !== undefined
 }
 
+/**
+ * Assumes the hash is already computed. Used by the setup route inside a `db.transaction`,
+ * which on bun:sqlite runs its callback synchronously — nothing here may `await`.
+ */
+export function insertCredential(db: Db, principalId: string, username: string, passwordHash: string): void {
+  db.insert(uiCredential)
+    .values({ principalId, username, passwordHash, createdAt: new Date() })
+    .run()
+}
+
 export async function createCredential(
   db: Db, principalId: string, username: string, password: string,
 ): Promise<void> {
@@ -14,9 +24,7 @@ export async function createCredential(
   // Bun.password defaults to argon2id at m=65536,t=2,p=1 — above the OWASP floor, so the
   // defaults are taken as they come (spec §6.1).
   const passwordHash = await Bun.password.hash(password)
-  db.insert(uiCredential)
-    .values({ principalId, username, passwordHash, createdAt: new Date() })
-    .run()
+  insertCredential(db, principalId, username, passwordHash)
 }
 
 export async function verifyCredential(db: Db, username: string, password: string): Promise<string | null> {

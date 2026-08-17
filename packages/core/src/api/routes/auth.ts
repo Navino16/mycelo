@@ -7,15 +7,17 @@ import { loadPrincipal } from '../../identity/people.js'
 import { principal as principalTable, channelIdentity, uiCredential } from '../../persistence/schema.js'
 import { and, eq } from 'drizzle-orm'
 import {
-  changePassword, createCredential, hasCredential, verifyCredential,
+  changePassword, hasCredential, insertCredential, verifyCredential,
 } from '../credentials.js'
 import { SESSION_COOKIE, closeSession, closeSessionsFor, openSession } from '../sessions.js'
 import { badRequest, conflict, notFound, unauthenticated } from '../errors.js'
 import { parseBody, requirePrincipalId } from '../parse.js'
 import { setSessionCookie } from '../cookies.js'
 
+// .trim() so a whitespace-only username is a 400 (§9) at the schema, never reaching the
+// store's own check — which would otherwise surface as a 409 (review finding, Important 3).
 const setupSchema = z.object({
-  username: z.string().min(1),
+  username: z.string().trim().min(1),
   password: z.string().min(8),
 })
 
@@ -55,13 +57,29 @@ export function registerAuthRoutes(app: FastifyInstance, state: RuntimeState): v
   app.get('/api/setup', () => ({ required: !hasCredential(state.db) }))
 
   app.post('/api/setup', async (request, reply) => {
-    if (hasCredential(state.db)) throw conflict('a UI account already exists')
     const body = parseBody(setupSchema, request.body)
-    const principalId = ownerPrincipal(state)
+    // Fast-fail before hashing: cheap, and avoids paying for argon2 on the common case of a
+    // wizard that already ran. It is not the guard that makes this safe — see below.
+    if (hasCredential(state.db)) throw conflict('a UI account already exists')
+    const passwordHash = await Bun.password.hash(body.password)
+    let principalId: string
     try {
-      await createCredential(state.db, principalId, body.username, body.password)
+      // Critical 1 (review): the actual guard. `await Bun.password.hash` above is the gap two
+      // concurrent setups raced through — the check above and the store's own check both ran
+      // before either request's hash resolved, so neither saw the other's row. Everything from
+      // here down is synchronous (bun:sqlite's `transaction()` callback cannot await), which
+      // under Bun's single-threaded event loop means no other request's code can interleave
+      // between this re-check and the insert. The transaction also rolls back the principal
+      // `ownerPrincipal` may have just created if the insert below still fails (Important 2).
+      principalId = state.db.transaction(() => {
+        if (hasCredential(state.db)) throw new Error('a UI account already exists')
+        const id = ownerPrincipal(state)
+        insertCredential(state.db, id, body.username, passwordHash)
+        return id
+      })
     } catch (e) {
-      // The primary key is what makes two simultaneous setups safe; the loser lands here.
+      // Reached only for a genuine duplicate now: the schema above rejects a bad username
+      // before this point, so nothing validation-shaped lands here to be mislabelled.
       throw conflict((e as Error).message)
     }
     setSessionCookie(reply, openSession(state.db, principalId), request.protocol === 'https')
@@ -100,7 +118,10 @@ export function registerAuthRoutes(app: FastifyInstance, state: RuntimeState): v
     try {
       await changePassword(state.db, id, body.current, body.next)
     } catch (e) {
-      throw badRequest((e as Error).message)
+      // Narrowed (review, Important 3): only a wrong current password is this caller's
+      // mistake. A missing account or a store fault is not, and must not be told as one.
+      if (e instanceof Error && e.message === 'the current password is wrong') throw badRequest(e.message)
+      throw e
     }
     // Ruling from task 9's review: a password change must not leave a stolen cookie live
     // elsewhere, but must not log the caller themselves out of their own change.
