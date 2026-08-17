@@ -68,9 +68,9 @@ export function loadBootstrap(file: string): Bootstrap {
   if (!result.success) {
     const issue = result.error.issues[0]
     const path = issue?.path.join('.') ?? ''
-    // Prefixed with the field path because Zod's text is identical for any field of the same
-    // type, and startupMessage() reduces a BootstrapError to this sentence behind one prefix
-    // — no path, no stack. `plugins` is named outright: its removal is a migration, not a typo.
+    // Prefixed with the field path: Zod's message text is identical for any field of the same
+    // type, so without it the operator cannot tell which field they got wrong. `plugins` is
+    // named outright — its removal is a migration, not a typo.
     const message = path === 'plugins'
       ? `remove the 'plugins:' block from ${file} — plugin settings now live in the database`
       : `${path === '' ? '' : `${path}: `}${issue?.message ?? 'invalid bootstrap'}`

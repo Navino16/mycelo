@@ -1,6 +1,6 @@
 import { createInterface } from 'node:readline/promises'
 import { resolve } from 'node:path'
-import { runEntry, startupMessage } from './boot/entry.js'
+import { runEntry, shutdownMessage, startupMessage } from './boot/entry.js'
 import type { Running } from './boot/entry.js'
 import { germinationBanner } from './mycelium.js'
 import { parseSenderLine } from './support/sender.js'
@@ -17,7 +17,11 @@ try {
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
-    void running.close().then(() => { process.exit(0) })
+    // Never bare: an unhandled rejection here is process-fatal, so a failed shutdown would
+    // print the stack trace this entry point exists to keep off the operator's screen.
+    void running.close()
+      .then(() => { process.exit(0) })
+      .catch((e: unknown) => { console.error(shutdownMessage(e)); process.exit(1) })
   })
 }
 

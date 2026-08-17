@@ -3,28 +3,36 @@ import { BootstrapError } from '../config.js'
 import { StartupError } from '../identity/bootstrap.js'
 import { DatabaseError } from '../persistence/db.js'
 import { createLogger } from '../support/logger.js'
-import { describeThrown } from '../support/thrown.js'
 import { germinatePhase } from './germinate.js'
 import { serve } from './serve.js'
 import type { RuntimeState } from './state.js'
 
 export interface Running {
   state: RuntimeState
-  /** The origin actually bound, which is what a configured port of 0 makes worth knowing. */
+  /** Carried rather than rebuilt by callers: server.ts owns the `http://host:port` format. */
   address: string
   close: () => Promise<void>
 }
 
 /**
- * A configuration mistake is the operator's to fix, so it gets a sentence. Anything
- * else is ours, so it keeps its stack.
+ * A configuration mistake is the operator's to fix, so it gets a sentence. Anything else is
+ * ours, so it keeps its stack — and a non-Error keeps its own text, which is the only clue
+ * a `throw 'string'` from a dependency leaves.
  */
-export function startupMessage(e: unknown): string {
+function failureDetail(e: unknown): string {
   if (e instanceof BootstrapError || e instanceof StartupError || e instanceof DatabaseError) {
-    return `mycelo cannot start: ${e.message}`
+    return e.message
   }
-  if (e instanceof Error) return `mycelo cannot start: ${e.stack ?? e.message}`
-  return `mycelo cannot start: ${describeThrown(e)}`
+  if (e instanceof Error) return e.stack ?? e.message
+  return String(e)
+}
+
+export function startupMessage(e: unknown): string {
+  return `mycelo cannot start: ${failureDetail(e)}`
+}
+
+export function shutdownMessage(e: unknown): string {
+  return `mycelo did not shut down cleanly: ${failureDetail(e)}`
 }
 
 /**
@@ -38,10 +46,12 @@ export async function runEntry(configFile: string): Promise<Running> {
   const app = createServer({ trustProxy: state.config.ui.trustProxy })
   let closed = false
   const close = async (): Promise<void> => {
-    // SIGINT and SIGTERM can both arrive, so idempotence is stated here rather than left to
-    // whether app.close() and the sqlite handle happen to tolerate a second call.
+    // Set before the first await: index.ts registers both signal handlers on this closure,
+    // so SIGINT and SIGTERM in the same tick would otherwise run two concurrent shutdowns.
     if (closed) return
     closed = true
+    // Requests stop before the handle goes (api-design §12): the reverse order would let a
+    // route that reads the database fault mid-shutdown instead of being refused at the socket.
     await app.close()
     // Refuses every further query. It does not release the file descriptor or the -wal
     // sibling — a known db.ts defect, not this call's to fix.
@@ -53,7 +63,8 @@ export async function runEntry(configFile: string): Promise<Running> {
     await germinatePhase(state, logger)
     return { state, address, close }
   } catch (e) {
-    await close()
+    // Swallowed deliberately: a cleanup failure must not replace the fault the operator needs.
+    try { await close() } catch { /* the original error is the one that matters */ }
     throw e
   }
 }

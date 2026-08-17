@@ -33,8 +33,8 @@ export async function germinatePhase(state: RuntimeState, logger: Logger): Promi
   } catch (e) {
     const failure = classifyGerminationFailure(e)
     logger.error(`germination failed; the API stays up in degraded mode: ${failure.message}`)
-    // GerminationFailure carries no class and no stack, and index.ts prints nothing itself,
-    // so without this an unclassified throw reaches the operator as a bare message.
+    // GerminationFailure carries no class and no stack, and index.ts prints no failure detail
+    // of its own, so without this an unclassified throw reaches the operator as a bare message.
     if (failure.kind === 'unknown') {
       logger.error('unclassified germination failure', {
         thrown: e instanceof Error ? (e.stack ?? e.name) : typeof e,

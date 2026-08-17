@@ -1,9 +1,10 @@
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Database } from 'bun:sqlite'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { runEntry, startupMessage } from '../../src/boot/entry.js'
+import { runEntry, shutdownMessage, startupMessage } from '../../src/boot/entry.js'
 import type { Running } from '../../src/boot/entry.js'
 import { BootstrapError } from '../../src/config.js'
 import { DatabaseError } from '../../src/persistence/db.js'
@@ -38,15 +39,39 @@ async function freePort(): Promise<number> {
  * `Database.prototype.close`: an unbound method reference trips
  * @typescript-eslint/unbound-method and this project has no disables.
  */
-function spyOnDatabaseClose(): { closes: () => number, restore: () => void } {
+function spyOnDatabaseClose(options: { andThrow?: boolean } = {}): {
+  closes: () => number
+  restore: () => void
+} {
   type Close = (this: Database, throwOnError?: boolean) => void
   const original = Object.getOwnPropertyDescriptor(Database.prototype, 'close')?.value as Close
   let count = 0
   Database.prototype.close = function counted(this: Database, throwOnError?: boolean): void {
     count += 1
     original.call(this, throwOnError)
+    if (options.andThrow === true) throw new Error('closing the handle exploded')
   }
   return { closes: () => count, restore: () => { Database.prototype.close = original } }
+}
+
+/** Absolute, so the child resolves its imports from the repo whatever its cwd is. */
+const ENTRY = fileURLToPath(new URL('../../src/index.ts', import.meta.url))
+
+/** Reads the child's stdout until `needle` appears, so the test never races its startup. */
+async function waitForLine(stream: ReadableStream<Uint8Array>, needle: string): Promise<string> {
+  const reader = stream.getReader()
+  const decoder = new TextDecoder()
+  let text = ''
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (value !== undefined) text += decoder.decode(value, { stream: true })
+      if (text.includes(needle)) return text
+      if (done) throw new Error(`the process ended before printing '${needle}':\n${text}`)
+    }
+  } finally {
+    reader.releaseLock()
+  }
 }
 
 describe('startupMessage', () => {
@@ -72,13 +97,24 @@ describe('startupMessage', () => {
     expect(message).toContain('entry.test')
   })
 
-  it('falls back to a safe description for a non-Error throw', () => {
-    expect(startupMessage({ nope: true })).toBe('mycelo cannot start: unknown error')
+  it('keeps the text of a non-Error throw, which is the only clue it carries', () => {
+    // A plugin's throw is classified by germinatePhase, never by startupMessage, so anything
+    // arriving here is core or dependency code and discarding it costs the operator the clue.
+    expect(startupMessage('ENOSPC writing the database'))
+      .toBe('mycelo cannot start: ENOSPC writing the database')
+  })
+})
+
+describe('shutdownMessage', () => {
+  it('says the process was stopping, not that it could not start', () => {
+    const message = shutdownMessage(new Error('the server refused to close'))
+    expect(message).toStartWith('mycelo did not shut down cleanly: ')
+    expect(message).not.toContain('cannot start')
   })
 })
 
 describe('runEntry', () => {
-  it('serves, germinates, and releases the port on close', async () => {
+  it('reaches a germinated state and releases the port on close', async () => {
     const port = await freePort()
     const running = await runEntry(config(`spores: ./none\ndatabase: ./d.db\nui:\n  port: ${String(port)}\n`))
     expect(running.state.germination.status).toBe('germinated')
@@ -94,6 +130,22 @@ describe('runEntry', () => {
     }
     expect(spy.closes()).toBe(1)
     expect(fetch(`${running.address}/healthz`)).rejects.toThrow()
+  })
+
+  it('stops accepting requests before it closes the handle', async () => {
+    const port = await freePort()
+    const running = await runEntry(config(`spores: ./none\ndatabase: ./d.db\nui:\n  port: ${String(port)}\n`))
+    const spy = spyOnDatabaseClose()
+    try {
+      const closing = running.close()
+      // Read before awaiting: close() runs synchronously as far as its first await, so a
+      // handle already closed at this point means closeDb() ran before app.close().
+      expect(spy.closes()).toBe(0)
+      await closing
+      expect(spy.closes()).toBe(1)
+    } finally {
+      spy.restore()
+    }
   })
 
   it('listens before it germinates, and stays up when germination degrades', async () => {
@@ -155,4 +207,54 @@ describe('runEntry', () => {
     const again = Bun.serve({ port, fetch: () => new Response('ok') })
     await again.stop(true)
   })
+
+  it('rethrows the germination fault even when the cleanup itself throws', async () => {
+    const port = await freePort()
+    const spores = join(dir, 'spores')
+    mkdirSync(spores)
+    const file = config(`spores: ./spores\ndatabase: ./d.db\nui:\n  port: ${String(port)}\n`)
+    chmodSync(spores, 0o000)
+    const spy = spyOnDatabaseClose({ andThrow: true })
+    let thrown: unknown
+    try {
+      await runEntry(file)
+    } catch (e) {
+      thrown = e
+    } finally {
+      spy.restore()
+      chmodSync(spores, 0o755)
+    }
+    // The failure path must not become the thing that hides the failure.
+    expect(String(thrown)).toContain('EACCES')
+    expect(String(thrown)).not.toContain('exploded')
+  })
+})
+
+/**
+ * The only tests that run index.ts. Collapsing its two-signal loop to one element leaves
+ * every in-process test green, so the loop is pinned here or nowhere.
+ */
+describe('the entry point process', () => {
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    it(`exits 0 and releases the port on ${signal}`, async () => {
+      const port = await freePort()
+      config(`spores: ./none\ndatabase: ./d.db\nui:\n  port: ${String(port)}\n`)
+      // process.execPath, not 'bun': the child must be this runtime, not whatever is on PATH.
+      const child = Bun.spawn([process.execPath, ENTRY], {
+        cwd: dir, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
+      })
+      let out: string
+      try {
+        // 'no console hypha' is printed after the signal handlers are registered, so waiting
+        // for it removes the race between binding the port and being able to answer a signal.
+        out = await waitForLine(child.stdout, 'no console hypha')
+        child.kill(signal)
+        expect(await child.exited).toBe(0)
+      } finally {
+        child.kill()
+      }
+      expect(out).toContain(`api listening on http://127.0.0.1:${String(port)}`)
+      expect(fetch(`http://127.0.0.1:${String(port)}/healthz`)).rejects.toThrow()
+    })
+  }
 })
