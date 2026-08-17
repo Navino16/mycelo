@@ -2,9 +2,9 @@ import { rmSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'bun:test'
 import { writeSetting } from '../../src/config/store.js'
 import { pluginSetting } from '../../src/persistence/schema.js'
-import type { PluginDto } from '../../src/api/routes/plugins.js'
+import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
-  bootAndLogin, closeBooted, configurable, configurableTwoFields, cyclingPair,
+  bootAndLogin, brokenManifest, closeBooted, configurable, configurableTwoFields, cyclingPair,
 } from './support.js'
 import type { LoggedIn } from './support.js'
 
@@ -22,8 +22,9 @@ describe('/api/plugins', () => {
     booted = await bootAndLogin()
     const { app, cookie } = booted
     await app.inject({ method: 'POST', url: '/api/plugins/ping/disable', headers: { cookie } })
-    const body = (await app.inject({ method: 'GET', url: '/api/plugins', headers: { cookie } })).json<PluginDto[]>()
-    const ping = body.find((p) => p.name === 'ping')
+    const body = (await app.inject({ method: 'GET', url: '/api/plugins', headers: { cookie } })).json<PluginGroups>()
+    // fixtures/ping declares kind: enzyme.
+    const ping = body.enzyme.find((p) => p.name === 'ping')
     // septum's own doc comment: disable() is reflected only by the next germination, so
     // the two disagree here on purpose. Phase 5's blocker was reporting only one of them.
     expect(ping).toMatchObject({ state: 'germinated', enabled: false })
@@ -33,9 +34,32 @@ describe('/api/plugins', () => {
     booted = await bootAndLogin({ spores: cyclingPair })
     const { app, cookie } = booted
     expect(booted.served.state.germination.status).toBe('degraded')
-    const body = (await app.inject({ method: 'GET', url: '/api/plugins', headers: { cookie } })).json<PluginDto[]>()
+    const body = (await app.inject({ method: 'GET', url: '/api/plugins', headers: { cookie } })).json<PluginGroups>()
+    // cyclingPair's alpha and beta both declare kind: rhiza.
     // Reporting them dormant would send the operator hunting two faults when there is one.
-    expect(body.map((p) => p.state)).toEqual(['unknown', 'unknown'])
+    expect(body.rhiza.map((p) => p.state)).toEqual(['unknown', 'unknown'])
+    expect(body.hypha).toEqual([])
+    expect(body.enzyme).toEqual([])
+    expect(body.inhibitor).toEqual([])
+    expect(body.unknown).toEqual([])
+  })
+
+  it('groups every kind, with an always-present unknown bucket, and never drops a plugin whose manifest never parsed', async () => {
+    booted = await bootAndLogin({ spores: brokenManifest })
+    const { app, cookie } = booted
+    // germination itself still succeeds: one spore is dormant, the run is not degraded.
+    expect(booted.served.state.germination.status).toBe('germinated')
+    const body = (await app.inject({ method: 'GET', url: '/api/plugins', headers: { cookie } })).json<PluginGroups>()
+    // All five keys present even though only one is non-empty (spec §8).
+    expect(Object.keys(body).sort()).toEqual(['enzyme', 'hypha', 'inhibitor', 'rhiza', 'unknown'])
+    expect(body.hypha).toEqual([])
+    expect(body.enzyme).toEqual([])
+    expect(body.rhiza).toEqual([])
+    expect(body.inhibitor).toEqual([])
+    const broken = body.unknown.find((p) => p.name === 'brokenyaml')
+    // Not vanished, and not miscategorised into a kind it never validated as.
+    expect(broken).toMatchObject({ state: 'dormant' })
+    expect(broken?.kind).toBeUndefined()
   })
 
   it('redacts a secret on read and keeps it secret on write', async () => {
@@ -62,10 +86,12 @@ describe('/api/plugins', () => {
       method: 'POST', url: '/api/plugins/needs-config/enable', headers: { cookie },
     })
     expect(response.statusCode).toBe(400)
-    const detail = JSON.stringify(response.json())
+    const body = response.json<{ error: { message: string, detail: string } }>()
+    // Rendered text: the message itself, not only detail, must be the real sentence.
+    expect(body.error.message).toBe("plugin 'needs-config' could not be enabled")
     // The plural case: an error built from issues[0] would pass a one-field fixture.
-    expect(detail).toContain('url')
-    expect(detail).toContain('token')
+    expect(body.error.detail).toContain('url')
+    expect(body.error.detail).toContain('token')
   })
 
   it('serves a JSON Schema a form generator can use', async () => {
@@ -80,8 +106,12 @@ describe('/api/plugins', () => {
   it('404s on a plugin that is not installed', async () => {
     booted = await bootAndLogin()
     const { app, cookie } = booted
-    expect((await app.inject({ method: 'GET', url: '/api/plugins/ghost', headers: { cookie } })).statusCode)
-      .toBe(404)
+    const response = await app.inject({ method: 'GET', url: '/api/plugins/ghost', headers: { cookie } })
+    expect(response.statusCode).toBe(404)
+    // Rendered text, not just the status: the translator falls back to the raw key on a
+    // typo or a missing catalogue entry, which a status-only assertion cannot catch.
+    expect(response.json<{ error: { message: string } }>().error.message)
+      .toBe("no plugin named 'ghost' is installed")
   })
 
   it('404s on enable, disable, schema and settings for a plugin that is not installed', async () => {
@@ -108,9 +138,13 @@ describe('/api/plugins', () => {
       payload: { url: 'http://example', bogus: 'x', alsoBogus: 'y' },
     })
     expect(response.statusCode).toBe(400)
-    const detail = JSON.stringify(response.json())
-    expect(detail).toContain('bogus')
-    expect(detail).toContain('alsoBogus')
+    const body = response.json<{ error: { message: string, detail: string[] } }>()
+    // detail is structured (§9): a form highlighting fields must not have to parse a
+    // localized sentence back apart to find them.
+    expect(body.error.detail).toEqual(['bogus', 'alsoBogus'])
+    // The message still names them too, in order — this is what item 2's rendered-text
+    // rule pins for this key.
+    expect(body.error.message).toBe("plugin 'needs-config' declares no setting named: bogus, alsoBogus")
     // The whole write is refused: a partial write would leave 'url' recorded.
     expect(served.state.db.select().from(pluginSetting).all()).toEqual([])
   })

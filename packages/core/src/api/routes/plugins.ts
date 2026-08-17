@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import type { FormSchema } from '@mycelo/septum'
+import type { FormSchema, SporeKind } from '@mycelo/septum'
 import type { RuntimeState } from '../../boot/state.js'
 import { enablePlugin } from '../../config/lifecycle.js'
 import { formSchemaOf, listPlugins, redactSecrets, rewriteSetting } from '../../config/plugins.js'
@@ -10,7 +10,8 @@ import { parseBody } from '../parse.js'
 
 export interface PluginDto {
   name: string
-  kind?: string
+  /** Absent only for a `registry.dormant` entry whose manifest never parsed (spec §8). */
+  kind?: SporeKind
   commands: readonly string[]
   state: 'germinated' | 'dormant' | 'disabled' | 'unknown'
   reason?: string
@@ -19,13 +20,31 @@ export interface PluginDto {
   scopes: readonly string[]
 }
 
+/**
+ * The wire shape of `GET /api/plugins` (spec §8, §15): all four kinds plus `unknown`,
+ * every key present even when empty, so the UI has no absence case to branch on.
+ */
+export type PluginGroups = { [K in SporeKind | 'unknown']: readonly PluginDto[] }
+
+// A plain groupBy(kind) would drop every entry whose kind is absent — precisely the
+// dormant-before-parse case an operator opens this screen to find (spec §8).
+function groupByKind(plugins: readonly PluginDto[]): PluginGroups {
+  const groups: { [K in SporeKind | 'unknown']: PluginDto[] } = {
+    hypha: [], rhiza: [], enzyme: [], inhibitor: [], unknown: [],
+  }
+  for (const plugin of plugins) groups[plugin.kind ?? 'unknown'].push(plugin)
+  return groups
+}
+
 function pluginsOf(state: RuntimeState): readonly PluginDto[] {
   const installs = new Map(listInstalls(state.db).map((i) => [i.name, i]))
   if (state.germination.status !== 'germinated') {
     // Nothing germinated, so nothing is known about any individual plugin (spec §4.1).
     return [...installs.values()].map((install) => ({
       name: install.name,
-      kind: install.kind,
+      // install.kind is stored as plain text; config/plugins.ts's listPlugins() casts the
+      // same field the same way — every install row was recorded from a parsed manifest.
+      kind: install.kind as SporeKind,
       commands: [],
       state: 'unknown' as const,
       enabled: install.enabled,
@@ -63,7 +82,7 @@ function undeclaredKeys(form: FormSchema, keys: readonly string[]): readonly str
 }
 
 export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState): void {
-  app.get('/api/plugins', () => pluginsOf(state))
+  app.get('/api/plugins', () => groupByKind(pluginsOf(state)))
 
   app.get('/api/plugins/:name', (request) => {
     const { name } = request.params as { name: string }
@@ -112,7 +131,9 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     const form = await formSchemaOf(state.db, state.config.sporesDir, name)
     const bad = undeclaredKeys(form, keys)
     if (bad.length > 0) {
-      throw badRequest('api.pluginSettingUndeclared', { plugin: name, keys: bad.join(', ') })
+      // detail carries the structure (§9): a form wanting to highlight fields would
+      // otherwise have to parse the localized sentence back apart.
+      throw badRequest('api.pluginSettingUndeclared', { plugin: name, keys: bad.join(', ') }, bad)
     }
     // Every key is declared, so the only thing left that can fail is the database itself —
     // one synchronous transaction makes that all-or-nothing. rewriteSetting is synchronous,

@@ -49,6 +49,12 @@ export const cyclingPair: SporeWriter = (sporesDir) => {
   }
 }
 
+// Missing `septum`, same as lifecycle.test.ts's 'brokenyaml': the manifest never parses,
+// so the registry.dormant entry it produces carries no kind at all.
+export const brokenManifest: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'brokenyaml', { 'spore.yaml': 'kind: enzyme\nname: brokenyaml\n' })
+}
+
 // Duck-typed like lifecycle.test.ts's needs-config: a spore under /tmp cannot resolve
 // the workspace's zod, and a real one carries its own copy anyway.
 function configSchemaModule(fields: readonly string[]): string {
