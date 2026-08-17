@@ -44,7 +44,7 @@ export function shutdownMessage(e: unknown): string {
 export async function runEntry(configFile: string): Promise<Running> {
   const logger = createLogger()
   const { state, closeDb } = serve(configFile)
-  const app = createServer({ trustProxy: state.config.ui.trustProxy })
+  const app = createServer({ trustProxy: state.config.ui.trustProxy, state })
   let closed = false
   const close = async (): Promise<void> => {
     // Set before the first await: index.ts registers both signal handlers on this closure,

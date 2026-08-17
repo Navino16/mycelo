@@ -1,4 +1,4 @@
-import { eq, lt } from 'drizzle-orm'
+import { and, eq, lt, ne } from 'drizzle-orm'
 import type { Db } from '../persistence/db.js'
 import { uiSession } from '../persistence/schema.js'
 
@@ -45,6 +45,17 @@ export function readSession(db: Db, token: string, now = new Date()): string | n
 
 export function closeSession(db: Db, token: string): void {
   db.delete(uiSession).where(eq(uiSession.tokenHash, hash(token))).run()
+}
+
+/**
+ * Called after a password change (spec §6 rulings): every *other* session for the
+ * principal dies, so a stolen cookie does not survive the fix. `exceptToken` keeps the
+ * caller's own session alive — only the route layer knows which token that is.
+ */
+export function closeSessionsFor(db: Db, principalId: string, exceptToken?: string): void {
+  const own = eq(uiSession.principalId, principalId)
+  const condition = exceptToken === undefined ? own : and(own, ne(uiSession.tokenHash, hash(exceptToken)))
+  db.delete(uiSession).where(condition).run()
 }
 
 export function sweepSessions(db: Db, now = new Date()): number {

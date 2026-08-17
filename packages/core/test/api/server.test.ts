@@ -1,13 +1,25 @@
-import { afterEach, describe, expect, it } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import type { FastifyInstance } from 'fastify'
 import { createServer, startServer } from '../../src/api/server.js'
+import { serve } from '../../src/boot/serve.js'
+import type { Served } from '../../src/boot/serve.js'
 
+let dir: string
+let served: Served
 let app: FastifyInstance | undefined
-afterEach(async () => { await app?.close(); app = undefined })
+afterEach(async () => { await app?.close(); app = undefined; served.closeDb(); rmSync(dir, { recursive: true, force: true }) })
+beforeEach(() => {
+  dir = mkdtempSync(join(tmpdir(), 'mycelo-server-'))
+  writeFileSync(join(dir, 'mycelo.yaml'), 'spores: ./none\ndatabase: ./d.db\n', 'utf8')
+  served = serve(join(dir, 'mycelo.yaml'))
+})
 
 describe('the HTTP server', () => {
   it('answers /healthz over a real TCP socket', async () => {
-    app = createServer({ trustProxy: false })
+    app = createServer({ trustProxy: false, state: served.state })
     // Port 0 lets the OS pick: a fixed port makes the suite fail under parallel runs.
     const address = await startServer(app, { bind: '127.0.0.1', port: 0, trustProxy: false, resetAccount: false })
     const response = await fetch(`${address}/healthz`)
@@ -16,7 +28,7 @@ describe('the HTTP server', () => {
   })
 
   it('says nothing about germination on /healthz', async () => {
-    app = createServer({ trustProxy: false })
+    app = createServer({ trustProxy: false, state: served.state })
     const address = await startServer(app, { bind: '127.0.0.1', port: 0, trustProxy: false, resetAccount: false })
     // spec §17.5: the container probe must not fail on degraded mode, so it must not
     // report it either — a body carrying germination state invites exactly that coupling.
