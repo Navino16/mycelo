@@ -18,12 +18,14 @@ import type {
   PushTarget,
   RestrictionsManage,
   RhizaHealth,
-  RoleInfo,
   RolesAssign,
   RolesManage,
   RolesRead,
   SporeKind,
 } from '@mycelo/septum'
+import {
+  assignRole, createRole, deleteRole, listRoles, revokeRole, setRoleCommands,
+} from './authorization/roles.js'
 import { formSchemaFor } from './config/jsonschema.js'
 import { enablePlugin, findSpore, loadSporeModule } from './config/lifecycle.js'
 import { getInstall, listInstalls, setEnabled, writeSetting } from './config/store.js'
@@ -32,13 +34,12 @@ import {
 } from './conversations/registry.js'
 import type { Registry } from './germination/registry.js'
 import {
-  findByIdentity, listPrincipals, loadPrincipal, markReviewed, requirePrincipal, rolesOf,
-  setDisplayName,
+  findByIdentity, listPrincipals, loadPrincipal, markReviewed, rolesOf, setDisplayName,
 } from './identity/people.js'
 import { canonicalLocale, setConversationLocale, setPrincipalLocale } from './i18n/locale.js'
 import type { Translator } from './i18n/translator.js'
 import type { Db } from './persistence/db.js'
-import { pluginSetting, principalRole, role, roleCommand } from './persistence/schema.js'
+import { pluginSetting } from './persistence/schema.js'
 import {
   clearContextRule, inhibitorChannels, listContextRules, setContextRule, setInhibitorChannels,
 } from './restrictions/rules.js'
@@ -93,73 +94,6 @@ function listPlugins(registry: Registry, sporesDir: string, db?: Db): readonly P
 
 async function aggregateHealth(registry: Registry): Promise<readonly RhizaHealth[]> {
   return Promise.all(registry.rhizas.map(async (r) => ({ rhiza: r.name, status: await r.instance.health() })))
-}
-
-function listRoles(db: Db): readonly RoleInfo[] {
-  return db.select().from(role).all().map((r) => ({
-    name: r.name,
-    builtin: r.builtin,
-    patterns: db.select({ pattern: roleCommand.pattern }).from(roleCommand)
-      .where(eq(roleCommand.roleId, r.id)).all().map((p) => p.pattern),
-  }))
-}
-
-function findRole(db: Db, name: string): { id: string; builtin: boolean } | undefined {
-  return db.select({ id: role.id, builtin: role.builtin }).from(role).where(eq(role.name, name)).get()
-}
-
-function assignRole(db: Db, principalId: string, roleName: string): void {
-  const found = findRole(db, roleName)
-  if (found === undefined) throw new Error(`role '${roleName}' does not exist`)
-  requirePrincipal(db, principalId)
-  db.insert(principalRole).values({ principalId, roleId: found.id }).onConflictDoNothing().run()
-}
-
-function revokeRole(db: Db, principalId: string, roleName: string): void {
-  const found = findRole(db, roleName)
-  if (found === undefined) throw new Error(`role '${roleName}' does not exist`)
-  requirePrincipal(db, principalId)
-  db.delete(principalRole)
-    .where(and(eq(principalRole.principalId, principalId), eq(principalRole.roleId, found.id)))
-    .run()
-}
-
-// Curated like its three siblings: the raw SQLite UNIQUE and primary-key violations
-// reached the user as "command 'role-new' failed", naming nothing.
-function createRole(db: Db, name: string, patterns: readonly string[]): void {
-  if (name === '') throw new Error('a role name cannot be empty')
-  if (findRole(db, name) !== undefined) throw new Error(`role '${name}' already exists`)
-  const duplicate = patterns.find((p, i) => patterns.indexOf(p) !== i)
-  if (duplicate !== undefined) throw new Error(`pattern '${duplicate}' is listed twice`)
-  const id = crypto.randomUUID()
-  db.transaction((tx) => {
-    tx.insert(role).values({ id, name }).run()
-    for (const pattern of patterns) tx.insert(roleCommand).values({ roleId: id, pattern }).run()
-  })
-}
-
-function setRoleCommands(db: Db, name: string, patterns: readonly string[]): void {
-  const found = findRole(db, name)
-  if (found === undefined) throw new Error(`role '${name}' does not exist`)
-  if (found.builtin) throw new Error(`role '${name}' is builtin and cannot be rewritten`)
-  const duplicate = patterns.find((p, i) => patterns.indexOf(p) !== i)
-  if (duplicate !== undefined) throw new Error(`pattern '${duplicate}' is listed twice`)
-  db.transaction((tx) => {
-    tx.delete(roleCommand).where(eq(roleCommand.roleId, found.id)).run()
-    for (const pattern of patterns) tx.insert(roleCommand).values({ roleId: found.id, pattern }).run()
-  })
-}
-
-function deleteRole(db: Db, name: string, defaultRole?: string): void {
-  const found = findRole(db, name)
-  if (found === undefined) throw new Error(`role '${name}' does not exist`)
-  if (found.builtin) throw new Error(`role '${name}' is builtin and cannot be deleted`)
-  // Boot raises a StartupError for a missing defaultRole; deleting into that state would
-  // leave every first contact throwing until someone restarts and sees why.
-  if (defaultRole !== undefined && name === defaultRole) {
-    throw new Error(`role '${name}' is the configured default role and cannot be deleted`)
-  }
-  db.delete(role).where(eq(role.id, found.id)).run()
 }
 
 // The published contract says enable() rejects; enablePlugin() returns a refusal object,
