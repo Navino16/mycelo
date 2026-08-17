@@ -1,5 +1,6 @@
 import { and, count, eq, inArray, isNotNull, isNull, like, or } from 'drizzle-orm'
 import type { Principal } from '@mycelo/septum'
+import { StoreRefusal } from '../authorization/refusal.js'
 import type { Db } from '../persistence/db.js'
 import { channelIdentity, principal, principalRole, role } from '../persistence/schema.js'
 
@@ -54,7 +55,7 @@ export function findByIdentity(db: Db, channel: string, externalId: string): Pri
 // published contract says these reject rather than resolve for an id nobody holds.
 export function requirePrincipal(db: Db, id: string): void {
   const row = db.select({ id: principal.id }).from(principal).where(eq(principal.id, id)).get()
-  if (row === undefined) throw new Error(`principal '${id}' does not exist`)
+  if (row === undefined) throw new StoreRefusal('principal-unknown', `principal '${id}' does not exist`)
 }
 
 export function markReviewed(db: Db, id: string): void {

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import type { RuntimeState } from '../../boot/state.js'
+import { isRefusal } from '../../authorization/refusal.js'
 import { assignRole, revokeRole } from '../../authorization/roles.js'
 import { loadPrincipal, markReviewed, requirePrincipal, searchPrincipals, setDisplayName } from '../../identity/people.js'
 import { notFound } from '../errors.js'
@@ -24,16 +25,10 @@ const patchSchema = z.object({
 
 const roleBodySchema = z.object({ role: z.string().min(1) })
 
-function isPrincipalMissing(e: unknown, id: string): boolean {
-  return e instanceof Error && e.message === `principal '${id}' does not exist`
-}
-
 /** assignRole/revokeRole check the role before the principal, so a bad role wins the race. */
 function roleAssignmentError(e: unknown, id: string, roleName: string): never {
-  if (e instanceof Error && e.message === `role '${roleName}' does not exist`) {
-    throw notFound('api.roleNotFound', { role: roleName })
-  }
-  if (isPrincipalMissing(e, id)) throw notFound('api.personNotFound', { id })
+  if (isRefusal(e, 'role-unknown')) throw notFound('api.roleNotFound', { role: roleName })
+  if (isRefusal(e, 'principal-unknown')) throw notFound('api.personNotFound', { id })
   throw e
 }
 
@@ -68,7 +63,7 @@ export function registerPeopleRoutes(app: FastifyInstance, state: RuntimeState):
       if (body.displayName !== undefined) setDisplayName(state.db, id, body.displayName)
       if (body.reviewed === true) markReviewed(state.db, id)
     } catch (e) {
-      if (isPrincipalMissing(e, id)) throw notFound('api.personNotFound', { id })
+      if (isRefusal(e, 'principal-unknown')) throw notFound('api.personNotFound', { id })
       throw e
     }
     return loadPrincipal(state.db, id)
