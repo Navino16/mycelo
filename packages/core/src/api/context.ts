@@ -26,12 +26,13 @@ export function registerContext(app: FastifyInstance, state: RuntimeState): void
   app.decorateRequest('locale', '')
 
   // Registered before the gate below, so the setup lock's 503 and the session check's 401 —
-  // both thrown from that later onRequest hook — always have a locale to render with. Derives
-  // its own principal from the cookie rather than depending on the gate's `request.principalId`.
+  // both thrown from that later onRequest hook — always have a locale to render with.
+  // Header-only, no query: neither refusal has a valid principal by definition, so this is
+  // the final answer for both, not a placeholder (task 10.5 review, Important 1).
   app.addHook('onRequest', (request, _reply, done) => {
     const path = request.url.split('?')[0] ?? ''
-    // §17.5: the container probe stays dataless — resolveApiLocale would otherwise query.
-    request.locale = path === '/healthz' ? state.config.defaultLocale : resolveApiLocale(state, request)
+    // §17.5: the container probe stays dataless.
+    request.locale = path === '/healthz' ? state.config.defaultLocale : headerLocale(state, request)
     done()
   })
 
@@ -52,22 +53,21 @@ export function registerContext(app: FastifyInstance, state: RuntimeState): void
     request.principalId = principalId
     done()
   })
+
+  // Refines the header-only guess above with the principal's own saved preference, once the
+  // gate has resolved one — the one query this already paid for before task 10.5.
+  app.addHook('preHandler', (request, _reply, done) => {
+    if (request.principalId !== undefined) {
+      const saved = state.db.select({ locale: principal.locale }).from(principal)
+        .where(eq(principal.id, request.principalId)).get()?.locale ?? null
+      if (saved !== null) request.locale = saved
+    }
+    done()
+  })
 }
 
-/**
- * principal ?? Accept-Language ?? default. Written here rather than through
- * i18n/locale.ts's resolveLocale, whose signature is
- * `(db, channel, conversationId, principalId, fallback)` — a chat conversation's cascade,
- * which an HTTP request has no rung for. Widening it would touch four other call sites.
- */
-function resolveApiLocale(state: RuntimeState, request: FastifyRequest): string {
-  const token = request.cookies[SESSION_COOKIE]
-  const principalId = token === undefined ? null : readSession(state.db, token)
-  const chosen = principalId === null
-    ? null
-    : state.db.select({ locale: principal.locale }).from(principal)
-        .where(eq(principal.id, principalId)).get()?.locale ?? null
-  if (chosen !== null) return chosen
+/** Accept-Language ?? default — no query. The final answer for a request with no principal. */
+function headerLocale(state: RuntimeState, request: FastifyRequest): string {
   const header = request.headers['accept-language']
   const preferred = typeof header === 'string'
     ? header.split(',')[0]?.split(';')[0]?.trim()
