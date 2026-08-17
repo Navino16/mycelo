@@ -42,7 +42,7 @@ describe('phase 1', () => {
       .toThrow(/defaultRole 'ghost'/)
   })
 
-  it('returns a closeDb that actually closes the database', () => {
+  it('returns a closeDb that refuses further queries', () => {
     const served = serve(config('spores: ./none\ndatabase: ./mycelo.db\n'))
     served.closeDb()
     expect(() => served.state.db.get<[number]>(sql`SELECT 1`)).toThrow()
