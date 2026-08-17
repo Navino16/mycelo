@@ -14,7 +14,6 @@ import type {
   PrincipalsRead,
   PushTarget,
   RestrictionsManage,
-  RhizaHealth,
   RolesAssign,
   RolesManage,
   RolesRead,
@@ -30,6 +29,7 @@ import {
   addBroadcastTarget, listBroadcastTargets, listConversations, removeBroadcastTarget,
 } from './conversations/registry.js'
 import type { Registry } from './germination/registry.js'
+import { aggregateHealth } from './supervision/health.js'
 import {
   findByIdentity, listPrincipals, loadPrincipal, markReviewed, rolesOf, setDisplayName,
 } from './identity/people.js'
@@ -40,10 +40,6 @@ import {
   clearContextRule, inhibitorChannels, listContextRules, setContextRule, setInhibitorChannels,
 } from './restrictions/rules.js'
 import { describeThrown } from './support/thrown.js'
-
-async function aggregateHealth(registry: Registry): Promise<readonly RhizaHealth[]> {
-  return Promise.all(registry.rhizas.map(async (r) => ({ rhiza: r.name, status: await r.instance.health() })))
-}
 
 // Defers the call into .then() so a throwing driver rejects the returned promise
 // instead of throwing synchronously out of what the published contract says is async.
