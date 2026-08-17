@@ -60,7 +60,7 @@ export function registerAuthRoutes(app: FastifyInstance, state: RuntimeState): v
     const body = parseBody(setupSchema, request.body)
     // Fast-fail before hashing: cheap, and avoids paying for argon2 on the common case of a
     // wizard that already ran. It is not the guard that makes this safe — see below.
-    if (hasCredential(state.db)) throw conflict('a UI account already exists')
+    if (hasCredential(state.db)) throw conflict('api.setupConflict')
     const passwordHash = await Bun.password.hash(body.password)
     let principalId: string
     try {
@@ -81,10 +81,13 @@ export function registerAuthRoutes(app: FastifyInstance, state: RuntimeState): v
       // Narrowed (review): only the two known duplicate shapes are conflicts — our own
       // re-check, or a raw SQLite uniqueness violation. `ownerPrincipal`'s own fault throw
       // is not a client conflict and must reach the generic 500 handler instead.
+      // The second shape is a substring match on the raw bun:sqlite driver message — a
+      // wording change under a driver upgrade fails loud (both concurrency tests as 500),
+      // not silent.
       const isDuplicate = e instanceof Error
         && (e.message === 'a UI account already exists' || e.message.includes('UNIQUE constraint failed'))
       if (!isDuplicate) throw e
-      throw conflict(e.message)
+      throw conflict('api.setupConflict')
     }
     setSessionCookie(reply, openSession(state.db, principalId), request.protocol === 'https')
     return { ok: true }
@@ -95,7 +98,7 @@ export function registerAuthRoutes(app: FastifyInstance, state: RuntimeState): v
   }, async (request, reply) => {
     const body = parseBody(loginSchema, request.body)
     const principalId = await verifyCredential(state.db, body.username, body.password)
-    if (principalId === null) throw unauthenticated('wrong username or password')
+    if (principalId === null) throw unauthenticated('api.loginFailed')
     setSessionCookie(reply, openSession(state.db, principalId), request.protocol === 'https')
     return { ok: true }
   })
@@ -110,7 +113,7 @@ export function registerAuthRoutes(app: FastifyInstance, state: RuntimeState): v
   app.get('/api/me', (request) => {
     const id = requirePrincipalId(request.principalId)
     const person = loadPrincipal(state.db, id)
-    if (person === null) throw notFound('the session principal no longer exists')
+    if (person === null) throw notFound('api.meMissing')
     const credential = state.db.select({ username: uiCredential.username }).from(uiCredential)
       .where(eq(uiCredential.principalId, id)).get()
     return { ...person, username: credential?.username ?? null, locale: request.locale }
@@ -124,7 +127,7 @@ export function registerAuthRoutes(app: FastifyInstance, state: RuntimeState): v
     } catch (e) {
       // Narrowed (review, Important 3): only a wrong current password is this caller's
       // mistake. A missing account or a store fault is not, and must not be told as one.
-      if (e instanceof Error && e.message === 'the current password is wrong') throw badRequest(e.message)
+      if (e instanceof Error && e.message === 'the current password is wrong') throw badRequest('api.wrongPassword')
       throw e
     }
     // Ruling from task 9's review: a password change must not leave a stolen cookie live

@@ -6,3 +6,15 @@ command:
 context:
   dm: "« {command} » n'est disponible qu'en message privé"
   group: "« {command} » n'est disponible qu'en groupe"
+api:
+  setupRequired: "aucun compte n'existe encore ; créez-en un sur /api/setup"
+  unauthenticated: "aucune session valide"
+  setupConflict: "un compte existe déjà"
+  loginFailed: "nom d'utilisateur ou mot de passe incorrect"
+  meMissing: "le principal de la session n'existe plus"
+  wrongPassword: "le mot de passe actuel est incorrect"
+  invalidBody: "le corps de la requête est invalide"
+  invalidQuery: "les paramètres de la requête sont invalides"
+  invalidRequest: "la requête est invalide"
+  rateLimited: "trop de requêtes ; réessayez plus tard"
+  internalError: "une erreur interne est survenue"

@@ -6,3 +6,15 @@ command:
 context:
   dm: "''{command}'' is only available in a direct message"
   group: "''{command}'' is only available in a group"
+api:
+  setupRequired: "no UI account exists yet; create one at /api/setup"
+  unauthenticated: "no valid session"
+  setupConflict: "a UI account already exists"
+  loginFailed: "wrong username or password"
+  meMissing: "the session principal no longer exists"
+  wrongPassword: "the current password is wrong"
+  invalidBody: "the request body is invalid"
+  invalidQuery: "the query string is invalid"
+  invalidRequest: "the request is invalid"
+  rateLimited: "too many requests; try again later"
+  internalError: "an internal error occurred"

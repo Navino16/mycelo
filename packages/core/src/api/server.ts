@@ -24,12 +24,15 @@ function statusCodeOf(error: unknown): number | undefined {
 
 export function createServer(options: ServerOptions): FastifyInstance {
   const app = Fastify({ logger: false, trustProxy: options.trustProxy })
-  app.setErrorHandler((error, _request, reply) => {
+  // Read through `options.state` on every render, not destructured: germination replaces
+  // `state.translator` once spore catalogues load, and a captured reference would miss it.
+  app.setErrorHandler((error, request, reply) => {
+    const { translator } = options.state
     if (error instanceof ApiError) {
       void reply.status(error.status).send({
         error: {
           code: error.code,
-          message: error.message,
+          message: translator.translate('core', error.key, request.locale, error.params),
           ...(error.detail === undefined ? {} : { detail: error.detail }),
         },
       })
@@ -40,13 +43,25 @@ export function createServer(options: ServerOptions): FastifyInstance {
     // other way — core's own zod, never a plugin's, so `instanceof` is sound here.
     if (error instanceof ZodError) {
       void reply.status(400).send({
-        error: { code: 'validation', message: 'the request is invalid', detail: error.issues },
+        error: {
+          code: 'validation',
+          message: translator.translate('core', 'api.invalidRequest', request.locale),
+          detail: error.issues,
+        },
       })
       return
     }
     const status = statusCodeOf(error) ?? 500
+    // §10 admits no exception, including this one: the raw fault (a SQLite sentence, an
+    // invariant message) goes to the operator's log, never to the client.
+    if (status !== 429) console.error(describeThrown(error))
     void reply.status(status).send({
-      error: { code: status === 429 ? 'rate-limited' : 'internal', message: describeThrown(error) },
+      error: {
+        code: status === 429 ? 'rate-limited' : 'internal',
+        message: translator.translate(
+          'core', status === 429 ? 'api.rateLimited' : 'api.internalError', request.locale,
+        ),
+      },
     })
   })
   app.register(cookie)

@@ -75,6 +75,8 @@ describe('the setup lock', () => {
       method: 'POST', url: '/api/setup', payload: { username: 'bob', password: 'another one' },
     })
     expect(response.statusCode).toBe(409)
+    // The one rendering assertion (task 10.5): a key, not a raw sentence, reaches the wire.
+    expect(response.json<{ error: { message: string } }>().error.message).toBe('a UI account already exists')
   })
 
   it('refuses a setup password shorter than 8 characters', async () => {

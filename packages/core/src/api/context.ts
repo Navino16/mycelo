@@ -25,11 +25,21 @@ export function registerContext(app: FastifyInstance, state: RuntimeState): void
   app.decorateRequest('principalId', undefined)
   app.decorateRequest('locale', '')
 
+  // Registered before the gate below, so the setup lock's 503 and the session check's 401 —
+  // both thrown from that later onRequest hook — always have a locale to render with. Derives
+  // its own principal from the cookie rather than depending on the gate's `request.principalId`.
+  app.addHook('onRequest', (request, _reply, done) => {
+    const path = request.url.split('?')[0] ?? ''
+    // §17.5: the container probe stays dataless — resolveApiLocale would otherwise query.
+    request.locale = path === '/healthz' ? state.config.defaultLocale : resolveApiLocale(state, request)
+    done()
+  })
+
   app.addHook('onRequest', (request, _reply, done) => {
     const path = request.url.split('?')[0] ?? ''
     if (OPEN_PATHS.has(path)) { done(); return }
     if (!hasCredential(state.db)) {
-      done(setupRequired('no UI account exists yet; create one at /api/setup'))
+      done(setupRequired('api.setupRequired'))
       return
     }
     // Static assets are served outside /api and need no session: the SPA shell itself
@@ -38,13 +48,8 @@ export function registerContext(app: FastifyInstance, state: RuntimeState): void
     if (SESSION_EXEMPT.has(path)) { done(); return }
     const token = request.cookies[SESSION_COOKIE]
     const principalId = token === undefined ? null : readSession(state.db, token)
-    if (principalId === null) { done(unauthenticated('no valid session')); return }
+    if (principalId === null) { done(unauthenticated('api.unauthenticated')); return }
     request.principalId = principalId
-    done()
-  })
-
-  app.addHook('preHandler', (request, _reply, done) => {
-    request.locale = resolveApiLocale(state, request)
     done()
   })
 }
@@ -56,10 +61,12 @@ export function registerContext(app: FastifyInstance, state: RuntimeState): void
  * which an HTTP request has no rung for. Widening it would touch four other call sites.
  */
 function resolveApiLocale(state: RuntimeState, request: FastifyRequest): string {
-  const chosen = request.principalId === undefined
+  const token = request.cookies[SESSION_COOKIE]
+  const principalId = token === undefined ? null : readSession(state.db, token)
+  const chosen = principalId === null
     ? null
     : state.db.select({ locale: principal.locale }).from(principal)
-        .where(eq(principal.id, request.principalId)).get()?.locale ?? null
+        .where(eq(principal.id, principalId)).get()?.locale ?? null
   if (chosen !== null) return chosen
   const header = request.headers['accept-language']
   const preferred = typeof header === 'string'
