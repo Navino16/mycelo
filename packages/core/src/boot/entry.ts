@@ -5,6 +5,7 @@ import { DatabaseError } from '../persistence/db.js'
 import { createLogger } from '../support/logger.js'
 import { germinatePhase } from './germinate.js'
 import { serve } from './serve.js'
+import { stopMycelium } from './start.js'
 import type { RuntimeState } from './state.js'
 
 export interface Running {
@@ -50,6 +51,11 @@ export async function runEntry(configFile: string): Promise<Running> {
     // so SIGINT and SIGTERM in the same tick would otherwise run two concurrent shutdowns.
     if (closed) return
     closed = true
+    // Spores stop before Fastify and the database: a plugin's stop() may still write to
+    // the database (a channel recording its last-seen cursor), so the handle must be open.
+    if (state.germination.status === 'germinated') {
+      await stopMycelium(state.germination.mycelium, logger)
+    }
     // Requests stop before the handle goes (api-design §12): the reverse order would let a
     // route that reads the database fault mid-shutdown instead of being refused at the socket.
     await app.close()

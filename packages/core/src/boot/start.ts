@@ -8,6 +8,7 @@ import { createMyceliumApi } from '../mycelium-rhiza.js'
 import { allInhibitorChannels } from '../restrictions/rules.js'
 import { createBus, createEnzymeStartContext, sendVia } from '../rhizomorph/bus.js'
 import type { Bus } from '../rhizomorph/bus.js'
+import { describeThrown } from '../support/thrown.js'
 import type { RuntimeState } from './state.js'
 
 export interface Mycelium {
@@ -259,4 +260,46 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
   reportedHyphae = listening
 
   return { registry: { ...routedRegistry, hyphae: listening, dormant }, bus, admission }
+}
+
+export interface StopFailure {
+  name: string
+  error: string
+}
+
+/**
+ * Reverse of the start order (design §2.1): channels first, so nothing new arrives, then
+ * inhibitors, then rhizas and enzymes against the dependency order. Never rejects — one
+ * plugin must not be able to hold the process open.
+ */
+export async function stopMycelium(mycelium: Mycelium, logger: Logger): Promise<readonly StopFailure[]> {
+  const { registry } = mycelium
+  const failures: StopFailure[] = []
+  const attempt = async (name: string, stop: () => Promise<void>): Promise<void> => {
+    try {
+      await stop()
+    } catch (e) {
+      const error = describeThrown(e)
+      logger.warn(`spore '${name}' failed to stop`, { error })
+      failures.push({ name, error })
+    }
+  }
+  for (const h of registry.hyphae) await attempt(h.name, () => h.instance.stop())
+  for (const i of registry.inhibitors) {
+    if (i.instance.stop !== undefined) await attempt(i.name, () => i.instance.stop?.() ?? Promise.resolve())
+  }
+  // Hypha.stop/Rhiza.stop are required by septum's contract; Enzyme.stop/Inhibitor.stop
+  // are optional, since a text-only enzyme or a stateless inhibitor has nothing to release.
+  const byName = new Map<string, () => Promise<void>>([
+    ...registry.rhizas.map((r) => [r.name, () => r.instance.stop()] as const),
+    ...registry.enzymes.flatMap((e) => e.instance?.stop === undefined
+      ? []
+      : [[e.name, () => e.instance?.stop?.() ?? Promise.resolve()] as const]),
+  ])
+  // Reverse dependency order: a rhiza must outlive the enzymes that call into it.
+  for (const name of [...registry.order].reverse()) {
+    const stop = byName.get(name)
+    if (stop !== undefined) await attempt(name, stop)
+  }
+  return failures
 }
