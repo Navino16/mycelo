@@ -959,7 +959,7 @@ describe('the four refusal callbacks, threaded with the locale bus.ts resolved',
       routes: buildRoutes([enzyme]), order: ['media'], brokenEnforcing: [], catalogs: new Map(),
     }
 
-    // Mirrors mycelium.ts's own four callbacks, so a passing test here proves bus.ts's
+    // Mirrors boot/start.ts's own four callbacks, so a passing test here proves bus.ts's
     // plumbing, not merely that some translator was called.
     const locales: string[] = []
     const stub: Translator = {

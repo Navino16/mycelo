@@ -21,12 +21,19 @@ export function serve(configFile: string): Served {
   const logger = createLogger()
   const config = loadBootstrap(configFile)
   const { db, close } = openDatabase(config.databaseFile)
-  migrateDatabase(db)
-  bootstrapIdentity(db, { owner: config.owner, defaultRole: config.defaultRole })
-  // Asserted on the core catalogues alone, which is equivalent to asserting the merged
-  // map: germination merges core last, so core and common are always exactly these.
-  const catalogs = loadCoreCatalogs()
-  assertCoreCatalogs(catalogs, config.defaultLocale)
-  const translator = createTranslator({ catalogs, defaultLocale: config.defaultLocale, logger })
-  return { state: createRuntimeState(config, db, translator), closeDb: close }
+  try {
+    migrateDatabase(db)
+    bootstrapIdentity(db, { owner: config.owner, defaultRole: config.defaultRole })
+    // Cannot live in germinatePhase: everything inside its `try` is non-fatal by
+    // construction, so a StartupError there would degrade instead of halting and the API
+    // would come up rendering every string as a raw catalogue key.
+    const catalogs = loadCoreCatalogs()
+    assertCoreCatalogs(catalogs, config.defaultLocale)
+    const translator = createTranslator({ catalogs, defaultLocale: config.defaultLocale, logger })
+    return { state: createRuntimeState(config, db, translator), closeDb: close }
+  } catch (e) {
+    // catch, not finally: on the success path the caller receives the handle and owns it.
+    close()
+    throw e
+  }
 }

@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { sql } from 'drizzle-orm'
+import { Database } from 'bun:sqlite'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { serve } from '../../src/boot/serve.js'
 
@@ -45,5 +46,26 @@ describe('phase 1', () => {
     const served = serve(config('spores: ./none\ndatabase: ./mycelo.db\n'))
     served.closeDb()
     expect(() => served.state.db.get<[number]>(sql`SELECT 1`)).toThrow()
+  })
+
+  it('closes the database when a step after openDatabase throws', () => {
+    // Counted on the prototype rather than through the returned handle: a throw gives the
+    // caller no `closeDb`, and bun:sqlite defers the OS-level release for as long as a
+    // drizzle statement lives, so neither the fd nor the -wal file moves.
+    // Read through the descriptor, not as `Database.prototype.close`: an unbound method
+    // reference trips @typescript-eslint/unbound-method, and this project has no disables.
+    type Close = (this: Database, throwOnError?: boolean) => void
+    const original = Object.getOwnPropertyDescriptor(Database.prototype, 'close')?.value as Close
+    let closes = 0
+    Database.prototype.close = function counted(this: Database, throwOnError?: boolean): void {
+      closes += 1
+      original.call(this, throwOnError)
+    }
+    try {
+      expect(() => serve(config('spores: ./none\ndatabase: ./d.db\ndefaultRole: ghost\n'))).toThrow()
+    } finally {
+      Database.prototype.close = original
+    }
+    expect(closes).toBe(1)
   })
 })

@@ -64,8 +64,20 @@ describe('phase 2 germination', () => {
     const served = serve(config())
     closeDb = served.closeDb
     const result = await germinatePhase(served.state, createLogger())
-    expect(result).toMatchObject({ status: 'degraded', failure: { kind: 'collision', command: 'ping' } })
+    expect(result).toMatchObject({
+      status: 'degraded',
+      failure: { kind: 'collision', command: 'ping', plugins: ['alpha', 'beta'] },
+    })
     expect(served.state.germination.status).toBe('degraded')
+  })
+
+  it('propagates a database fault instead of degrading', () => {
+    const served = serve(config())
+    served.closeDb()
+    // Degraded mode is for faults a UI action repairs (§8.1); an unusable database is not
+    // one, so syncInstalls and readAllSettings sit outside the catch.
+    expect(germinatePhase(served.state, createLogger())).rejects.toThrow()
+    expect(served.state.germination.status).toBe('starting')
   })
 
   it('germinates when nothing is fatal', async () => {

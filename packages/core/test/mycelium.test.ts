@@ -795,7 +795,7 @@ it("lets an enzyme's start() push into the target conversation's own locale, nev
 
 // Pins the assertCoreCatalogs call site itself: every other test of it in
 // core-catalogs.test.ts calls the function directly, so deleting the call from
-// bootstrap() left the whole suite green — the exact defect finding 3 exists to close.
+// serve() left the whole suite green — the exact defect finding 3 exists to close.
 it('refuses to boot when the default locale has no core catalogue', async () => {
   const configFile = join(dir, 'mycelo.yaml')
   writeFileSync(configFile, `prefix: "/"\nspores: ${dir}\ndefaultLocale: ru\n`, 'utf8')
