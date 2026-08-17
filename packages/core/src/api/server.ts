@@ -8,6 +8,7 @@ import type { RuntimeState } from '../boot/state.js'
 import { ApiError } from './errors.js'
 import { registerContext } from './context.js'
 import { registerAuthRoutes } from './routes/auth.js'
+import { registerPluginRoutes } from './routes/plugins.js'
 import { describeThrown } from '../support/thrown.js'
 
 export interface ServerOptions {
@@ -76,6 +77,7 @@ export function createServer(options: ServerOptions): FastifyInstance {
   app.after(() => {
     registerContext(app, options.state)
     registerAuthRoutes(app, options.state)
+    registerPluginRoutes(app, options.state)
   })
   return app
 }

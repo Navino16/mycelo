@@ -18,3 +18,6 @@ api:
   invalidRequest: "la requête est invalide"
   rateLimited: "trop de requêtes ; réessayez plus tard"
   internalError: "une erreur interne est survenue"
+  pluginNotFound: "aucun plugin nommé « {plugin} » n'est installé"
+  pluginEnableRefused: "le plugin « {plugin} » n'a pas pu être activé"
+  pluginSettingUndeclared: "le plugin « {plugin} » ne déclare aucun paramètre nommé : {keys}"
