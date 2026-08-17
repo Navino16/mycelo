@@ -1,8 +1,11 @@
+import { deleteAllCredentials } from '../api/credentials.js'
+import { sweepSessions } from '../api/sessions.js'
 import { loadBootstrap } from '../config.js'
 import { assertCoreCatalogs, loadCoreCatalogs } from '../i18n/core-catalogs.js'
 import { createTranslator } from '../i18n/translator.js'
 import { bootstrapIdentity } from '../identity/bootstrap.js'
 import { migrateDatabase, openDatabase } from '../persistence/db.js'
+import { uiSession } from '../persistence/schema.js'
 import { createLogger } from '../support/logger.js'
 import { createRuntimeState } from './state.js'
 import type { RuntimeState } from './state.js'
@@ -24,6 +27,12 @@ export function serve(configFile: string): Served {
   try {
     migrateDatabase(db)
     bootstrapIdentity(db, { owner: config.owner, defaultRole: config.defaultRole })
+    if (config.ui.resetAccount) {
+      const removed = deleteAllCredentials(db)
+      db.delete(uiSession).run()
+      logger.warn(`ui.resetAccount removed ${String(removed)} UI credential(s) and every session; the setup wizard will run again — remove the key once you are back in`)
+    }
+    sweepSessions(db)
     // Cannot live in germinatePhase: everything inside its `try` is non-fatal by
     // construction, so a StartupError there would degrade instead of halting and the API
     // would come up rendering every string as a raw catalogue key.

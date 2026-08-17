@@ -119,3 +119,22 @@ export const inhibitorChannel = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.pluginName, t.channel] })],
 )
+
+// One credential per principal, because §5.4 makes a UI login another identity of the
+// same person rather than an account of its own.
+export const uiCredential = sqliteTable('ui_credential', {
+  principalId: text('principal_id').primaryKey().references(() => principal.id, { onDelete: 'cascade' }),
+  username: text('username').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  lastLoginAt: integer('last_login_at', { mode: 'timestamp_ms' }),
+})
+
+// The hash, never the token: a SELECT over this table must not hand out live sessions.
+export const uiSession = sqliteTable('ui_session', {
+  tokenHash: text('token_hash').primaryKey(),
+  principalId: text('principal_id').notNull().references(() => principal.id, { onDelete: 'cascade' }),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+  expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+  lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull(),
+})

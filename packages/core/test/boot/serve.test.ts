@@ -1,10 +1,14 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { sql } from 'drizzle-orm'
+import { count, sql } from 'drizzle-orm'
 import { Database } from 'bun:sqlite'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import { hasCredential, createCredential } from '../../src/api/credentials.js'
+import { openSession } from '../../src/api/sessions.js'
 import { serve } from '../../src/boot/serve.js'
+import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
+import { principal, uiSession } from '../../src/persistence/schema.js'
 
 let dir: string
 let closeDb: (() => void) | undefined
@@ -67,5 +71,35 @@ describe('phase 1', () => {
       Database.prototype.close = original
     }
     expect(closes).toBe(1)
+  })
+
+  it('ui.resetAccount removes every UI credential and session', async () => {
+    const databaseFile = join(dir, 'mycelo.db')
+    const seed = openDatabase(databaseFile)
+    migrateDatabase(seed.db)
+    seed.db.insert(principal).values({ id: 'p1', createdAt: new Date() }).run()
+    await createCredential(seed.db, 'p1', 'alice', 'secret')
+    openSession(seed.db, 'p1')
+    seed.close()
+
+    const served = serve(config('spores: ./none\ndatabase: ./mycelo.db\nui:\n  resetAccount: true\n'))
+    closeDb = served.closeDb
+    expect(hasCredential(served.state.db)).toBe(false)
+    expect(served.state.db.select({ n: count() }).from(uiSession).get()?.n).toBe(0)
+  })
+
+  it('leaves every UI credential and session alone without ui.resetAccount', async () => {
+    const databaseFile = join(dir, 'mycelo.db')
+    const seed = openDatabase(databaseFile)
+    migrateDatabase(seed.db)
+    seed.db.insert(principal).values({ id: 'p1', createdAt: new Date() }).run()
+    await createCredential(seed.db, 'p1', 'alice', 'secret')
+    openSession(seed.db, 'p1')
+    seed.close()
+
+    const served = serve(config('spores: ./none\ndatabase: ./mycelo.db\n'))
+    closeDb = served.closeDb
+    expect(hasCredential(served.state.db)).toBe(true)
+    expect(served.state.db.select({ n: count() }).from(uiSession).get()?.n).toBe(1)
   })
 })
