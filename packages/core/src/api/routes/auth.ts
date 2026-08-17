@@ -78,9 +78,13 @@ export function registerAuthRoutes(app: FastifyInstance, state: RuntimeState): v
         return id
       })
     } catch (e) {
-      // Reached only for a genuine duplicate now: the schema above rejects a bad username
-      // before this point, so nothing validation-shaped lands here to be mislabelled.
-      throw conflict((e as Error).message)
+      // Narrowed (review): only the two known duplicate shapes are conflicts — our own
+      // re-check, or a raw SQLite uniqueness violation. `ownerPrincipal`'s own fault throw
+      // is not a client conflict and must reach the generic 500 handler instead.
+      const isDuplicate = e instanceof Error
+        && (e.message === 'a UI account already exists' || e.message.includes('UNIQUE constraint failed'))
+      if (!isDuplicate) throw e
+      throw conflict(e.message)
     }
     setSessionCookie(reply, openSession(state.db, principalId), request.protocol === 'https')
     return { ok: true }

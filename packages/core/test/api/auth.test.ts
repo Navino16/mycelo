@@ -5,7 +5,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { boot, closeBooted, freshDir, setup } from './support.js'
 import type { Booted } from './support.js'
-import { principal, principalRole, uiCredential } from '../../src/persistence/schema.js'
+import { channelIdentity, principal, principalRole, uiCredential } from '../../src/persistence/schema.js'
 import type { Db } from '../../src/persistence/db.js'
 
 let dir: string
@@ -134,6 +134,21 @@ describe('the setup lock', () => {
     expect(db().select({ n: count() }).from(uiCredential).get()?.n).toBe(1)
   })
 
+  it('answers 500 with code internal for an ownerPrincipal fault, not 409', async () => {
+    // Re-review regression: moving ownerPrincipal inside the transaction's try/catch meant
+    // its own "core bug" throw was caught by the same catch as the duplicate-setup race and
+    // relabelled a client conflict. Reachable if the configured owner's channel_identity row
+    // is missing — simulated here directly, since bootstrapIdentity itself never fails to
+    // create it.
+    const a = start('owner:\n  channel: console\n  userId: owner-on-console\n')
+    db().delete(channelIdentity).run()
+    const response = await a.inject({
+      method: 'POST', url: '/api/setup', payload: { username: 'alice', password: 'correct horse' },
+    })
+    expect(response.statusCode).toBe(500)
+    expect(response.json<{ error: { code: string } }>().error.code).toBe('internal')
+  })
+
   it('maps a bare ZodError to the §9 validation shape', async () => {
     // Spec gap the review found: setErrorHandler mapped no ZodError. Declared before any
     // request so it lands before the instance starts (Fastify forbids adding routes after).
@@ -237,6 +252,24 @@ describe('authentication', () => {
       payload: { current: 'correct horse', next: 'short' },
     })
     expect(response.statusCode).toBe(400)
+  })
+
+  it('answers 500 with code internal for a changePassword failure other than a wrong password', async () => {
+    // Re-review, step 3: the narrowed catch's `throw e` branch had no test proving the new
+    // status code. Reachable if the credential row's principal no longer matches the live
+    // session's — reassigned rather than deleted, so hasCredential() stays true and the
+    // setup lock does not intercept the request before it reaches the route.
+    const a = start()
+    const cookie = await setup(a)
+    const other = crypto.randomUUID()
+    db().insert(principal).values({ id: other, createdAt: new Date() }).run()
+    db().update(uiCredential).set({ principalId: other }).run()
+    const response = await a.inject({
+      method: 'PUT', url: '/api/me/password', headers: { cookie },
+      payload: { current: 'correct horse', next: 'a new password' },
+    })
+    expect(response.statusCode).toBe(500)
+    expect(response.json<{ error: { code: string } }>().error.code).toBe('internal')
   })
 
   it('invalidates every other session on a password change, but keeps the current one', async () => {
