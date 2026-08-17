@@ -1,7 +1,7 @@
 import { CycleError } from '../germination/anastomoses.js'
 import { CollisionError } from '../germination/registry.js'
 import { describeThrown } from '../support/thrown.js'
-import type { Mycelium } from '../mycelium.js'
+import type { Mycelium } from './start.js'
 import type { Bootstrap } from '../config.js'
 import type { Db } from '../persistence/db.js'
 import type { Translator } from '../i18n/translator.js'
