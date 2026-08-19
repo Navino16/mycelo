@@ -58,10 +58,8 @@ export function createServer(options: ServerOptions): FastifyInstance {
     }
     const status = statusCodeOf(error) ?? 500
     // §10 admits no exception, including this one: the raw fault (a SQLite sentence, an
-    // invariant message) goes to the operator's log, never to the client. Also where a
-    // StartupError/BootstrapError lands if one ever reached a request handler — neither
-    // throw site is reachable from one today (identity/bootstrap.ts and config.ts both run
-    // before the server exists), so no dedicated branch exists to test dishonestly.
+    // invariant message) goes to the operator's log, never to the client. Also covers
+    // StartupError/BootstrapError, neither reachable from a request handler today.
     if (status !== 429) console.error(describeThrown(error))
     void reply.status(status).send({
       error: {

@@ -44,7 +44,11 @@ describe('/api/germination/retry', () => {
     const { app, cookie } = booted
     const response = await app.inject({ method: 'POST', url: '/api/germination/retry', headers: { cookie } })
     expect(response.statusCode).toBe(409)
-    expect(response.json<{ error: { code: string } }>().error.code).toBe('degraded')
+    const body = response.json<{ error: { code: string, message: string } }>()
+    expect(body.error.code).toBe('degraded')
+    // The translator falls back to the raw key on a typo or a catalogue mismatch; the
+    // suite must render the key, not just check the status, to catch that (review, Important 1).
+    expect(body.error.message).toBe('germination can only be retried while the runtime is degraded')
   })
 
   it('germinates after the culprit is disabled', async () => {
