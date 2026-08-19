@@ -395,6 +395,24 @@ describe('the session cookie', () => {
     expect(cookie?.secure).toBeUndefined()
   })
 
+  // The positive branch: every assertion above is `secure` *absent*, so replacing
+  // `request.protocol === 'https'` with a constant false survived the whole suite — and that
+  // mutant means the session cookie is never Secure behind TLS (review, minor 5).
+  it('is Secure behind a trusted proxy that forwarded https', async () => {
+    const a = start('', true)
+    const created = await a.inject({
+      method: 'POST', url: '/api/setup', payload: { username: 'alice', password: 'correct horse' },
+      headers: { 'x-forwarded-proto': 'https' },
+    })
+    expect(created.statusCode).toBe(200)
+    expect(created.cookies.find((c) => c.name === 'mycelo_session')?.secure).toBe(true)
+    const login = await a.inject({
+      method: 'POST', url: '/api/login', payload: { username: 'alice', password: 'correct horse' },
+      headers: { 'x-forwarded-proto': 'https' },
+    })
+    expect(login.cookies.find((c) => c.name === 'mycelo_session')?.secure).toBe(true)
+  })
+
   // POST /api/setup is a second call site of the same `request.protocol === 'https'`
   // argument (auth.ts:92) and M69 mutated only the login one at :102 — a reader without
   // the writer's guard, in the class this campaign named as its worst.
