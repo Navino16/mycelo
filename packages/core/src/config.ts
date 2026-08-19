@@ -18,7 +18,7 @@ const uiSchema = z.object({
   // `false` the login limiter counts every attacker as one client; without a proxy and
   // `true` a client sets its own X-Forwarded-For and the limiter protects nothing.
   trustProxy: z.boolean().default(false),
-  /** Deletes every UI credential at boot so the setup wizard runs again (spec §6.6). */
+  /** Deletes every UI credential and session at boot so the wizard runs again (spec §6.6). */
   resetAccount: z.boolean().default(false),
 })
 
