@@ -2,10 +2,12 @@ import Fastify from 'fastify'
 import type { FastifyInstance } from 'fastify'
 import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
+import fastifyStatic from '@fastify/static'
+import { fileURLToPath } from 'node:url'
 import { ZodError } from 'zod'
 import type { UiConfig } from '../config.js'
 import type { RuntimeState } from '../boot/state.js'
-import { ApiError } from './errors.js'
+import { ApiError, notFound } from './errors.js'
 import { registerContext } from './context.js'
 import { registerAuthRoutes } from './routes/auth.js'
 import { registerHealthRoutes } from './routes/health.js'
@@ -14,6 +16,13 @@ import { registerPluginRoutes } from './routes/plugins.js'
 import { registerRegistryRoutes } from './routes/registry.js'
 import { registerRoleRoutes } from './routes/roles.js'
 import { describeThrown } from '../support/thrown.js'
+
+// Both roots, tried in order: a real build the day phase 9 produces one, the committed
+// sentinel until then. dist/ is gitignored, so public/ is the only one in the tree today.
+const UI_ROOTS = [
+  fileURLToPath(new URL('../../../ui/dist', import.meta.url)),
+  fileURLToPath(new URL('../../../ui/public', import.meta.url)),
+]
 
 export interface ServerOptions {
   trustProxy: boolean
@@ -87,6 +96,17 @@ export function createServer(options: ServerOptions): FastifyInstance {
     registerPluginRoutes(app, options.state)
     registerRoleRoutes(app, options.state)
     registerRegistryRoutes(app, options.state)
+    // wildcard: false — the plugin claims only the files it finds under UI_ROOTS, so the
+    // fallback below still runs for every SPA route and API 404 (spec §12).
+    void app.register(fastifyStatic, { root: UI_ROOTS, wildcard: false })
+    app.setNotFoundHandler((request, reply) => {
+      const path = request.url.split('?')[0] ?? ''
+      if (path.startsWith('/api/') || path === '/healthz') {
+        throw notFound('api.routeNotFound', { path })
+      }
+      // SPA fallback: the client router owns every other path (spec §12).
+      void reply.sendFile('index.html')
+    })
   })
   return app
 }

@@ -39,13 +39,13 @@ export function registerContext(app: FastifyInstance, state: RuntimeState): void
   app.addHook('onRequest', (request, _reply, done) => {
     const path = request.url.split('?')[0] ?? ''
     if (OPEN_PATHS.has(path)) { done(); return }
+    // Static assets are served outside /api and need no session or account: the shell
+    // must load before setup so it can serve the account-creation wizard (spec §6.4).
+    if (!path.startsWith('/api/')) { done(); return }
     if (!hasCredential(state.db)) {
       done(setupRequired('api.setupRequired'))
       return
     }
-    // Static assets are served outside /api and need no session: the SPA shell itself
-    // must load so it can show the login form.
-    if (!path.startsWith('/api/')) { done(); return }
     if (SESSION_EXEMPT.has(path)) { done(); return }
     const token = request.cookies[SESSION_COOKIE]
     const principalId = token === undefined ? null : readSession(state.db, token)
