@@ -100,10 +100,9 @@ describe('the phase-6 milestone (api-design §15)', () => {
     expect(shell.headers['content-type']).toContain('text/html')
     expect(shell.body).toContain('Mycelo')
 
-    // §15.6 — two rhizas requiring each other. Dropping the files in takes *two* restarts,
-    // not the one §15 assumes: only `syncInstalls` at boot creates an install row (there is
-    // no inoculate route before phase 8), and phase 5 records anything a later sync finds as
-    // disabled, so the row has to exist before the operator can enable it.
+    // §15.6 — two rhizas requiring each other. This takes *two* restarts, not §15's one:
+    // only syncInstalls at boot creates an install row (no inoculate route before phase 8),
+    // and phase 5 records anything a later sync finds as disabled.
     cyclingPairWithModules(sporesDir)
     booted = await restart(dir, sporesDir, booted)
     const disabledStill = await booted.app.inject({ method: 'GET', url: '/api/health', headers: { cookie } })
