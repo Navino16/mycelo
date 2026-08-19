@@ -28,3 +28,4 @@ api:
   roleBuiltin: "role ''{role}'' is builtin and cannot be changed"
   roleIsDefault: "role ''{role}'' is the configured default role and cannot be deleted"
   patternDuplicate: "a pattern is listed twice"
+  germinationNotDegraded: "germination can only be retried while the runtime is degraded"

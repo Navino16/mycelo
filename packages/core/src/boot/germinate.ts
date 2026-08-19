@@ -44,3 +44,15 @@ export async function germinatePhase(state: RuntimeState, logger: Logger): Promi
   }
   return state.germination
 }
+
+/**
+ * Only from degraded mode (spec §4.2): nothing germinated, so nothing needs stopping.
+ * A retry from `germinated` would have to tear a live channel connection down.
+ */
+export async function retryGermination(state: RuntimeState, logger: Logger): Promise<Germination> {
+  if (state.germination.status !== 'degraded') {
+    throw new Error('germination can only be retried while the runtime is degraded')
+  }
+  state.retrying ??= germinatePhase(state, logger).finally(() => { state.retrying = undefined })
+  return state.retrying
+}

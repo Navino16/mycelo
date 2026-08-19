@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { germinatePhase } from '../../src/boot/germinate.js'
+import { germinatePhase, retryGermination } from '../../src/boot/germinate.js'
 import { serve } from '../../src/boot/serve.js'
 import { createLogger } from '../../src/support/logger.js'
 
@@ -104,5 +104,28 @@ describe('phase 2 germination', () => {
     // The core's own domain must survive the merge, or every refusal renders as a key.
     expect(served.state.translator.translate('core', 'command.unknown', 'en', { command: 'x' }))
       .not.toBe('command.unknown')
+  })
+})
+
+describe('retryGermination', () => {
+  it('joins two concurrent callers into one germination', async () => {
+    cyclingPair()
+    const served = serve(config())
+    closeDb = served.closeDb
+    await germinatePhase(served.state, createLogger())
+    const first = retryGermination(served.state, createLogger())
+    const second = retryGermination(served.state, createLogger())
+    const [a, b] = await Promise.all([first, second])
+    expect(a).toBe(b)
+  })
+
+  it('refuses when the runtime is not degraded', async () => {
+    spore('good', {
+      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.7"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
+    })
+    const served = serve(config())
+    closeDb = served.closeDb
+    await germinatePhase(served.state, createLogger())
+    expect(retryGermination(served.state, createLogger())).rejects.toThrow(/only be retried while/)
   })
 })

@@ -15,6 +15,8 @@ export interface Mycelium {
   registry: Registry
   bus: Bus
   admission: AdmissionChain
+  /** Every hypha whose connect() resolved, unlike registry.hyphae (listen() survivors only). */
+  connectedHyphae: readonly GerminatedHypha[]
 }
 
 /** The three refusal callbacks below each sliced this out of `qualified` themselves. */
@@ -259,7 +261,7 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
   }
   reportedHyphae = listening
 
-  return { registry: { ...routedRegistry, hyphae: listening, dormant }, bus, admission }
+  return { registry: { ...routedRegistry, hyphae: listening, dormant }, bus, admission, connectedHyphae }
 }
 
 export interface StopFailure {
@@ -273,7 +275,7 @@ export interface StopFailure {
  * plugin must not be able to hold the process open.
  */
 export async function stopMycelium(mycelium: Mycelium, logger: Logger): Promise<readonly StopFailure[]> {
-  const { registry } = mycelium
+  const { registry, connectedHyphae } = mycelium
   const failures: StopFailure[] = []
   const attempt = async (name: string, stop: () => Promise<void>): Promise<void> => {
     try {
@@ -284,7 +286,9 @@ export async function stopMycelium(mycelium: Mycelium, logger: Logger): Promise<
       failures.push({ name, error })
     }
   }
-  for (const h of registry.hyphae) await attempt(h.name, () => h.instance.stop())
+  // connectedHyphae, not registry.hyphae: a hypha whose connect() resolved but whose
+  // listen() threw is absent from registry.hyphae, though its connection is live.
+  for (const h of connectedHyphae) await attempt(h.name, () => h.instance.stop())
   for (const i of registry.inhibitors) {
     if (i.instance.stop !== undefined) await attempt(i.name, () => i.instance.stop?.() ?? Promise.resolve())
   }

@@ -8,6 +8,7 @@ import type { RuntimeState } from '../boot/state.js'
 import { ApiError } from './errors.js'
 import { registerContext } from './context.js'
 import { registerAuthRoutes } from './routes/auth.js'
+import { registerHealthRoutes } from './routes/health.js'
 import { registerPeopleRoutes } from './routes/people.js'
 import { registerPluginRoutes } from './routes/plugins.js'
 import { registerRegistryRoutes } from './routes/registry.js'
@@ -57,7 +58,10 @@ export function createServer(options: ServerOptions): FastifyInstance {
     }
     const status = statusCodeOf(error) ?? 500
     // §10 admits no exception, including this one: the raw fault (a SQLite sentence, an
-    // invariant message) goes to the operator's log, never to the client.
+    // invariant message) goes to the operator's log, never to the client. Also where a
+    // StartupError/BootstrapError lands if one ever reached a request handler — neither
+    // throw site is reachable from one today (identity/bootstrap.ts and config.ts both run
+    // before the server exists), so no dedicated branch exists to test dishonestly.
     if (status !== 429) console.error(describeThrown(error))
     void reply.status(status).send({
       error: {
@@ -80,6 +84,7 @@ export function createServer(options: ServerOptions): FastifyInstance {
   app.after(() => {
     registerContext(app, options.state)
     registerAuthRoutes(app, options.state)
+    registerHealthRoutes(app, options.state)
     registerPeopleRoutes(app, options.state)
     registerPluginRoutes(app, options.state)
     registerRoleRoutes(app, options.state)

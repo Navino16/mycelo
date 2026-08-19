@@ -35,6 +35,8 @@ export interface RuntimeState {
   /** Replaced by phase 2 once spore catalogues load; core-only until then (spec §3). */
   translator: Translator
   germination: Germination
+  /** The in-flight retry, so two callers join one germination rather than racing. */
+  retrying?: Promise<Germination>
 }
 
 export function createRuntimeState(

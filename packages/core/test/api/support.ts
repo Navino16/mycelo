@@ -60,6 +60,20 @@ export const cyclingPair: SporeWriter = (sporesDir) => {
   }
 }
 
+/**
+ * `cyclingPair` plus `gamma`, an enzyme requiring `alpha` alone — disabling `gamma`
+ * removes it from the graph entirely but leaves the alpha/beta cycle intact, the case
+ * where a retry names a shorter cycle instead of succeeding (spec §4.2).
+ */
+export const cyclingTriple: SporeWriter = (sporesDir) => {
+  cyclingPair(sporesDir)
+  writeSpore(sporesDir, 'gamma', {
+    'spore.yaml': 'kind: enzyme\nname: gamma\nseptum: "^0.7"\ncommands:\n'
+      + '  - name: noop\n    description: No-op\n    respond: noop.text\n'
+      + 'requires:\n  - rhiza: alpha\n',
+  })
+}
+
 // Missing `septum`, same as lifecycle.test.ts's 'brokenyaml': the manifest never parses,
 // so the registry.dormant entry it produces carries no kind at all.
 export const brokenManifest: SporeWriter = (sporesDir) => {

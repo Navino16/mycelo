@@ -7,13 +7,16 @@ import { createLogger } from '../../src/support/logger.js'
 
 function myceliumWith(overrides: {
   hyphae?: readonly GerminatedHypha[]
+  /** Defaults to `hyphae`; set separately to simulate a hypha demoted after connect(). */
+  connectedHyphae?: readonly GerminatedHypha[]
   rhizas?: readonly GerminatedRhiza[]
   enzymes?: readonly GerminatedEnzyme[]
 }): Mycelium {
   const rhizas = overrides.rhizas ?? []
   const enzymes = overrides.enzymes ?? []
+  const hyphae = overrides.hyphae ?? []
   const registry: Registry = {
-    hyphae: overrides.hyphae ?? [],
+    hyphae,
     enzymes,
     rhizas,
     inhibitors: [],
@@ -25,6 +28,7 @@ function myceliumWith(overrides: {
   }
   return {
     registry,
+    connectedHyphae: overrides.connectedHyphae ?? hyphae,
     bus: { deliver: async () => {} },
     admission: { admit: async () => ({ allow: true }) },
   }
@@ -121,6 +125,16 @@ describe('stopMycelium', () => {
     // One plugin must not be able to hold the process open or strand its siblings.
     expect(stopped).toEqual(['good'])
     expect(failures).toEqual([{ name: 'bad', error: 'stop failed' }])
+  })
+
+  it('stops a hypha whose listen() failed although registry.hyphae excludes it', async () => {
+    const stopped: string[] = []
+    const flaky = stubHypha('flaky', stopped)
+    // listPlugins()/registry.hyphae report only the listening set (start.ts step 3), but
+    // the connection itself is live and must still be torn down.
+    const mycelium = myceliumWith({ hyphae: [], connectedHyphae: [flaky] })
+    expect(await stopMycelium(mycelium, createLogger())).toEqual([])
+    expect(stopped).toEqual(['flaky'])
   })
 
   it('does not reject when a spore rejects', () => {
