@@ -15,7 +15,7 @@ import { registerPeopleRoutes } from './routes/people.js'
 import { registerPluginRoutes } from './routes/plugins.js'
 import { registerRegistryRoutes } from './routes/registry.js'
 import { registerRoleRoutes } from './routes/roles.js'
-import { describeThrown } from '../support/thrown.js'
+import { describeFault } from '../support/thrown.js'
 
 // Both roots, tried in order: a real build the day phase 9 produces one, the committed
 // sentinel until then. dist/ is gitignored, so public/ is the only one in the tree today.
@@ -71,7 +71,8 @@ export function createServer(options: ServerOptions): FastifyInstance {
     // §10 admits no exception, including this one: the raw fault (a SQLite sentence, an
     // invariant message) goes to the operator's log, never to the client. Also covers
     // StartupError/BootstrapError, neither reachable from a request handler today.
-    if (status !== 429) console.error(describeThrown(error))
+    // describeFault, not describeThrown: this line is the only record, so it keeps the stack.
+    if (status !== 429) console.error(describeFault(error))
     void reply.status(status).send({
       error: {
         code: status === 429 ? 'rate-limited' : 'internal',

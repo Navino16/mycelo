@@ -3,6 +3,7 @@ import { BootstrapError } from '../config.js'
 import { StartupError } from '../identity/bootstrap.js'
 import { DatabaseError } from '../persistence/db.js'
 import { createLogger } from '../support/logger.js'
+import { describeFault } from '../support/thrown.js'
 import { germinatePhase } from './germinate.js'
 import { serve } from './serve.js'
 import { stopMycelium } from './start.js'
@@ -24,8 +25,7 @@ function failureDetail(e: unknown): string {
   if (e instanceof BootstrapError || e instanceof StartupError || e instanceof DatabaseError) {
     return e.message
   }
-  if (e instanceof Error) return e.stack ?? e.message
-  return String(e)
+  return describeFault(e)
 }
 
 export function startupMessage(e: unknown): string {

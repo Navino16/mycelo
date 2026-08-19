@@ -7,3 +7,16 @@ export function describeThrown(e: unknown): string {
     return 'unknown error'
   }
 }
+
+/**
+ * For an operator log only, never a client: keeps the stack, unlike `describeThrown`, whose
+ * output reaches the API through `GerminationFailure.message` and would leak absolute paths.
+ */
+export function describeFault(e: unknown): string {
+  if (e instanceof Error) return e.stack ?? e.message
+  try {
+    return String(e)
+  } catch {
+    return 'unknown error'
+  }
+}

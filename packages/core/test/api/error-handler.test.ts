@@ -30,6 +30,31 @@ describe('the fallback error branch', () => {
     expect(JSON.stringify(body)).not.toContain('a raw substrate detail')
   })
 
+  // The other half of §10's bargain, which the whole-branch review found unpaid: the log kept
+  // only `error.message`, so a genuine fault arrived with no stack and a `throw 'string'` from
+  // a dependency arrived as the literal 'unknown error'.
+  it("logs a 500's stack, and a non-Error throw's own text", async () => {
+    booted = boot(dir)
+    booted.app.get('/api/__boom3', function boom3() { throw new Error('a raw substrate detail') })
+    // Cast, not a bare string: @typescript-eslint/only-throw-error is type-based, and the
+    // point of the test is precisely what a dependency throwing a string leaves behind.
+    const notAnError = 'ENOSPC' as unknown as Error
+    booted.app.get('/api/__boom4', () => { throw notAnError })
+    const cookie = await setup(booted.app)
+    const logged = spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await booted.app.inject({ method: 'GET', url: '/api/__boom3', headers: { cookie } })
+      const stack = logged.mock.calls.flat().join('\n')
+      expect(stack).toContain('a raw substrate detail')
+      expect(stack).toContain('boom3')
+      logged.mockClear()
+      await booted.app.inject({ method: 'GET', url: '/api/__boom4', headers: { cookie } })
+      expect(logged.mock.calls.flat().join('\n')).toContain('ENOSPC')
+    } finally {
+      logged.mockRestore()
+    }
+  })
+
   // §10 sends the raw fault to the operator's log and a sentence to the client. Inverting
   // the `status !== 429` guard survived the whole suite (campaign M72), which would leave a
   // genuine 500 with no server-side trace at all, and fill the log with limiter noise.
