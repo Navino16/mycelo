@@ -1,8 +1,9 @@
 import type { Enzyme, Hypha, Rhiza } from '@mycelo/septum'
 import { describe, expect, it } from 'bun:test'
-import type { GerminatedEnzyme, GerminatedHypha, GerminatedRhiza, Registry } from '../../src/germination/registry.js'
-import { stopMycelium } from '../../src/boot/start.js'
+import type { GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor, GerminatedRhiza, Registry } from '../../src/germination/registry.js'
+import { startMycelium, stopMycelium } from '../../src/boot/start.js'
 import type { Mycelium } from '../../src/boot/start.js'
+import type { RuntimeState } from '../../src/boot/state.js'
 import { createLogger } from '../../src/support/logger.js'
 
 function myceliumWith(overrides: {
@@ -11,6 +12,7 @@ function myceliumWith(overrides: {
   connectedHyphae?: readonly GerminatedHypha[]
   rhizas?: readonly GerminatedRhiza[]
   enzymes?: readonly GerminatedEnzyme[]
+  inhibitors?: readonly GerminatedInhibitor[]
 }): Mycelium {
   const rhizas = overrides.rhizas ?? []
   const enzymes = overrides.enzymes ?? []
@@ -19,7 +21,7 @@ function myceliumWith(overrides: {
     hyphae,
     enzymes,
     rhizas,
-    inhibitors: [],
+    inhibitors: overrides.inhibitors ?? [],
     dormant: [],
     routes: new Map(),
     order: [...rhizas, ...enzymes].map((s) => s.name),
@@ -55,6 +57,16 @@ function stubHypha(name: string, stopped: string[]): GerminatedHypha {
 
 function throwingHypha(name: string): GerminatedHypha {
   return hypha(name, async () => { throw new Error('stop failed') })
+}
+
+// Inhibitor.stop is optional in the contract, so a stub carrying one is the only way to
+// prove the loop that calls it exists at all.
+function stubInhibitor(name: string, stopped: string[]): GerminatedInhibitor {
+  return {
+    name, config: {}, resolved: new Set(), scopes: [],
+    manifest: { kind: 'inhibitor', name, septum: '^0.7', enforcing: false },
+    instance: { inspect: async () => ({ allow: true }), stop: async () => { stopped.push(name) } },
+  } as unknown as GerminatedInhibitor
 }
 
 function stubRhiza(name: string, stopped: string[]): GerminatedRhiza {
@@ -127,6 +139,34 @@ describe('stopMycelium', () => {
     expect(failures).toEqual([{ name: 'bad', error: 'stop failed' }])
   })
 
+  // Every fixture in this file set `inhibitors: []` until now, so deleting the inhibitor
+  // stop loop survived the whole suite.
+  it('stops every inhibitor, after the channels and before the rhizas', async () => {
+    const order: string[] = []
+    const mycelium = myceliumWith({
+      hyphae: [stubHypha('chan', order)],
+      rhizas: [stubRhiza('r1', order)],
+      inhibitors: [stubInhibitor('gate', order), stubInhibitor('guard', order)],
+    })
+    await stopMycelium(mycelium, createLogger())
+    // The plural case, and the position: an inhibitor may call into a rhiza (design §7),
+    // so it stops while that rhiza is still running.
+    expect(order).toEqual(['chan', 'gate', 'guard', 'r1'])
+  })
+
+  // The invariant stated at start.ts's reverse loop — "a rhiza must outlive the enzymes that
+  // call into it" — had no test: the ordering test above it only pins hypha before enzyme.
+  it('stops an enzyme before the rhiza it calls into', async () => {
+    const order: string[] = []
+    const mycelium = myceliumWith({
+      rhizas: [stubRhiza('conn', order)],
+      enzymes: [stubEnzyme('caller', order)],
+    })
+    await stopMycelium(mycelium, createLogger())
+    // registry.order is dependency-first (conn, then caller), so stopping walks it reversed.
+    expect(order).toEqual(['caller', 'conn'])
+  })
+
   it('stops a hypha whose listen() failed although registry.hyphae excludes it', async () => {
     const stopped: string[] = []
     const flaky = stubHypha('flaky', stopped)
@@ -142,5 +182,36 @@ describe('stopMycelium', () => {
     // Bare, not awaited: `await expect(...).resolves` trips @typescript-eslint/await-thenable
     // here, same as the `.rejects` case CLAUDE.md already records; Bun still fails it correctly.
     expect(stopMycelium(mycelium, createLogger())).resolves.toBeDefined()
+  })
+})
+
+describe('startMycelium', () => {
+  // A registry.order naming a spore that is neither rhiza nor enzyme reaches start.ts's
+  // `unreachable` throw — the one reachable door past the connect loop (review, Important 4).
+  it('stops what it started when the dependency walk throws, and still propagates', async () => {
+    const stopped: string[] = []
+    const registry: Registry = {
+      hyphae: [stubHypha('chan', stopped)],
+      enzymes: [],
+      rhizas: [stubRhiza('r1', stopped)],
+      inhibitors: [],
+      dormant: [],
+      routes: new Map(),
+      order: ['r1', 'ghost'],
+      brokenEnforcing: [],
+      catalogs: new Map(),
+    }
+    const state = {
+      config: { sporesDir: '/none', prefix: '/', defaultLocale: 'en' },
+      db: {},
+      translator: {},
+    } as unknown as RuntimeState
+    const started = startMycelium({ registry, state, logger: createLogger() })
+    // Bare, not awaited: `await expect(...).rejects` trips @typescript-eslint/await-thenable.
+    expect(started).rejects.toThrow(/neither a rhiza nor an enzyme/)
+    await started.catch(() => { /* asserted above; this only sequences the check below */ })
+    // spec §4.2 rests on degraded mode meaning nothing is connected: the hypha this call
+    // connected and the rhiza it started are both torn down before the fault escapes.
+    expect(stopped).toEqual(['chan', 'r1'])
   })
 })
