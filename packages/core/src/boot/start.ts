@@ -284,8 +284,7 @@ export interface StopFailure {
 
 /** What `stopStarted` has to tear down: the started sets, not a whole Mycelium. */
 interface Started {
-  /** Not registry.hyphae: a hypha whose connect() resolved but whose listen() threw is
-   *  absent from it, though its connection is live. */
+  /** Not registry.hyphae: a hypha whose listen() threw is absent from it, connection live. */
   connectedHyphae: readonly GerminatedHypha[]
   inhibitors: readonly GerminatedInhibitor[]
   rhizas: readonly GerminatedRhiza[]
