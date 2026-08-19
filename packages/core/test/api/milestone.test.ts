@@ -88,6 +88,8 @@ describe('the phase-6 milestone (api-design §15)', () => {
     })
 
     // §15.4 — a clean substrate: nothing dormant, no inhibitor refusing everything.
+    // Mutation-named (campaign M29, M30): reporting every inhibitor as enforcing-blocked, or
+    // every enzyme as dormant, each fails here rather than passing an empty-vs-empty check.
     const health = await app.inject({ method: 'GET', url: '/api/health', headers: { cookie } })
     expect(health.statusCode).toBe(200)
     expect(health.json<RuntimeHealth>()).toMatchObject({
@@ -113,6 +115,7 @@ describe('the phase-6 milestone (api-design §15)', () => {
       const enabled = await booted.app.inject({
         method: 'POST', url: `/api/plugins/${name}/enable`, headers: { cookie },
       })
+      // Mutation-named (campaign M31): refusing when enablePlugin succeeded fails here.
       expect(enabled.statusCode).toBe(200)
       expect(enabled.json<Toggled>()).toEqual({ ok: true, restartRequired: true })
     }
@@ -125,6 +128,8 @@ describe('the phase-6 milestone (api-design §15)', () => {
     const degraded = await restarted.inject({ method: 'GET', url: '/api/health', headers: { cookie } })
     expect(degraded.statusCode).toBe(200)
     const body = degraded.json<RuntimeHealth>()
+    // The milestone's headline assertion, and mutation-named (campaign M26): classifying a
+    // CycleError as kind 'unknown' fails on this line and on nothing else in this file.
     expect(body).toMatchObject({ mode: 'degraded', failure: { kind: 'cycle' } })
     expect(body.failure?.kind === 'cycle' ? [...body.failure.spores].sort() : []).toEqual(['alpha', 'beta'])
 

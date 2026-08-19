@@ -46,6 +46,26 @@ describe('searchPrincipals', () => {
     close()
   })
 
+  // Campaign M45: dropping the `principal.id` tiebreaker from the ORDER BY. Every other
+  // fixture here derives createdAt from the id, so no two rows ever tie and the tiebreaker
+  // is unreachable. Inserted in reverse id order on one shared timestamp, bun:sqlite answers
+  // p3,p2,p1 without it and p1,p2,p3 with it.
+  it('orders principals sharing a createdAt by id, so page 2 cannot repeat page 1', () => {
+    const { db, close } = fresh()
+    const sameInstant = new Date('2026-01-01T00:00:00Z')
+    for (const id of ['p3', 'p2', 'p1']) {
+      db.insert(principal).values({ id, displayName: id, createdAt: sameInstant }).run()
+    }
+    expect(searchPrincipals(db, { page: 1, perPage: 3 }).items.map((p) => p.id))
+      .toEqual(['p1', 'p2', 'p3'])
+    // And the property the tiebreaker exists for, read across the page boundary.
+    const first = searchPrincipals(db, { page: 1, perPage: 2 }).items.map((p) => p.id)
+    const second = searchPrincipals(db, { page: 2, perPage: 2 }).items.map((p) => p.id)
+    expect(first).toEqual(['p1', 'p2'])
+    expect(second).toEqual(['p3'])
+    close()
+  })
+
   it('matches on a display name and on a channel external id', () => {
     const { db, close } = fresh()
     person(db, 'p1', 'Alice')

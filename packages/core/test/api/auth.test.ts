@@ -298,11 +298,9 @@ describe('authentication', () => {
   })
 })
 
-// The first test here spends ten argon2id verifications and the second eleven — ten wrong
-// logins from one address, an eleventh the limiter refuses without hashing, then one correct
-// login from another. At m=65536 that is ~1.5 s idle and the 5 s default times out on a
-// loaded shared runner. The assertions are on status codes, so a larger budget cannot mask
-// a logic defect.
+// Ten argon2id verifications in the first test, eleven in the second (the limiter refuses
+// its 11th without hashing, then one correct login from another address): ~1.5 s idle, and
+// the 5 s default times out on a loaded runner. Status-code assertions mask no logic defect.
 const RATE_LIMIT_TIMEOUT_MS = 20_000
 
 describe('rate limiting on login', () => {
@@ -383,6 +381,22 @@ describe('the session cookie', () => {
       path: '/',
       // inject() speaks http, and a `secure` cookie over http is one the browser drops.
       maxAge: 14 * 24 * 60 * 60,
+    })
+    expect(cookie?.secure).toBeUndefined()
+  })
+
+  // POST /api/setup is a second call site of the same `request.protocol === 'https'`
+  // argument (auth.ts:92) and M69 mutated only the login one at :102 — a reader without
+  // the writer's guard, in the class this campaign named as its worst.
+  it('is set with the same attributes by the setup wizard, not only by login', async () => {
+    const a = start()
+    const created = await a.inject({
+      method: 'POST', url: '/api/setup', payload: { username: 'alice', password: 'correct horse' },
+    })
+    expect(created.statusCode).toBe(200)
+    const cookie = created.cookies.find((c) => c.name === 'mycelo_session')
+    expect(cookie).toMatchObject({
+      httpOnly: true, sameSite: 'Lax', path: '/', maxAge: 14 * 24 * 60 * 60,
     })
     expect(cookie?.secure).toBeUndefined()
   })
