@@ -21,6 +21,7 @@ api:
   pluginNotFound: "aucun plugin nommé « {plugin} » n'est installé"
   pluginEnableRefused: "le plugin « {plugin} » n'a pas pu être activé"
   pluginSettingUndeclared: "le plugin « {plugin} » ne déclare aucun paramètre nommé : {keys}"
+  pluginSettingInvalid: "le plugin « {plugin} » a refusé la valeur fournie pour : {keys}"
   personNotFound: "aucune personne avec l'id « {id} »"
   roleNotFound: "aucun rôle nommé « {role} »"
   roleExists: "le rôle « {role} » existe déjà"

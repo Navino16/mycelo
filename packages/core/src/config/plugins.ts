@@ -96,28 +96,130 @@ export function redactSecrets(db: Db, name: string): Record<string, unknown> {
 }
 
 /**
- * Refuses a key the plugin's own JSON Schema does not declare. An undeclared key would
- * otherwise be dropped in silence by a loose schema, or block enable() by a strict one.
- * A plugin publishing no schema is unguarded.
+ * Keys the plugin's own JSON Schema does not declare. An undeclared key would otherwise be
+ * dropped in silence by a loose schema, or block enable() by a strict one. A plugin
+ * publishing no schema, or an explicitly open one, is unguarded.
  */
+export function undeclaredKeys(form: FormSchema, keys: readonly string[]): readonly string[] {
+  if (!form.available) return []
+  const schema = form.schema as { properties?: unknown, additionalProperties?: unknown }
+  const properties: unknown = schema.properties
+  // z.object emits no additionalProperties, z.looseObject emits `{}` and z.strictObject
+  // `false`. Only an explicitly open schema is exempt: refusing every key a deliberately
+  // open plugin accepts would shut it out of the one configuration surface there is.
+  const open = schema.additionalProperties !== undefined && schema.additionalProperties !== false
+  if (open || typeof properties !== 'object' || properties === null) return []
+  // hasOwn, never `in`: the schema is a plugin-supplied plain object, and 'constructor'
+  // is a key an operator can type.
+  return keys.filter((key) => !Object.hasOwn(properties, key))
+}
+
+/** Refuses a key the plugin's own JSON Schema does not declare (`undeclaredKeys`). */
 export async function writeDeclaredSetting(
   db: Db, sporesDir: string, name: string, key: string, value: unknown,
 ): Promise<void> {
   const form = await formSchemaOf(db, sporesDir, name)
-  if (form.available) {
-    const schema = form.schema as { properties?: unknown, additionalProperties?: unknown }
-    const properties: unknown = schema.properties
-    // z.object emits no additionalProperties, z.looseObject emits `{}` and z.strictObject
-    // `false`. Only an explicitly open schema is exempt: refusing every key a deliberately
-    // open plugin accepts would shut it out of the one configuration surface there is.
-    const open = schema.additionalProperties !== undefined && schema.additionalProperties !== false
-    // hasOwn, never `in`: the schema is a plugin-supplied plain object, and 'constructor'
-    // is a key an operator can type.
-    if (!open && typeof properties === 'object' && properties !== null && !Object.hasOwn(properties, key)) {
-      throw new Error(`plugin '${name}' declares no setting '${key}'`)
-    }
+  if (undeclaredKeys(form, [key]).length > 0) {
+    throw new Error(`plugin '${name}' declares no setting '${key}'`)
   }
   rewriteSetting(db, name, key, value)
+}
+
+export interface SettingRejection {
+  key: string
+  /** The plugin's own issues where it published any, otherwise its message. */
+  issues: unknown
+}
+
+/** A member read from an object the plugin built: never an instance check, and a getter is code. */
+function member(target: unknown, name: string): unknown {
+  if (typeof target !== 'object' || target === null) return undefined
+  try {
+    return (target as Record<string, unknown>)[name]
+  } catch {
+    return undefined
+  }
+}
+
+/** hasOwn, never `in`: a shape is a plugin-supplied plain object and 'constructor' is a key. */
+function field(shape: unknown, key: string): unknown {
+  if (typeof shape !== 'object' || shape === null) return undefined
+  return Object.hasOwn(shape, key) ? member(shape, key) : undefined
+}
+
+function parseWith(schema: unknown, value: unknown): { ok: boolean, error: unknown } | undefined {
+  const parse = member(schema, 'safeParse')
+  if (typeof parse !== 'function') return undefined
+  try {
+    const result: unknown = (parse as (input: unknown) => unknown).call(schema, value)
+    if (typeof result !== 'object' || result === null) return undefined
+    return { ok: member(result, 'success') === true, error: member(result, 'error') }
+  } catch {
+    return undefined
+  }
+}
+
+/** ZodError.issues is non-enumerable, so serialising the error itself would drop it. */
+function detailOf(error: unknown): unknown {
+  const issues = member(error, 'issues')
+  if (Array.isArray(issues)) return issues
+  return typeof error === 'string' ? error : describeThrown(error)
+}
+
+/** Undefined when the schema exposes no readable shape, which is the caller's cue to fall back. */
+function fieldRejections(
+  configSchema: unknown, values: Record<string, unknown>,
+): readonly SettingRejection[] | undefined {
+  const shape = member(configSchema, 'shape')
+  if (typeof shape !== 'object' || shape === null) return undefined
+  const rejections: SettingRejection[] = []
+  for (const [key, value] of Object.entries(values)) {
+    // A key the shape does not carry is skipped, not refused: undeclaredKeys already owns that.
+    const result = parseWith(field(shape, key), value)
+    if (result !== undefined && !result.ok) rejections.push({ key, issues: detailOf(result.error) })
+  }
+  return rejections
+}
+
+/**
+ * `defineConfig` publishes `safeParse` alone, so a plugin written the documented way exposes
+ * no per-field schema: validate the object and keep only the issues the provided keys own.
+ */
+function objectRejections(
+  configSchema: unknown, values: Record<string, unknown>,
+): readonly SettingRejection[] {
+  const result = parseWith(configSchema, values)
+  if (result === undefined || result.ok) return []
+  const issues = member(result.error, 'issues')
+  if (!Array.isArray(issues)) return []
+  const rejections: SettingRejection[] = []
+  for (const key of Object.keys(values)) {
+    const own = (issues as unknown[]).filter((issue) => {
+      const path = member(issue, 'path')
+      return Array.isArray(path) && path[0] === key
+    })
+    if (own.length > 0) rejections.push({ key, issues: own })
+  }
+  return rejections
+}
+
+/**
+ * Spec §8: each provided value against its own field schema, never the merged object — a
+ * two-required-field form must be fillable one field at a time, which is why completeness
+ * is `enablePlugin`'s check and not this one's.
+ */
+export async function rejectedSettings(
+  db: Db, sporesDir: string, name: string, values: Record<string, unknown>,
+): Promise<readonly SettingRejection[]> {
+  if (getInstall(db, name) === null) return []
+  let module: Awaited<ReturnType<typeof loadSporeModule>>
+  try {
+    module = await loadSporeModule(sporesDir, name)
+  } catch {
+    return []
+  }
+  const configSchema: unknown = module?.configSchema
+  return fieldRejections(configSchema, values) ?? objectRejections(configSchema, values)
 }
 
 // Carries the row's is_secret forward: writeSetting() rewrites that column too, so a

@@ -164,6 +164,77 @@ export const closedJsonSchema: SporeWriter = (sporesDir) => {
   })
 }
 
+/**
+ * A schema exposing a per-field `shape`, the way a plugin exporting a Zod object directly
+ * does. `port` takes a number, `label` any string — so one key can be refused while the
+ * other is written.
+ */
+export const shapedSchema: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'shaped', {
+    'spore.yaml': 'kind: enzyme\nname: shaped\nseptum: "^0.7"\n'
+      + 'commands:\n  - name: shaped\n    description: Report the configured setting\n    code: handleConfigured\n',
+    'src/index.ts': `
+      const number = {
+        safeParse: (v) => typeof v === 'number'
+          ? { success: true, data: v }
+          : { success: false, error: { issues: [{ code: 'invalid_type', message: 'expected a number' }] } },
+      }
+      const text = {
+        safeParse: (v) => typeof v === 'string'
+          ? { success: true, data: v }
+          : { success: false, error: { issues: [{ code: 'invalid_type', message: 'expected a string' }] } },
+      }
+      export default {
+        configSchema: {
+          shape: { port: number, label: text },
+          safeParse: (input) => ({ success: true, data: input }),
+          toJsonSchema: () => ({
+            type: 'object',
+            properties: { port: { type: 'number' }, label: { type: 'string' } },
+            required: ['port'],
+          }),
+        },
+        create: () => ({ handlers: { handleConfigured: async () => {} } }),
+      }
+    `,
+  })
+}
+
+/**
+ * No `shape`, only the whole-object `safeParse` that `defineConfig` publishes — the shape
+ * every plugin written the documented way has. `port` is required and must be a number.
+ */
+export const definedSchema: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'defined', {
+    'spore.yaml': 'kind: enzyme\nname: defined\nseptum: "^0.7"\n'
+      + 'commands:\n  - name: defined\n    description: Report the configured setting\n    code: handleConfigured\n',
+    'src/index.ts': `
+      export default {
+        configSchema: {
+          safeParse: (input) => {
+            const issues = []
+            if (typeof input?.port !== 'number') {
+              issues.push({ code: 'invalid_type', path: ['port'], message: 'expected a number' })
+            }
+            if (input?.label !== undefined && typeof input.label !== 'string') {
+              issues.push({ code: 'invalid_type', path: ['label'], message: 'expected a string' })
+            }
+            return issues.length === 0
+              ? { success: true, data: input }
+              : { success: false, error: { issues } }
+          },
+          toJsonSchema: () => ({
+            type: 'object',
+            properties: { port: { type: 'number' }, label: { type: 'string' } },
+            required: ['port'],
+          }),
+        },
+        create: () => ({ handlers: { handleConfigured: async () => {} } }),
+      }
+    `,
+  })
+}
+
 // Two plugins, two commands each, and every command name disjoint from its plugin's own
 // name — a fixture where a plugin's name equalled one of its commands could not tell
 // grouping (by plugin) apart from naming (of the command) if either collapsed. Each

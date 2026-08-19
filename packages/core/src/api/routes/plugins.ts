@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import type { FormSchema, SporeKind } from '@mycelo/septum'
+import type { SporeKind } from '@mycelo/septum'
 import type { RuntimeState } from '../../boot/state.js'
 import { enablePlugin } from '../../config/lifecycle.js'
-import { formSchemaOf, listPlugins, redactSecrets, rewriteSetting } from '../../config/plugins.js'
+import { formSchemaOf, listPlugins, redactSecrets, rejectedSettings, rewriteSetting, undeclaredKeys } from '../../config/plugins.js'
 import { getInstall, listInstalls, setEnabled } from '../../config/store.js'
 import { badRequest, notFound } from '../errors.js'
 import { parseBody } from '../parse.js'
@@ -67,20 +67,6 @@ function pluginsOf(state: RuntimeState): readonly PluginDto[] {
   }))
 }
 
-/**
- * Keys the plugin's own JSON Schema does not declare, mirroring the guard
- * `config/plugins.ts`'s `writeDeclaredSetting` applies one key at a time — duplicated
- * here so every key can be checked, and refused, before any of them is written.
- */
-function undeclaredKeys(form: FormSchema, keys: readonly string[]): readonly string[] {
-  if (!form.available) return []
-  const schema = form.schema as { properties?: unknown, additionalProperties?: unknown }
-  const properties: unknown = schema.properties
-  const open = schema.additionalProperties !== undefined && schema.additionalProperties !== false
-  if (open || typeof properties !== 'object' || properties === null) return []
-  return keys.filter((key) => !Object.hasOwn(properties, key))
-}
-
 export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState): void {
   app.get('/api/plugins', () => groupByKind(pluginsOf(state)))
 
@@ -135,9 +121,16 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
       // otherwise have to parse the localized sentence back apart.
       throw badRequest('api.pluginSettingUndeclared', { plugin: name, keys: bad.join(', ') }, bad)
     }
-    // Every key is declared, so the only thing left that can fail is the database itself —
-    // one synchronous transaction makes that all-or-nothing. rewriteSetting is synchronous,
-    // so it can run inside bun:sqlite's transaction(), which cannot await.
+    // Declared is not valid: without this an enabled plugin takes a value that makes it
+    // dormant at the next boot, which is the failure enablePlugin() exists to prevent (§8).
+    const rejected = await rejectedSettings(state.db, state.config.sporesDir, name, body)
+    if (rejected.length > 0) {
+      const rejectedKeys = rejected.map((r) => r.key).join(', ')
+      throw badRequest('api.pluginSettingInvalid', { plugin: name, keys: rejectedKeys }, rejected)
+    }
+    // Every key declared and every value parsed, so only the database can still fail: one
+    // synchronous transaction makes that all-or-nothing. rewriteSetting is synchronous, so
+    // it can run inside bun:sqlite's transaction(), which cannot await.
     state.db.transaction(() => {
       for (const [key, value] of Object.entries(body)) rewriteSetting(state.db, name, key, value)
     })

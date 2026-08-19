@@ -5,7 +5,7 @@ import { pluginSetting } from '../../src/persistence/schema.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
   bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configurable, configurableTwoFields,
-  cyclingPair, noJsonSchema,
+  cyclingPair, definedSchema, noJsonSchema, shapedSchema,
 } from './support.js'
 import type { LoggedIn } from './support.js'
 
@@ -249,5 +249,72 @@ describe('/api/plugins', () => {
       method: 'PUT', url: '/api/plugins/strict/settings', headers: { cookie },
       payload: { token: 'abc' },
     })).statusCode).toBe(200)
+  })
+})
+
+// Spec §8 says "validated against the plugin's schema" and the route validated key *names*
+// only, so `{ port: 'not-a-number' }` was written with 200 and the operator learned about it
+// at the next boot, from a plugin gone dormant (review, Important 3).
+describe('PUT /api/plugins/:name/settings validates the values', () => {
+  it('refuses a value its own field schema rejects, and writes nothing', async () => {
+    booted = await bootAndLogin({ spores: shapedSchema })
+    const { app, cookie } = booted
+    const refused = await app.inject({
+      method: 'PUT', url: '/api/plugins/shaped/settings', headers: { cookie },
+      payload: { port: 'not-a-number', label: 'fine' },
+    })
+    expect(refused.statusCode).toBe(400)
+    const error = refused.json<{ error: { code: string, message: string, detail: unknown } }>().error
+    expect(error.code).toBe('validation')
+    expect(error.message).toBe("plugin 'shaped' rejected the value given for: port")
+    // §9: detail carries the plugin's own issues, so a form can highlight the field.
+    expect(error.detail).toEqual([{ key: 'port', issues: [{ code: 'invalid_type', message: 'expected a number' }] }])
+    // All-or-nothing: the sound key travelled in the same body and must not have landed.
+    expect((await app.inject({
+      method: 'GET', url: '/api/plugins/shaped/settings', headers: { cookie },
+    })).json<Record<string, unknown>>()).toEqual({})
+  })
+
+  it('accepts the same keys once every value parses', async () => {
+    booted = await bootAndLogin({ spores: shapedSchema })
+    const { app, cookie } = booted
+    expect((await app.inject({
+      method: 'PUT', url: '/api/plugins/shaped/settings', headers: { cookie },
+      payload: { port: 8080, label: 'fine' },
+    })).statusCode).toBe(200)
+    expect((await app.inject({
+      method: 'GET', url: '/api/plugins/shaped/settings', headers: { cookie },
+    })).json<Record<string, unknown>>()).toEqual({ port: 8080, label: 'fine' })
+  })
+
+  // `defineConfig` publishes safeParse alone, so a shape-only fix would be inert for every
+  // plugin written the documented way: this fixture has no shape at all.
+  it('refuses a bad value through the whole-object schema a defineConfig plugin publishes', async () => {
+    booted = await bootAndLogin({ spores: definedSchema })
+    const { app, cookie } = booted
+    const refused = await app.inject({
+      method: 'PUT', url: '/api/plugins/defined/settings', headers: { cookie },
+      payload: { port: 'not-a-number' },
+    })
+    expect(refused.statusCode).toBe(400)
+    expect(refused.json<{ error: { message: string } }>().error.message)
+      .toBe("plugin 'defined' rejected the value given for: port")
+  })
+
+  // The property that rules out validating the merged object, which is §8's literal reading:
+  // a required field the operator has not filled in yet is enablePlugin's business, not this
+  // route's, or a two-field form could never be filled one field at a time.
+  it('accepts a partial write although a required key is still missing', async () => {
+    booted = await bootAndLogin({ spores: definedSchema })
+    const { app, cookie } = booted
+    expect((await app.inject({
+      method: 'PUT', url: '/api/plugins/defined/settings', headers: { cookie },
+      payload: { label: 'later' },
+    })).statusCode).toBe(200)
+    // And the refusal that proves the acceptance above is not blanket tolerance.
+    expect((await app.inject({
+      method: 'PUT', url: '/api/plugins/defined/settings', headers: { cookie },
+      payload: { label: 7 },
+    })).statusCode).toBe(400)
   })
 })

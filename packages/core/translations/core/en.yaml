@@ -21,6 +21,7 @@ api:
   pluginNotFound: "no plugin named ''{plugin}'' is installed"
   pluginEnableRefused: "plugin ''{plugin}'' could not be enabled"
   pluginSettingUndeclared: "plugin ''{plugin}'' declares no setting named: {keys}"
+  pluginSettingInvalid: "plugin ''{plugin}'' rejected the value given for: {keys}"
   personNotFound: "no person with id ''{id}''"
   roleNotFound: "no role named ''{role}''"
   roleExists: "role ''{role}'' already exists"
