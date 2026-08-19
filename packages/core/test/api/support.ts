@@ -226,6 +226,26 @@ const RHIZA_STUB = `
 `
 
 /**
+ * A rhiza whose `health()` rejects: spec §11's "counts as unhealthy, never as a failed
+ * request". Duck-typed like RHIZA_STUB, which it cannot reuse — it differs in that method.
+ */
+export const unhealthyRhiza: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'flapping', {
+    'spore.yaml': 'kind: rhiza\nname: flapping\nseptum: "^0.7"\n',
+    'src/index.ts': `
+      export default {
+        create: () => ({
+          start: () => Promise.resolve(),
+          stop: () => Promise.resolve(),
+          health: () => Promise.reject(new Error('connection refused')),
+          api: {},
+        }),
+      }
+    `,
+  })
+}
+
+/**
  * `cyclingPair` plus a module each. `enablePlugin` imports the module, so a module-less
  * spore cannot be enabled through `POST /api/plugins/:name/enable`; cycle detection still
  * precedes every import, so the pair cycles all the same (milestone, spec §15 steps 6-8).

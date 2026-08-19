@@ -82,6 +82,25 @@ describe('aggregateRuntimeHealth', () => {
     expect(health.rhizas.map((r) => [r.rhiza, r.status.state])).toEqual([['a', 'healthy'], ['b', 'unreachable']])
   })
 
+  // The synchronous half of the same guard: `await r.instance.health()` covers a throw and a
+  // rejection alike, and a healthy sibling must still be reported (spec §11).
+  it("keeps reporting the other rhizas when one health() throws synchronously", async () => {
+    const germination = {
+      status: 'germinated' as const,
+      mycelium: {
+        registry: registry({
+          rhizas: [
+            { name: 'boom', instance: { health: () => { throw new Error('socket closed') } } },
+            { name: 'fine', instance: { health: () => Promise.resolve({ state: 'healthy', checkedAt: new Date(0) }) } },
+          ] as never,
+        }),
+      },
+    } as unknown as Germination
+    const health = await aggregateRuntimeHealth(germination)
+    expect(health.rhizas.map((r) => [r.rhiza, r.status.state, r.status.detail]))
+      .toEqual([['boom', 'unreachable', 'socket closed'], ['fine', 'healthy', undefined]])
+  })
+
   it('answers starting as degraded rather than inventing a third mode', async () => {
     expect((await aggregateRuntimeHealth({ status: 'starting' })).mode).toBe('degraded')
   })

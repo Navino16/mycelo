@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'bun:test'
-import { bootAndLogin, closeBooted, cyclingPair, cyclingTriple } from './support.js'
+import { bootAndLogin, closeBooted, cyclingPair, cyclingTriple, unhealthyRhiza } from './support.js'
 import type { LoggedIn } from './support.js'
 import type { RuntimeHealth } from '../../src/supervision/health.js'
 
@@ -28,6 +28,21 @@ describe('/api/health', () => {
     const body = (await app.inject({ method: 'GET', url: '/api/health', headers: { cookie } })).json<RuntimeHealth>()
     expect(body).toMatchObject({ mode: 'degraded', failure: { kind: 'cycle' } })
     expect(body.failure?.kind === 'cycle' ? [...body.failure.spores].sort() : []).toEqual(['alpha', 'beta'])
+  })
+
+  // Nothing drove a throwing health() through this route before the whole-branch review:
+  // one rejecting rhiza rejected the Promise.all and answered 500, suppressing the very
+  // screen that carries enforcingBlocked (spec §11).
+  it('reports a rhiza whose health() rejects as unreachable, with 200', async () => {
+    booted = await bootAndLogin({ spores: unhealthyRhiza })
+    const { app, cookie } = booted
+    const response = await app.inject({ method: 'GET', url: '/api/health', headers: { cookie } })
+    expect(response.statusCode).toBe(200)
+    const body = response.json<RuntimeHealth>()
+    expect(body.mode).toBe('germinated')
+    expect(body.rhizas.map((r) => [r.rhiza, r.status.state, r.status.detail]))
+      .toEqual([['flapping', 'unreachable', 'connection refused']])
+    expect(typeof body.rhizas[0]?.status.checkedAt).toBe('string')
   })
 
   it('answers a database-backed route while degraded', async () => {

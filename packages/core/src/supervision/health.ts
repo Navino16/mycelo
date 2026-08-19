@@ -1,9 +1,18 @@
 import type { RhizaHealth } from '@mycelo/septum'
 import type { Germination, GerminationFailure } from '../boot/state.js'
 import type { Registry } from '../germination/registry.js'
+import { describeThrown } from '../support/thrown.js'
 
 export async function aggregateHealth(registry: Registry): Promise<readonly RhizaHealth[]> {
-  return Promise.all(registry.rhizas.map(async (r) => ({ rhiza: r.name, status: await r.instance.health() })))
+  return Promise.all(registry.rhizas.map(async (r) => {
+    try {
+      return { rhiza: r.name, status: await r.instance.health() }
+    } catch (e) {
+      // spec §11: a rhiza that throws is unreachable, never a failed request — this screen
+      // is the one that carries enforcingBlocked, and it is opened because something is wrong.
+      return { rhiza: r.name, status: { state: 'unreachable' as const, detail: describeThrown(e), checkedAt: new Date() } }
+    }
+  }))
 }
 
 export interface RuntimeHealth {
