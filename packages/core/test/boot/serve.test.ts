@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { count, sql } from 'drizzle-orm'
 import { Database } from 'bun:sqlite'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { hasCredential, createCredential } from '../../src/api/credentials.js'
+import { hasCredential, insertCredential } from '../../src/api/credentials.js'
 import { openSession } from '../../src/api/sessions.js'
 import { serve } from '../../src/boot/serve.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
@@ -78,7 +78,7 @@ describe('phase 1', () => {
     const seed = openDatabase(databaseFile)
     migrateDatabase(seed.db)
     seed.db.insert(principal).values({ id: 'p1', createdAt: new Date() }).run()
-    await createCredential(seed.db, 'p1', 'alice', 'secret')
+    insertCredential(seed.db, 'p1', 'alice', await Bun.password.hash('secret'))
     openSession(seed.db, 'p1')
     seed.close()
 
@@ -93,7 +93,7 @@ describe('phase 1', () => {
     const seed = openDatabase(databaseFile)
     migrateDatabase(seed.db)
     seed.db.insert(principal).values({ id: 'p1', createdAt: new Date() }).run()
-    await createCredential(seed.db, 'p1', 'alice', 'secret')
+    insertCredential(seed.db, 'p1', 'alice', await Bun.password.hash('secret'))
     openSession(seed.db, 'p1')
     seed.close()
 

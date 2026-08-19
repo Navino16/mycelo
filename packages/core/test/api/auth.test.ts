@@ -68,6 +68,16 @@ describe('the setup lock', () => {
       .toBe(200)
   })
 
+  // Held by credentials.test.ts against a src/ helper the wizard never called, until that
+  // helper was deleted for having no production caller. The property belongs on this path.
+  it('stores the setup password as an argon2id hash, never in the clear', async () => {
+    const a = start()
+    await setup(a)
+    const stored = db().select({ hash: uiCredential.passwordHash }).from(uiCredential).get()?.hash ?? ''
+    expect(stored).not.toContain('correct horse')
+    expect(stored.startsWith('$argon2id$')).toBe(true)
+  })
+
   it('refuses a second setup with 409', async () => {
     const a = start()
     await setup(a)

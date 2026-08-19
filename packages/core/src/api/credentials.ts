@@ -16,17 +16,6 @@ export function insertCredential(db: Db, principalId: string, username: string, 
     .run()
 }
 
-export async function createCredential(
-  db: Db, principalId: string, username: string, password: string,
-): Promise<void> {
-  if (username.trim() === '') throw new Error('a username cannot be empty')
-  if (hasCredential(db)) throw new Error('a UI account already exists')
-  // Bun.password defaults to argon2id at m=65536,t=2,p=1 — above the OWASP floor, so the
-  // defaults are taken as they come (spec §6.1).
-  const passwordHash = await Bun.password.hash(password)
-  insertCredential(db, principalId, username, passwordHash)
-}
-
 export async function verifyCredential(db: Db, username: string, password: string): Promise<string | null> {
   const row = db
     .select({ principalId: uiCredential.principalId, passwordHash: uiCredential.passwordHash })
