@@ -102,4 +102,25 @@ describe('phase 1', () => {
     expect(hasCredential(served.state.db)).toBe(true)
     expect(served.state.db.select({ n: count() }).from(uiSession).get()?.n).toBe(1)
   })
+
+  // sweepSessions() itself is covered by test/api/sessions.test.ts; the mutation that
+  // survived was deleting its one call site here, leaving expired rows to accumulate
+  // with no other reaper (campaign M37).
+  it('sweeps expired sessions at boot and leaves the live ones', () => {
+    const databaseFile = join(dir, 'mycelo.db')
+    const seed = openDatabase(databaseFile)
+    migrateDatabase(seed.db)
+    seed.db.insert(principal).values({ id: 'p1', createdAt: new Date() }).run()
+    const past = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    openSession(seed.db, 'p1')
+    openSession(seed.db, 'p1', past)
+    openSession(seed.db, 'p1', past)
+    expect(seed.db.select({ n: count() }).from(uiSession).get()?.n).toBe(3)
+    seed.close()
+
+    const served = serve(config('spores: ./none\ndatabase: ./mycelo.db\n'))
+    closeDb = served.closeDb
+    // The plural case: two expired rows, so a sweep collapsed to one of them is caught.
+    expect(served.state.db.select({ n: count() }).from(uiSession).get()?.n).toBe(1)
+  })
 })

@@ -4,7 +4,8 @@ import { writeSetting } from '../../src/config/store.js'
 import { pluginSetting } from '../../src/persistence/schema.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
-  bootAndLogin, brokenManifest, closeBooted, configurable, configurableTwoFields, cyclingPair,
+  bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configurable, configurableTwoFields,
+  cyclingPair, noJsonSchema,
 } from './support.js'
 import type { LoggedIn } from './support.js'
 
@@ -205,5 +206,48 @@ describe('/api/plugins', () => {
       method: 'GET', url: '/api/plugins/needs-config/settings', headers: { cookie },
     })).json<Record<string, string>>()
     expect(body).toEqual({ url: 'http://example', token: 'abc' })
+  })
+
+  // Every other settings test uses a fixture that publishes a schema, so `undeclaredKeys`
+  // could refuse *every* key on the unguarded path with the whole suite green (campaign
+  // M50) — shutting the operator out of the one surface `jsonschema.ts:17` tells them to use.
+  it('writes a setting for a plugin that publishes no JSON Schema, which is the unguarded case by design', async () => {
+    booted = await bootAndLogin({ spores: noJsonSchema })
+    const { app, cookie } = booted
+    const schema = (await app.inject({
+      method: 'GET', url: '/api/plugins/freeform/schema', headers: { cookie },
+    })).json<{ available: boolean }>()
+    expect(schema.available).toBe(false)
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/freeform/settings', headers: { cookie },
+      payload: { anything: 'goes', andAnother: 2 },
+    })
+    expect(response.statusCode).toBe(200)
+    expect((await app.inject({
+      method: 'GET', url: '/api/plugins/freeform/settings', headers: { cookie },
+    })).json<Record<string, unknown>>()).toEqual({ anything: 'goes', andAnother: 2 })
+  })
+
+  // The only fixture emitting `additionalProperties` at all: without it both halves of
+  // `open`'s `&&` answer the same everywhere, so dropping the `!== false` half survived
+  // (campaign M51) and a strictObject plugin would silently accept a typo'd key.
+  it('refuses an undeclared key against a closed schema, which is not the same as an absent additionalProperties', async () => {
+    booted = await bootAndLogin({ spores: closedJsonSchema })
+    const { app, cookie } = booted
+    const refused = await app.inject({
+      method: 'PUT', url: '/api/plugins/strict/settings', headers: { cookie },
+      payload: { nope: 1 },
+    })
+    expect(refused.statusCode).toBe(400)
+    expect(refused.json<{ error: { message: string, detail: string[] } }>().error).toMatchObject({
+      code: 'validation',
+      message: "plugin 'strict' declares no setting named: nope",
+      detail: ['nope'],
+    })
+    // Not simply refusing everything: the declared key still writes.
+    expect((await app.inject({
+      method: 'PUT', url: '/api/plugins/strict/settings', headers: { cookie },
+      payload: { token: 'abc' },
+    })).statusCode).toBe(200)
   })
 })

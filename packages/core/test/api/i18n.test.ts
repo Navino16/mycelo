@@ -58,6 +58,53 @@ describe('API messages rendered through the translator', () => {
     expect(enMessage).not.toBe(frMessage)
   })
 
+  // Every other test here sends a single-valued header, so nothing distinguished the first
+  // entry from the last (campaign M18) — a real browser sends a whole preference list.
+  it('picks the first Accept-Language entry, not the last, from a real browser header', async () => {
+    const a = start()
+    await setup(a)
+    const response = await a.inject({
+      method: 'GET', url: '/api/me', headers: { 'accept-language': 'fr,en-GB;q=0.8,en;q=0.5' },
+    })
+    expect(response.statusCode).toBe(401)
+    expect(response.json<{ error: { message: string } }>().error.message).toBe('aucune session valide')
+  })
+
+  // The rendered text is the same either way — the translator falls back — so only the
+  // locale /api/me reports distinguishes them (campaign M19).
+  it('falls back to the default locale for an Accept-Language no catalogue provides, and says so on /api/me', async () => {
+    const a = start()
+    const cookie = await setup(a)
+    const response = await a.inject({
+      method: 'GET', url: '/api/me', headers: { cookie, 'accept-language': 'sw' },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json<{ locale: string }>().locale).toBe('en')
+  })
+
+  // Design §5.1's third rung: the principal's own saved locale beats the header. Nothing
+  // in test/api/ wrote `principal.locale` before this, so the whole preHandler that task
+  // 10.5 exists for could be deleted with 801 tests green (campaign M20).
+  it("the principal's saved locale beats the Accept-Language header", async () => {
+    const a = start()
+    const cookie = await setup(a)
+    const db = state().db
+    const id = db.select({ id: principal.id }).from(principal).get()?.id
+    if (id === undefined) throw new Error('setup() did not create a principal')
+    // What `/lang fr` writes from a channel (phase 5.6), read back over HTTP.
+    db.update(principal).set({ locale: 'fr' }).where(eq(principal.id, id)).run()
+    const response = await a.inject({
+      method: 'GET', url: '/api/people/no-such-person', headers: { cookie, 'accept-language': 'en' },
+    })
+    expect(response.statusCode).toBe(404)
+    // A rendered sentence, not the echoed field: the refusal itself must arrive in French
+    // even though the header asked for English.
+    const message = response.json<{ error: { message: string } }>().error.message
+    expect(message).not.toBe('api.personNotFound')
+    expect(message).toBe(state().translator.translate('core', 'api.personNotFound', 'fr', { id: 'no-such-person' }))
+    expect(message).not.toBe(state().translator.translate('core', 'api.personNotFound', 'en', { id: 'no-such-person' }))
+  })
+
   it('renders the setup lock refusal, which is emitted before the session gate', async () => {
     // The lock's 503 is the message that would have rendered with locale undefined.
     const a = start()

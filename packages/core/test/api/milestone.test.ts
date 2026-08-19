@@ -28,7 +28,7 @@ function names(group: readonly { name: string }[]): string[] {
   return group.map((p) => p.name).sort()
 }
 
-/** Closes the running process and boots the same directory again: same database, same account. */
+/** Closes the Fastify instance and the database handle, then boots the same directory again. */
 async function restart(home: string, sporesDir: string, previous: Booted): Promise<Booted> {
   await closeBooted(previous)
   const next = boot(home, '', false, sporesDir)
@@ -106,6 +106,7 @@ describe('the phase-6 milestone (api-design §15)', () => {
     cyclingPairWithModules(sporesDir)
     booted = await restart(dir, sporesDir, booted)
     const disabledStill = await booted.app.inject({ method: 'GET', url: '/api/health', headers: { cookie } })
+    expect(disabledStill.statusCode).toBe(200)
     expect(disabledStill.json<RuntimeHealth>().mode).toBe('germinated')
 
     for (const name of ['alpha', 'beta']) {

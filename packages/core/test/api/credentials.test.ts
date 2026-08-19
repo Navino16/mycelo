@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it, spyOn } from 'bun:test'
 import {
   changePassword, createCredential, deleteAllCredentials, hasCredential, verifyCredential,
 } from '../../src/api/credentials.js'
@@ -59,6 +59,22 @@ describe('credentials', () => {
     expect(await verifyCredential(db, 'alice', 'new')).toBe('p1')
     expect(await verifyCredential(db, 'alice', 'old')).toBeNull()
     close()
+  })
+
+  // The dummy hash on the unknown-username path is what stops the login route being a
+  // timing oracle for usernames (spec §6.1). Deleting it survived the whole suite
+  // (campaign M10), because every other assertion here is on the return value alone.
+  it('hashes anyway for an unknown username, so login is not a username oracle', async () => {
+    const { db, close } = fresh()
+    await createCredential(db, person(db, 'p1'), 'alice', 'correct horse')
+    const hash = spyOn(Bun.password, 'hash')
+    try {
+      expect(await verifyCredential(db, 'nobody', 'correct horse')).toBeNull()
+      expect(hash).toHaveBeenCalledTimes(1)
+    } finally {
+      hash.mockRestore()
+      close()
+    }
   })
 
   it('deletes every credential and says how many', async () => {

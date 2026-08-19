@@ -1,5 +1,5 @@
 import { rmSync } from 'node:fs'
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test'
 import { boot, closeBooted, freshDir, setup } from './support.js'
 import type { Booted } from './support.js'
 import { StartupError } from '../../src/identity/bootstrap.js'
@@ -29,4 +29,28 @@ describe('the fallback error branch', () => {
     expect(body.error.message).toBe('an internal error occurred')
     expect(JSON.stringify(body)).not.toContain('a raw substrate detail')
   })
+
+  // §10 sends the raw fault to the operator's log and a sentence to the client. Inverting
+  // the `status !== 429` guard survived the whole suite (campaign M72), which would leave a
+  // genuine 500 with no server-side trace at all, and fill the log with limiter noise.
+  it("logs a 500's raw fault for the operator and stays silent for a 429", async () => {
+    booted = boot(dir)
+    booted.app.get('/api/__boom2', () => { throw new Error('a raw substrate detail') })
+    const cookie = await setup(booted.app)
+    const logged = spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await booted.app.inject({ method: 'GET', url: '/api/__boom2', headers: { cookie } })
+      expect(logged.mock.calls.flat().join('\n')).toContain('a raw substrate detail')
+      logged.mockClear()
+      // The 11th failed login is the limiter's own 429, which must not be logged.
+      for (let i = 0; i < 11; i += 1) {
+        await booted.app.inject({
+          method: 'POST', url: '/api/login', payload: { username: 'alice', password: 'wrong' },
+        })
+      }
+      expect(logged).not.toHaveBeenCalled()
+    } finally {
+      logged.mockRestore()
+    }
+  }, 20_000)
 })

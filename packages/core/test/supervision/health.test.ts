@@ -57,6 +57,31 @@ describe('aggregateRuntimeHealth', () => {
     expect(health.dormant).toEqual([{ name: 'other', reason: 'boom' }])
   })
 
+  // The plural case for enforcingBlocked, the sibling of the dormant one above. Phase 5.5's
+  // worst survivor was exactly this shape on a security list (campaign M24): two broken
+  // enforcing inhibitors, one reported, and the bot still refusing everything after the fix.
+  it('carries every enforcing-blocked inhibitor, not only the last', async () => {
+    const germination = {
+      status: 'germinated' as const,
+      mycelium: { registry: registry({ brokenEnforcing: ['gate', 'guard'] }) },
+    } as unknown as Germination
+    expect((await aggregateRuntimeHealth(germination)).enforcingBlocked).toEqual(['gate', 'guard'])
+  })
+
+  it('reports every rhiza\'s health, not only the first', async () => {
+    const rhiza = (name: string, state: string): unknown => ({
+      name,
+      instance: { health: () => Promise.resolve({ state, checkedAt: new Date(0) }) },
+    })
+    const germination = {
+      status: 'germinated' as const,
+      mycelium: { registry: registry({ rhizas: [rhiza('a', 'healthy'), rhiza('b', 'unreachable')] as never }) },
+    } as unknown as Germination
+    const health = await aggregateRuntimeHealth(germination)
+    // Distinct states, so a collapse to one entry cannot be mistaken for a duplicate.
+    expect(health.rhizas.map((r) => [r.rhiza, r.status.state])).toEqual([['a', 'healthy'], ['b', 'unreachable']])
+  })
+
   it('answers starting as degraded rather than inventing a third mode', async () => {
     expect((await aggregateRuntimeHealth({ status: 'starting' })).mode).toBe('degraded')
   })

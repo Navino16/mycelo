@@ -121,6 +121,49 @@ export const configurable: SporeWriter = configurableSpore(['token'])
 /** Two required settings: the plural case an `issues[0]` implementation would miss. */
 export const configurableTwoFields: SporeWriter = configurableSpore(['url', 'token'])
 
+/**
+ * A plugin with a configSchema but **no** `toJsonSchema` — `formSchemaFor` answers
+ * `available: false, reason: 'this plugin publishes no JSON Schema: configure it by hand'`.
+ * The route must then write whatever it is given: that is what "by hand" means.
+ */
+export const noJsonSchema: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'freeform', {
+    'spore.yaml': 'kind: enzyme\nname: freeform\nseptum: "^0.7"\n'
+      + 'commands:\n  - name: freeform\n    description: Report the configured setting\n    code: handleConfigured\n',
+    'src/index.ts': `
+      export default {
+        configSchema: { safeParse: (input) => ({ success: true, data: input }) },
+        create: () => ({ handlers: { handleConfigured: async () => {} } }),
+      }
+    `,
+  })
+}
+
+/**
+ * A **closed** schema: `additionalProperties: false`, what `z.strictObject` emits. Distinct
+ * from every other fixture here, which emits no `additionalProperties` at all — so it is the
+ * only one that tells the two halves of `undeclaredKeys`'s `open` check apart.
+ */
+export const closedJsonSchema: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'strict', {
+    'spore.yaml': 'kind: enzyme\nname: strict\nseptum: "^0.7"\n'
+      + 'commands:\n  - name: strict\n    description: Report the configured setting\n    code: handleConfigured\n',
+    'src/index.ts': `
+      export default {
+        configSchema: {
+          safeParse: (input) => ({ success: true, data: input }),
+          toJsonSchema: () => ({
+            type: 'object',
+            properties: { token: { type: 'string' } },
+            additionalProperties: false,
+          }),
+        },
+        create: () => ({ handlers: { handleConfigured: async () => {} } }),
+      }
+    `,
+  })
+}
+
 // Two plugins, two commands each, and every command name disjoint from its plugin's own
 // name — a fixture where a plugin's name equalled one of its commands could not tell
 // grouping (by plugin) apart from naming (of the command) if either collapsed. Each

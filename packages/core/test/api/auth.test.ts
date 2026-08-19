@@ -298,9 +298,11 @@ describe('authentication', () => {
   })
 })
 
-// Both tests here spend ten argon2id verifications at m=65536, ~1.5 s idle; the 5 s
-// default times out on a loaded shared runner. The assertions are on status codes, so a
-// larger budget cannot mask a logic defect.
+// The first test here spends ten argon2id verifications and the second eleven — ten wrong
+// logins from one address, an eleventh the limiter refuses without hashing, then one correct
+// login from another. At m=65536 that is ~1.5 s idle and the 5 s default times out on a
+// loaded shared runner. The assertions are on status codes, so a larger budget cannot mask
+// a logic defect.
 const RATE_LIMIT_TIMEOUT_MS = 20_000
 
 describe('rate limiting on login', () => {
@@ -314,6 +316,9 @@ describe('rate limiting on login', () => {
       })
     }
     expect(last?.statusCode).toBe(429)
+    // §9's envelope is what the UI branches on: `internal` here would style a limiter
+    // refusal as a server fault (campaign M73).
+    expect(last?.json<{ error: { code: string } }>().error.code).toBe('rate-limited')
   }, RATE_LIMIT_TIMEOUT_MS)
 
   it('counts attempts per client address, and only trusts X-Forwarded-For when told to', async () => {
@@ -341,4 +346,44 @@ describe('rate limiting on login', () => {
     })
     expect(fromElsewhere.statusCode).toBe(200)
   }, RATE_LIMIT_TIMEOUT_MS)
+
+  // `global: false` (spec §6.7) is what keeps the UI's own polling out of the limiter, and
+  // it cannot be proved by exhausting a route — @fastify/rate-limit's default max is 1000.
+  // A limited route carries `x-ratelimit-limit`; an unlimited one carries none (campaign M74).
+  it('limits only /api/login: no other route carries a rate-limit header', async () => {
+    const a = start()
+    const cookie = await setup(a)
+    const login = await a.inject({
+      method: 'POST', url: '/api/login', payload: { username: 'alice', password: 'wrong' },
+    })
+    expect(login.headers['x-ratelimit-limit']).toBe('10')
+    // The plural case: a global limiter would stamp every one of these.
+    for (const url of ['/api/health', '/api/me', '/api/plugins', '/api/roles']) {
+      const response = await a.inject({ method: 'GET', url, headers: { cookie } })
+      expect(response.headers['x-ratelimit-limit']).toBeUndefined()
+    }
+  }, RATE_LIMIT_TIMEOUT_MS)
+})
+
+// Not one test asserted a single cookie attribute before this: httpOnly, sameSite and the
+// secure flag could each be inverted with the whole suite green (campaign M67-M69), and the
+// inverted secure flag alone means a browser silently discards the cookie over plain HTTP.
+describe('the session cookie', () => {
+  it('is httpOnly, lax, rooted at /, insecure over http, and lasts 14 days', async () => {
+    const a = start()
+    await setup(a)
+    const login = await a.inject({
+      method: 'POST', url: '/api/login', payload: { username: 'alice', password: 'correct horse' },
+    })
+    expect(login.statusCode).toBe(200)
+    const cookie = login.cookies.find((c) => c.name === 'mycelo_session')
+    expect(cookie).toMatchObject({
+      httpOnly: true,
+      sameSite: 'Lax',
+      path: '/',
+      // inject() speaks http, and a `secure` cookie over http is one the browser drops.
+      maxAge: 14 * 24 * 60 * 60,
+    })
+    expect(cookie?.secure).toBeUndefined()
+  })
 })

@@ -128,4 +128,24 @@ describe('retryGermination', () => {
     await germinatePhase(served.state, createLogger())
     expect(retryGermination(served.state, createLogger())).rejects.toThrow(/only be retried while/)
   })
+
+  // Every other retry test retries once. Dropping the `.finally` that clears
+  // `state.retrying` survived the whole suite (campaign M34): the second retry would
+  // return the first attempt's settled promise, so an operator who fixed the fault would
+  // be shown the old failure until the process restarted.
+  it('a second retry re-germinates rather than replaying the first attempt\'s result', async () => {
+    cyclingPair()
+    const served = serve(config())
+    closeDb = served.closeDb
+    await germinatePhase(served.state, createLogger())
+    expect(served.state.germination.status).toBe('degraded')
+
+    // Retry against the unrepaired cycle: still degraded, and the promise must be cleared.
+    expect((await retryGermination(served.state, createLogger())).status).toBe('degraded')
+    expect(served.state.retrying).toBeUndefined()
+
+    // Break the cycle, exactly as `POST /api/plugins/beta/disable` does, then retry again.
+    rmSync(join(dir, 'spores', 'beta'), { recursive: true, force: true })
+    expect((await retryGermination(served.state, createLogger())).status).toBe('germinated')
+  })
 })
