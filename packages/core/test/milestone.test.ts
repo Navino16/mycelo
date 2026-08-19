@@ -37,7 +37,7 @@ function seedSetting(databaseFile: string, sporesDir: string, plugin: string, ke
 }
 
 it('answers /ping with pong, through the real fixtures and the real bootstrap()', async () => {
-  // Exercises mycelium.ts's bootstrap() itself, not a hand-reassembled germinate()/
+  // Exercises boot/index.ts's bootstrap() itself, not a hand-reassembled germinate()/
   // createBus(). `owner` grants the fixture's fixed sender ('local') the owner role:
   // these milestones exercise routing, not authorization.
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
@@ -491,7 +491,7 @@ it('runs the phase 5.5 milestone: an operator bounds where a command works and r
 })
 
 it("reports 'only available in a group' through the real onOutOfContext wiring, not the dm sentence", async () => {
-  // mycelium.ts's onOutOfContext builds the catalogue key as `context.${where}`; the
+  // boot/start.ts's onOutOfContext builds the catalogue key as `context.${where}`; the
   // milestone above only ever exercises the dm branch, which would pass even with that
   // key hard-coded to 'context.dm'. This drives the group branch through the same
   // real bootstrap() wiring.

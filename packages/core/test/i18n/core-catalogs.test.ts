@@ -108,7 +108,7 @@ describe('the core-owned catalogues', () => {
   })
 })
 
-// mycelium.ts's onOutOfContext computes `context.${where}` from a ConversationKind with no
+// boot/start.ts's onOutOfContext computes `context.${where}` from a ConversationKind with no
 // static check that the key exists. Pinned bidirectionally, as this project already pins
 // MYCELIUM_SCOPES against MOUNTABLE_SCOPES: a third ConversationKind with no matching key
 // would render raw, and a stale `context.*` key with no ConversationKind is dead weight.

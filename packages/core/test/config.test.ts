@@ -105,3 +105,27 @@ describe('defaultLocale', () => {
     expect(() => loadBootstrap(file)).toThrow(/not a locale/)
   })
 })
+
+describe('the ui block', () => {
+  it('defaults every field when the block is absent', () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'mycelo-ui-')), 'mycelo.yaml')
+    writeFileSync(file, 'prefix: "/"\n', 'utf8')
+    expect(loadBootstrap(file).ui).toEqual({
+      bind: '127.0.0.1', port: 8730, trustProxy: false, resetAccount: false,
+    })
+  })
+
+  it('takes a partial block and defaults the rest', () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'mycelo-ui-')), 'mycelo.yaml')
+    writeFileSync(file, 'ui:\n  port: 9000\n  trustProxy: true\n', 'utf8')
+    expect(loadBootstrap(file).ui).toEqual({
+      bind: '127.0.0.1', port: 9000, trustProxy: true, resetAccount: false,
+    })
+  })
+
+  it('names the field when a port is out of range', () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'mycelo-ui-')), 'mycelo.yaml')
+    writeFileSync(file, 'ui:\n  port: 70000\n', 'utf8')
+    expect(() => loadBootstrap(file)).toThrow(/ui\.port/)
+  })
+})

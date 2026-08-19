@@ -1,12 +1,39 @@
 import { createInterface } from 'node:readline/promises'
 import { resolve } from 'node:path'
-import { bootstrap, germinationBanner } from './mycelium.js'
+import { runEntry, shutdownMessage, startupMessage } from './boot/entry.js'
+import type { Running } from './boot/entry.js'
+import { germinationBanner } from './mycelium.js'
 import { parseSenderLine } from './support/sender.js'
 
 const configFile = resolve(process.cwd(), 'mycelo.yaml')
-const { registry } = await bootstrap(configFile)
 
-console.log(`mycelium: ${germinationBanner(registry)}`)
+let running: Running
+try {
+  running = await runEntry(configFile)
+} catch (e) {
+  console.error(startupMessage(e))
+  process.exit(1)
+}
+
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    // Never bare: an unhandled rejection here is process-fatal, so a failed shutdown would
+    // print the stack trace this entry point exists to keep off the operator's screen.
+    void running.close()
+      .then(() => { process.exit(0) })
+      .catch((e: unknown) => { console.error(shutdownMessage(e)); process.exit(1) })
+  })
+}
+
+const { germination } = running.state
+
+if (germination.status === 'germinated') {
+  console.log(`mycelium: ${germinationBanner(germination.mycelium.registry)}`)
+} else {
+  // germinatePhase has already logged why. Degraded mode has no registry, so there is no
+  // hypha to drive and the API is the only way in (spec §8.1).
+  console.log(`mycelium ${germination.status}: no channel to drive from stdin; use the API at ${running.address}`)
+}
 
 // The console hypha is driven by stdin here and by feed() in tests. Nothing else in
 // the core knows this method exists — it is not part of the Hypha contract, so it
@@ -20,7 +47,9 @@ function hasFeed(instance: unknown): instance is {
     && typeof (instance as Record<string, unknown>).feed === 'function'
 }
 
-const consoleInstance = registry.hyphae.find((h) => h.name === 'console')?.instance
+const consoleInstance = germination.status === 'germinated'
+  ? germination.mycelium.registry.hyphae.find((h) => h.name === 'console')?.instance
+  : undefined
 
 if (!hasFeed(consoleInstance)) {
   console.log('no console hypha: nothing to read from')

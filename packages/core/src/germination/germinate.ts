@@ -210,7 +210,7 @@ export async function germinate(
     logger.warn('germination produced zero spores: no channel and no command will ever answer')
   }
 
-  // Startup (mycelium.ts) needs rhizas and enzymes in one interleaved, dependency-first
+  // Startup (boot/start.ts) needs rhizas and enzymes in one interleaved, dependency-first
   // sequence — resolution.order already is that sequence; just drop hyphae, inhibitors
   // and anything that failed to germinate.
   const registered = new Set([...rhizas, ...enzymes].map((s) => s.name))

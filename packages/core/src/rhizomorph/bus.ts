@@ -78,7 +78,7 @@ export interface StartContextOptions {
 
 /**
  * The message-independent slice of EnzymeContext — push, capabilitiesOf, rhiza, has,
- * on — built once per spore so mycelium.ts's Enzyme.start() call (before any message
+ * on — built once per spore so boot/start.ts's Enzyme.start() call (before any message
  * exists) and createBus()'s per-message context below share one implementation.
  */
 export function createEnzymeStartContext(options: StartContextOptions): EnzymeStartContext {

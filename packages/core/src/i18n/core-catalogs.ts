@@ -27,9 +27,9 @@ export function loadCoreCatalogs(): Catalogs {
 }
 
 /**
- * Fails startup rather than answering every refusal with a raw catalogue key. mycelium.ts's
- * availableLocales() check is not enough on its own: it unions every domain, so one plugin
- * shipping the default locale would mask the core's own translations being entirely absent.
+ * Fails startup rather than answering every refusal with a raw catalogue key. Called from
+ * boot/serve.ts, and asserted per core-owned domain: a union over every domain lets one
+ * plugin shipping the default locale mask the core's own translations being entirely absent.
  */
 export function assertCoreCatalogs(catalogs: Catalogs, defaultLocale: string): void {
   for (const domain of CORE_OWNED_DOMAINS) {

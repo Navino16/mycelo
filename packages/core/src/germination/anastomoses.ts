@@ -45,7 +45,8 @@ export class CycleError extends Error {
 
 // A target may carry a semver range ("radarr@^2"); split on the first "@" and match on
 // the name only. Range checking is phase 8's problem, once spores carry versions.
-function targetName(target: string): string {
+// Exported for api/routes/registry.ts, which must strip the same range to match `resolved`.
+export function targetName(target: string): string {
   const at = target.indexOf('@')
   return at === -1 ? target : target.slice(0, at)
 }

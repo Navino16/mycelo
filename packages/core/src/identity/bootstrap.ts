@@ -18,7 +18,13 @@ export interface BootstrapIdentityOptions {
 
 const OWNER_ROLE = 'owner'
 
-function ensureOwnerRole(db: Db): string {
+/**
+ * Exported for `api/routes/auth.ts`: the setup wizard creates a fresh owner principal
+ * when no `owner:` block is configured, and `bootstrapIdentity` deliberately does nothing
+ * in that case (test: "does nothing when no owner is configured") — so the wizard is the
+ * only other caller that must guarantee the role exists before assigning it.
+ */
+export function ensureOwnerRole(db: Db): string {
   const existing = db.select({ id: role.id, builtin: role.builtin }).from(role).where(eq(role.name, OWNER_ROLE)).get()
   const id = existing?.id ?? crypto.randomUUID()
   if (existing === undefined) {

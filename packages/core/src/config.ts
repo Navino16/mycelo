@@ -11,7 +11,19 @@ const ownerSchema = z.object({
 
 export type OwnerIdentity = z.infer<typeof ownerSchema>
 
-// `ui` still arrives with the phase that needs it.
+const uiSchema = z.object({
+  bind: z.string().min(1).default('127.0.0.1'),
+  port: z.number().int().min(1).max(65535).default(8730),
+  // False is the only default that is safe when wrong (spec §6.7): with a proxy and
+  // `false` the login limiter counts every attacker as one client; without a proxy and
+  // `true` a client sets its own X-Forwarded-For and the limiter protects nothing.
+  trustProxy: z.boolean().default(false),
+  /** Deletes every UI credential and session at boot so the wizard runs again (spec §6.6). */
+  resetAccount: z.boolean().default(false),
+})
+
+export type UiConfig = z.infer<typeof uiSchema>
+
 const bootstrapSchema = z.object({
   prefix: z.string().min(1).default('/'),
   spores: z.string().default('./fixtures'),
@@ -22,6 +34,10 @@ const bootstrapSchema = z.object({
   // Settings moved to the database in phase 5. Rejected rather than dropped: Zod strips
   // unknown keys, so a stale block would take an operator's configuration with it in silence.
   plugins: z.never().optional(),
+  // .prefault(), not .default(): Zod v4's .default() returns an undefined-tested value
+  // verbatim without re-parsing it, so `.default({})` would skip every inner field's own
+  // default and yield `{}`. .prefault() parses the fallback through the schema.
+  ui: uiSchema.prefault({}),
 })
 
 export type Bootstrap = z.infer<typeof bootstrapSchema> & {
@@ -52,8 +68,9 @@ export function loadBootstrap(file: string): Bootstrap {
   if (!result.success) {
     const issue = result.error.issues[0]
     const path = issue?.path.join('.') ?? ''
-    // index.ts prints the message and nothing else, and Zod's text is identical for any
-    // field of the same type. `plugins` is named outright: it is this phase's migration.
+    // Prefixed with the field path: Zod's message text is identical for any field of the same
+    // type, so without it the operator cannot tell which field they got wrong. `plugins` is
+    // named outright — its removal is a migration, not a typo.
     const message = path === 'plugins'
       ? `remove the 'plugins:' block from ${file} — plugin settings now live in the database`
       : `${path === '' ? '' : `${path}: `}${issue?.message ?? 'invalid bootstrap'}`

@@ -62,7 +62,7 @@ export function createAdmissionChain(options: {
 }): AdmissionChain {
   const { inhibitors, brokenEnforcing, membership, logger, rhiza, channelScopes, translator, defaultLocale } = options
   const ordered = [...inhibitors].sort((a, b) => a.name.localeCompare(b.name))
-  // Same attribution start() gets (mycelium.ts), so an inhibitor's records name it in
+  // Same attribution start() gets (boot/start.ts), so an inhibitor's records name it in
   // both moments rather than only during startup.
   const loggerFor = new Map(inhibitors.map((i) => [i.name, logger.child({ inhibitor: i.name })]))
 
