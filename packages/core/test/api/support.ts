@@ -166,8 +166,14 @@ const RHIZA_STUB = `
   }
 `
 
-// One enzyme with two dependencies, mandatory and optional to two different rhizas — the
-// plural case for /api/graph, whose edges must distinguish the two, not just report one.
+// One enzyme, two rhizas. `sideconn` is reached by one plain optional requirement —
+// mandatory-versus-optional across two distinct targets. `coreconn` is reached by *two*
+// requirements with *conflicting* optionality: an any_of (whose chosen alternative
+// anastomoses.ts always treats as mandatory) and a separate plain optional requirement
+// naming it directly. That is the shape /api/graph's edgesOf must both dedupe (one edge,
+// not two) and merge correctly (mandatory wins over optional). The any_of is listed
+// first so a naive "last write wins" merge — as opposed to the correct AND — would
+// answer optional for coreconn instead of mandatory, and so be caught.
 export const mandatoryAndOptionalDependency: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'coreconn', {
     'spore.yaml': 'kind: rhiza\nname: coreconn\nseptum: "^0.7"\n', 'src/index.ts': RHIZA_STUB,
@@ -179,7 +185,10 @@ export const mandatoryAndOptionalDependency: SporeWriter = (sporesDir) => {
     // A respond: command needs no module (enzymeManifestSchema requires at least one command).
     'spore.yaml': 'kind: enzyme\nname: grapher\nseptum: "^0.7"\ncommands:\n'
       + '  - name: noop\n    description: No-op\n    respond: noop.text\n'
-      + 'requires:\n  - rhiza: coreconn\n  - rhiza: sideconn\n    optional: true\n',
+      + 'requires:\n'
+      + '  - any_of:\n      - rhiza: nowhere\n      - rhiza: coreconn\n'
+      + '  - rhiza: coreconn\n    optional: true\n'
+      + '  - rhiza: sideconn\n    optional: true\n',
   })
 }
 

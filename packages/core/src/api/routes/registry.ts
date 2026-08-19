@@ -14,6 +14,23 @@ export interface CommandDto {
   capabilities: readonly string[]
 }
 
+/**
+ * Grouped by plugin, matching §8's identical wording for `/api/plugins` — the Roles screen
+ * renders one collapsible section per plugin. No `unknown` bucket: every command reaches
+ * this route through `registry.routes`, which is indexed by plugin, so (unlike
+ * `/api/plugins`, where a manifest can fail to parse before a kind is known) a command
+ * with no plugin cannot exist here.
+ */
+export type CommandGroups = Record<string, readonly CommandDto[]>
+
+function groupByPlugin(commands: readonly CommandDto[]): CommandGroups {
+  const groups: Record<string, CommandDto[]> = {}
+  for (const command of commands) {
+    (groups[command.plugin] ??= []).push(command)
+  }
+  return groups
+}
+
 export interface GraphNode {
   name: string
   /** Absent only for a `registry.dormant` entry whose manifest never parsed. */
@@ -70,15 +87,16 @@ export function registerRegistryRoutes(app: FastifyInstance, state: RuntimeState
   app.get('/api/commands', (request) => {
     // Nothing germinated while 'starting' or 'degraded', so there are no commands to grant
     // and no distinction between the two matters here (spec §4.1).
-    if (state.germination.status !== 'germinated') return []
+    if (state.germination.status !== 'germinated') return {}
     const { registry } = state.germination.mycelium
-    return [...registry.routes.values()].map((route): CommandDto => ({
+    const commands = [...registry.routes.values()].map((route): CommandDto => ({
       plugin: route.plugin,
       command: route.command,
       qualified: route.qualified,
       description: state.translator.translate(route.plugin, route.spec.description, request.locale),
       capabilities: route.spec.capabilities ?? [],
     }))
+    return groupByPlugin(commands)
   })
 
   app.get('/api/graph', (): GraphDto => {
