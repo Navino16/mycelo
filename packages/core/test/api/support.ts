@@ -41,7 +41,7 @@ export function boot(
 
 // Same fixtures milestone.test.ts and lifecycle.test.ts germinate against, at the same
 // depth: packages/core/test/api is a sibling of packages/core/test/config.
-const FIXTURES = resolve(import.meta.dirname, '../../../../fixtures')
+export const FIXTURES = resolve(import.meta.dirname, '../../../../fixtures')
 
 export type SporeWriter = (sporesDir: string) => void
 
@@ -181,6 +181,16 @@ const RHIZA_STUB = `
     }),
   }
 `
+
+/**
+ * `cyclingPair` plus a module each. `enablePlugin` imports the module, so a module-less
+ * spore cannot be enabled through `POST /api/plugins/:name/enable`; cycle detection still
+ * precedes every import, so the pair cycles all the same (milestone, spec §15 steps 6-8).
+ */
+export const cyclingPairWithModules: SporeWriter = (sporesDir) => {
+  cyclingPair(sporesDir)
+  for (const name of ['alpha', 'beta']) writeSpore(sporesDir, name, { 'src/index.ts': RHIZA_STUB })
+}
 
 // One enzyme, two rhizas. `sideconn` is reached by one plain optional requirement —
 // mandatory-versus-optional across two distinct targets. `coreconn` is reached by *two*

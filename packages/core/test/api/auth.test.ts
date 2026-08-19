@@ -298,6 +298,11 @@ describe('authentication', () => {
   })
 })
 
+// Both tests here spend ten argon2id verifications at m=65536, ~1.5 s idle; the 5 s
+// default times out on a loaded shared runner. The assertions are on status codes, so a
+// larger budget cannot mask a logic defect.
+const RATE_LIMIT_TIMEOUT_MS = 20_000
+
 describe('rate limiting on login', () => {
   it('limits repeated failed logins and refuses the 11th with 429', async () => {
     const a = start()
@@ -309,7 +314,7 @@ describe('rate limiting on login', () => {
       })
     }
     expect(last?.statusCode).toBe(429)
-  })
+  }, RATE_LIMIT_TIMEOUT_MS)
 
   it('counts attempts per client address, and only trusts X-Forwarded-For when told to', async () => {
     // spec §6.7's trap: with trustProxy on, two distinct forwarded addresses are two
@@ -335,5 +340,5 @@ describe('rate limiting on login', () => {
       headers: { 'x-forwarded-for': '10.0.0.2' },
     })
     expect(fromElsewhere.statusCode).toBe(200)
-  })
+  }, RATE_LIMIT_TIMEOUT_MS)
 })
