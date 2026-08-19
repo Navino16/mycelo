@@ -27,6 +27,8 @@ const UI_ROOTS = [
 export interface ServerOptions {
   trustProxy: boolean
   state: RuntimeState
+  /** Test seam only, never operator config: overrides UI_ROOTS to probe fallback order. */
+  uiRoots?: string[]
 }
 
 /** Fastify's own faults (a malformed body, @fastify/rate-limit's 429) carry this, unlike ApiError. */
@@ -98,7 +100,7 @@ export function createServer(options: ServerOptions): FastifyInstance {
     registerRegistryRoutes(app, options.state)
     // wildcard: false — the plugin claims only the files it finds under UI_ROOTS, so the
     // fallback below still runs for every SPA route and API 404 (spec §12).
-    void app.register(fastifyStatic, { root: UI_ROOTS, wildcard: false })
+    void app.register(fastifyStatic, { root: options.uiRoots ?? UI_ROOTS, wildcard: false })
     app.setNotFoundHandler((request, reply) => {
       const path = request.url.split('?')[0] ?? ''
       if (path.startsWith('/api/') || path === '/healthz') {

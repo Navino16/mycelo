@@ -25,15 +25,17 @@ export function freshDir(): string {
  * `beforeServe`, if given, runs against the database file before `serve()` opens it —
  * for seeding a row `bootstrapIdentity` must find already there (e.g. a configured
  * `defaultRole` that has to name an existing role or `serve()` itself throws).
+ * `uiRoots`, if given, overrides `createServer`'s static roots — a test seam for the
+ * dist/public fallback order, never operator config.
  */
 export function boot(
   dir: string, extra = '', trustProxy = false, sporesDir = './none',
-  beforeServe?: (dbFile: string) => void,
+  beforeServe?: (dbFile: string) => void, uiRoots?: string[],
 ): Booted {
   writeFileSync(join(dir, 'mycelo.yaml'), `spores: ${sporesDir}\ndatabase: ./d.db\n${extra}`, 'utf8')
   beforeServe?.(join(dir, 'd.db'))
   const served = serve(join(dir, 'mycelo.yaml'))
-  const app = createServer({ trustProxy, state: served.state })
+  const app = createServer({ trustProxy, state: served.state, uiRoots })
   return { app, served }
 }
 
