@@ -1,5 +1,6 @@
 import type {
   BroadcastResult,
+  CommandsRead,
   ConversationsRead,
   HealthRead,
   LocaleManage,
@@ -18,6 +19,7 @@ import type {
   RolesManage,
   RolesRead,
 } from '@mycelo/septum'
+import { availableCommands } from './authorization/available.js'
 import {
   assignRole, createRole, deleteRole, listRoles, revokeRole, setRoleCommands,
 } from './authorization/roles.js'
@@ -67,7 +69,7 @@ async function broadcast(
 export interface MyceliumApiOptions {
   /** Guards deleteRole against removing the role every first contact is given. */
   defaultRole?: string
-  /** Required by locale.manage; createMyceliumApi throws if that scope is granted without it. */
+  /** Required by locale.manage and commands.read; createMyceliumApi throws if either is granted without it. */
   translator?: Translator
 }
 
@@ -101,7 +103,7 @@ export function createMyceliumApi(
   const api = Object.create(null) as Partial<
     PluginsRead & HealthRead & MessagesSend & PrincipalsRead & PrincipalsManage &
     RolesRead & RolesAssign & RolesManage & PluginsToggle & PluginsConfigure &
-    ConversationsRead & MessagesBroadcast & RestrictionsManage & LocaleManage
+    ConversationsRead & MessagesBroadcast & RestrictionsManage & LocaleManage & CommandsRead
   >
 
   if (granted.has('plugins.read')) api.listPlugins = () => listPlugins(registry, sporesDirs, db)
@@ -150,6 +152,11 @@ export function createMyceliumApi(
     api.listBroadcastTargets = () => toPromise(() => listBroadcastTargets(db))
     api.addBroadcastTarget = (target) => toPromise(() => { addBroadcastTarget(db, target) })
     api.removeBroadcastTarget = (target) => toPromise(() => { removeBroadcastTarget(db, target) })
+  }
+  if (granted.has('commands.read')) {
+    if (translator === undefined) throw new Error('commands.read was granted with no translator')
+    api.available = (principal, locale) =>
+      toPromise(() => availableCommands(registry, db, translator, principal, locale))
   }
   if (granted.has('locale.manage')) {
     // Fail fast rather than mounting a scope whose availableLocales() would answer [] —

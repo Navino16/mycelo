@@ -1,5 +1,7 @@
 import { MYCELIUM_SCOPES } from '../src/mycelium.js'
 import type {
+  CommandInfo,
+  CommandsRead,
   ConversationsRead,
   HealthRead,
   LocaleManage,
@@ -30,6 +32,7 @@ export type ScopeNamesAreExact = Expect<Equal<MyceliumScope,
   | 'plugins.read' | 'plugins.toggle' | 'plugins.configure'
   | 'health.read' | 'messages.send'
   | 'messages.broadcast' | 'conversations.read' | 'restrictions.manage' | 'locale.manage'
+  | 'commands.read'
 >>
 
 export type ScopesAreReadonly = Expect<Equal<typeof MYCELIUM_SCOPES, readonly [
@@ -38,6 +41,7 @@ export type ScopesAreReadonly = Expect<Equal<typeof MYCELIUM_SCOPES, readonly [
   'plugins.read', 'plugins.toggle', 'plugins.configure',
   'health.read', 'messages.send',
   'messages.broadcast', 'conversations.read', 'restrictions.manage', 'locale.manage',
+  'commands.read',
 ]>>
 
 // One entry per scope, `never` for a scope no phase mounts yet. A scope added to
@@ -57,6 +61,7 @@ interface ScopeApi {
   'conversations.read': ConversationsRead
   'restrictions.manage': RestrictionsManage
   'locale.manage': LocaleManage
+  'commands.read': CommandsRead
 }
 
 export type EveryScopeIsClassified = Expect<Equal<keyof ScopeApi, MyceliumScope>>
@@ -133,6 +138,12 @@ export const restrictionsManage: RestrictionsManage = {
   listBroadcastTargets: () => Promise.resolve([{ channel: 'console', conversationId: 'stdin' }]),
   addBroadcastTarget: () => Promise.resolve(),
   removeBroadcastTarget: () => Promise.resolve(),
+}
+
+const ping: CommandInfo = { qualified: 'ping.ping', name: 'ping', plugin: 'ping', description: 'Health check' }
+
+export const commandsRead: CommandsRead = {
+  available: () => Promise.resolve([ping]),
 }
 
 export const localeManage: LocaleManage = {

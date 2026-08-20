@@ -22,6 +22,7 @@ export const MYCELIUM_SCOPES = [
   'conversations.read',
   'restrictions.manage',
   'locale.manage',
+  'commands.read',
 ] as const
 
 export type MyceliumScope = (typeof MYCELIUM_SCOPES)[number]
@@ -209,6 +210,30 @@ export interface RestrictionsManage {
   addBroadcastTarget(target: PushTarget): Promise<void>
   /** Removing one that is not configured is a no-op. */
   removeBroadcastTarget(target: PushTarget): Promise<void>
+}
+
+export interface CommandInfo {
+  /** The authorization identifier: 'plugin.command'. */
+  qualified: string
+  /** Short name, as typed after the prefix. */
+  name: string
+  /** The spore declaring the command, and the catalogue domain its description came from. */
+  plugin: string
+  /** Rendered text, falling back to the default locale and then to the key itself. */
+  description: string
+}
+
+/**
+ * The core filters and renders, because it holds the pattern matcher and every catalogue;
+ * a spore can only render its own domain and those its manifest requires (design §6).
+ */
+export interface CommandsRead {
+  /**
+   * Commands this principal may invoke, sorted by `qualified`, described in this locale.
+   * The principal is a parameter because a mycelium rhiza is mounted once per plugin,
+   * not once per invocation.
+   */
+  available(principal: Principal, locale: string): Promise<readonly CommandInfo[]>
 }
 
 export interface LocaleManage {

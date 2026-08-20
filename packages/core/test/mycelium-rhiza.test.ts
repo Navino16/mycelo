@@ -4,10 +4,11 @@ import { join, resolve as resolvePath } from 'node:path'
 import { describe, expect, it } from 'bun:test'
 import { z } from 'zod'
 import type {
-  ConversationsRead, HealthRead, IncomingMessage, LocaleManage, MessagesBroadcast, PluginsConfigure,
+  CommandsRead, ConversationsRead, HealthRead, IncomingMessage, LocaleManage, MessagesBroadcast, PluginsConfigure,
   PluginsRead, PluginsToggle, PrincipalsManage, PrincipalsRead, PushTarget, RestrictionsManage,
   RolesAssign, RolesManage, RolesRead,
 } from '@mycelo/septum'
+import { assignRole, createRole } from '../src/authorization/roles.js'
 import { addBroadcastTarget, recordConversation } from '../src/conversations/registry.js'
 import { getInstall, recordInstall, setEnabled, writeSetting } from '../src/config/store.js'
 import { bootstrapIdentity } from '../src/identity/bootstrap.js'
@@ -635,5 +636,38 @@ describe('restrictions.manage', () => {
     expect(await api.listBroadcastTargets?.()).toEqual([{ channel: 'console', conversationId: 'c1' }])
     await api.removeBroadcastTarget?.({ channel: 'console', conversationId: 'c1' })
     expect(await api.listBroadcastTargets?.()).toEqual([])
+  })
+})
+
+describe('commands.read', () => {
+  // `registry` above carries one route-less enzyme; this one carries the routes available()
+  // reads, so the mount is exercised end to end rather than only checked for presence.
+  function routed(): Registry {
+    const routes = new Map(['plugins', 'movies'].map((command) => {
+      const plugin = command === 'plugins' ? 'admin' : 'media'
+      return [command, {
+        command, plugin, qualified: `${plugin}.${command}`,
+        spec: { name: command, description: `cmd.${command}`, respond: 'x' },
+      }]
+    }))
+    return { ...emptyRegistry(), routes } as unknown as Registry
+  }
+
+  it('throws rather than mounting a scope with no translator to render descriptions', () => {
+    expect(() => createMyceliumApi(routed(), ['commands.read'], noSend, fresh(), SPORES))
+      .toThrow(/commands.read/)
+  })
+
+  it('answers through the mount, filtered by the caller and described in the given locale', async () => {
+    const db = fresh()
+    createRole(db, 'admins', ['admin.*'])
+    const bob = resolvePrincipal(db, { channel: 'console', externalId: 'bob' })
+    assignRole(db, bob.id, 'admins')
+    const api = createMyceliumApi(routed(), ['commands.read'], noSend, db, SPORES,
+      { translator: stubTranslator }) as CommandsRead
+
+    expect(await api.available(bob, 'fr')).toEqual([
+      { qualified: 'admin.plugins', name: 'plugins', plugin: 'admin', description: 'cmd.plugins' },
+    ])
   })
 })
