@@ -200,6 +200,7 @@ export function createBus({
       }),
       capabilities: capabilitiesOf(origin),
       get principal(): Principal { return principal },
+      locale,
     }
   }
 

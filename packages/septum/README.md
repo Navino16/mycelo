@@ -252,6 +252,11 @@ stored locale, or `config.defaultLocale` — **not** a reader's `/lang` choice, 
 carries no principal to consult. Pass its result as `t()`'s third argument for a proactive
 `push()` that has no message to derive one from.
 
+A handler's context also carries `locale: string` — the same locale `ctx.t()` uses when `locale`
+is omitted, exposed so a handler can pass it to something else that needs it named rather than
+rendered, such as a rhiza call. It is not on `EnzymeStartContext`: `start()` has no message to
+resolve one from.
+
 Add a `configSchema` when the plugin takes configuration. It is duck-typed rather than typed
 as a Zod schema: a plugin is bundled with its own copy of Zod, so its schemas are not
 instances of the core's. Anything with a compatible `safeParse` is accepted — and "compatible"
@@ -313,7 +318,7 @@ The harness is yours to build: the kit cannot know what your plugin depends on, 
 the stubs.
 
 `context()` is the context a *handler* gets. `start()` runs before any message exists and gets the
-narrower `EnzymeStartContext` — no `reply`, no `principal`, no `capabilities` — so `enzymeChecks`
+narrower `EnzymeStartContext` — no `reply`, no `principal`, no `capabilities`, no `locale` — so `enzymeChecks`
 narrows `context()` down to those members before calling `start()`. An enzyme that reaches for
 `ctx.reply` in `start()` therefore fails the kit exactly as it would fail in the bot. Pass
 `startContext()` instead if you want to stub that moment yourself.
@@ -334,6 +339,7 @@ const context = (): EnzymeContext => ({
   capabilities: { has: () => true, list: () => [] },
   capabilitiesOf: () => ({ has: () => true, list: () => [] }),
   principal: { id: 'p1', identities: [], roles: [] },
+  locale: 'en',
   on() {},
   t: (key) => (typeof key === 'string' ? key : key.key),
   localeFor: () => Promise.resolve('en'),

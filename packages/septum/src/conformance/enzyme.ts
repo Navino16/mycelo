@@ -146,6 +146,7 @@ function withGuardedT(
     localeFor: (target) => ctx.localeFor(target),
     capabilities: ctx.capabilities,
     principal: ctx.principal,
+    locale: ctx.locale,
   }
 }
 

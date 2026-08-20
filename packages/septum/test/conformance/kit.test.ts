@@ -148,6 +148,7 @@ function enzymeContext(): EnzymeContext<unknown> {
     capabilities: { has: () => true, list: () => [] },
     capabilitiesOf: () => ({ has: () => true, list: () => [] }),
     principal: { id: 'p1', identities: [], roles: [] },
+    locale: 'en',
     on() {},
     t: (key) => (typeof key === 'string' ? key : key.key),
     localeFor: () => Promise.resolve('en'),
@@ -590,6 +591,7 @@ describe('regressions', () => {
       logger = { debug() {}, info() {}, warn() {}, error() {}, child: (): EnzymeContext<unknown>['logger'] => this.logger }
       capabilities: EnzymeContext<unknown>['capabilities'] = { has: () => true, list: () => [] }
       principal = { id: 'p1', identities: [], roles: [] }
+      locale = 'en'
       async reply(): Promise<void> {}
       async push(): Promise<void> {}
       rhiza<TApi>(): TApi { return {} as TApi }
