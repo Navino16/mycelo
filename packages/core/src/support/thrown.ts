@@ -6,8 +6,12 @@
  */
 export function describeConfigError(error: unknown): string {
   const issues = (error as { issues?: unknown } | null)?.issues
-  if (!Array.isArray(issues) || issues.length === 0) return 'the plugin reported no further detail'
-  return issues.map(describeConfigIssue).join('; ')
+  if (Array.isArray(issues) && issues.length > 0) return issues.map(describeConfigIssue).join('; ')
+  // A pre-0.8 plugin's `error` carries no issues at all, and its own sentence says more than
+  // the generic line below — which is the whole audience of this guard.
+  if (typeof error === 'string' && error.length > 0) return error
+  if (error instanceof Error && error.message.length > 0) return error.message
+  return 'the plugin reported no further detail'
 }
 
 /** `String()`, never `.join()`, on the raw path: `Array.prototype.join` throws on a symbol. */
