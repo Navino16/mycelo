@@ -722,7 +722,7 @@ it('refuses all traffic when an enforcing inhibitor is dormant from a rejected c
     'spore.yaml': 'kind: inhibitor\nname: badconfiggate\nseptum: "^1.0"\nenforcing: true\n',
     'src/index.ts': [
       'export default {',
-      '  configSchema: { safeParse: () => ({ success: false, error: "groupId is required" }) },',
+      '  configSchema: { safeParse: () => ({ success: false, error: { issues: [{ path: ["groupId"], message: "groupId is required" }] } }) },',
       '  create: () => ({ inspect: () => Promise.resolve({ allow: true }) }),',
       '}',
     ].join('\n'),

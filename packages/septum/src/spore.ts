@@ -1,14 +1,25 @@
+export interface ConfigIssue {
+  /** Where in the settings object the refusal applies. Empty for a whole-object refusal. */
+  readonly path: readonly PropertyKey[]
+  readonly message: string
+}
+
+export interface ConfigError {
+  readonly issues: readonly ConfigIssue[]
+}
+
 /**
  * A validator for a plugin's configuration, described structurally.
  *
  * Not typed as a Zod schema: a spore is bundled with its own copy of Zod, so a
  * schema arriving from a plugin is not an instance of the core's ZodType. Any
- * object with a compatible `safeParse` satisfies this.
+ * object with a compatible `safeParse` satisfies this — but "compatible" now has a
+ * stated shape: `error` must carry `issues`, not any value.
  */
 export interface ConfigSchema<T> {
   safeParse(input: unknown):
     | { success: true; data: T }
-    | { success: false; error: unknown }
+    | { success: false; error: ConfigError }
   /**
    * JSON Schema for the settings form. Absent when the plugin provides none — which also
    * leaves `plugins.configure`'s `setSetting` unable to refuse an undeclared key.

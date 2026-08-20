@@ -40,7 +40,7 @@ const NEEDS_CONFIG_MODULE = `
       const url = input === null || typeof input !== 'object' ? undefined : input.url
       return typeof url === 'string' && url.length > 0
         ? { success: true, data: { url } }
-        : { success: false, error: "'url' must be a non-empty string" }
+        : { success: false, error: { issues: [{ path: ['url'], message: "'url' must be a non-empty string" }] } }
     } },
     create: () => ({
       handlers: {

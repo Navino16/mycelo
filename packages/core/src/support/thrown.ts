@@ -1,3 +1,10 @@
+import type { ConfigError } from '@mycelo/septum'
+
+/** Renders a plugin's own refusal into one line: `path: message`, joined, path omitted when empty. */
+export function describeConfigError(error: ConfigError): string {
+  return error.issues.map((i) => (i.path.length === 0 ? i.message : `${i.path.join('.')}: ${i.message}`)).join('; ')
+}
+
 /** Coercion to string happens in here too: a hostile `message` can return an object that resists it. */
 export function describeThrown(e: unknown): string {
   try {

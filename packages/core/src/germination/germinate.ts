@@ -5,6 +5,7 @@ import { getInstall } from '../config/store.js'
 import { loadCatalogs } from '../i18n/catalog.js'
 import type { LocaleMessages } from '../i18n/catalog.js'
 import type { Db } from '../persistence/db.js'
+import { describeConfigError } from '../support/thrown.js'
 import { resolve } from './anastomoses.js'
 import { discover } from './discover.js'
 import { loadModule } from './load.js'
@@ -128,7 +129,7 @@ export async function germinate(
           // Duck-typed, never instanceof: a spore is bundled with its own copy of Zod.
           const parsed = module.configSchema.safeParse(declared)
           if (!parsed.success) {
-            const reason = `configuration rejected: ${String(parsed.error)}`
+            const reason = `configuration rejected: ${describeConfigError(parsed.error)}`
             dormant.push({ name: manifest.name, reason })
             failed.set(manifest.name, reason)
             markBroken()

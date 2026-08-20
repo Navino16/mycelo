@@ -93,7 +93,8 @@ function configSchemaModule(fields: readonly string[]): string {
       configSchema: {
         safeParse: (input) => (${checks})
           ? { success: true, data: input }
-          : { success: false, error: 'missing required field(s): ' + [${missingExpr}].flat().join(', ') },
+          : { success: false, error: { issues: [${missingExpr}].flat()
+              .map((f) => ({ path: [f], message: 'missing required field' })) } },
         toJsonSchema: () => ({
           type: 'object',
           properties: { ${properties} },
@@ -165,29 +166,29 @@ export const closedJsonSchema: SporeWriter = (sporesDir) => {
 }
 
 /**
- * A schema exposing a per-field `shape`, the way a plugin exporting a Zod object directly
- * does. `port` takes a number, `label` any string — so one key can be refused while the
- * other is written.
+ * A whole-object schema where one key can be refused while another, in the same payload,
+ * is written — `port` takes a number, `label` any string. `.shape` is gone from the
+ * contract, so this goes through the same `objectRejections` path as `definedSchema`.
  */
-export const shapedSchema: SporeWriter = (sporesDir) => {
-  writeSpore(sporesDir, 'shaped', {
-    'spore.yaml': 'kind: enzyme\nname: shaped\nseptum: "^0.7"\n'
-      + 'commands:\n  - name: shaped\n    description: Report the configured setting\n    code: handleConfigured\n',
+export const mixedFieldSchema: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'mixed', {
+    'spore.yaml': 'kind: enzyme\nname: mixed\nseptum: "^0.7"\n'
+      + 'commands:\n  - name: mixed\n    description: Report the configured setting\n    code: handleConfigured\n',
     'src/index.ts': `
-      const number = {
-        safeParse: (v) => typeof v === 'number'
-          ? { success: true, data: v }
-          : { success: false, error: { issues: [{ code: 'invalid_type', message: 'expected a number' }] } },
-      }
-      const text = {
-        safeParse: (v) => typeof v === 'string'
-          ? { success: true, data: v }
-          : { success: false, error: { issues: [{ code: 'invalid_type', message: 'expected a string' }] } },
-      }
       export default {
         configSchema: {
-          shape: { port: number, label: text },
-          safeParse: (input) => ({ success: true, data: input }),
+          safeParse: (input) => {
+            const issues = []
+            if (typeof input?.port !== 'number') {
+              issues.push({ path: ['port'], message: 'expected a number' })
+            }
+            if (input?.label !== undefined && typeof input.label !== 'string') {
+              issues.push({ path: ['label'], message: 'expected a string' })
+            }
+            return issues.length === 0
+              ? { success: true, data: input }
+              : { success: false, error: { issues } }
+          },
           toJsonSchema: () => ({
             type: 'object',
             properties: { port: { type: 'number' }, label: { type: 'string' } },

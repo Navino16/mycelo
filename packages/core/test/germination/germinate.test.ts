@@ -146,7 +146,7 @@ it('refuses all traffic when an enforcing inhibitor is dormant from a rejected c
     'spore.yaml': 'kind: inhibitor\nname: strictgate\nseptum: "^1.0"\nenforcing: true\n',
     'src/index.ts': [
       'export default {',
-      '  configSchema: { safeParse: () => ({ success: false, error: "groupId is required" }) },',
+      '  configSchema: { safeParse: () => ({ success: false, error: { issues: [{ path: ["groupId"], message: "groupId is required" }] } }) },',
       '  create: () => ({ inspect: () => Promise.resolve({ allow: true }) }),',
       '}',
     ].join('\n'),
@@ -161,7 +161,7 @@ it('does not refuse all traffic when a dormant inhibitor is only advisory', asyn
     'spore.yaml': 'kind: inhibitor\nname: softgate\nseptum: "^1.0"\n',
     'src/index.ts': [
       'export default {',
-      '  configSchema: { safeParse: () => ({ success: false, error: "groupId is required" }) },',
+      '  configSchema: { safeParse: () => ({ success: false, error: { issues: [{ path: ["groupId"], message: "groupId is required" }] } }) },',
       '  create: () => ({ inspect: () => Promise.resolve({ allow: true }) }),',
       '}',
     ].join('\n'),
@@ -476,11 +476,11 @@ const CONFIGURABLE_RHIZA_MODULE = `
     configSchema: { safeParse: (input) => {
       // undefined and {} are reported differently on purpose: without it, dropping
       // germinate()'s \`?? {}\` would leave the absent-key test green.
-      if (input === undefined) return { success: false, error: 'config was passed as undefined' }
+      if (input === undefined) return { success: false, error: { issues: [{ path: [], message: 'config was passed as undefined' }] } }
       const token = input === null || typeof input !== 'object' ? undefined : input.token
       return typeof token === 'string'
         ? { success: true, data: { token } }
-        : { success: false, error: 'token must be a string' }
+        : { success: false, error: { issues: [{ path: ['token'], message: 'token must be a string' }] } }
     } },
     create: () => ({ ${RHIZA_BODY} }),
   }

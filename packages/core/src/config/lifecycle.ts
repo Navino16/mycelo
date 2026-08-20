@@ -4,7 +4,7 @@ import { loadModule } from '../germination/load.js'
 import { isFailure, readManifest } from '../germination/manifest.js'
 import type { ManifestFailure, ReadManifest } from '../germination/manifest.js'
 import type { Db } from '../persistence/db.js'
-import { describeThrown } from '../support/thrown.js'
+import { describeConfigError, describeThrown } from '../support/thrown.js'
 import { getInstall, listInstalls, readSettings, recordInstall, setEnabled } from './store.js'
 
 export interface EnableOk { ok: true }
@@ -95,7 +95,7 @@ export async function enablePlugin(db: Db, sporesDirs: readonly string[], name: 
       return { ok: false, reason: `configuration is incomplete: validating it threw: ${describeThrown(e)}` }
     }
     if (!parsed.success) {
-      return { ok: false, reason: `configuration is incomplete: ${String(parsed.error)}` }
+      return { ok: false, reason: `configuration is incomplete: ${describeConfigError(parsed.error)}` }
     }
   }
   setEnabled(db, name, true)

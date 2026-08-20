@@ -30,7 +30,7 @@ capabilities are declared here rather than in the module.
 ```yaml
 kind: enzyme
 name: radarr-helper
-septum: "^0.7"
+septum: "^0.8"
 description: Movie shortcuts for Radarr
 commands:
   - name: help
@@ -188,9 +188,9 @@ pattern listed twice. Three exceptions answer instead of rejecting: `getPrincipa
 answers `[]` for an unknown principal, who holds no role either way.
 
 `enable(name)` validates the stored settings against the plugin's own `configSchema` before it
-flips the row, and **rejects** with `configuration is incomplete:` followed by whatever that
-schema reported — a Zod error dump, or the string a hand-built `ConfigSchema` returned; how
-precisely the fault is named is the plugin author's choice, not the core's. `disable(name)`,
+flips the row, and **rejects** with `configuration is incomplete:` followed by `String()` of that
+schema's `error` — a readable dump for a Zod error, but not yet for a hand-built `ConfigError`
+object, since the core does not render `issues` into a sentence. `disable(name)`,
 `settings(name)` and `setSetting(...)` reject for a plugin that is not installed. `setSetting`
 also rejects a key the plugin's published JSON Schema neither declares nor allows as an
 additional property — such a key would be dropped silently by a loose schema, or block
@@ -329,7 +329,7 @@ it('conforms to the Enzyme contract', async () => {
   const failures = await enzymeChecks({
     name: 'radarr-helper',
     manifest: {
-      kind: 'enzyme', name: 'radarr-helper', septum: '^0.7',
+      kind: 'enzyme', name: 'radarr-helper', septum: '^0.8',
       commands: [
         { name: 'help', description: 'Show what this plugin can do', respond: 'Try /add <title> to queue a movie.' },
         { name: 'add', description: 'Queue a movie by title', code: 'addMovie',

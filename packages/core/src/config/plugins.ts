@@ -141,12 +141,6 @@ function member(target: unknown, name: string): unknown {
   }
 }
 
-/** hasOwn, never `in`: a shape is a plugin-supplied plain object and 'constructor' is a key. */
-function field(shape: unknown, key: string): unknown {
-  if (typeof shape !== 'object' || shape === null) return undefined
-  return Object.hasOwn(shape, key) ? member(shape, key) : undefined
-}
-
 function parseWith(schema: unknown, value: unknown): { ok: boolean, error: unknown } | undefined {
   const parse = member(schema, 'safeParse')
   if (typeof parse !== 'function') return undefined
@@ -157,28 +151,6 @@ function parseWith(schema: unknown, value: unknown): { ok: boolean, error: unkno
   } catch {
     return undefined
   }
-}
-
-/** ZodError.issues is non-enumerable, so serialising the error itself would drop it. */
-function detailOf(error: unknown): unknown {
-  const issues = member(error, 'issues')
-  if (Array.isArray(issues)) return issues
-  return typeof error === 'string' ? error : describeThrown(error)
-}
-
-/** Undefined when the schema exposes no readable shape, which is the caller's cue to fall back. */
-function fieldRejections(
-  configSchema: unknown, values: Record<string, unknown>,
-): readonly SettingRejection[] | undefined {
-  const shape = member(configSchema, 'shape')
-  if (typeof shape !== 'object' || shape === null) return undefined
-  const rejections: SettingRejection[] = []
-  for (const [key, value] of Object.entries(values)) {
-    // A key the shape does not carry is skipped, not refused: undeclaredKeys already owns that.
-    const result = parseWith(field(shape, key), value)
-    if (result !== undefined && !result.ok) rejections.push({ key, issues: detailOf(result.error) })
-  }
-  return rejections
 }
 
 /**
@@ -204,9 +176,11 @@ function objectRejections(
 }
 
 /**
- * Spec §8: each provided value against its own field schema, never the merged object — a
- * two-required-field form must be fillable one field at a time, which is why completeness
- * is `enablePlugin`'s check and not this one's.
+ * Spec §8: never the merged object — a two-required-field form must be fillable one field
+ * at a time, which is why completeness is `enablePlugin`'s check and not this one's.
+ * `ConfigError.issues` is now a declared shape, so the whole-object parse filtered to the
+ * provided keys (`objectRejections`) is the only mechanism; there is no per-field `.shape`
+ * to try first.
  */
 export async function rejectedSettings(
   db: Db, sporesDirs: readonly string[], name: string, values: Record<string, unknown>,
@@ -218,8 +192,7 @@ export async function rejectedSettings(
   } catch {
     return []
   }
-  const configSchema: unknown = module?.configSchema
-  return fieldRejections(configSchema, values) ?? objectRejections(configSchema, values)
+  return objectRejections(module?.configSchema, values)
 }
 
 // Carries the row's is_secret forward: writeSetting() rewrites that column too, so a
