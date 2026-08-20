@@ -140,3 +140,13 @@ describe('the ui block', () => {
     expect(() => loadBootstrap(file)).toThrow(/ui\.port/)
   })
 })
+
+// Neither branch of the union carried .min(1), so both resolved to the directory holding
+// mycelo.yaml — a root the operator never named (review, minor 6).
+it('refuses an empty spores entry rather than resolving it to the config file\'s own directory', () => {
+  writeFileSync(join(dir, 'scalar.yaml'), 'spores: ""\n')
+  writeFileSync(join(dir, 'list.yaml'), 'spores: ["", ./fixtures]\n')
+
+  expect(() => loadBootstrap(join(dir, 'scalar.yaml'))).toThrow(BootstrapError)
+  expect(() => loadBootstrap(join(dir, 'list.yaml'))).toThrow(BootstrapError)
+})

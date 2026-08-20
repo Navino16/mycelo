@@ -26,7 +26,7 @@ export type UiConfig = z.infer<typeof uiSchema>
 
 const bootstrapSchema = z.object({
   prefix: z.string().min(1).default('/'),
-  spores: z.union([z.string(), z.array(z.string()).min(1)]).default('./fixtures'),
+  spores: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]).default('./fixtures'),
   database: z.string().min(1).default('./mycelo.db'),
   owner: ownerSchema.optional(),
   defaultRole: z.string().min(1).optional(),
