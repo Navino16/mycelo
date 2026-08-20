@@ -401,6 +401,32 @@ export interface BootAndLoginOptions {
 }
 
 /**
+ * A whole-object refusal — `path: []` — which is what a top-level Zod `.refine()` emits and
+ * what septum documents. Both keys are declared, so `undeclaredKeys` cannot be what refuses.
+ */
+export const eitherOrSchema: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'eitheror', {
+    'spore.yaml': 'kind: enzyme\nname: eitheror\nseptum: "^0.8"\n'
+      + 'commands:\n  - name: eitheror\n    description: command.eitheror.description\n    code: handleConfigured\n',
+    'translations/en.yaml': 'command:\n  eitheror:\n    description: Report the configured setting\n',
+    'src/index.ts': `
+      export default {
+        configSchema: {
+          safeParse: (input) => (input?.socket === undefined || input?.tcp === undefined
+            ? { success: true, data: input }
+            : { success: false, error: { issues: [{ path: [], message: 'socket or tcp, not both' }] } }),
+          toJsonSchema: () => ({
+            type: 'object',
+            properties: { socket: { type: 'string' }, tcp: { type: 'string' } },
+          }),
+        },
+        create: () => ({ handlers: { handleConfigured: async () => {} } }),
+      }
+    `,
+  })
+}
+
+/**
  * Boots, runs the phase-2 germination `serve()` leaves pending, and completes the setup
  * wizard, so a route test starts already past both gates in `api/context.ts`.
  */

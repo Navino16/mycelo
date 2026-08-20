@@ -5,7 +5,7 @@ import { pluginSetting } from '../../src/persistence/schema.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
   bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configurable, configurableTwoFields,
-  cyclingPair, definedSchema, mixedFieldSchema, noJsonSchema,
+  cyclingPair, definedSchema, eitherOrSchema, mixedFieldSchema, noJsonSchema,
 } from './support.js'
 import type { LoggedIn } from './support.js'
 
@@ -299,6 +299,27 @@ describe('PUT /api/plugins/:name/settings validates the values', () => {
     expect(refused.statusCode).toBe(400)
     expect(refused.json<{ error: { message: string } }>().error.message)
       .toBe("plugin 'defined' rejected the value given for: port")
+  })
+
+  // septum documents `path: []` as a whole-object refusal and the kit certifies one, so the
+  // per-key filter answered [] and this PUT was written with 200 (review, Important 1).
+  it('refuses a whole-object rejection and highlights every key it was given', async () => {
+    booted = await bootAndLogin({ spores: eitherOrSchema })
+    const { app, cookie } = booted
+    const refused = await app.inject({
+      method: 'PUT', url: '/api/plugins/eitheror/settings', headers: { cookie },
+      payload: { socket: '/tmp/s', tcp: 'host:1' },
+    })
+    expect(refused.statusCode).toBe(400)
+    const error = refused.json<{ error: { message: string, detail: unknown } }>().error
+    expect(error.message).toBe("plugin 'eitheror' rejected the value given for: socket, tcp")
+    expect(error.detail).toEqual([
+      { key: 'socket', issues: [{ path: [], message: 'socket or tcp, not both' }] },
+      { key: 'tcp', issues: [{ path: [], message: 'socket or tcp, not both' }] },
+    ])
+    expect((await app.inject({
+      method: 'GET', url: '/api/plugins/eitheror/settings', headers: { cookie },
+    })).json<Record<string, unknown>>()).toEqual({})
   })
 
   // The property that rules out validating the merged object, which is §8's literal reading:
