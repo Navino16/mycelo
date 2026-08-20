@@ -161,7 +161,7 @@ const goodEnzyme: EnzymeHarness = {
     kind: 'enzyme',
     name: 'links',
     septum: '^1.0',
-    commands: [{ name: 'links', description: 'Show links', code: 'links' }],
+    commands: [{ name: 'links', description: 'command.links.description', code: 'links' }],
   },
   module: { create: () => ({ handlers: { links: async () => {} } }) },
   context: enzymeContext,
@@ -680,7 +680,10 @@ describe('regressions', () => {
   it('passes an enzyme whose supplied catalogues all compile', async () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
-      catalogs: { en: { links: { usage: 'usage: links' } }, fr: { links: { usage: 'usage : links' } } },
+      catalogs: {
+        en: { links: { usage: 'usage: links' }, command: { links: { description: 'Show links' } } },
+        fr: { links: { usage: 'usage : links' }, command: { links: { description: 'Voir les liens' } } },
+      },
     })
     expect(failures).toEqual([])
   })
@@ -688,7 +691,7 @@ describe('regressions', () => {
   it('fails a catalogue key that does not compile, naming the locale and the key', async () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
-      catalogs: { en: { links: { usage: 'usage: {command' } } },
+      catalogs: { en: { links: { usage: 'usage: {command' }, command: { links: { description: 'Show links' } } } },
     })
     expect(failures.join(' ')).toContain("'en'")
     expect(failures.join(' ')).toContain('links.usage')
@@ -707,8 +710,49 @@ describe('regressions', () => {
   // with no keys, not a fault. A kit stricter than the runtime would fail a plugin the
   // bot germinates happily — exactly a scaffolded translations/fr.yaml left empty.
   it('passes a null catalogue root, exactly as the runtime does for an empty translation file', async () => {
-    const failures = await enzymeChecks({ ...goodEnzyme, catalogs: { en: { links: { usage: 'x' } }, fr: null } })
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      catalogs: { en: { links: { usage: 'x' }, command: { links: { description: 'Show links' } } }, fr: null },
+    })
     expect(failures).toEqual([])
+  })
+
+  // 26 of this project's own 30 fixture descriptions were English literals, which the
+  // runtime renders as itself and logs a missing-translation warning for on every call.
+  it('fails a command description that is a literal rather than a catalogue key', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      manifest: {
+        kind: 'enzyme', name: 'links', septum: '^1.0',
+        commands: [{ name: 'links', description: 'Show links', code: 'links' }],
+      },
+      catalogs: { en: { links: { usage: 'x' } } },
+    })
+    expect(failures.join(' ')).toContain("no key 'Show links'")
+    expect(failures.join(' ')).toContain("'en'")
+  })
+
+  // Two commands and two locales: a check reading only the last description, or only the
+  // first catalogue, would report nothing here.
+  it('names every description missing from every catalogue, not just the first', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      manifest: {
+        kind: 'enzyme', name: 'links', septum: '^1.0',
+        commands: [
+          { name: 'links', description: 'command.links.description', code: 'links' },
+          { name: 'usage', description: 'command.usage.description', code: 'links' },
+        ],
+      },
+      catalogs: {
+        en: { command: { links: { description: 'Show links' } } },
+        fr: { command: { usage: { description: 'Mode d\'emploi' } } },
+      },
+    })
+    expect(failures).toEqual([
+      "translations for 'en': no key 'command.usage.description', which a command declares as its description",
+      "translations for 'fr': no key 'command.links.description', which a command declares as its description",
+    ])
   })
 
   // The inverted phase-2 divergence: the kit's stub t used to accept every domain while

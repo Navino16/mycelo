@@ -21,7 +21,9 @@ export interface EnzymeHarness {
   /**
    * Already-parsed catalogues, keyed by locale — parseManifest's convention, since the kit
    * must not import `node:fs`. Compiled as germination compiles them (design §7.1), so a
-   * message that would make the spore dormant in the bot fails here instead.
+   * message that would make the spore dormant in the bot fails here instead. Every command's
+   * `description` must also resolve in each catalogue that has any keys at all: a literal
+   * description renders as itself and logs a missing-translation warning for every caller.
    */
   catalogs?: Record<string, unknown>
 }
@@ -63,9 +65,12 @@ function flatten(node: unknown, prefix: string, out: Map<string, string>): strin
   return null
 }
 
-function catalogFailures(catalogs: Record<string, unknown> | undefined): string[] {
+function catalogFailures(
+  catalogs: Record<string, unknown> | undefined, manifest: EnzymeManifest,
+): string[] {
   if (catalogs === undefined) return []
   const failures: string[] = []
+  const descriptions = [...new Set(manifest.commands.map((c) => c.description))]
   for (const [locale, raw] of Object.entries(catalogs)) {
     // An empty or comment-only file parses to null: catalog.ts treats that as a
     // catalogue with no keys, not a fault, and the kit must agree.
@@ -81,6 +86,16 @@ function catalogFailures(catalogs: Record<string, unknown> | undefined): string[
         new IntlMessageFormat(message, locale)
       } catch (e) {
         failures.push(`translations for '${locale}': key '${key}' does not compile: ${(e as Error).message}`)
+      }
+    }
+    // A catalogue with no keys is the scaffolded-empty case above, whichever way YAML
+    // parsed it; a catalogue that has keys is expected to carry every description.
+    if (flat.size === 0) continue
+    for (const description of descriptions) {
+      if (!flat.has(description)) {
+        failures.push(
+          `translations for '${locale}': no key '${description}', which a command declares as its description`,
+        )
       }
     }
   }
@@ -175,7 +190,7 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
   if (manifest.kind !== 'enzyme') {
     return [...failures, `manifest kind is '${manifest.kind}', expected 'enzyme'`]
   }
-  failures.push(...catalogFailures(harness.catalogs))
+  failures.push(...catalogFailures(harness.catalogs, manifest))
   const allowed = declaredRhizas(manifest)
 
   const codeCommands = manifest.commands.filter((c) => c.respond === undefined)

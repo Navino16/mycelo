@@ -371,7 +371,10 @@ accept, so calling them would report correct validation as a failure. Those are 
 Pass `catalogs` — already-parsed translation files keyed by locale, such as
 `{ en: parse(readFileSync('translations/en.yaml', 'utf8')) }` — to have `enzymeChecks` compile
 every key the same way germination does, and to have `ctx.t()` throw for a domain your manifest
-does not declare in `requires`, exactly as the bot would.
+does not declare in `requires`, exactly as the bot would. Each catalogue that holds any keys must
+also carry every command's `description`: a literal description renders as itself and logs a
+missing translation on every call. A catalogue that parses to `null`, or holds no keys at all, is
+the scaffolded-empty case and is skipped.
 
 ## Status
 

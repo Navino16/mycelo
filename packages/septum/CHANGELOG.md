@@ -26,6 +26,10 @@ Added:
   context rules are applied at dispatch, not here, so a listed command can still be refused on the
   channel it is asked on. `CommandInfo`: `qualified`, `name`, `plugin`, `description`. This is why a
   command's `description:` is now rendered rather than merely declared to be a catalogue key.
+- `enzymeChecks` now also asserts that every command's `description` resolves in each supplied
+  `catalogs` entry that has any keys at all, so a literal description — which renders as itself and
+  logs a missing translation for every caller — fails the kit rather than the operator's log. A
+  catalogue that parses to `null` or holds no keys is still the scaffolded-empty case and is skipped.
 
 ## 0.7.0
 
