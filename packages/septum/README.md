@@ -37,12 +37,12 @@ commands:
     description: command.help.description
     respond: help.text
   - name: add
-    description: Queue a movie by title
+    description: command.add.description
     code: addMovie
     capabilities: [reactions]
     args:
       - name: title
-        description: Movie title
+        description: arg.title.description
         required: true
 ```
 
@@ -66,6 +66,11 @@ nothing today and avoids a rewrite once something does. The keys above resolve t
 command:
   help:
     description: Show what this plugin can do
+  add:
+    description: Queue a movie by title
+arg:
+  title:
+    description: Movie title
 help:
   text: "Try /add '<title>' to queue a movie."
 ```
@@ -353,9 +358,9 @@ it('conforms to the Enzyme contract', async () => {
     manifest: {
       kind: 'enzyme', name: 'radarr-helper', septum: '^0.8',
       commands: [
-        { name: 'help', description: 'Show what this plugin can do', respond: 'Try /add <title> to queue a movie.' },
-        { name: 'add', description: 'Queue a movie by title', code: 'addMovie',
-          args: [{ name: 'title', description: 'Movie title', required: true }] },
+        { name: 'help', description: 'command.help.description', respond: 'help.text' },
+        { name: 'add', description: 'command.add.description', code: 'addMovie',
+          args: [{ name: 'title', description: 'arg.title.description', required: true }] },
       ],
     },
     module,
