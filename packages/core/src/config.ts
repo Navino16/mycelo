@@ -26,7 +26,7 @@ export type UiConfig = z.infer<typeof uiSchema>
 
 const bootstrapSchema = z.object({
   prefix: z.string().min(1).default('/'),
-  spores: z.string().default('./fixtures'),
+  spores: z.union([z.string(), z.array(z.string()).min(1)]).default('./fixtures'),
   database: z.string().min(1).default('./mycelo.db'),
   owner: ownerSchema.optional(),
   defaultRole: z.string().min(1).optional(),
@@ -41,7 +41,7 @@ const bootstrapSchema = z.object({
 })
 
 export type Bootstrap = z.infer<typeof bootstrapSchema> & {
-  sporesDir: string
+  sporesDirs: readonly string[]
   databaseFile: string
 }
 
@@ -85,7 +85,8 @@ export function loadBootstrap(file: string): Bootstrap {
   return {
     ...result.data,
     defaultLocale,
-    sporesDir: resolve(file, '..', result.data.spores),
+    sporesDirs: (typeof result.data.spores === 'string' ? [result.data.spores] : result.data.spores)
+      .map((dir) => resolve(file, '..', dir)),
     databaseFile: resolve(file, '..', result.data.database),
   }
 }

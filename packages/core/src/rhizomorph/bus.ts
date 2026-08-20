@@ -123,7 +123,7 @@ export interface BusOptions {
   db: Db
   admission: AdmissionChain
   /** Where the mycelium API reaches a spore on disk, for plugins.toggle and plugins.configure. */
-  sporesDir: string
+  sporesDirs: readonly string[]
   /** Assigned to a principal on first contact only (identity/resolve.ts). */
   defaultRole?: string
   /** Required by locale.manage and by every enzyme's ctx.t(): every caller has one. */
@@ -143,7 +143,7 @@ export interface BusOptions {
 }
 
 export function createBus({
-  registry, prefix, logger, db, admission, sporesDir, defaultRole, translator, defaultLocale,
+  registry, prefix, logger, db, admission, sporesDirs, defaultRole, translator, defaultLocale,
   onUnrouted, onDenied, onUnsupported, onOutOfContext, mycelium,
 }: BusOptions): Bus {
   const hyphaByName = new Map(registry.hyphae.map((h) => [h.name, h]))
@@ -155,7 +155,7 @@ export function createBus({
       scopes,
       (target, content) => send(target.channel, target.conversationId, content),
       db,
-      sporesDir,
+      sporesDirs,
       { defaultRole, translator },
     ))
 

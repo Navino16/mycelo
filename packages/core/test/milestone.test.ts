@@ -31,7 +31,7 @@ afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
 function seedSetting(databaseFile: string, sporesDir: string, plugin: string, key: string, value: unknown): void {
   const { db, close } = openDatabase(databaseFile)
   migrateDatabase(db)
-  syncInstalls(db, sporesDir)
+  syncInstalls(db, [sporesDir])
   writeSetting(db, plugin, key, value, false)
   close()
 }

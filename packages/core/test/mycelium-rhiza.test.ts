@@ -31,7 +31,7 @@ function seedPrincipal(db: Db, id: string): void {
 
 const stubSend = async () => {}
 const noSend = stubSend
-const SPORES = resolvePath(import.meta.dirname, '../../../fixtures')
+const SPORES = [resolvePath(import.meta.dirname, '../../../fixtures')]
 
 function fresh(): Db {
   const { db } = openDatabase(':memory:')
@@ -397,7 +397,7 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
       )
       writeFileSync(join(dir, 'boomspore', 'src/index.ts'), 'throw new Error("import explodes")\n', 'utf8')
       recordInstall(db, 'boomspore', 'enzyme')
-      const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, dir) as PluginsConfigure
+      const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, [dir]) as PluginsConfigure
       const schema = await api.formSchema('boomspore')
       expect(schema.available).toBe(false)
       // The real cause, not merely "unavailable": an operator cannot act on the latter.
@@ -482,7 +482,7 @@ describe('setSetting against the keys the plugin declares', () => {
     const dir = declaring(jsonSchema)
     try {
       recordInstall(db, 'declares', 'enzyme')
-      await body(createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, dir) as PluginsConfigure)
+      await body(createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, [dir]) as PluginsConfigure)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

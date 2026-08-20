@@ -11,7 +11,7 @@ import { getInstall, listInstalls, writeSetting } from './store.js'
 // germinate.ts skips a disabled install before it can ever become a registry entry —
 // germinated or dormant — so this is the only place that can still name it, and the only
 // place that can name an install whose spore has gone from disk.
-export function listPlugins(registry: Registry, sporesDir: string, db?: Db): readonly PluginInfo[] {
+export function listPlugins(registry: Registry, sporesDirs: readonly string[], db?: Db): readonly PluginInfo[] {
   const germinated: PluginInfo[] = [
     ...registry.hyphae.map((h) => ({ name: h.name, kind: h.manifest.kind, commands: [], state: 'germinated' as const, enabled: true })),
     ...registry.enzymes.map((e) => ({
@@ -44,7 +44,7 @@ export function listPlugins(registry: Registry, sporesDir: string, db?: Db): rea
       if (!install.enabled) return [{ ...base, state: 'disabled' as const, enabled: false }]
       // syncInstalls keeps the row of a spore whose directory has gone, so the operator
       // can recover it — which requires being able to see that it is still there.
-      if (findSpore(sporesDir, install.name) !== undefined) return []
+      if (findSpore(sporesDirs, install.name) !== undefined) return []
       return [{
         ...base,
         state: 'dormant' as const,
@@ -57,20 +57,20 @@ export function listPlugins(registry: Registry, sporesDir: string, db?: Db): rea
 
 // The published contract says enable() rejects; enablePlugin() returns a refusal object,
 // so the reason has to be re-thrown or a caller would read `undefined` as success.
-export async function enableOrThrow(db: Db, sporesDir: string, name: string): Promise<void> {
-  const result = await enablePlugin(db, sporesDir, name)
+export async function enableOrThrow(db: Db, sporesDirs: readonly string[], name: string): Promise<void> {
+  const result = await enablePlugin(db, sporesDirs, name)
   if (!result.ok) throw new Error(result.reason)
 }
 
 // loadSporeModule() propagates whatever the spore throws at import; formSchema() resolves
 // a FormSchema, so every fault becomes its available: false branch rather than a rejection.
-export async function formSchemaOf(db: Db, sporesDir: string, name: string): Promise<FormSchema> {
+export async function formSchemaOf(db: Db, sporesDirs: readonly string[], name: string): Promise<FormSchema> {
   if (getInstall(db, name) === null) {
     return { available: false, reason: `plugin '${name}' is not installed` }
   }
   let module: Awaited<ReturnType<typeof loadSporeModule>>
   try {
-    module = await loadSporeModule(sporesDir, name)
+    module = await loadSporeModule(sporesDirs, name)
   } catch (e) {
     return { available: false, reason: `spore '${name}' failed to load: ${describeThrown(e)}` }
   }
@@ -116,9 +116,9 @@ export function undeclaredKeys(form: FormSchema, keys: readonly string[]): reado
 
 /** Refuses a key the plugin's own JSON Schema does not declare (`undeclaredKeys`). */
 export async function writeDeclaredSetting(
-  db: Db, sporesDir: string, name: string, key: string, value: unknown,
+  db: Db, sporesDirs: readonly string[], name: string, key: string, value: unknown,
 ): Promise<void> {
-  const form = await formSchemaOf(db, sporesDir, name)
+  const form = await formSchemaOf(db, sporesDirs, name)
   if (undeclaredKeys(form, [key]).length > 0) {
     throw new Error(`plugin '${name}' declares no setting '${key}'`)
   }
@@ -209,12 +209,12 @@ function objectRejections(
  * is `enablePlugin`'s check and not this one's.
  */
 export async function rejectedSettings(
-  db: Db, sporesDir: string, name: string, values: Record<string, unknown>,
+  db: Db, sporesDirs: readonly string[], name: string, values: Record<string, unknown>,
 ): Promise<readonly SettingRejection[]> {
   if (getInstall(db, name) === null) return []
   let module: Awaited<ReturnType<typeof loadSporeModule>>
   try {
-    module = await loadSporeModule(sporesDir, name)
+    module = await loadSporeModule(sporesDirs, name)
   } catch {
     return []
   }

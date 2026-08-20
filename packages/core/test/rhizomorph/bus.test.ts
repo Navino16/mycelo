@@ -22,7 +22,7 @@ import { createLogger } from '../../src/support/logger.js'
 const DEFAULT_COMMANDS: CommandSpec[] = [{ name: 'ping', description: 'Health check', code: 'ping' }]
 // No test here reaches the mycelium fallback's disk-backed methods; the real fixtures
 // directory is passed so nothing in this file depends on a path that does not exist.
-const SPORES = resolvePath(import.meta.dirname, '../../../../fixtures')
+const SPORES = [resolvePath(import.meta.dirname, '../../../../fixtures')]
 // None of this file's scopes touch the database; a shared in-memory instance is enough
 // to satisfy createBus's required db parameter.
 const db = (() => { const { db: opened } = openDatabase(':memory:'); migrateDatabase(opened); return opened })()
@@ -40,7 +40,7 @@ db.insert(principalRole).values({ principalId: localPrincipal.id, roleId: 'r:tes
 // through it, so the pre-existing tests asserting that English sentence need it present.
 function busFor(registry: Registry, overrides: Partial<BusOptions> = {}): Bus {
   return createBus({
-    registry, db, admission: admitAll, prefix: '/', sporesDir: SPORES, logger: createLogger(),
+    registry, db, admission: admitAll, prefix: '/', sporesDirs: SPORES, logger: createLogger(),
     translator: createTranslator({ catalogs: loadCoreCatalogs(), defaultLocale: 'en', logger: createLogger() }),
     defaultLocale: 'en',
     ...overrides,
@@ -660,7 +660,7 @@ function harness(options: {
   } as unknown as Parameters<typeof createBus>[0]['logger']
   const bus = createBus({
     registry, prefix: '/', logger, db: harnessDb,
-    sporesDir: SPORES,
+    sporesDirs: SPORES,
     ...(options.defaultRole === undefined ? {} : { defaultRole: options.defaultRole }),
     translator: createTranslator({ catalogs: new Map(), defaultLocale: 'en', logger: createLogger() }),
     defaultLocale: 'en',
@@ -973,7 +973,7 @@ describe('the four refusal callbacks, threaded with the locale bus.ts resolved',
       child: () => logger,
     }
     const bus = createBus({
-      registry, prefix: '/', logger, db: testDb, sporesDir: SPORES,
+      registry, prefix: '/', logger, db: testDb, sporesDirs: SPORES,
       admission: admitAll,
       translator: stub, defaultLocale: 'en',
       onUnrouted: async (_msg, command, locale) => {

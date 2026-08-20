@@ -56,7 +56,7 @@ function pluginsOf(state: RuntimeState): readonly PluginDto[] {
     ...registry.enzymes.map((e) => [e.name, e.scopes] as const),
     ...registry.inhibitors.map((i) => [i.name, i.scopes] as const),
   ])
-  return listPlugins(registry, state.config.sporesDir, state.db).map((info) => ({
+  return listPlugins(registry, state.config.sporesDirs, state.db).map((info) => ({
     name: info.name,
     ...(info.kind === undefined ? {} : { kind: info.kind }),
     commands: info.commands,
@@ -83,7 +83,7 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     // enablePlugin(), not enableOrThrow(): its EnableRefusal is a discriminated result,
     // never a throw, so an exception reaching here is a genuine fault and must not be
     // relabelled a client mistake (task 10's review, Important 3, applied here too).
-    const result = await enablePlugin(state.db, state.config.sporesDir, name)
+    const result = await enablePlugin(state.db, state.config.sporesDirs, name)
     if (!result.ok) throw badRequest('api.pluginEnableRefused', { plugin: name }, result.reason)
     return { ok: true, restartRequired: state.germination.status === 'germinated' }
   })
@@ -100,7 +100,7 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
   app.get('/api/plugins/:name/schema', async (request) => {
     const { name } = request.params as { name: string }
     requireInstalled(state, name)
-    return await formSchemaOf(state.db, state.config.sporesDir, name)
+    return await formSchemaOf(state.db, state.config.sporesDirs, name)
   })
 
   app.get('/api/plugins/:name/settings', (request) => {
@@ -114,7 +114,7 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     requireInstalled(state, name)
     const body = parseBody(z.record(z.string(), z.unknown()), request.body)
     const keys = Object.keys(body)
-    const form = await formSchemaOf(state.db, state.config.sporesDir, name)
+    const form = await formSchemaOf(state.db, state.config.sporesDirs, name)
     const bad = undeclaredKeys(form, keys)
     if (bad.length > 0) {
       // detail carries the structure (§9): a form wanting to highlight fields would
@@ -123,7 +123,7 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     }
     // Declared is not valid: without this an enabled plugin takes a value that makes it
     // dormant at the next boot, which is the failure enablePlugin() exists to prevent (§8).
-    const rejected = await rejectedSettings(state.db, state.config.sporesDir, name, body)
+    const rejected = await rejectedSettings(state.db, state.config.sporesDirs, name, body)
     if (rejected.length > 0) {
       const rejectedKeys = rejected.map((r) => r.key).join(', ')
       throw badRequest('api.pluginSettingInvalid', { plugin: name, keys: rejectedKeys }, rejected)

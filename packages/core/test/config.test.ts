@@ -17,14 +17,25 @@ function writeConfig(content: string): string {
 it('defaults every field when the file is absent', () => {
   const config = loadBootstrap(join(dir, 'mycelo.yaml'))
   expect(config.prefix).toBe('/')
-  expect(config.sporesDir).toBe(resolve(dir, 'fixtures'))
+  expect(config.sporesDirs).toEqual([resolve(dir, 'fixtures')])
 })
 
 it('reads what the file declares', () => {
   const file = writeConfig('prefix: "!"\nspores: ./plugins\n')
   const config = loadBootstrap(file)
   expect(config.prefix).toBe('!')
-  expect(config.sporesDir).toBe(resolve(dir, 'plugins'))
+  expect(config.sporesDirs).toEqual([resolve(dir, 'plugins')])
+})
+
+it('spores accepts one directory or several, always yielding absolute paths', () => {
+  writeFileSync(join(dir, 'one.yaml'), 'spores: ./fixtures\n')
+  writeFileSync(join(dir, 'many.yaml'), 'spores: [./fixtures, ../other/spores]\n')
+
+  expect(loadBootstrap(join(dir, 'one.yaml')).sporesDirs).toEqual([join(dir, 'fixtures')])
+  expect(loadBootstrap(join(dir, 'many.yaml')).sporesDirs).toEqual([
+    join(dir, 'fixtures'),
+    resolve(dir, '../other/spores'),
+  ])
 })
 
 it('ignores fields later phases will add', () => {

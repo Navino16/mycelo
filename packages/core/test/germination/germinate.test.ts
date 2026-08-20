@@ -35,7 +35,7 @@ it('refuses an instance that does not implement its kind', async () => {
     'spore.yaml': 'kind: hypha\nname: liar\nseptum: "^1.0"\n',
     'src/index.ts': 'export default { create: () => ({ start: 1 }) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.hyphae).toEqual([])
   expect(registry.dormant[0]?.reason).toContain('create() returned no connect, listen, stop, send')
 })
@@ -44,7 +44,7 @@ it('leaves a spore dormant when a declared requires target is not installed', as
   spore('needy', {
     'spore.yaml': 'kind: enzyme\nname: needy\nseptum: "^1.0"\ncommands:\n  - name: needy\n    description: x\n    respond: hi\nrequires:\n  - rhiza: radarr\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.enzymes).toEqual([])
   expect(registry.dormant[0]?.reason).toContain("requires rhiza 'radarr', which is not installed")
 })
@@ -54,7 +54,7 @@ it('germinates an inhibitor instead of refusing its kind', async () => {
     'spore.yaml': 'kind: inhibitor\nname: gatefix\nseptum: "^1.0"\nenforcing: true\n',
     'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.dormant).toEqual([])
   expect(registry.inhibitors.map((i) => i.name)).toEqual(['gatefix'])
   expect(registry.inhibitors[0]?.manifest.enforcing).toBe(true)
@@ -65,7 +65,7 @@ it('leaves an inhibitor with no inspect() dormant', async () => {
     'spore.yaml': 'kind: inhibitor\nname: badgate\nseptum: "^1.0"\n',
     'src/index.ts': 'export default { create: () => ({}) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.inhibitors).toEqual([])
   expect(registry.dormant[0]?.reason).toContain('inspect')
   // 'badgate' declares no `enforcing`, so its own shape failure must not fail closed.
@@ -77,7 +77,7 @@ it('refuses all traffic when an enforcing inhibitor has a shape failure', async 
     'spore.yaml': 'kind: inhibitor\nname: shapegate\nseptum: "^1.0"\nenforcing: true\n',
     'src/index.ts': 'export default { create: () => ({}) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.inhibitors).toEqual([])
   expect(registry.brokenEnforcing).toEqual(['shapegate'])
 })
@@ -87,7 +87,7 @@ it('refuses all traffic when an enforcing inhibitor throws on module load', asyn
     'spore.yaml': 'kind: inhibitor\nname: throwloadgate\nseptum: "^1.0"\nenforcing: true\n',
     'src/index.ts': 'throw new Error("import explodes")\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.inhibitors).toEqual([])
   expect(registry.brokenEnforcing).toEqual(['throwloadgate'])
 })
@@ -97,7 +97,7 @@ it('does not refuse all traffic when an advisory inhibitor throws on module load
     'spore.yaml': 'kind: inhibitor\nname: throwloadgate2\nseptum: "^1.0"\n',
     'src/index.ts': 'throw new Error("import explodes")\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.inhibitors).toEqual([])
   expect(registry.brokenEnforcing).toEqual([])
 })
@@ -107,7 +107,7 @@ it('refuses all traffic when an enforcing inhibitor throws in create()', async (
     'spore.yaml': 'kind: inhibitor\nname: throwcreategate\nseptum: "^1.0"\nenforcing: true\n',
     'src/index.ts': 'export default { create: () => { throw new Error("create explodes") } }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.inhibitors).toEqual([])
   expect(registry.brokenEnforcing).toEqual(['throwcreategate'])
 })
@@ -121,7 +121,7 @@ it('refuses all traffic when an enforcing inhibitor has a dormant mandatory depe
     'spore.yaml': 'kind: inhibitor\nname: depgate\nseptum: "^1.0"\nenforcing: true\nrequires:\n  - rhiza: brokenstore\n',
     'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.inhibitors).toEqual([])
   expect(registry.brokenEnforcing).toEqual(['depgate'])
 })
@@ -135,7 +135,7 @@ it('does not refuse all traffic when an advisory inhibitor has a dormant mandato
     'spore.yaml': 'kind: inhibitor\nname: depgate2\nseptum: "^1.0"\nrequires:\n  - rhiza: brokenstore\n',
     'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.inhibitors).toEqual([])
   expect(registry.dormant.find((d) => d.name === 'depgate2')).toBeDefined()
   expect(registry.brokenEnforcing).toEqual([])
@@ -151,7 +151,7 @@ it('refuses all traffic when an enforcing inhibitor is dormant from a rejected c
       '}',
     ].join('\n'),
   })
-  const registry = await germinate(dir, createLogger(), {})
+  const registry = await germinate([dir], createLogger(), {})
   expect(registry.inhibitors).toEqual([])
   expect(registry.brokenEnforcing).toEqual(['strictgate'])
 })
@@ -166,7 +166,7 @@ it('does not refuse all traffic when a dormant inhibitor is only advisory', asyn
       '}',
     ].join('\n'),
   })
-  const registry = await germinate(dir, createLogger(), {})
+  const registry = await germinate([dir], createLogger(), {})
   expect(registry.dormant).toHaveLength(1)
   expect(registry.brokenEnforcing).toEqual([])
 })
@@ -178,7 +178,7 @@ it('refuses all traffic when an enforcing inhibitor\'s manifest does not parse',
     'spore.yaml': 'kind: inhibitor\nname: typogate\nenforcing: true\nseptem: "^1.0"\n',
     'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.inhibitors).toEqual([])
   // No validated name exists, so the directory is what identifies it.
   expect(registry.brokenEnforcing).toEqual(['typogate'])
@@ -193,7 +193,7 @@ it('does not refuse all traffic when an unparseable manifest is not an enforcing
     'spore.yaml': 'kind: enzyme\nname: typoenzyme\nenforcing: true\nseptem: "^1.0"\n',
     'src/index.ts': 'export default { create: () => ({ handlers: {} }) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.dormant).toHaveLength(2)
   expect(registry.brokenEnforcing).toEqual([])
 })
@@ -203,7 +203,7 @@ it('does not read a truthy-but-not-true enforcing out of an unvalidated manifest
     'spore.yaml': 'kind: inhibitor\nname: sneakygate\nenforcing: "yes"\nseptem: "^1.0"\n',
     'src/index.ts': 'export default { create: () => ({ inspect: () => Promise.resolve({ allow: true }) }) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.brokenEnforcing).toEqual([])
 })
 
@@ -219,7 +219,7 @@ it('makes a dependent dormant when a MANDATORY dependency fails to load, never i
     'spore.yaml': 'kind: enzyme\nname: needs-it\nseptum: "^0.4"\nrequires:\n  - rhiza: broken-rhiza\ncommands:\n  - name: hi\n    description: x\n    respond: hi\n',
     'src/index.ts': `import { writeFileSync } from 'node:fs'\nwriteFileSync(${JSON.stringify(marker)}, 'loaded')\nexport default { create: () => ({ handlers: {} }) }\n`,
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.enzymes).toEqual([])
   expect(registry.dormant.find((d) => d.name === 'needs-it')?.reason)
     .toContain("requires rhiza 'broken-rhiza', which is dormant")
@@ -234,7 +234,7 @@ it('keeps a dependent germinating when an OPTIONAL dependency fails to load', as
   spore('shrugs-it-off', {
     'spore.yaml': 'kind: enzyme\nname: shrugs-it-off\nseptum: "^0.4"\nrequires:\n  - rhiza: broken-rhiza\n    optional: true\ncommands:\n  - name: hi\n    description: x\n    respond: hi\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.enzymes.map((e) => e.name)).toEqual(['shrugs-it-off'])
   expect(registry.dormant.find((d) => d.name === 'shrugs-it-off')).toBeUndefined()
 })
@@ -252,7 +252,7 @@ it('does not fall back to a healthy any_of alternative when the chosen one fails
   spore('picks-one', {
     'spore.yaml': 'kind: enzyme\nname: picks-one\nseptum: "^0.4"\nrequires:\n  - any_of:\n      - rhiza: alpha\n      - rhiza: beta\ncommands:\n  - name: hi\n    description: x\n    respond: hi\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.rhizas.map((r) => r.name)).toEqual(['beta'])
   expect(registry.enzymes).toEqual([])
   expect(registry.dormant.find((d) => d.name === 'picks-one')?.reason).toBe(
@@ -267,7 +267,7 @@ it('germinates a valid rhiza into registry.rhizas', async () => {
     'spore.yaml': 'kind: rhiza\nname: valid-rhiza\nseptum: "^0.4"\n',
     'src/index.ts': `export default { create: () => ({ ${RHIZA_BODY} }) }\n`,
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.rhizas.map((r) => r.name)).toEqual(['valid-rhiza'])
   expect(registry.dormant).toEqual([])
 })
@@ -277,7 +277,7 @@ it('sends a rhiza dormant when create() returns no api, matching the conformance
     'spore.yaml': 'kind: rhiza\nname: no-api\nseptum: "^0.4"\n',
     'src/index.ts': 'export default { create: () => ({ start: async () => {}, stop: async () => {}, health: async () => "healthy" }) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.rhizas).toEqual([])
   expect(registry.dormant[0]?.reason).toContain('no api')
 })
@@ -287,7 +287,7 @@ it('keeps germinating after one spore fails', async () => {
   spore('ping', {
     'spore.yaml': 'kind: enzyme\nname: ping\nseptum: "^1.0"\ncommands:\n  - name: ping\n    description: x\n    respond: pong\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.enzymes.map((e) => e.name)).toEqual(['ping'])
   expect(registry.dormant).toHaveLength(1)
 })
@@ -303,7 +303,7 @@ it('propagates a command collision instead of swallowing it into a dormancy entr
     'spore.yaml': 'kind: enzyme\nname: b\nseptum: "^1.0"\ncommands:\n  - name: status\n    description: x\n    respond: from-b\n',
   })
   try {
-    await germinate(dir, createLogger())
+    await germinate([dir], createLogger())
     expect.unreachable()
   } catch (e) {
     expect(e).toBeInstanceOf(CollisionError)
@@ -317,14 +317,14 @@ it('propagates a command collision instead of swallowing it into a dormancy entr
 it('warns naming the resolved path when the spores directory does not exist', async () => {
   const missing = join(dir, 'does-not-exist')
   const { logger, warnings } = spyLogger()
-  const registry = await germinate(missing, logger)
+  const registry = await germinate([missing], logger)
   expect(registry.hyphae).toEqual([])
   expect(warnings.some((w) => w.includes(missing))).toBe(true)
 })
 
 it('warns when germination produces zero spores, even though the directory exists', async () => {
   const { logger, warnings } = spyLogger()
-  const registry = await germinate(dir, logger)
+  const registry = await germinate([dir], logger)
   expect(registry.hyphae).toEqual([])
   expect(registry.enzymes).toEqual([])
   expect(warnings.some((w) => w.includes('zero spores'))).toBe(true)
@@ -341,7 +341,7 @@ it('sends the second of two hyphae sharing a manifest name dormant, naming both 
     'spore.yaml': 'kind: hypha\nname: duplicated\nseptum: "^1.0"\n',
     'src/index.ts': `export default { create: () => ({ ${HYPHA_BODY} }) }\n`,
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.hyphae.map((h) => h.name)).toEqual(['duplicated'])
   const dormant = registry.dormant.find((d) => d.name === 'duplicated')
   expect(dormant?.reason).toContain('first-copy')
@@ -355,7 +355,7 @@ it('sends the second of two enzymes sharing a manifest name dormant, naming both
   spore('beta-enzyme', {
     'spore.yaml': 'kind: enzyme\nname: shared\nseptum: "^1.0"\ncommands:\n  - name: b\n    description: x\n    respond: from-beta\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.enzymes.map((e) => e.name)).toEqual(['shared'])
   const dormant = registry.dormant.find((d) => d.name === 'shared')
   expect(dormant?.reason).toContain('alpha-enzyme')
@@ -367,7 +367,7 @@ it('sends a hypha dormant when it declares group_membership but has no listGroup
     'spore.yaml': 'kind: hypha\nname: deceptive\nseptum: "^1.0"\ncapabilities:\n  - group_membership\n',
     'src/index.ts': `export default { create: () => ({ ${HYPHA_BODY} }) }\n`,
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.hyphae).toEqual([])
   expect(registry.dormant[0]?.reason).toContain('no listGroupMembers()')
 })
@@ -377,7 +377,7 @@ it('sends a hypha dormant when it has listGroupMembers() but does not declare gr
     'spore.yaml': 'kind: hypha\nname: secretive\nseptum: "^1.0"\n',
     'src/index.ts': `export default { create: () => ({ ${HYPHA_BODY}, listGroupMembers: async () => [] }) }\n`,
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.hyphae).toEqual([])
   expect(registry.dormant[0]?.reason).toContain('does not declare group_membership')
 })
@@ -387,7 +387,7 @@ it('refuses an enzyme whose handlers lack a name the manifest references', async
     'spore.yaml': 'kind: enzyme\nname: broken\nseptum: "^1.0"\ncommands:\n  - name: go\n    description: Go\n    code: handleGo\n',
     'src/index.ts': 'export default { create: () => ({ handlers: {} }) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.enzymes).toEqual([])
   expect(registry.dormant[0]?.reason).toContain('handleGo')
 })
@@ -397,7 +397,7 @@ it('names a missing handler once even when two commands share it', async () => {
     'spore.yaml': 'kind: enzyme\nname: shared\nseptum: "^1.0"\ncommands:\n  - name: add\n    description: Add\n    code: mutate\n  - name: remove\n    description: Remove\n    code: mutate\n',
     'src/index.ts': 'export default { create: () => ({ handlers: {} }) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.dormant[0]?.reason).toMatch(/mutate/)
   expect(registry.dormant[0]?.reason.match(/mutate/g)).toHaveLength(1)
 })
@@ -409,7 +409,7 @@ it('warns about a handler no command references, and still germinates', async ()
   })
   const warnings: string[] = []
   const logger = createLogger()
-  const registry = await germinate(dir, { ...logger, warn: (m) => { warnings.push(m) } })
+  const registry = await germinate([dir], { ...logger, warn: (m) => { warnings.push(m) } })
   expect(registry.enzymes.map((e) => e.name)).toEqual(['dead'])
   expect(warnings.join(' ')).toContain('leftover')
 })
@@ -421,7 +421,7 @@ it('says the module is unreachable, not naming handlers, when every command answ
   })
   const warnings: string[] = []
   const logger = createLogger()
-  const registry = await germinate(dir, { ...logger, warn: (m) => { warnings.push(m) } })
+  const registry = await germinate([dir], { ...logger, warn: (m) => { warnings.push(m) } })
   expect(registry.dormant).toEqual([])
   expect(registry.enzymes.map((e) => e.name)).toEqual(['unreachable'])
   expect(warnings.join(' ')).toContain('the module is unreachable')
@@ -435,7 +435,7 @@ it('goes dormant on a command named "constructor" with no such handler, not Obje
     'spore.yaml': 'kind: enzyme\nname: sneaky\nseptum: "^1.0"\ncommands:\n  - name: go\n    description: Go\n    code: constructor\n',
     'src/index.ts': 'export default { create: () => ({ handlers: {} }) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.enzymes).toEqual([])
   expect(registry.dormant[0]?.reason).toContain('constructor')
 })
@@ -445,7 +445,7 @@ it('goes dormant on a command named "toString" with no such handler, not Object.
     'spore.yaml': 'kind: enzyme\nname: sneaky2\nseptum: "^1.0"\ncommands:\n  - name: go\n    description: Go\n    code: toString\n',
     'src/index.ts': 'export default { create: () => ({ handlers: {} }) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.enzymes).toEqual([])
   expect(registry.dormant[0]?.reason).toContain('toString')
 })
@@ -455,7 +455,7 @@ it('refuses an enzyme whose instance has start() but no stop(), matching the con
     'spore.yaml': 'kind: enzyme\nname: lopsided\nseptum: "^1.0"\ncommands:\n  - name: go\n    description: Go\n    code: go\n',
     'src/index.ts': 'export default { create: () => ({ handlers: { go: async () => {} }, start: async () => {} }) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.enzymes).toEqual([])
   expect(registry.dormant[0]?.reason).toContain('both present or both absent')
 })
@@ -465,7 +465,7 @@ it('germinates when the handler is genuinely declared and named "constructor"', 
     'spore.yaml': 'kind: enzyme\nname: legit\nseptum: "^1.0"\ncommands:\n  - name: go\n    description: Go\n    code: constructor\n',
     'src/index.ts': 'export default { create: () => ({ handlers: { constructor: async () => {} } }) }\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.enzymes.map((e) => e.name)).toEqual(['legit'])
   expect(registry.dormant).toEqual([])
 })
@@ -495,21 +495,21 @@ function confRhiza(): void {
 
 it('serves a spore its config from mycelo.yaml', async () => {
   confRhiza()
-  const registry = await germinate(dir, createLogger(), { confrhiza: { token: 'abc' } })
+  const registry = await germinate([dir], createLogger(), { confrhiza: { token: 'abc' } })
   expect(registry.dormant).toEqual([])
   expect(registry.rhizas[0]?.config).toEqual({ token: 'abc' })
 })
 
 it('leaves a spore dormant, with the reason, when its config is rejected', async () => {
   confRhiza()
-  const registry = await germinate(dir, createLogger(), { confrhiza: { token: 42 } })
+  const registry = await germinate([dir], createLogger(), { confrhiza: { token: 42 } })
   expect(registry.rhizas).toEqual([])
   expect(registry.dormant[0]?.reason).toContain('token must be a string')
 })
 
 it('rejects a spore whose config key is absent entirely, rather than passing undefined', async () => {
   confRhiza()
-  const registry = await germinate(dir, createLogger(), {})
+  const registry = await germinate([dir], createLogger(), {})
   expect(registry.rhizas).toEqual([])
   // The absent key must arrive as {}, so the schema's own undefined branch stays unreached.
   expect(registry.dormant[0]?.reason).toContain('token must be a string')
@@ -521,7 +521,7 @@ it('gives a spore with no configSchema an empty config', async () => {
     'spore.yaml': 'kind: rhiza\nname: plainrhiza\nseptum: "^0.4"\n',
     'src/index.ts': `export default { create: () => ({ ${RHIZA_BODY} }) }\n`,
   })
-  const registry = await germinate(dir, createLogger(), {})
+  const registry = await germinate([dir], createLogger(), {})
   expect(registry.rhizas[0]?.config).toEqual({})
 })
 
@@ -535,7 +535,7 @@ it('loads a spore\'s catalogues into the registry, keyed by the spore name', asy
     'translations/en.yaml': 'ready: ready\n',
     'translations/fr.yaml': 'ready: prêt\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.catalogs.get('greeter')?.get('fr')?.get('ready')?.format()).toBe('prêt')
 })
 
@@ -545,7 +545,7 @@ it('makes a spore dormant when one of its catalogues does not compile, naming fi
     'translations/en.yaml': 'ready: ready\n',
     'translations/es.yaml': 'ready: "type {help"\n',
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.enzymes).toHaveLength(0)
   const reason = registry.dormant.find((d) => d.name === 'greeter')?.reason ?? ''
   expect(reason).toContain('es.yaml')
@@ -558,14 +558,14 @@ it('drops a dormant spore\'s catalogue instead of keeping it from before the fai
     'src/index.ts': CONFIGURABLE_RHIZA_MODULE,
     'translations/en.yaml': 'ready: ready\n',
   })
-  const registry = await germinate(dir, createLogger(), { confrhiza: { token: 42 } })
+  const registry = await germinate([dir], createLogger(), { confrhiza: { token: 42 } })
   expect(registry.rhizas).toEqual([])
   expect(registry.catalogs.has('confrhiza')).toBe(false)
 })
 
 it('germinates a spore with no translations directory at all', async () => {
   spore('greeter', textEnzyme('greeter'))
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.enzymes).toHaveLength(1)
   expect(registry.catalogs.has('greeter')).toBe(false)
 })
@@ -583,7 +583,7 @@ it('makes a MANDATORY dependent dormant when a broken catalogue fails a rhiza, n
     'spore.yaml': 'kind: enzyme\nname: needs-it\nseptum: "^0.4"\nrequires:\n  - rhiza: broken-rhiza\ncommands:\n  - name: hi\n    description: x\n    respond: hi\n',
     'src/index.ts': `import { writeFileSync } from 'node:fs'\nwriteFileSync(${JSON.stringify(marker)}, 'loaded')\nexport default { create: () => ({ handlers: {} }) }\n`,
   })
-  const registry = await germinate(dir, createLogger())
+  const registry = await germinate([dir], createLogger())
   expect(registry.enzymes).toEqual([])
   expect(registry.dormant.find((d) => d.name === 'needs-it')?.reason)
     .toContain("requires rhiza 'broken-rhiza', which is dormant")
@@ -593,7 +593,7 @@ it('makes a MANDATORY dependent dormant when a broken catalogue fails a rhiza, n
 it('refuses a spore that claims a reserved domain name', async () => {
   for (const reserved of ['core', 'common']) {
     spore(reserved, textEnzyme(reserved))
-    const registry = await germinate(dir, createLogger())
+    const registry = await germinate([dir], createLogger())
     // Both, not one: a guard written against a single literal is the cardinality mutation
     // phase 5.5's campaign kept surviving.
     expect(registry.dormant.find((d) => d.name === reserved)?.reason).toContain('reserved')

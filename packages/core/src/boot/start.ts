@@ -101,7 +101,7 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
     scopes,
     (target, content) => sendVia(hyphaByName, target.channel, target.conversationId, content),
     db,
-    config.sporesDir,
+    config.sporesDirs,
     { defaultRole: config.defaultRole, translator },
   )
   // spec §4.2 rests on degraded mode meaning nothing is connected, so a throw from here on
@@ -219,7 +219,7 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
       logger,
       db,
       admission,
-      sporesDir: config.sporesDir,
+      sporesDirs: config.sporesDirs,
       ...(config.defaultRole === undefined ? {} : { defaultRole: config.defaultRole }),
       translator,
       defaultLocale: config.defaultLocale,

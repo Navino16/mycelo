@@ -20,7 +20,7 @@ import { capabilityShapeError, enzymeShapeError, hyphaShapeError, inhibitorShape
  * collision halts the whole phase (spec §8). CycleError propagates out untouched.
  */
 export async function germinate(
-  sporesDir: string,
+  sporesDirs: readonly string[],
   logger: Logger,
   pluginConfig: Readonly<Record<string, unknown>> = {},
   db?: Db,
@@ -29,8 +29,11 @@ export async function germinate(
   // (spec-compliant on their own), but their combination — run from the wrong cwd —
   // produced "germinated 0 spores" and exit 0 with no word said. Not a crash, but not
   // legible either.
-  if (!existsSync(sporesDir)) {
-    logger.warn(`spores directory does not exist: '${sporesDir}' — nothing will germinate`)
+  const missing = sporesDirs.filter((dir) => !existsSync(dir))
+  if (missing.length === sporesDirs.length) {
+    logger.warn(`no spores directory exists: ${missing.map((d) => `'${d}'`).join(', ')} — nothing will germinate`)
+  } else if (missing.length > 0) {
+    logger.warn(`spores directory does not exist: ${missing.map((d) => `'${d}'`).join(', ')}`)
   }
 
   const reads: ReadManifest[] = []
@@ -38,7 +41,7 @@ export async function germinate(
   // Design §7: an enforcing inhibitor that fails to germinate must still refuse all
   // traffic. Only germinate() holds both facts at once — the manifest and the dormancy.
   const brokenEnforcing: string[] = []
-  for (const location of discover(sporesDir)) {
+  for (const location of discover(sporesDirs)) {
     const read = readManifest(location)
     if (isFailure(read)) {
       // Matched on the directory, the identity listPlugins() and findSpore() already use

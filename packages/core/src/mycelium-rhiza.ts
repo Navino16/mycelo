@@ -91,7 +91,7 @@ export function createMyceliumApi(
   scopes: readonly MyceliumScope[],
   send: (target: PushTarget, content: OutgoingContent) => Promise<void>,
   db: Db,
-  sporesDir: string,
+  sporesDirs: readonly string[],
   options?: MyceliumApiOptions,
 ): object {
   const { defaultRole, translator } = options ?? {}
@@ -104,7 +104,7 @@ export function createMyceliumApi(
     ConversationsRead & MessagesBroadcast & RestrictionsManage & LocaleManage
   >
 
-  if (granted.has('plugins.read')) api.listPlugins = () => listPlugins(registry, sporesDir, db)
+  if (granted.has('plugins.read')) api.listPlugins = () => listPlugins(registry, sporesDirs, db)
   if (granted.has('health.read')) api.health = () => aggregateHealth(registry)
   if (granted.has('messages.send')) api.send = send
   if (granted.has('conversations.read')) api.listConversations = () => toPromise(() => listConversations(db))
@@ -133,13 +133,13 @@ export function createMyceliumApi(
     api.deleteRole = (name) => toPromise(() => deleteRole(db, name, defaultRole))
   }
   if (granted.has('plugins.toggle')) {
-    api.enable = (name) => enableOrThrow(db, sporesDir, name)
+    api.enable = (name) => enableOrThrow(db, sporesDirs, name)
     api.disable = (name) => toPromise(() => { setEnabled(db, name, false) })
   }
   if (granted.has('plugins.configure')) {
     api.settings = (name) => toPromise(() => redactSecrets(db, name))
-    api.setSetting = (name, key, value) => writeDeclaredSetting(db, sporesDir, name, key, value)
-    api.formSchema = (name) => formSchemaOf(db, sporesDir, name)
+    api.setSetting = (name, key, value) => writeDeclaredSetting(db, sporesDirs, name, key, value)
+    api.formSchema = (name) => formSchemaOf(db, sporesDirs, name)
   }
   if (granted.has('restrictions.manage')) {
     api.listContextRules = () => toPromise(() => listContextRules(db))

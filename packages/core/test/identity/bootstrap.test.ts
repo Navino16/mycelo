@@ -11,7 +11,7 @@ import { StartupError, bootstrapIdentity } from '../../src/identity/bootstrap.js
 import { rejectsWith } from '../support/rejects.js'
 
 const noSend = async () => {}
-const SPORES = resolvePath(import.meta.dirname, '../../../../fixtures')
+const SPORES = [resolvePath(import.meta.dirname, '../../../../fixtures')]
 
 function emptyRegistry(): Registry {
   return {
