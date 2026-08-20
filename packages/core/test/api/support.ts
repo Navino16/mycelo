@@ -166,17 +166,22 @@ export const closedJsonSchema: SporeWriter = (sporesDir) => {
 }
 
 /**
- * A whole-object schema where one key can be refused while another, in the same payload,
- * is written — `port` takes a number, `label` any string. `.shape` is gone from the
- * contract, so this goes through the same `objectRejections` path as `definedSchema`.
+ * A whole-object schema that also exposes a permissive per-field `shape` — every field's own
+ * `safeParse` accepts anything, unlike the whole-object one, which refuses `port` when it is
+ * not a number. Nothing in the core reads `.shape` any more; this fixture exists so that if
+ * the branch is ever reintroduced it does not silently bypass the whole-object check (task 2's
+ * review, finding 3) — a `fieldRejections` reading this permissive `shape` would report no
+ * rejection at all, where `objectRejections` correctly refuses `port`.
  */
 export const mixedFieldSchema: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'mixed', {
-    'spore.yaml': 'kind: enzyme\nname: mixed\nseptum: "^0.7"\n'
+    'spore.yaml': 'kind: enzyme\nname: mixed\nseptum: "^0.8"\n'
       + 'commands:\n  - name: mixed\n    description: Report the configured setting\n    code: handleConfigured\n',
     'src/index.ts': `
+      const permissive = { safeParse: (v) => ({ success: true, data: v }) }
       export default {
         configSchema: {
+          shape: { port: permissive, label: permissive },
           safeParse: (input) => {
             const issues = []
             if (typeof input?.port !== 'number') {

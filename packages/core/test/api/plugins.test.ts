@@ -256,7 +256,7 @@ describe('/api/plugins', () => {
 // only, so `{ port: 'not-a-number' }` was written with 200 and the operator learned about it
 // at the next boot, from a plugin gone dormant (review, Important 3).
 describe('PUT /api/plugins/:name/settings validates the values', () => {
-  it('refuses a value its own field schema rejects, and writes nothing', async () => {
+  it('refuses a value through the whole-object schema even though the plugin also exposes a permissive shape, and writes nothing', async () => {
     booted = await bootAndLogin({ spores: mixedFieldSchema })
     const { app, cookie } = booted
     const refused = await app.inject({
