@@ -233,7 +233,8 @@ export interface CommandsRead {
    * this locale. Channel capabilities and context rules are applied at dispatch, not here —
    * a listed command can still be refused on the channel it is asked on.
    * The principal is a parameter because a mycelium rhiza is mounted once per plugin,
-   * not once per invocation.
+   * not once per invocation — so a spore holding any principal's id learns that principal's
+   * authorized command set without holding `roles.read` (design §6).
    */
   available(principal: Principal, locale: string): Promise<readonly CommandInfo[]>
 }
