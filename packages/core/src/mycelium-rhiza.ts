@@ -1,5 +1,6 @@
 import type {
   BroadcastResult,
+  CommandsRead,
   ConversationsRead,
   HealthRead,
   LocaleManage,
@@ -18,6 +19,7 @@ import type {
   RolesManage,
   RolesRead,
 } from '@mycelo/septum'
+import { availableCommands } from './authorization/available.js'
 import {
   assignRole, createRole, deleteRole, listRoles, revokeRole, setRoleCommands,
 } from './authorization/roles.js'
@@ -67,7 +69,7 @@ async function broadcast(
 export interface MyceliumApiOptions {
   /** Guards deleteRole against removing the role every first contact is given. */
   defaultRole?: string
-  /** Required by locale.manage; createMyceliumApi throws if that scope is granted without it. */
+  /** Required by locale.manage and commands.read; createMyceliumApi throws if either is granted without it. */
   translator?: Translator
 }
 
@@ -91,7 +93,7 @@ export function createMyceliumApi(
   scopes: readonly MyceliumScope[],
   send: (target: PushTarget, content: OutgoingContent) => Promise<void>,
   db: Db,
-  sporesDir: string,
+  sporesDirs: readonly string[],
   options?: MyceliumApiOptions,
 ): object {
   const { defaultRole, translator } = options ?? {}
@@ -101,10 +103,10 @@ export function createMyceliumApi(
   const api = Object.create(null) as Partial<
     PluginsRead & HealthRead & MessagesSend & PrincipalsRead & PrincipalsManage &
     RolesRead & RolesAssign & RolesManage & PluginsToggle & PluginsConfigure &
-    ConversationsRead & MessagesBroadcast & RestrictionsManage & LocaleManage
+    ConversationsRead & MessagesBroadcast & RestrictionsManage & LocaleManage & CommandsRead
   >
 
-  if (granted.has('plugins.read')) api.listPlugins = () => listPlugins(registry, sporesDir, db)
+  if (granted.has('plugins.read')) api.listPlugins = () => listPlugins(registry, sporesDirs, db)
   if (granted.has('health.read')) api.health = () => aggregateHealth(registry)
   if (granted.has('messages.send')) api.send = send
   if (granted.has('conversations.read')) api.listConversations = () => toPromise(() => listConversations(db))
@@ -133,13 +135,13 @@ export function createMyceliumApi(
     api.deleteRole = (name) => toPromise(() => deleteRole(db, name, defaultRole))
   }
   if (granted.has('plugins.toggle')) {
-    api.enable = (name) => enableOrThrow(db, sporesDir, name)
+    api.enable = (name) => enableOrThrow(db, sporesDirs, name)
     api.disable = (name) => toPromise(() => { setEnabled(db, name, false) })
   }
   if (granted.has('plugins.configure')) {
     api.settings = (name) => toPromise(() => redactSecrets(db, name))
-    api.setSetting = (name, key, value) => writeDeclaredSetting(db, sporesDir, name, key, value)
-    api.formSchema = (name) => formSchemaOf(db, sporesDir, name)
+    api.setSetting = (name, key, value) => writeDeclaredSetting(db, sporesDirs, name, key, value)
+    api.formSchema = (name) => formSchemaOf(db, sporesDirs, name)
   }
   if (granted.has('restrictions.manage')) {
     api.listContextRules = () => toPromise(() => listContextRules(db))
@@ -150,6 +152,11 @@ export function createMyceliumApi(
     api.listBroadcastTargets = () => toPromise(() => listBroadcastTargets(db))
     api.addBroadcastTarget = (target) => toPromise(() => { addBroadcastTarget(db, target) })
     api.removeBroadcastTarget = (target) => toPromise(() => { removeBroadcastTarget(db, target) })
+  }
+  if (granted.has('commands.read')) {
+    if (translator === undefined) throw new Error('commands.read was granted with no translator')
+    api.available = (principal, locale) =>
+      toPromise(() => availableCommands(registry, db, translator, principal, locale))
   }
   if (granted.has('locale.manage')) {
     // Fail fast rather than mounting a scope whose availableLocales() would answer [] —

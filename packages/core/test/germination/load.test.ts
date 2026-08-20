@@ -22,7 +22,7 @@ function spore(name: string, files: Record<string, string>): void {
 const HYPHA_MANIFEST = 'kind: hypha\nname: probe\nseptum: "^1.0"\n'
 
 async function read(name: string) {
-  const location = discover(dir).find((l) => l.directory === name)!
+  const location = discover([dir]).find((l) => l.directory === name)!
   const r = readManifest(location)
   if (isFailure(r)) throw new Error(r.reason)
   return r

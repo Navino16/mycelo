@@ -93,7 +93,8 @@ function configSchemaModule(fields: readonly string[]): string {
       configSchema: {
         safeParse: (input) => (${checks})
           ? { success: true, data: input }
-          : { success: false, error: 'missing required field(s): ' + [${missingExpr}].flat().join(', ') },
+          : { success: false, error: { issues: [${missingExpr}].flat()
+              .map((f) => ({ path: [f], message: 'missing required field' })) } },
         toJsonSchema: () => ({
           type: 'object',
           properties: { ${properties} },
@@ -165,29 +166,34 @@ export const closedJsonSchema: SporeWriter = (sporesDir) => {
 }
 
 /**
- * A schema exposing a per-field `shape`, the way a plugin exporting a Zod object directly
- * does. `port` takes a number, `label` any string — so one key can be refused while the
- * other is written.
+ * A whole-object schema that also exposes a permissive per-field `shape` — every field's own
+ * `safeParse` accepts anything, unlike the whole-object one, which refuses `port` when it is
+ * not a number. Nothing in the core reads `.shape` any more; this fixture exists so that if
+ * the branch is ever reintroduced it does not silently bypass the whole-object check (task 2's
+ * review, finding 3) — a `fieldRejections` reading this permissive `shape` would report no
+ * rejection at all, where `objectRejections` correctly refuses `port`.
  */
-export const shapedSchema: SporeWriter = (sporesDir) => {
-  writeSpore(sporesDir, 'shaped', {
-    'spore.yaml': 'kind: enzyme\nname: shaped\nseptum: "^0.7"\n'
-      + 'commands:\n  - name: shaped\n    description: Report the configured setting\n    code: handleConfigured\n',
+export const mixedFieldSchema: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'mixed', {
+    'spore.yaml': 'kind: enzyme\nname: mixed\nseptum: "^0.8"\n'
+      + 'commands:\n  - name: mixed\n    description: Report the configured setting\n    code: handleConfigured\n',
     'src/index.ts': `
-      const number = {
-        safeParse: (v) => typeof v === 'number'
-          ? { success: true, data: v }
-          : { success: false, error: { issues: [{ code: 'invalid_type', message: 'expected a number' }] } },
-      }
-      const text = {
-        safeParse: (v) => typeof v === 'string'
-          ? { success: true, data: v }
-          : { success: false, error: { issues: [{ code: 'invalid_type', message: 'expected a string' }] } },
-      }
+      const permissive = { safeParse: (v) => ({ success: true, data: v }) }
       export default {
         configSchema: {
-          shape: { port: number, label: text },
-          safeParse: (input) => ({ success: true, data: input }),
+          shape: { port: permissive, label: permissive },
+          safeParse: (input) => {
+            const issues = []
+            if (typeof input?.port !== 'number') {
+              issues.push({ path: ['port'], message: 'expected a number' })
+            }
+            if (input?.label !== undefined && typeof input.label !== 'string') {
+              issues.push({ path: ['label'], message: 'expected a string' })
+            }
+            return issues.length === 0
+              ? { success: true, data: input }
+              : { success: false, error: { issues } }
+          },
           toJsonSchema: () => ({
             type: 'object',
             properties: { port: { type: 'number' }, label: { type: 'string' } },
@@ -392,6 +398,32 @@ export interface BootAndLoginOptions {
    * exist, before this helper ever gets to open a session.
    */
   seedRole?: string
+}
+
+/**
+ * A whole-object refusal — `path: []` — which is what a top-level Zod `.refine()` emits and
+ * what septum documents. Both keys are declared, so `undeclaredKeys` cannot be what refuses.
+ */
+export const eitherOrSchema: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'eitheror', {
+    'spore.yaml': 'kind: enzyme\nname: eitheror\nseptum: "^0.8"\n'
+      + 'commands:\n  - name: eitheror\n    description: command.eitheror.description\n    code: handleConfigured\n',
+    'translations/en.yaml': 'command:\n  eitheror:\n    description: Report the configured setting\n',
+    'src/index.ts': `
+      export default {
+        configSchema: {
+          safeParse: (input) => (input?.socket === undefined || input?.tcp === undefined
+            ? { success: true, data: input }
+            : { success: false, error: { issues: [{ path: [], message: 'socket or tcp, not both' }] } }),
+          toJsonSchema: () => ({
+            type: 'object',
+            properties: { socket: { type: 'string' }, tcp: { type: 'string' } },
+          }),
+        },
+        create: () => ({ handlers: { handleConfigured: async () => {} } }),
+      }
+    `,
+  })
 }
 
 /**

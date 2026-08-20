@@ -4,9 +4,9 @@ septum: "^0.7"
 description: Answers pong. Test fixture, never distributed.
 commands:
   - name: ping
-    description: Health check
+    description: command.ping.description
     respond: reply.pong
   - name: react
-    description: Answer only where reactions exist
+    description: command.react.description
     respond: reply.reactions
     capabilities: [reactions]

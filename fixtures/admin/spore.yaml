@@ -7,16 +7,16 @@ requires:
     scopes: [plugins.read, plugins.toggle, plugins.configure, principals.read, roles.read, roles.assign, roles.manage, conversations.read, messages.broadcast, restrictions.manage, locale.manage]
 commands:
   - name: plugins
-    description: List installed plugins
+    description: command.plugins.description
     code: handlePlugins
   - name: whoami
-    description: Report your principal and roles
+    description: command.whoami.description
     code: handleWhoami
   - name: roles
-    description: List roles and their command patterns
+    description: command.roles.description
     code: handleRoles
   - name: grant
-    description: Give a role to someone on this channel
+    description: command.grant.description
     code: handleGrant
     args:
       - name: role
@@ -26,7 +26,7 @@ commands:
         description: Channel handle of the recipient
         required: true
   - name: revoke
-    description: Take a role away from someone on this channel
+    description: command.revoke.description
     code: handleRevoke
     args:
       - name: role
@@ -36,31 +36,31 @@ commands:
         description: Channel handle
         required: true
   - name: role-new
-    description: Create a role with command patterns
+    description: command.role-new.description
     code: handleRoleNew
     args:
       - name: name
         description: Role name
         required: true
   - name: plugin-list
-    description: List installed plugins and whether they are enabled
+    description: command.plugin-list.description
     code: handlePluginList
   - name: plugin-enable
-    description: Enable an installed plugin
+    description: command.plugin-enable.description
     code: handlePluginEnable
     args:
       - name: name
         description: Plugin name
         required: true
   - name: plugin-disable
-    description: Disable an installed plugin
+    description: command.plugin-disable.description
     code: handlePluginDisable
     args:
       - name: name
         description: Plugin name
         required: true
   - name: plugin-set
-    description: Set one configuration value on a plugin
+    description: command.plugin-set.description
     code: handlePluginSet
     args:
       - name: name
@@ -73,17 +73,17 @@ commands:
         description: Setting value
         required: true
   - name: plugin-config
-    description: Show a plugin's settings, secrets redacted
+    description: command.plugin-config.description
     code: handlePluginConfig
     args:
       - name: name
         description: Plugin name
         required: true
   - name: conversations
-    description: List conversations the bot has seen
+    description: command.conversations.description
     code: handleConversations
   - name: where-rule
-    description: Confine a command pattern to direct messages or to groups
+    description: command.where-rule.description
     code: handleWhereRule
     args:
       - name: pattern
@@ -93,7 +93,7 @@ commands:
         description: dm or group
         required: true
   - name: broadcast-add
-    description: Add a broadcast target
+    description: command.broadcast-add.description
     code: handleBroadcastAdd
     args:
       - name: channel
@@ -103,14 +103,14 @@ commands:
         description: Conversation id
         required: true
   - name: broadcast
-    description: Send one message to every configured target
+    description: command.broadcast.description
     code: handleBroadcast
     args:
       - name: text
         description: What to send
         required: true
   - name: inhibitor-channels
-    description: Confine an inhibitor to named channels
+    description: command.inhibitor-channels.description
     code: handleInhibitorChannels
     args:
       - name: name

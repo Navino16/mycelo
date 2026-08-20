@@ -15,16 +15,16 @@ const DEFAULTS: Config = { channel: 'console', groupId: 'household' }
 const configSchema: ConfigSchema<Config> = {
   safeParse(input: unknown) {
     if (typeof input !== 'object' || input === null) {
-      return { success: false, error: 'gate config must be an object' }
+      return { success: false, error: { issues: [{ path: [], message: 'gate config must be an object' }] } }
     }
     const raw = input as Record<string, unknown>
     const channel = raw.channel ?? DEFAULTS.channel
     const groupId = raw.groupId ?? DEFAULTS.groupId
     if (typeof channel !== 'string' || channel.length === 0) {
-      return { success: false, error: "gate config needs a non-empty 'channel'" }
+      return { success: false, error: { issues: [{ path: ['channel'], message: "gate config needs a non-empty 'channel'" }] } }
     }
     if (typeof groupId !== 'string' || groupId.length === 0) {
-      return { success: false, error: "gate config needs a non-empty 'groupId'" }
+      return { success: false, error: { issues: [{ path: ['groupId'], message: "gate config needs a non-empty 'groupId'" }] } }
     }
     return { success: true, data: { channel, groupId } }
   },

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { ConfigSchema } from './spore.js'
 
-/** What `PluginsConfigure.formSchema()` (task 7) resolves to for one plugin's settings form. */
+/** What `PluginsConfigure.formSchema()` resolves to for one plugin's settings form. */
 export type FormSchema =
   | { available: true; schema: object }
   | { available: false; reason: string }

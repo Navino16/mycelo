@@ -126,4 +126,6 @@ export interface EnzymeContext<TConfig = unknown> extends EnzymeStartContext<TCo
   /** Capabilities of the conversation being answered. */
   readonly capabilities: Capabilities
   readonly principal: Principal
+  /** The locale resolved for the message being answered — the same one `ctx.t()` uses. */
+  readonly locale: string
 }

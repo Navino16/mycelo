@@ -5,6 +5,38 @@ lang:
   set-group: "this conversation now answers in {locale}"
   group-only: "lang-group only makes sense in a group"
 command:
+  plugins:
+    description: "List installed plugins"
+  whoami:
+    description: "Report your principal and roles"
+  roles:
+    description: "List roles and their command patterns"
+  grant:
+    description: "Give a role to someone on this channel"
+  revoke:
+    description: "Take a role away from someone on this channel"
+  role-new:
+    description: "Create a role with command patterns"
+  plugin-list:
+    description: "List installed plugins and whether they are enabled"
+  plugin-enable:
+    description: "Enable an installed plugin"
+  plugin-disable:
+    description: "Disable an installed plugin"
+  plugin-set:
+    description: "Set one configuration value on a plugin"
+  plugin-config:
+    description: "Show a plugin's settings, secrets redacted"
+  conversations:
+    description: "List conversations the bot has seen"
+  where-rule:
+    description: "Confine a command pattern to direct messages or to groups"
+  broadcast-add:
+    description: "Add a broadcast target"
+  broadcast:
+    description: "Send one message to every configured target"
+  inhibitor-channels:
+    description: "Confine an inhibitor to named channels"
   lang:
     description: "Choose the language the bot answers you in"
   lang-group:

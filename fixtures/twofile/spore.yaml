@@ -4,5 +4,5 @@ septum: "^0.5"
 description: A plugin in two files, unbundled. Test fixture, never distributed.
 commands:
   - name: two
-    description: Multi-file check
+    description: command.two.description
     code: handleTwo

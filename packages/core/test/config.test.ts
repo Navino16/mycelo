@@ -17,14 +17,25 @@ function writeConfig(content: string): string {
 it('defaults every field when the file is absent', () => {
   const config = loadBootstrap(join(dir, 'mycelo.yaml'))
   expect(config.prefix).toBe('/')
-  expect(config.sporesDir).toBe(resolve(dir, 'fixtures'))
+  expect(config.sporesDirs).toEqual([resolve(dir, 'fixtures')])
 })
 
 it('reads what the file declares', () => {
   const file = writeConfig('prefix: "!"\nspores: ./plugins\n')
   const config = loadBootstrap(file)
   expect(config.prefix).toBe('!')
-  expect(config.sporesDir).toBe(resolve(dir, 'plugins'))
+  expect(config.sporesDirs).toEqual([resolve(dir, 'plugins')])
+})
+
+it('spores accepts one directory or several, always yielding absolute paths', () => {
+  writeFileSync(join(dir, 'one.yaml'), 'spores: ./fixtures\n')
+  writeFileSync(join(dir, 'many.yaml'), 'spores: [./fixtures, ../other/spores]\n')
+
+  expect(loadBootstrap(join(dir, 'one.yaml')).sporesDirs).toEqual([join(dir, 'fixtures')])
+  expect(loadBootstrap(join(dir, 'many.yaml')).sporesDirs).toEqual([
+    join(dir, 'fixtures'),
+    resolve(dir, '../other/spores'),
+  ])
 })
 
 it('ignores fields later phases will add', () => {
@@ -128,4 +139,28 @@ describe('the ui block', () => {
     writeFileSync(file, 'ui:\n  port: 70000\n', 'utf8')
     expect(() => loadBootstrap(file)).toThrow(/ui\.port/)
   })
+})
+
+// Neither branch of the union carried .min(1), so both resolved to the directory holding
+// mycelo.yaml — a root the operator never named (review, minor 6).
+it('refuses an empty spores entry rather than resolving it to the config file\'s own directory', () => {
+  writeFileSync(join(dir, 'scalar.yaml'), 'spores: ""\n')
+  writeFileSync(join(dir, 'list.yaml'), 'spores: ["", ./fixtures]\n')
+
+  expect(() => loadBootstrap(join(dir, 'scalar.yaml'))).toThrow(BootstrapError)
+  expect(() => loadBootstrap(join(dir, 'list.yaml'))).toThrow(BootstrapError)
+})
+
+// A repeated root is a plausible typo, and assertNoCollisions refused it against itself:
+// "exists in both '/x/admin' and '/x/admin'" (review, minor 7). Two spellings, because a
+// dedupe over the raw strings would let the second pair through.
+it('collapses a repeated spores root, keeping the order it was first named in', () => {
+  writeFileSync(join(dir, 'twice.yaml'), 'spores: [./fixtures, ./fixtures]\n')
+  writeFileSync(join(dir, 'spelt.yaml'), 'spores: [./a, ./fixtures, ./b/../fixtures]\n')
+
+  expect(loadBootstrap(join(dir, 'twice.yaml')).sporesDirs).toEqual([join(dir, 'fixtures')])
+  expect(loadBootstrap(join(dir, 'spelt.yaml')).sporesDirs).toEqual([
+    join(dir, 'a'),
+    join(dir, 'fixtures'),
+  ])
 })

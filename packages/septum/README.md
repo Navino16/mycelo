@@ -30,19 +30,19 @@ capabilities are declared here rather than in the module.
 ```yaml
 kind: enzyme
 name: radarr-helper
-septum: "^0.7"
+septum: "^0.8"
 description: Movie shortcuts for Radarr
 commands:
   - name: help
     description: command.help.description
     respond: help.text
   - name: add
-    description: Queue a movie by title
+    description: command.add.description
     code: addMovie
     capabilities: [reactions]
     args:
       - name: title
-        description: Movie title
+        description: arg.title.description
         required: true
 ```
 
@@ -56,17 +56,23 @@ where it is missing; a command with none works on every channel.
 `respond` is a **catalogue key**, resolved in the plugin's own domain against the reader's
 locale. A plugin that ships no `translations/` directory is unaffected: an unknown key renders
 as itself, literally and without passing through ICU, so `respond: pong` still answers `pong`.
-A command's `description` and an argument's are catalogue keys too, by the same contract — but
-nothing in the core reads either field yet, so writing one as a key costs nothing today and
-avoids a rewrite once something does. The keys above resolve through `translations/en.yaml`
-beside `spore.yaml`:
+A command's `description` is a catalogue key too, by the same contract, and the core now renders
+it: `commands.read`'s `available()` resolves it in the reader's locale. An argument's `description`
+is a catalogue key as well, but nothing in the core reads it yet, so writing one as a key costs
+nothing today and avoids a rewrite once something does. The keys above resolve through
+`translations/en.yaml` beside `spore.yaml`:
 
 ```yaml
 command:
   help:
     description: Show what this plugin can do
+  add:
+    description: Queue a movie by title
+arg:
+  title:
+    description: Movie title
 help:
-  text: "Try /add <title> to queue a movie."
+  text: "Try /add '<title>' to queue a movie."
 ```
 
 Catalogues are [ICU MessageFormat](https://formatjs.github.io/docs/core-concepts/icu-syntax/),
@@ -178,6 +184,7 @@ absent, not present-but-rejecting:
 | `conversations.read` | `ConversationsRead` | `listConversations()` — every conversation the bot has seen, where the channel supplies one |
 | `restrictions.manage` | `RestrictionsManage` | context rules, an inhibitor's confined channels, and the broadcast target list — confining an inhibitor's channels takes effect immediately, even for one `enforcing`, with no restart |
 | `locale.manage` | `LocaleManage` | `setPrincipalLocale(principalId, locale)`, `setConversationLocale(channel, conversationId, locale)`, `availableLocales()` — the last is synchronous, like `listPlugins()` |
+| `commands.read` | `CommandsRead` | `available(principal, locale)` — the commands that principal is *authorized* to invoke, sorted by `qualified`, each with its `description` already rendered in that locale. Channel capabilities and context rules are applied at dispatch, not here, so a listed command can still be refused on the channel it is asked on |
 
 `listPlugins()` and `availableLocales()` alone are synchronous; every other method returns a promise. The identity and role
 methods **reject** rather than resolve quietly when asked about something that does not exist — an
@@ -188,9 +195,8 @@ pattern listed twice. Three exceptions answer instead of rejecting: `getPrincipa
 answers `[]` for an unknown principal, who holds no role either way.
 
 `enable(name)` validates the stored settings against the plugin's own `configSchema` before it
-flips the row, and **rejects** with `configuration is incomplete:` followed by whatever that
-schema reported — a Zod error dump, or the string a hand-built `ConfigSchema` returned; how
-precisely the fault is named is the plugin author's choice, not the core's. `disable(name)`,
+flips the row, and **rejects** with `configuration is incomplete:` followed by the plugin's own
+issues, rendered `path: message` and joined with `; `. `disable(name)`,
 `settings(name)` and `setSetting(...)` reject for a plugin that is not installed. `setSetting`
 also rejects a key the plugin's published JSON Schema neither declares nor allows as an
 additional property — such a key would be dropped silently by a loose schema, or block
@@ -253,9 +259,29 @@ stored locale, or `config.defaultLocale` — **not** a reader's `/lang` choice, 
 carries no principal to consult. Pass its result as `t()`'s third argument for a proactive
 `push()` that has no message to derive one from.
 
+A handler's context also carries `locale: string` — the same locale `ctx.t()` uses when `locale`
+is omitted, exposed so a handler can pass it to something else that needs it named rather than
+rendered, such as a rhiza call. It is not on `EnzymeStartContext`: `start()` has no message to
+resolve one from.
+
 Add a `configSchema` when the plugin takes configuration. It is duck-typed rather than typed
 as a Zod schema: a plugin is bundled with its own copy of Zod, so its schemas are not
-instances of the core's. Anything with a compatible `safeParse` is accepted.
+instances of the core's. Anything with a compatible `safeParse` is accepted — and "compatible"
+has a stated shape: a refusal's `error` carries `issues`, each an object with `path` (empty for
+a whole-object refusal) and `message`:
+
+```ts
+import type { ConfigSchema } from '@mycelo/septum'
+
+const configSchema: ConfigSchema<{ apiKey: string }> = {
+  safeParse: (input) => {
+    const apiKey = (input as { apiKey?: unknown } | null)?.apiKey
+    return typeof apiKey === 'string' && apiKey.length > 0
+      ? { success: true, data: { apiKey } }
+      : { success: false, error: { issues: [{ path: ['apiKey'], message: 'apiKey is required' }] } }
+  },
+}
+```
 
 `defineConfig` wraps a Zod schema into that shape and adds `toJsonSchema()`, which the settings
 form is generated from. It uses septum's own bundled Zod, so the schema and the converter always
@@ -292,14 +318,14 @@ implementation. Each returns a list of failure strings, so it works with any tes
 |---|---|
 | `hyphaChecks` | manifest, config schema, `connect`/`listen`/`stop`/`send`, `group_membership` consistency, and — given a `membershipGroupId` — that `listGroupMembers` resolves an array |
 | `rhizaChecks` | manifest, config schema, `api`, and that `health()` reports rather than throws |
-| `enzymeChecks` | manifest, config schema, lifecycle, every command with no required args, and — given `catalogs` — that every translation key compiles and that `ctx.t()` refuses a domain the manifest does not declare |
+| `enzymeChecks` | manifest, config schema, lifecycle, every command with no required args, and — given `catalogs` — that every translation key compiles, that every command's `description` resolves in at least one catalogue, and that `ctx.t()` refuses a domain the manifest does not declare |
 | `inhibitorChecks` | manifest, config schema, lifecycle, and a verdict per expected allow/deny |
 
 The harness is yours to build: the kit cannot know what your plugin depends on, so you supply
 the stubs.
 
 `context()` is the context a *handler* gets. `start()` runs before any message exists and gets the
-narrower `EnzymeStartContext` — no `reply`, no `principal`, no `capabilities` — so `enzymeChecks`
+narrower `EnzymeStartContext` — no `reply`, no `principal`, no `capabilities`, no `locale` — so `enzymeChecks`
 narrows `context()` down to those members before calling `start()`. An enzyme that reaches for
 `ctx.reply` in `start()` therefore fails the kit exactly as it would fail in the bot. Pass
 `startContext()` instead if you want to stub that moment yourself.
@@ -320,6 +346,7 @@ const context = (): EnzymeContext => ({
   capabilities: { has: () => true, list: () => [] },
   capabilitiesOf: () => ({ has: () => true, list: () => [] }),
   principal: { id: 'p1', identities: [], roles: [] },
+  locale: 'en',
   on() {},
   t: (key) => (typeof key === 'string' ? key : key.key),
   localeFor: () => Promise.resolve('en'),
@@ -329,11 +356,11 @@ it('conforms to the Enzyme contract', async () => {
   const failures = await enzymeChecks({
     name: 'radarr-helper',
     manifest: {
-      kind: 'enzyme', name: 'radarr-helper', septum: '^0.7',
+      kind: 'enzyme', name: 'radarr-helper', septum: '^0.8',
       commands: [
-        { name: 'help', description: 'Show what this plugin can do', respond: 'Try /add <title> to queue a movie.' },
-        { name: 'add', description: 'Queue a movie by title', code: 'addMovie',
-          args: [{ name: 'title', description: 'Movie title', required: true }] },
+        { name: 'help', description: 'command.help.description', respond: 'help.text' },
+        { name: 'add', description: 'command.add.description', code: 'addMovie',
+          args: [{ name: 'title', description: 'arg.title.description', required: true }] },
       ],
     },
     module,
@@ -349,7 +376,11 @@ accept, so calling them would report correct validation as a failure. Those are 
 Pass `catalogs` — already-parsed translation files keyed by locale, such as
 `{ en: parse(readFileSync('translations/en.yaml', 'utf8')) }` — to have `enzymeChecks` compile
 every key the same way germination does, and to have `ctx.t()` throw for a domain your manifest
-does not declare in `requires`, exactly as the bot would.
+does not declare in `requires`, exactly as the bot would. Every command's `description` must also
+resolve in **at least one** of the catalogues you pass: a description that resolves in none is a
+literal, and renders as itself in every language. Contributing only some keys for a locale is
+fine — a missing key cascades to the default locale, with one warning — as is a catalogue that
+parses to `null` or holds no keys at all.
 
 ## Status
 

@@ -80,9 +80,9 @@ describe('the phase-6 milestone (api-design §15)', () => {
       hypha: names(groups.hypha), rhiza: names(groups.rhiza), enzyme: names(groups.enzyme),
       inhibitor: names(groups.inhibitor), unknown: names(groups.unknown),
     }).toEqual({
-      hypha: ['console'],
+      hypha: ['console', 'reactive'],
       rhiza: ['mock'],
-      enzyme: ['admin', 'helpdesk', 'media', 'ping', 'twofile'],
+      enzyme: ['admin', 'help', 'helpdesk', 'media', 'ping', 'twofile'],
       inhibitor: ['gate'],
       unknown: [],
     })

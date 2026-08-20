@@ -148,6 +148,7 @@ function enzymeContext(): EnzymeContext<unknown> {
     capabilities: { has: () => true, list: () => [] },
     capabilitiesOf: () => ({ has: () => true, list: () => [] }),
     principal: { id: 'p1', identities: [], roles: [] },
+    locale: 'en',
     on() {},
     t: (key) => (typeof key === 'string' ? key : key.key),
     localeFor: () => Promise.resolve('en'),
@@ -160,7 +161,7 @@ const goodEnzyme: EnzymeHarness = {
     kind: 'enzyme',
     name: 'links',
     septum: '^1.0',
-    commands: [{ name: 'links', description: 'Show links', code: 'links' }],
+    commands: [{ name: 'links', description: 'command.links.description', code: 'links' }],
   },
   module: { create: () => ({ handlers: { links: async () => {} } }) },
   context: enzymeContext,
@@ -357,6 +358,22 @@ describe('enzyme conformance checks', () => {
     })
     // ctx.config would be undefined at runtime, and every read off it would throw.
     expect(failures.join(' ')).toContain('no data')
+  })
+
+  // design §5.2: a plugin whose refusal carries no issues leaves describeConfigError with
+  // nothing to render and the settings route with nothing to filter by path[0].
+  it('catches a configSchema whose invalid-config refusal carries no issues', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        configSchema: { safeParse: (v: unknown) => ((v as { account?: unknown })?.account === undefined
+          ? { success: false, error: 'account is required' }
+          : { success: true, data: v }) } as never,
+        create: () => ({ handlers: { links: async () => {} } }),
+      },
+      invalidConfig: {},
+    })
+    expect(failures.join(' ')).toContain('no readable issues')
   })
 
   it('does not certify a handler resolved through Object.prototype', async () => {
@@ -574,6 +591,7 @@ describe('regressions', () => {
       logger = { debug() {}, info() {}, warn() {}, error() {}, child: (): EnzymeContext<unknown>['logger'] => this.logger }
       capabilities: EnzymeContext<unknown>['capabilities'] = { has: () => true, list: () => [] }
       principal = { id: 'p1', identities: [], roles: [] }
+      locale = 'en'
       async reply(): Promise<void> {}
       async push(): Promise<void> {}
       rhiza<TApi>(): TApi { return {} as TApi }
@@ -662,7 +680,10 @@ describe('regressions', () => {
   it('passes an enzyme whose supplied catalogues all compile', async () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
-      catalogs: { en: { links: { usage: 'usage: links' } }, fr: { links: { usage: 'usage : links' } } },
+      catalogs: {
+        en: { links: { usage: 'usage: links' }, command: { links: { description: 'Show links' } } },
+        fr: { links: { usage: 'usage : links' }, command: { links: { description: 'Voir les liens' } } },
+      },
     })
     expect(failures).toEqual([])
   })
@@ -670,7 +691,7 @@ describe('regressions', () => {
   it('fails a catalogue key that does not compile, naming the locale and the key', async () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
-      catalogs: { en: { links: { usage: 'usage: {command' } } },
+      catalogs: { en: { links: { usage: 'usage: {command' }, command: { links: { description: 'Show links' } } } },
     })
     expect(failures.join(' ')).toContain("'en'")
     expect(failures.join(' ')).toContain('links.usage')
@@ -689,8 +710,95 @@ describe('regressions', () => {
   // with no keys, not a fault. A kit stricter than the runtime would fail a plugin the
   // bot germinates happily — exactly a scaffolded translations/fr.yaml left empty.
   it('passes a null catalogue root, exactly as the runtime does for an empty translation file', async () => {
-    const failures = await enzymeChecks({ ...goodEnzyme, catalogs: { en: { links: { usage: 'x' } }, fr: null } })
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      catalogs: { en: { links: { usage: 'x' }, command: { links: { description: 'Show links' } } }, fr: null },
+    })
     expect(failures).toEqual([])
+  })
+
+  // 26 of this project's own 30 fixture descriptions were English literals, which no
+  // catalogue can resolve — so they render as themselves in every language.
+  it('fails a command description that is a literal rather than a catalogue key', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      manifest: {
+        kind: 'enzyme', name: 'links', septum: '^1.0',
+        commands: [{ name: 'links', description: 'Show links', code: 'links' }],
+      },
+      catalogs: { en: { links: { usage: 'x' } } },
+    })
+    expect(failures).toEqual([
+      "no supplied catalogue has a key 'Show links', which a command declares as its description",
+    ])
+  })
+
+  // Two commands and two locales, one of them partial: a check reading only the first
+  // catalogue would fail `command.usage.description`, one reading only the last would fail
+  // `command.links.description`, and each command's key is absent from exactly one file.
+  it('accepts a description carried by one catalogue while another contributes partially', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      manifest: {
+        kind: 'enzyme', name: 'links', septum: '^1.0',
+        commands: [
+          { name: 'links', description: 'command.links.description', code: 'links' },
+          { name: 'usage', description: 'command.usage.description', code: 'links' },
+        ],
+      },
+      catalogs: {
+        en: { command: { links: { description: 'Show links' } } },
+        fr: { command: { usage: { description: 'Mode d\'emploi' } } },
+      },
+    })
+    expect(failures).toEqual([])
+  })
+
+  // fixtures/admin/translations/ru.yaml's own shape, whose comment forbids completing it:
+  // design §7.2 cascades a missing key to the default locale with one warning, so a kit
+  // demanding every locale would refuse a plugin the runtime germinates.
+  it('accepts a deliberately partial catalogue beside a complete one', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      manifest: {
+        kind: 'enzyme', name: 'links', septum: '^1.0',
+        commands: [
+          { name: 'links', description: 'command.links.description', code: 'links' },
+          { name: 'usage', description: 'command.usage.description', code: 'links' },
+        ],
+      },
+      catalogs: {
+        en: {
+          command: { links: { description: 'Show links' }, usage: { description: 'Show usage' } },
+          links: { usage: 'usage: links' },
+        },
+        ru: { links: { usage: 'использование: links' } },
+      },
+    })
+    expect(failures).toEqual([])
+  })
+
+  // The plural failure: neither description resolves anywhere, so both must be named, and
+  // once each rather than once per locale.
+  it('names every description no catalogue at all resolves, once each', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      manifest: {
+        kind: 'enzyme', name: 'links', septum: '^1.0',
+        commands: [
+          { name: 'links', description: 'command.links.description', code: 'links' },
+          { name: 'usage', description: 'command.usage.description', code: 'links' },
+        ],
+      },
+      catalogs: {
+        en: { links: { usage: 'usage: links' } },
+        fr: { links: { usage: 'usage : links' } },
+      },
+    })
+    expect(failures).toEqual([
+      "no supplied catalogue has a key 'command.links.description', which a command declares as its description",
+      "no supplied catalogue has a key 'command.usage.description', which a command declares as its description",
+    ])
   })
 
   // The inverted phase-2 divergence: the kit's stub t used to accept every domain while

@@ -5,7 +5,7 @@ import { pluginSetting } from '../../src/persistence/schema.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
   bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configurable, configurableTwoFields,
-  cyclingPair, definedSchema, noJsonSchema, shapedSchema,
+  cyclingPair, definedSchema, eitherOrSchema, mixedFieldSchema, noJsonSchema,
 } from './support.js'
 import type { LoggedIn } from './support.js'
 
@@ -256,34 +256,34 @@ describe('/api/plugins', () => {
 // only, so `{ port: 'not-a-number' }` was written with 200 and the operator learned about it
 // at the next boot, from a plugin gone dormant (review, Important 3).
 describe('PUT /api/plugins/:name/settings validates the values', () => {
-  it('refuses a value its own field schema rejects, and writes nothing', async () => {
-    booted = await bootAndLogin({ spores: shapedSchema })
+  it('refuses a value through the whole-object schema even though the plugin also exposes a permissive shape, and writes nothing', async () => {
+    booted = await bootAndLogin({ spores: mixedFieldSchema })
     const { app, cookie } = booted
     const refused = await app.inject({
-      method: 'PUT', url: '/api/plugins/shaped/settings', headers: { cookie },
+      method: 'PUT', url: '/api/plugins/mixed/settings', headers: { cookie },
       payload: { port: 'not-a-number', label: 'fine' },
     })
     expect(refused.statusCode).toBe(400)
     const error = refused.json<{ error: { code: string, message: string, detail: unknown } }>().error
     expect(error.code).toBe('validation')
-    expect(error.message).toBe("plugin 'shaped' rejected the value given for: port")
+    expect(error.message).toBe("plugin 'mixed' rejected the value given for: port")
     // §9: detail carries the plugin's own issues, so a form can highlight the field.
-    expect(error.detail).toEqual([{ key: 'port', issues: [{ code: 'invalid_type', message: 'expected a number' }] }])
+    expect(error.detail).toEqual([{ key: 'port', issues: [{ path: ['port'], message: 'expected a number' }] }])
     // All-or-nothing: the sound key travelled in the same body and must not have landed.
     expect((await app.inject({
-      method: 'GET', url: '/api/plugins/shaped/settings', headers: { cookie },
+      method: 'GET', url: '/api/plugins/mixed/settings', headers: { cookie },
     })).json<Record<string, unknown>>()).toEqual({})
   })
 
   it('accepts the same keys once every value parses', async () => {
-    booted = await bootAndLogin({ spores: shapedSchema })
+    booted = await bootAndLogin({ spores: mixedFieldSchema })
     const { app, cookie } = booted
     expect((await app.inject({
-      method: 'PUT', url: '/api/plugins/shaped/settings', headers: { cookie },
+      method: 'PUT', url: '/api/plugins/mixed/settings', headers: { cookie },
       payload: { port: 8080, label: 'fine' },
     })).statusCode).toBe(200)
     expect((await app.inject({
-      method: 'GET', url: '/api/plugins/shaped/settings', headers: { cookie },
+      method: 'GET', url: '/api/plugins/mixed/settings', headers: { cookie },
     })).json<Record<string, unknown>>()).toEqual({ port: 8080, label: 'fine' })
   })
 
@@ -299,6 +299,27 @@ describe('PUT /api/plugins/:name/settings validates the values', () => {
     expect(refused.statusCode).toBe(400)
     expect(refused.json<{ error: { message: string } }>().error.message)
       .toBe("plugin 'defined' rejected the value given for: port")
+  })
+
+  // septum documents `path: []` as a whole-object refusal and the kit certifies one, so the
+  // per-key filter answered [] and this PUT was written with 200 (review, Important 1).
+  it('refuses a whole-object rejection and highlights every key it was given', async () => {
+    booted = await bootAndLogin({ spores: eitherOrSchema })
+    const { app, cookie } = booted
+    const refused = await app.inject({
+      method: 'PUT', url: '/api/plugins/eitheror/settings', headers: { cookie },
+      payload: { socket: '/tmp/s', tcp: 'host:1' },
+    })
+    expect(refused.statusCode).toBe(400)
+    const error = refused.json<{ error: { message: string, detail: unknown } }>().error
+    expect(error.message).toBe("plugin 'eitheror' rejected the value given for: socket, tcp")
+    expect(error.detail).toEqual([
+      { key: 'socket', issues: [{ path: [], message: 'socket or tcp, not both' }] },
+      { key: 'tcp', issues: [{ path: [], message: 'socket or tcp, not both' }] },
+    ])
+    expect((await app.inject({
+      method: 'GET', url: '/api/plugins/eitheror/settings', headers: { cookie },
+    })).json<Record<string, unknown>>()).toEqual({})
   })
 
   // The property that rules out validating the merged object, which is §8's literal reading:

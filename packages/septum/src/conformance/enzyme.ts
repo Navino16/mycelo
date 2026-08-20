@@ -21,7 +21,10 @@ export interface EnzymeHarness {
   /**
    * Already-parsed catalogues, keyed by locale — parseManifest's convention, since the kit
    * must not import `node:fs`. Compiled as germination compiles them (design §7.1), so a
-   * message that would make the spore dormant in the bot fails here instead.
+   * message that would make the spore dormant in the bot fails here instead. Every command's
+   * `description` must also resolve in at least one of them: one that resolves nowhere is a
+   * literal, and renders as itself in every language. A partial catalogue is fine — design
+   * §7.2 cascades a missing key to the default locale.
    */
   catalogs?: Record<string, unknown>
 }
@@ -63,9 +66,12 @@ function flatten(node: unknown, prefix: string, out: Map<string, string>): strin
   return null
 }
 
-function catalogFailures(catalogs: Record<string, unknown> | undefined): string[] {
+function catalogFailures(
+  catalogs: Record<string, unknown> | undefined, manifest: EnzymeManifest,
+): string[] {
   if (catalogs === undefined) return []
   const failures: string[] = []
+  const declared = new Set<string>()
   for (const [locale, raw] of Object.entries(catalogs)) {
     // An empty or comment-only file parses to null: catalog.ts treats that as a
     // catalogue with no keys, not a fault, and the kit must agree.
@@ -82,6 +88,16 @@ function catalogFailures(catalogs: Record<string, unknown> | undefined): string[
       } catch (e) {
         failures.push(`translations for '${locale}': key '${key}' does not compile: ${(e as Error).message}`)
       }
+    }
+    for (const key of flat.keys()) declared.add(key)
+  }
+  // One catalogue is enough: design §7.2 lets a partial contribution cascade to the default
+  // locale, so demanding every locale would fail a plugin the runtime germinates. A literal
+  // description resolves in none, which is the case this exists to catch.
+  if (declared.size === 0) return failures
+  for (const description of new Set(manifest.commands.map((c) => c.description))) {
+    if (!declared.has(description)) {
+      failures.push(`no supplied catalogue has a key '${description}', which a command declares as its description`)
     }
   }
   return failures
@@ -146,6 +162,7 @@ function withGuardedT(
     localeFor: (target) => ctx.localeFor(target),
     capabilities: ctx.capabilities,
     principal: ctx.principal,
+    locale: ctx.locale,
   }
 }
 
@@ -174,7 +191,7 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
   if (manifest.kind !== 'enzyme') {
     return [...failures, `manifest kind is '${manifest.kind}', expected 'enzyme'`]
   }
-  failures.push(...catalogFailures(harness.catalogs))
+  failures.push(...catalogFailures(harness.catalogs, manifest))
   const allowed = declaredRhizas(manifest)
 
   const codeCommands = manifest.commands.filter((c) => c.respond === undefined)

@@ -1,0 +1,6 @@
+reply:
+  list: "commands:\n{lines}"
+  line: "{name} — {description}"
+command:
+  help:
+    description: "List the commands you are authorized to invoke, with their description"

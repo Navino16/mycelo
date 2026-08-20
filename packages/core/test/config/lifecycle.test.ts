@@ -12,7 +12,7 @@ import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import { pluginSetting } from '../../src/persistence/schema.js'
 import { createLogger } from '../../src/support/logger.js'
 
-const SPORES = resolve(import.meta.dirname, '../../../../fixtures')
+const SPORES = [resolve(import.meta.dirname, '../../../../fixtures')]
 
 function fresh(): { db: ReturnType<typeof openDatabase>['db'], close: () => void } {
   const p = openDatabase(':memory:')
@@ -40,7 +40,7 @@ const NEEDS_CONFIG_MODULE = `
       const url = input === null || typeof input !== 'object' ? undefined : input.url
       return typeof url === 'string' && url.length > 0
         ? { success: true, data: { url } }
-        : { success: false, error: "'url' must be a non-empty string" }
+        : { success: false, error: { issues: [{ path: ['url'], message: "'url' must be a non-empty string" }] } }
     } },
     create: () => ({
       handlers: {
@@ -71,7 +71,7 @@ it('a spore appearing after the first sync arrives disabled', () => {
   const { db, close } = fresh()
   syncInstalls(db, SPORES)
   needsConfig()
-  syncInstalls(db, dir)
+  syncInstalls(db, [dir])
   expect(getInstall(db, 'needs-config')?.enabled).toBe(false)
   close()
 })
@@ -89,9 +89,9 @@ it('sync never revives a plugin the operator disabled', () => {
 it('sync leaves the row of a spore that has disappeared from disk', () => {
   const { db, close } = fresh()
   needsConfig()
-  syncInstalls(db, dir)
+  syncInstalls(db, [dir])
   rmSync(join(dir, 'needs-config'), { recursive: true, force: true })
-  syncInstalls(db, dir)
+  syncInstalls(db, [dir])
   expect(getInstall(db, 'needs-config')).not.toBeNull()
   close()
 })
@@ -102,7 +102,7 @@ it('enabling refuses while a required setting is missing, and carries the schema
   const { db, close } = fresh()
   needsConfig()
   recordInstall(db, 'needs-config', 'enzyme')
-  const result = await enablePlugin(db, dir, 'needs-config')
+  const result = await enablePlugin(db, [dir], 'needs-config')
   expect(result.ok).toBe(false)
   if (!result.ok) expect(result.reason).toContain('url')
   expect(getInstall(db, 'needs-config')?.enabled).toBe(false)
@@ -114,7 +114,7 @@ it('enabling succeeds once the setting is filled', async () => {
   needsConfig()
   recordInstall(db, 'needs-config', 'enzyme')
   writeSetting(db, 'needs-config', 'url', 'http://x', false)
-  const result = await enablePlugin(db, dir, 'needs-config')
+  const result = await enablePlugin(db, [dir], 'needs-config')
   expect(result.ok).toBe(true)
   expect(getInstall(db, 'needs-config')?.enabled).toBe(true)
   close()
@@ -123,7 +123,7 @@ it('enabling succeeds once the setting is filled', async () => {
 it('enabling refuses a plugin that is not installed', async () => {
   const { db, close } = fresh()
   needsConfig()
-  const result = await enablePlugin(db, dir, 'needs-config')
+  const result = await enablePlugin(db, [dir], 'needs-config')
   expect(result.ok).toBe(false)
   if (!result.ok) expect(result.reason).toContain('not installed')
   close()
@@ -132,7 +132,7 @@ it('enabling refuses a plugin that is not installed', async () => {
 it('enabling refuses a plugin whose directory is absent from disk', async () => {
   const { db, close } = fresh()
   recordInstall(db, 'ghost', 'enzyme')
-  const result = await enablePlugin(db, dir, 'ghost')
+  const result = await enablePlugin(db, [dir], 'ghost')
   expect(result.ok).toBe(false)
   if (!result.ok) expect(result.reason).toContain('present on disk')
   expect(getInstall(db, 'ghost')?.enabled).toBe(false)
@@ -150,7 +150,7 @@ it('enabling refuses, rather than throwing, when the module throws at import', a
     'src/index.ts': 'throw new Error("import explodes")\n',
   })
   recordInstall(db, 'boomspore', 'enzyme')
-  const result = await enablePlugin(db, dir, 'boomspore')
+  const result = await enablePlugin(db, [dir], 'boomspore')
   expect(result.ok).toBe(false)
   if (!result.ok) expect(result.reason).toContain('import explodes')
   expect(getInstall(db, 'boomspore')?.enabled).toBe(false)
@@ -164,7 +164,7 @@ it('enabling refuses, rather than throwing, when the spore has no entry point', 
       + 'commands:\n  - name: nocode\n    description: x\n    code: handleNocode\n',
   })
   recordInstall(db, 'nocode', 'enzyme')
-  const result = await enablePlugin(db, dir, 'nocode')
+  const result = await enablePlugin(db, [dir], 'nocode')
   expect(result.ok).toBe(false)
   if (!result.ok) expect(result.reason).toContain('no entry point')
   close()
@@ -178,7 +178,7 @@ it('enabling refuses, rather than throwing, when the default export has no creat
     'src/index.ts': 'export default { }\n',
   })
   recordInstall(db, 'nocreate', 'enzyme')
-  const result = await enablePlugin(db, dir, 'nocreate')
+  const result = await enablePlugin(db, [dir], 'nocreate')
   expect(result.ok).toBe(false)
   if (!result.ok) expect(result.reason).toContain('create()')
   close()
@@ -188,7 +188,7 @@ it('enabling names the manifest fault instead of claiming the spore is absent', 
   const { db, close } = fresh()
   spore('brokenyaml', { 'spore.yaml': 'kind: enzyme\nname: brokenyaml\n' })
   recordInstall(db, 'brokenyaml', 'enzyme')
-  const result = await enablePlugin(db, dir, 'brokenyaml')
+  const result = await enablePlugin(db, [dir], 'brokenyaml')
   expect(result.ok).toBe(false)
   if (!result.ok) {
     // A YAML typo told the operator the directory was missing: no path to the fix.
@@ -252,7 +252,7 @@ describe('a disabled plugin whose manifest no longer parses', () => {
     brokenGate()
     recordInstall(db, 'gate', 'inhibitor')
     setEnabled(db, 'gate', true)
-    const registry = await germinate(dir, createLogger(), {}, db)
+    const registry = await germinate([dir], createLogger(), {}, db)
     expect(registry.brokenEnforcing).toEqual(['gate'])
     close()
   })
@@ -261,7 +261,7 @@ describe('a disabled plugin whose manifest no longer parses', () => {
     const { db, close } = fresh()
     brokenGate()
     recordInstall(db, 'gate', 'inhibitor')
-    const registry = await germinate(dir, createLogger(), {}, db)
+    const registry = await germinate([dir], createLogger(), {}, db)
     // admit() runs before the command is parsed, so brokenEnforcing is unreachable from
     // any channel: a YAML typo in an already-disabled plugin would need a shell to undo.
     expect(registry.brokenEnforcing).toEqual([])
@@ -273,8 +273,8 @@ describe('a disabled plugin whose manifest no longer parses', () => {
     const { db, close } = fresh()
     brokenGate()
     recordInstall(db, 'gate', 'inhibitor')
-    const registry = await germinate(dir, createLogger(), {}, db)
-    const api = createMyceliumApi(registry, ['plugins.read'], async () => {}, db, dir) as PluginsRead
+    const registry = await germinate([dir], createLogger(), {}, db)
+    const api = createMyceliumApi(registry, ['plugins.read'], async () => {}, db, [dir]) as PluginsRead
     expect(api.listPlugins()).toEqual([
       { name: 'gate', kind: 'inhibitor', commands: [], state: 'disabled', enabled: false },
     ])
@@ -294,7 +294,7 @@ describe('enablePlugin refuses rather than rejecting when validation itself thro
         + '}\n',
     })
     recordInstall(db, 'throwspore', 'enzyme')
-    const result = await enablePlugin(db, dir, 'throwspore')
+    const result = await enablePlugin(db, [dir], 'throwspore')
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.reason).toContain('predicate exploded')
     close()
@@ -307,7 +307,7 @@ describe('enablePlugin refuses rather than rejecting when validation itself thro
     // Bypasses writeSetting, which stringifies: only a hand-edited or corrupted row
     // reaches readSettings with text JSON.parse cannot read.
     db.insert(pluginSetting).values({ pluginName: 'needs-config', key: 'url', value: 'not json', isSecret: false }).run()
-    const result = await enablePlugin(db, dir, 'needs-config')
+    const result = await enablePlugin(db, [dir], 'needs-config')
     expect(result.ok).toBe(false)
     // Not merely refused: the ordinary "url is missing" refusal satisfies ok === false too,
     // so only the reason distinguishes a caught throw from a rejected config.

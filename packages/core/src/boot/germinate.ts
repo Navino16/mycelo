@@ -1,6 +1,7 @@
 import type { Logger } from '@mycelo/septum'
 import { syncInstalls } from '../config/lifecycle.js'
 import { readAllSettings } from '../config/store.js'
+import { assertNoCollisions } from '../germination/discover.js'
 import { germinate } from '../germination/germinate.js'
 import type { Catalogs } from '../i18n/catalog.js'
 import { loadCoreCatalogs } from '../i18n/core-catalogs.js'
@@ -18,12 +19,14 @@ export async function germinatePhase(state: RuntimeState, logger: Logger): Promi
   const { config, db } = state
   // Outside the `try`: degraded mode exists for faults a UI action repairs (§8.1), and no
   // screen repairs an unwritable database — serving an API over one only buys a bot that
-  // answers HTTP while its authorization tables are unreadable.
-  const { added } = syncInstalls(db, config.sporesDir)
+  // answers HTTP while its authorization tables are unreadable. A collision is a startup
+  // failure for the same reason (design §4.2).
+  assertNoCollisions(config.sporesDirs)
+  const { added } = syncInstalls(db, config.sporesDirs)
   if (added.length > 0) logger.info(`recorded ${String(added.length)} spore(s): ${added.join(', ')}`)
   const settings = readAllSettings(db)
   try {
-    const registry = await germinate(config.sporesDir, logger, settings, db)
+    const registry = await germinate(config.sporesDirs, logger, settings, db)
     // Spore-first would let a plugin shadow the core's own domain; germination already
     // refuses those two names, so the order here is belt and braces.
     const catalogs: Catalogs = new Map([...registry.catalogs, ...loadCoreCatalogs()])

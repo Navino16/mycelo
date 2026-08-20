@@ -4,7 +4,7 @@ import { loadModule } from '../germination/load.js'
 import { isFailure, readManifest } from '../germination/manifest.js'
 import type { ManifestFailure, ReadManifest } from '../germination/manifest.js'
 import type { Db } from '../persistence/db.js'
-import { describeThrown } from '../support/thrown.js'
+import { describeConfigError, describeThrown } from '../support/thrown.js'
 import { getInstall, listInstalls, readSettings, recordInstall, setEnabled } from './store.js'
 
 export interface EnableOk { ok: true }
@@ -15,7 +15,7 @@ export interface EnableRefusal { ok: false, reason: string }
  * phase 8's inoculate. It never deletes a row whose directory has gone: an operator's
  * settings must survive an unmounted volume.
  */
-export function syncInstalls(db: Db, sporesDir: string): { added: readonly string[] } {
+export function syncInstalls(db: Db, sporesDirs: readonly string[]): { added: readonly string[] } {
   // An all-disabled first run cannot be undone from a channel: /plugin-enable lives in
   // `admin`, which would be disabled too. Hence one transaction and one write per spore:
   // a crash mid-walk must leave the table empty, so the next boot is still a first run.
@@ -24,7 +24,7 @@ export function syncInstalls(db: Db, sporesDir: string): { added: readonly strin
   // Statements issued through `db` inside this callback run on the same connection, and
   // therefore inside the BEGIN the driver opened for it.
   db.transaction(() => {
-    for (const location of discover(sporesDir)) {
+    for (const location of discover(sporesDirs)) {
       const read = readManifest(location)
       if (isFailure(read)) continue
       const { manifest } = read
@@ -40,8 +40,8 @@ export function syncInstalls(db: Db, sporesDir: string): { added: readonly strin
  * The spore of that name on disk. A manifest that failed to parse carries no validated
  * name, so it is matched on its directory instead — all a failed manifest leaves.
  */
-export function findSpore(sporesDir: string, name: string): ReadManifest | ManifestFailure | undefined {
-  for (const location of discover(sporesDir)) {
+export function findSpore(sporesDirs: readonly string[], name: string): ReadManifest | ManifestFailure | undefined {
+  for (const location of discover(sporesDirs)) {
     const read = readManifest(location)
     if (isFailure(read)) {
       if (location.directory === name) return read
@@ -58,10 +58,10 @@ export function findSpore(sporesDir: string, name: string): ReadManifest | Manif
  * whatever loadModule() throws — enablePlugin() is where that becomes a refusal.
  */
 export async function loadSporeModule(
-  sporesDir: string,
+  sporesDirs: readonly string[],
   name: string,
 ): Promise<SporeModule<unknown, unknown> | null | undefined> {
-  const found = findSpore(sporesDir, name)
+  const found = findSpore(sporesDirs, name)
   if (found === undefined || isFailure(found)) return undefined
   return await loadModule(found)
 }
@@ -71,9 +71,9 @@ export async function loadSporeModule(
  * first, so a plugin missing a required field is refused here rather than going dormant
  * at the next startup, where the operator would only see it after a restart.
  */
-export async function enablePlugin(db: Db, sporesDir: string, name: string): Promise<EnableOk | EnableRefusal> {
+export async function enablePlugin(db: Db, sporesDirs: readonly string[], name: string): Promise<EnableOk | EnableRefusal> {
   if (getInstall(db, name) === null) return { ok: false, reason: `plugin '${name}' is not installed` }
-  const found = findSpore(sporesDir, name)
+  const found = findSpore(sporesDirs, name)
   if (found === undefined) return { ok: false, reason: `no spore named '${name}' is present on disk` }
   if (isFailure(found)) return { ok: false, reason: `spore '${name}' has an unreadable manifest: ${found.reason}` }
   let module: SporeModule<unknown, unknown> | null
@@ -95,7 +95,7 @@ export async function enablePlugin(db: Db, sporesDir: string, name: string): Pro
       return { ok: false, reason: `configuration is incomplete: validating it threw: ${describeThrown(e)}` }
     }
     if (!parsed.success) {
-      return { ok: false, reason: `configuration is incomplete: ${String(parsed.error)}` }
+      return { ok: false, reason: `configuration is incomplete: ${describeConfigError(parsed.error)}` }
     }
   }
   setEnabled(db, name, true)

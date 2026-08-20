@@ -5,6 +5,38 @@ lang:
   set-group: "cette conversation répond désormais en {locale}"
   group-only: "lang-group n'a de sens qu'en groupe"
 command:
+  plugins:
+    description: "Lister les plugins installés"
+  whoami:
+    description: "Indiquer votre identité et vos rôles"
+  roles:
+    description: "Lister les rôles et leurs motifs de commande"
+  grant:
+    description: "Donner un rôle à quelqu'un sur ce canal"
+  revoke:
+    description: "Retirer un rôle à quelqu'un sur ce canal"
+  role-new:
+    description: "Créer un rôle avec des motifs de commande"
+  plugin-list:
+    description: "Lister les plugins installés et leur état d'activation"
+  plugin-enable:
+    description: "Activer un plugin installé"
+  plugin-disable:
+    description: "Désactiver un plugin installé"
+  plugin-set:
+    description: "Définir une valeur de configuration d'un plugin"
+  plugin-config:
+    description: "Afficher les réglages d'un plugin, secrets masqués"
+  conversations:
+    description: "Lister les conversations vues par le bot"
+  where-rule:
+    description: "Confiner un motif de commande aux messages privés ou aux groupes"
+  broadcast-add:
+    description: "Ajouter une cible de diffusion"
+  broadcast:
+    description: "Envoyer un message à toutes les cibles configurées"
+  inhibitor-channels:
+    description: "Confiner un inhibiteur à des canaux nommés"
   lang:
     description: "Choisir la langue dans laquelle le bot vous répond"
   lang-group:

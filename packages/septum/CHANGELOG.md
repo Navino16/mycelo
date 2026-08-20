@@ -1,5 +1,39 @@
 # @mycelo/septum
 
+## 0.8.0
+
+**Breaking.** `ConfigSchema.error` takes a shape instead of `unknown`: `ConfigError { readonly
+issues: readonly ConfigIssue[] }`, each issue `{ readonly path: readonly PropertyKey[]; readonly
+message: string }`. Migration: a schema built with `defineConfig`, or any Zod schema, already
+satisfies it — a `ZodError` is assignable to `ConfigError`. A **hand-written** `ConfigSchema` must
+now return that shape rather than a bare string or an arbitrary object. The conformance kit now
+checks a refusal's shape too, so a hand-written schema that previously reported "conforms" may fail
+now — which is the point: the core renders those issues into the sentence an operator sees. An empty
+`path` is a refusal about the settings object as a whole, such as a top-level Zod `.refine()`: the
+core reports it against every key the write carried, so a form can highlight them all.
+
+**Breaking.** `EnzymeContext.locale: string` is a new required member: the locale the core resolved
+for the message being answered, the same one `ctx.t()` uses when none is given. It is on
+`EnzymeContext` and deliberately **not** on `EnzymeStartContext`, since `start()` answers no
+message — the same asymmetry `principal` and `capabilities` already have. Migration: the
+conformance kit's `EnzymeContext` stub is written by the plugin author, not built by the kit, so
+every author's own test harness must add `locale` to the context it passes in. Nothing else changes
+for them.
+
+Added:
+
+- `commands.read`, the fifteenth `MyceliumScope`, and the `CommandsRead` interface it mounts:
+  `available(principal, locale)` — the commands that principal is *authorized* to invoke, sorted by
+  `qualified`, each with its `description` already rendered in that locale. Channel capabilities and
+  context rules are applied at dispatch, not here, so a listed command can still be refused on the
+  channel it is asked on. `CommandInfo`: `qualified`, `name`, `plugin`, `description`. This is why a
+  command's `description:` is now rendered rather than merely declared to be a catalogue key.
+- `enzymeChecks` now also asserts that every command's `description` resolves in at least one
+  supplied `catalogs` entry, so a literal description — which resolves nowhere and renders as
+  itself in every language — fails the kit rather than reaching the operator's log. Only *no*
+  catalogue resolving it is a failure: a partial contribution for one locale cascades to the
+  default with a warning, so demanding every locale would refuse a plugin the runtime germinates.
+
 ## 0.7.0
 
 **Breaking.** `respond:` is resolved as a catalogue key in the declaring spore's own domain by

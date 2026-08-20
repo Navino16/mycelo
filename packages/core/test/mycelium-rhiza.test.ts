@@ -4,10 +4,11 @@ import { join, resolve as resolvePath } from 'node:path'
 import { describe, expect, it } from 'bun:test'
 import { z } from 'zod'
 import type {
-  ConversationsRead, HealthRead, IncomingMessage, LocaleManage, MessagesBroadcast, PluginsConfigure,
+  CommandsRead, ConversationsRead, HealthRead, IncomingMessage, LocaleManage, MessagesBroadcast, PluginsConfigure,
   PluginsRead, PluginsToggle, PrincipalsManage, PrincipalsRead, PushTarget, RestrictionsManage,
   RolesAssign, RolesManage, RolesRead,
 } from '@mycelo/septum'
+import { assignRole, createRole } from '../src/authorization/roles.js'
 import { addBroadcastTarget, recordConversation } from '../src/conversations/registry.js'
 import { getInstall, recordInstall, setEnabled, writeSetting } from '../src/config/store.js'
 import { bootstrapIdentity } from '../src/identity/bootstrap.js'
@@ -31,7 +32,7 @@ function seedPrincipal(db: Db, id: string): void {
 
 const stubSend = async () => {}
 const noSend = stubSend
-const SPORES = resolvePath(import.meta.dirname, '../../../fixtures')
+const SPORES = [resolvePath(import.meta.dirname, '../../../fixtures')]
 
 function fresh(): Db {
   const { db } = openDatabase(':memory:')
@@ -397,7 +398,7 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
       )
       writeFileSync(join(dir, 'boomspore', 'src/index.ts'), 'throw new Error("import explodes")\n', 'utf8')
       recordInstall(db, 'boomspore', 'enzyme')
-      const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, dir) as PluginsConfigure
+      const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, [dir]) as PluginsConfigure
       const schema = await api.formSchema('boomspore')
       expect(schema.available).toBe(false)
       // The real cause, not merely "unavailable": an operator cannot act on the latter.
@@ -482,7 +483,7 @@ describe('setSetting against the keys the plugin declares', () => {
     const dir = declaring(jsonSchema)
     try {
       recordInstall(db, 'declares', 'enzyme')
-      await body(createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, dir) as PluginsConfigure)
+      await body(createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, [dir]) as PluginsConfigure)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -635,5 +636,46 @@ describe('restrictions.manage', () => {
     expect(await api.listBroadcastTargets?.()).toEqual([{ channel: 'console', conversationId: 'c1' }])
     await api.removeBroadcastTarget?.({ channel: 'console', conversationId: 'c1' })
     expect(await api.listBroadcastTargets?.()).toEqual([])
+  })
+})
+
+describe('commands.read', () => {
+  // `registry` above carries one route-less enzyme; this one carries the routes available()
+  // reads, so the mount is exercised end to end rather than only checked for presence.
+  function routed(): Registry {
+    const routes = new Map(['plugins', 'whoami', 'movies'].map((command) => {
+      const plugin = command === 'movies' ? 'media' : 'admin'
+      return [command, {
+        command, plugin, qualified: `${plugin}.${command}`,
+        spec: { name: command, description: `cmd.${command}`, respond: 'x' },
+      }]
+    }))
+    return { ...emptyRegistry(), routes } as unknown as Registry
+  }
+
+  it('throws rather than mounting a scope with no translator to render descriptions', () => {
+    expect(() => createMyceliumApi(routed(), ['commands.read'], noSend, fresh(), SPORES))
+      .toThrow(/commands.read/)
+  })
+
+  // Renders the locale into the description: stubTranslator ignores its locale argument, so
+  // the mount could hardcode one and this test would still pass (review, Important 4).
+  const localeAware = {
+    translate: (_d: string, key: string, locale: string) => `${key}@${locale}`,
+    availableLocales: () => ['en', 'fr'],
+  }
+
+  it('answers through the mount, filtered by the caller and described in the given locale', async () => {
+    const db = fresh()
+    createRole(db, 'admins', ['admin.*'])
+    const bob = resolvePrincipal(db, { channel: 'console', externalId: 'bob' })
+    assignRole(db, bob.id, 'admins')
+    const api = createMyceliumApi(routed(), ['commands.read'], noSend, db, SPORES,
+      { translator: localeAware }) as CommandsRead
+
+    expect(await api.available(bob, 'fr')).toEqual([
+      { qualified: 'admin.plugins', name: 'plugins', plugin: 'admin', description: 'cmd.plugins@fr' },
+      { qualified: 'admin.whoami', name: 'whoami', plugin: 'admin', description: 'cmd.whoami@fr' },
+    ])
   })
 })

@@ -11,7 +11,7 @@ import { getInstall, listInstalls, writeSetting } from './store.js'
 // germinate.ts skips a disabled install before it can ever become a registry entry —
 // germinated or dormant — so this is the only place that can still name it, and the only
 // place that can name an install whose spore has gone from disk.
-export function listPlugins(registry: Registry, sporesDir: string, db?: Db): readonly PluginInfo[] {
+export function listPlugins(registry: Registry, sporesDirs: readonly string[], db?: Db): readonly PluginInfo[] {
   const germinated: PluginInfo[] = [
     ...registry.hyphae.map((h) => ({ name: h.name, kind: h.manifest.kind, commands: [], state: 'germinated' as const, enabled: true })),
     ...registry.enzymes.map((e) => ({
@@ -44,7 +44,7 @@ export function listPlugins(registry: Registry, sporesDir: string, db?: Db): rea
       if (!install.enabled) return [{ ...base, state: 'disabled' as const, enabled: false }]
       // syncInstalls keeps the row of a spore whose directory has gone, so the operator
       // can recover it — which requires being able to see that it is still there.
-      if (findSpore(sporesDir, install.name) !== undefined) return []
+      if (findSpore(sporesDirs, install.name) !== undefined) return []
       return [{
         ...base,
         state: 'dormant' as const,
@@ -57,20 +57,20 @@ export function listPlugins(registry: Registry, sporesDir: string, db?: Db): rea
 
 // The published contract says enable() rejects; enablePlugin() returns a refusal object,
 // so the reason has to be re-thrown or a caller would read `undefined` as success.
-export async function enableOrThrow(db: Db, sporesDir: string, name: string): Promise<void> {
-  const result = await enablePlugin(db, sporesDir, name)
+export async function enableOrThrow(db: Db, sporesDirs: readonly string[], name: string): Promise<void> {
+  const result = await enablePlugin(db, sporesDirs, name)
   if (!result.ok) throw new Error(result.reason)
 }
 
 // loadSporeModule() propagates whatever the spore throws at import; formSchema() resolves
 // a FormSchema, so every fault becomes its available: false branch rather than a rejection.
-export async function formSchemaOf(db: Db, sporesDir: string, name: string): Promise<FormSchema> {
+export async function formSchemaOf(db: Db, sporesDirs: readonly string[], name: string): Promise<FormSchema> {
   if (getInstall(db, name) === null) {
     return { available: false, reason: `plugin '${name}' is not installed` }
   }
   let module: Awaited<ReturnType<typeof loadSporeModule>>
   try {
-    module = await loadSporeModule(sporesDir, name)
+    module = await loadSporeModule(sporesDirs, name)
   } catch (e) {
     return { available: false, reason: `spore '${name}' failed to load: ${describeThrown(e)}` }
   }
@@ -116,9 +116,9 @@ export function undeclaredKeys(form: FormSchema, keys: readonly string[]): reado
 
 /** Refuses a key the plugin's own JSON Schema does not declare (`undeclaredKeys`). */
 export async function writeDeclaredSetting(
-  db: Db, sporesDir: string, name: string, key: string, value: unknown,
+  db: Db, sporesDirs: readonly string[], name: string, key: string, value: unknown,
 ): Promise<void> {
-  const form = await formSchemaOf(db, sporesDir, name)
+  const form = await formSchemaOf(db, sporesDirs, name)
   if (undeclaredKeys(form, [key]).length > 0) {
     throw new Error(`plugin '${name}' declares no setting '${key}'`)
   }
@@ -127,7 +127,7 @@ export async function writeDeclaredSetting(
 
 export interface SettingRejection {
   key: string
-  /** The plugin's own issues where it published any, otherwise its message. */
+  /** The plugin's own issues, whatever shape they carried. */
   issues: unknown
 }
 
@@ -139,12 +139,6 @@ function member(target: unknown, name: string): unknown {
   } catch {
     return undefined
   }
-}
-
-/** hasOwn, never `in`: a shape is a plugin-supplied plain object and 'constructor' is a key. */
-function field(shape: unknown, key: string): unknown {
-  if (typeof shape !== 'object' || shape === null) return undefined
-  return Object.hasOwn(shape, key) ? member(shape, key) : undefined
 }
 
 function parseWith(schema: unknown, value: unknown): { ok: boolean, error: unknown } | undefined {
@@ -159,31 +153,19 @@ function parseWith(schema: unknown, value: unknown): { ok: boolean, error: unkno
   }
 }
 
-/** ZodError.issues is non-enumerable, so serialising the error itself would drop it. */
-function detailOf(error: unknown): unknown {
-  const issues = member(error, 'issues')
-  if (Array.isArray(issues)) return issues
-  return typeof error === 'string' ? error : describeThrown(error)
-}
-
-/** Undefined when the schema exposes no readable shape, which is the caller's cue to fall back. */
-function fieldRejections(
-  configSchema: unknown, values: Record<string, unknown>,
-): readonly SettingRejection[] | undefined {
-  const shape = member(configSchema, 'shape')
-  if (typeof shape !== 'object' || shape === null) return undefined
-  const rejections: SettingRejection[] = []
-  for (const [key, value] of Object.entries(values)) {
-    // A key the shape does not carry is skipped, not refused: undeclaredKeys already owns that.
-    const result = parseWith(field(shape, key), value)
-    if (result !== undefined && !result.ok) rejections.push({ key, issues: detailOf(result.error) })
-  }
-  return rejections
+// An absent or non-array path reads as a whole-object refusal, exactly as
+// support/thrown.ts renders it: two duck-typed readers of one plugin value must not
+// disagree, or the same refusal blocks enable() and passes PUT with a 200.
+function issuePath(issue: unknown): unknown[] {
+  const path = member(issue, 'path')
+  return Array.isArray(path) ? path : []
 }
 
 /**
  * `defineConfig` publishes `safeParse` alone, so a plugin written the documented way exposes
  * no per-field schema: validate the object and keep only the issues the provided keys own.
+ * An empty or absent path is a refusal about the object as a whole (a top-level `.refine()`),
+ * so it is attributed to every key the request carried — the object it refuses is exactly that set.
  */
 function objectRejections(
   configSchema: unknown, values: Record<string, unknown>,
@@ -192,34 +174,30 @@ function objectRejections(
   if (result === undefined || result.ok) return []
   const issues = member(result.error, 'issues')
   if (!Array.isArray(issues)) return []
+  const wholeObject = (issues as unknown[]).filter((issue) => issuePath(issue).length === 0)
   const rejections: SettingRejection[] = []
   for (const key of Object.keys(values)) {
-    const own = (issues as unknown[]).filter((issue) => {
-      const path = member(issue, 'path')
-      return Array.isArray(path) && path[0] === key
-    })
-    if (own.length > 0) rejections.push({ key, issues: own })
+    const own = (issues as unknown[]).filter((issue) => issuePath(issue)[0] === key)
+    if (own.length + wholeObject.length > 0) rejections.push({ key, issues: [...own, ...wholeObject] })
   }
   return rejections
 }
 
 /**
- * Spec §8: each provided value against its own field schema, never the merged object — a
- * two-required-field form must be fillable one field at a time, which is why completeness
- * is `enablePlugin`'s check and not this one's.
+ * Spec §8: never the merged object — a two-required-field form must be fillable one field
+ * at a time, which is why completeness is `enablePlugin`'s check and not this one's.
  */
 export async function rejectedSettings(
-  db: Db, sporesDir: string, name: string, values: Record<string, unknown>,
+  db: Db, sporesDirs: readonly string[], name: string, values: Record<string, unknown>,
 ): Promise<readonly SettingRejection[]> {
   if (getInstall(db, name) === null) return []
   let module: Awaited<ReturnType<typeof loadSporeModule>>
   try {
-    module = await loadSporeModule(sporesDir, name)
+    module = await loadSporeModule(sporesDirs, name)
   } catch {
     return []
   }
-  const configSchema: unknown = module?.configSchema
-  return fieldRejections(configSchema, values) ?? objectRejections(configSchema, values)
+  return objectRejections(module?.configSchema, values)
 }
 
 // Carries the row's is_secret forward: writeSetting() rewrites that column too, so a

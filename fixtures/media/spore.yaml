@@ -7,11 +7,11 @@ requires:
   - any_of: [{ rhiza: nowhere }, { rhiza: mock }]
 commands:
   - name: movies
-    description: Look a title up
+    description: command.movies.description
     code: handleMovies
   - name: where
-    description: Report which alternative resolved
+    description: command.where.description
     code: handleWhere
   - name: count
-    description: Report a count, in the reader's language
+    description: command.count.description
     code: handleCount

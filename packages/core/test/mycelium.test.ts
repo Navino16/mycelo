@@ -9,6 +9,7 @@ import { resolvePrincipal } from '../src/identity/resolve.js'
 import { setConversationLocale, setPrincipalLocale } from '../src/i18n/locale.js'
 import { bootstrap, germinationBanner } from '../src/mycelium.js'
 import { migrateDatabase, openDatabase } from '../src/persistence/db.js'
+import { rejectsWith } from './support/rejects.js'
 
 function message(channel: string, text: string): IncomingMessage {
   return {
@@ -29,6 +30,52 @@ function spore(name: string, files: Record<string, string>): void {
     writeFileSync(file, content, 'utf8')
   }
 }
+
+// Pins the assertNoCollisions call site: it is tested directly in discover.test.ts, so
+// deleting the call from germinatePhase left the whole suite green — after which findSpore
+// silently returns the first root, the precedence design §4.2 refuses (review, Important 2).
+function twoRoots(): { a: string, b: string } {
+  const a = join(dir, 'roots', 'a')
+  const b = join(dir, 'roots', 'b')
+  for (const root of [a, b]) {
+    mkdirSync(join(root, 'ping'), { recursive: true })
+    writeFileSync(join(root, 'ping', 'spore.yaml'), 'kind: enzyme\nname: ping\nseptum: "^0.8"\n'
+      + 'commands:\n  - name: ping\n    description: command.ping.description\n    respond: reply.pong\n', 'utf8')
+  }
+  return { a, b }
+}
+
+it('refuses to boot when the same spore directory exists in two roots, naming both', async () => {
+  const { a, b } = twoRoots()
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores:\n  - ${a}\n  - ${b}\n`, 'utf8')
+
+  await rejectsWith(
+    bootstrap(configFile),
+    new RegExp(`spore directory 'ping' exists in both '${a}/ping' and '${b}/ping'`),
+  )
+})
+
+// germinate.ts's absent-root warning has two branches and every other test uses one root,
+// so the "some missing" one was unreachable from the suite.
+it('warns in the singular for one absent root while another still germinates', async () => {
+  const { a } = twoRoots()
+  const absent = join(dir, 'roots', 'gone')
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores:\n  - ${a}\n  - ${absent}\n`, 'utf8')
+
+  const logs: string[] = []
+  const spy = spyOn(console, 'log').mockImplementation((line: unknown) => { logs.push(String(line)) })
+  let registry
+  try {
+    ({ registry } = await bootstrap(configFile))
+  } finally {
+    spy.mockRestore()
+  }
+  expect(registry.enzymes.map((e) => e.name)).toEqual(['ping'])
+  expect(logs.some((l) => l.includes(`spores directory does not exist: '${absent}'`))).toBe(true)
+  expect(logs.some((l) => l.includes('no spores directory exists'))).toBe(false)
+})
 
 it('keeps other hyphae starting when one throws in connect(), and marks it dormant', async () => {
   spore('bad', {
@@ -722,7 +769,7 @@ it('refuses all traffic when an enforcing inhibitor is dormant from a rejected c
     'spore.yaml': 'kind: inhibitor\nname: badconfiggate\nseptum: "^1.0"\nenforcing: true\n',
     'src/index.ts': [
       'export default {',
-      '  configSchema: { safeParse: () => ({ success: false, error: "groupId is required" }) },',
+      '  configSchema: { safeParse: () => ({ success: false, error: { issues: [{ path: ["groupId"], message: "groupId is required" }] } }) },',
       '  create: () => ({ inspect: () => Promise.resolve({ allow: true }) }),',
       '}',
     ].join('\n'),

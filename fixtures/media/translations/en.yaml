@@ -4,3 +4,10 @@ movies:
   # the literal text.
   count-usage: "usage: count '<number>'"
   count: "{n, plural, one {# film} other {# films}}"
+command:
+  movies:
+    description: "Look a title up"
+  where:
+    description: "Report which alternative resolved"
+  count:
+    description: "Report a count, in the reader's language"
