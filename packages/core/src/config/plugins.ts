@@ -127,7 +127,7 @@ export async function writeDeclaredSetting(
 
 export interface SettingRejection {
   key: string
-  /** The plugin's own issues where it published any, otherwise its message. */
+  /** The plugin's own issues, whatever shape they carried. */
   issues: unknown
 }
 
@@ -178,9 +178,6 @@ function objectRejections(
 /**
  * Spec §8: never the merged object — a two-required-field form must be fillable one field
  * at a time, which is why completeness is `enablePlugin`'s check and not this one's.
- * `ConfigError.issues` is now a declared shape, so the whole-object parse filtered to the
- * provided keys (`objectRejections`) is the only mechanism; there is no per-field `.shape`
- * to try first.
  */
 export async function rejectedSettings(
   db: Db, sporesDirs: readonly string[], name: string, values: Record<string, unknown>,

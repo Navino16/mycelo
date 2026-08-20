@@ -1,8 +1,22 @@
-import type { ConfigError } from '@mycelo/septum'
+/**
+ * Renders a plugin's own refusal into one line: `path: message`, joined with `; `. Reaches a
+ * client through `enablePlugin` and an operator's log through germination — like `describeThrown`
+ * beside it, duck-typed: a spore's own contract can still be wrong, and the core never checks a
+ * manifest's `septum:` field, so an older or malformed plugin's `error` can be anything.
+ */
+export function describeConfigError(error: unknown): string {
+  const issues = (error as { issues?: unknown } | null)?.issues
+  if (!Array.isArray(issues) || issues.length === 0) return 'the plugin reported no further detail'
+  return issues.map(describeConfigIssue).join('; ')
+}
 
-/** Renders a plugin's own refusal into one line: `path: message`, joined, path omitted when empty. */
-export function describeConfigError(error: ConfigError): string {
-  return error.issues.map((i) => (i.path.length === 0 ? i.message : `${i.path.join('.')}: ${i.message}`)).join('; ')
+/** `String()`, never `.join()`, on the raw path: `Array.prototype.join` throws on a symbol. */
+function describeConfigIssue(issue: unknown): string {
+  const record = typeof issue === 'object' && issue !== null ? issue as Record<string, unknown> : {}
+  const path = Array.isArray(record.path) ? record.path : []
+  const message = typeof record.message === 'string' ? record.message : 'unspecified issue'
+  const rendered = path.map((p: unknown) => String(p)).join('.')
+  return rendered.length === 0 ? message : `${rendered}: ${message}`
 }
 
 /** Coercion to string happens in here too: a hostile `message` can return an object that resists it. */
