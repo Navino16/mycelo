@@ -150,3 +150,17 @@ it('refuses an empty spores entry rather than resolving it to the config file\'s
   expect(() => loadBootstrap(join(dir, 'scalar.yaml'))).toThrow(BootstrapError)
   expect(() => loadBootstrap(join(dir, 'list.yaml'))).toThrow(BootstrapError)
 })
+
+// A repeated root is a plausible typo, and assertNoCollisions refused it against itself:
+// "exists in both '/x/admin' and '/x/admin'" (review, minor 7). Two spellings, because a
+// dedupe over the raw strings would let the second pair through.
+it('collapses a repeated spores root, keeping the order it was first named in', () => {
+  writeFileSync(join(dir, 'twice.yaml'), 'spores: [./fixtures, ./fixtures]\n')
+  writeFileSync(join(dir, 'spelt.yaml'), 'spores: [./a, ./fixtures, ./b/../fixtures]\n')
+
+  expect(loadBootstrap(join(dir, 'twice.yaml')).sporesDirs).toEqual([join(dir, 'fixtures')])
+  expect(loadBootstrap(join(dir, 'spelt.yaml')).sporesDirs).toEqual([
+    join(dir, 'a'),
+    join(dir, 'fixtures'),
+  ])
+})

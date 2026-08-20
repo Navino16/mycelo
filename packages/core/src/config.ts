@@ -85,8 +85,12 @@ export function loadBootstrap(file: string): Bootstrap {
   return {
     ...result.data,
     defaultLocale,
-    sporesDirs: (typeof result.data.spores === 'string' ? [result.data.spores] : result.data.spores)
-      .map((dir) => resolve(file, '..', dir)),
+    // Deduped after resolution, so two spellings of one directory collapse too: a repeated
+    // root is a typo, and assertNoCollisions would otherwise refuse it against itself.
+    sporesDirs: [...new Set(
+      (typeof result.data.spores === 'string' ? [result.data.spores] : result.data.spores)
+        .map((dir) => resolve(file, '..', dir)),
+    )],
     databaseFile: resolve(file, '..', result.data.database),
   }
 }
