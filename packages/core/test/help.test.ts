@@ -60,5 +60,8 @@ it('/help shows each sender only their own commands', async () => {
   fixture.feed('/help', 'bob') // holds a role granting 'admin.*' and 'help.help' only
   await waitFor(() => { expect(fixture.sent.length).toBe(5) })
   expect(fixture.sent[3]?.text).toContain('ping')
+  // Positive as well as negative: a broken filter that answered [] for bob would
+  // still satisfy .not.toContain('ping') without ever proving his list is scoped.
+  expect(fixture.sent[4]?.text).toContain('whoami')
   expect(fixture.sent[4]?.text).not.toContain('ping')
 })
