@@ -153,16 +153,19 @@ function parseWith(schema: unknown, value: unknown): { ok: boolean, error: unkno
   }
 }
 
-function issuePath(issue: unknown): unknown[] | undefined {
+// An absent or non-array path reads as a whole-object refusal, exactly as
+// support/thrown.ts renders it: two duck-typed readers of one plugin value must not
+// disagree, or the same refusal blocks enable() and passes PUT with a 200.
+function issuePath(issue: unknown): unknown[] {
   const path = member(issue, 'path')
-  return Array.isArray(path) ? path : undefined
+  return Array.isArray(path) ? path : []
 }
 
 /**
  * `defineConfig` publishes `safeParse` alone, so a plugin written the documented way exposes
  * no per-field schema: validate the object and keep only the issues the provided keys own.
- * An empty path is a refusal about the object as a whole (a top-level `.refine()`), so it is
- * attributed to every key the request carried — the object it refuses is exactly that set.
+ * An empty or absent path is a refusal about the object as a whole (a top-level `.refine()`),
+ * so it is attributed to every key the request carried — the object it refuses is exactly that set.
  */
 function objectRejections(
   configSchema: unknown, values: Record<string, unknown>,
@@ -171,10 +174,10 @@ function objectRejections(
   if (result === undefined || result.ok) return []
   const issues = member(result.error, 'issues')
   if (!Array.isArray(issues)) return []
-  const wholeObject = (issues as unknown[]).filter((issue) => issuePath(issue)?.length === 0)
+  const wholeObject = (issues as unknown[]).filter((issue) => issuePath(issue).length === 0)
   const rejections: SettingRejection[] = []
   for (const key of Object.keys(values)) {
-    const own = (issues as unknown[]).filter((issue) => issuePath(issue)?.[0] === key)
+    const own = (issues as unknown[]).filter((issue) => issuePath(issue)[0] === key)
     if (own.length + wholeObject.length > 0) rejections.push({ key, issues: [...own, ...wholeObject] })
   }
   return rejections

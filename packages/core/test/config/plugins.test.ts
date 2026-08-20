@@ -6,6 +6,7 @@ import { recordInstall } from '../../src/config/store.js'
 import { rejectedSettings } from '../../src/config/plugins.js'
 import type { Db } from '../../src/persistence/db.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
+import { describeConfigError } from '../../src/support/thrown.js'
 
 const SPORES = [resolve(import.meta.dirname, '../../../../fixtures')]
 
@@ -107,5 +108,46 @@ it('leaves a partial write accepted when the whole-object rule it would break is
   eitherOr()
   recordInstall(db, 'eitheror', 'enzyme')
   expect(await rejectedSettings(db, [dir], 'eitheror', { socket: '/tmp/s' })).toEqual([])
+  close()
+})
+
+// A pre-0.8 plugin can emit an issue with no path at all. support/thrown.ts renders it as a
+// whole-object refusal, so enablePlugin reports it — while this reader dropped it and PUT
+// answered 200. One value, two duck-typed readers, opposite verdicts (re-review, minor 3).
+function pathless(): void {
+  mkdirSync(join(dir, 'pathless', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'pathless', 'spore.yaml'),
+    'kind: enzyme\nname: pathless\nseptum: "^0.8"\n'
+      + 'commands:\n  - name: pathless\n    description: command.pathless.description\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(
+    join(dir, 'pathless', 'src/index.ts'),
+    'export default {\n'
+      + '  configSchema: {\n'
+      + '    safeParse: () => ({ success: false, error: { issues: [\n'
+      + '      { message: "the whole thing is wrong" },\n'
+      + '      { path: "notanarray", message: "so is this" },\n'
+      + '    ] } }),\n'
+      + '  },\n'
+      + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+      + '}\n',
+    'utf8',
+  )
+}
+
+it('reads an issue with no usable path the way enablePlugin does, against every key given', async () => {
+  const { db, close } = fresh()
+  pathless()
+  recordInstall(db, 'pathless', 'enzyme')
+  const rejected = await rejectedSettings(db, [dir], 'pathless', { a: 1, b: 2 })
+  const issues = [
+    { message: 'the whole thing is wrong' },
+    { path: 'notanarray', message: 'so is this' },
+  ]
+  expect(rejected).toEqual([{ key: 'a', issues }, { key: 'b', issues }])
+  // The same two issues through the other reader, which has always treated them this way.
+  expect(describeConfigError({ issues })).toBe('the whole thing is wrong; so is this')
   close()
 })
