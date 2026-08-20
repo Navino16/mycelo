@@ -2,3 +2,10 @@ movies:
   found: "{title} via mock"
   count-usage: "usage : count '<nombre>'"
   count: "{n, plural, one {# film} other {# films}}"
+command:
+  movies:
+    description: "Rechercher un titre"
+  where:
+    description: "Indiquer quelle alternative a été résolue"
+  count:
+    description: "Indiquer un compte, dans la langue du lecteur"

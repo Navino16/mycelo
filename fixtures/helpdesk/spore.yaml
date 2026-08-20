@@ -4,14 +4,14 @@ septum: "^0.5"
 description: Text and code in one plugin. Test fixture, never distributed.
 commands:
   - name: links
-    description: Service URLs
+    description: command.links.description
     respond: links.text
   - name: rules
-    description: House rules
+    description: command.rules.description
     respond: rules.text
   - name: add
-    description: Add a title
+    description: command.add.description
     code: handleMutation
   - name: remove
-    description: Remove a title
+    description: command.remove.description
     code: handleMutation

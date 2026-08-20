@@ -1,14 +1,15 @@
-import type { EnzymeModule, PluginsRead } from '@mycelo/septum'
+import type { CommandsRead, EnzymeModule } from '@mycelo/septum'
 
-// design §11.2: built against plugins.read as it exists today, deliberately inadequate.
-// PluginInfo.commands is short names only — no description, no per-sender filter.
+// design §10, §6: filtered on authorization and rendered in the reader's locale.
 export default {
   create: () => ({
     handlers: {
       handleHelp: async (_invocation, ctx) => {
-        const mycelium = ctx.rhiza<PluginsRead>('mycelium')
-        const names = mycelium.listPlugins().flatMap((p) => p.commands)
-        await ctx.reply({ text: ctx.t('reply.list', { names: names.join(', ') }) })
+        const commands = await ctx.rhiza<CommandsRead>('mycelium').available(ctx.principal, ctx.locale)
+        const lines = commands
+          .map((c) => ctx.t('reply.line', { name: c.name, description: c.description }))
+          .join('\n')
+        await ctx.reply({ text: ctx.t('reply.list', { lines }) })
       },
     },
   }),

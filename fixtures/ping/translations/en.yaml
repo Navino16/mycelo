@@ -1,3 +1,8 @@
 reply:
   pong: "pong"
   reactions: "reactions are available here"
+command:
+  ping:
+    description: "Health check"
+  react:
+    description: "Answer only where reactions exist"

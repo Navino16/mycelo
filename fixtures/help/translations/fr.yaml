@@ -1,5 +1,6 @@
 reply:
-  list: "commandes : {names}"
+  list: "commandes :\n{lines}"
+  line: "{name} — {description}"
 command:
   help:
-    description: "Liste tous les noms de commande que le mycelium rapporte actuellement"
+    description: "Lister les commandes que vous êtes autorisé à utiliser, avec leur description"

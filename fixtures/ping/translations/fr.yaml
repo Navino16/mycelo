@@ -1,3 +1,8 @@
 reply:
   pong: "pong (en français)"
   reactions: "les réactions sont disponibles ici"
+command:
+  ping:
+    description: "Vérification de santé"
+  react:
+    description: "Répond uniquement là où les réactions existent"

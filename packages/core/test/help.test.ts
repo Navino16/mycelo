@@ -15,7 +15,7 @@ let dir: string
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'mycelo-help-')) })
 afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
 
-it('/help lists command names', async () => {
+it('/help lists commands with their description, not bare names', async () => {
   const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
   const configFile = join(dir, 'mycelo.yaml')
   writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
@@ -29,4 +29,36 @@ it('/help lists command names', async () => {
   fixture.feed('/help')
   await waitFor(() => { expect(fixture.sent.length).toBe(1) })
   expect(fixture.sent[0]?.text).toContain('ping')
+  // Health check is ping's rendered description, not its bare command name.
+  expect(fixture.sent[0]?.text).toContain('Health check')
+})
+
+it('/help shows each sender only their own commands', async () => {
+  const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
+
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+
+  const fixture = registry.hyphae.find((h) => h.name === 'console')
+    ?.instance as unknown as ConsoleFixture
+
+  // bob's identity does not exist until his first message (admission before principal).
+  fixture.feed('/whoami', 'bob')
+  await waitFor(() => { expect(fixture.sent.length).toBe(1) })
+
+  // help.help is included so bob can invoke /help at all — a role of admin.* alone
+  // would be refused before the handler ever ran.
+  fixture.feed('/role-new narrow admin.* help.help', 'local')
+  await waitFor(() => { expect(fixture.sent.length).toBe(2) })
+
+  fixture.feed('/grant narrow bob', 'local')
+  await waitFor(() => { expect(fixture.sent.length).toBe(3) })
+
+  fixture.feed('/help', 'local') // the owner, per the config's owner: line
+  fixture.feed('/help', 'bob') // holds a role granting 'admin.*' and 'help.help' only
+  await waitFor(() => { expect(fixture.sent.length).toBe(5) })
+  expect(fixture.sent[3]?.text).toContain('ping')
+  expect(fixture.sent[4]?.text).not.toContain('ping')
 })

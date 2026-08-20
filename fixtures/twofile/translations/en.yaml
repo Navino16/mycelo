@@ -1,0 +1,3 @@
+command:
+  two:
+    description: "Multi-file check"

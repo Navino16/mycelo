@@ -1,10 +1,10 @@
 kind: enzyme
 name: help
 septum: "^0.8"
-description: Lists command names visible through plugins.read. Test fixture, never distributed.
+description: Lists the commands the caller is authorized to invoke, described and translated. Test fixture, never distributed.
 requires:
   - rhiza: mycelium
-    scopes: [plugins.read]
+    scopes: [commands.read]
 commands:
   - name: help
     description: command.help.description
