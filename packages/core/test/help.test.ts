@@ -65,3 +65,30 @@ it('/help shows each sender only their own commands', async () => {
   expect(fixture.sent[4]?.text).toContain('whoami')
   expect(fixture.sent[4]?.text).not.toContain('ping')
 })
+
+// The phase's headline data path, seam to seam: reader's /lang → ctx.locale →
+// available(principal, locale) → rendered description. Every unit was pinned and neither
+// seam was, so hardcoding 'en' at either one left the suite green (review, Important 4).
+it("renders /help's descriptions in the caller's own language after /lang", async () => {
+  const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
+
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+
+  const fixture = registry.hyphae.find((h) => h.name === 'console')
+    ?.instance as unknown as ConsoleFixture
+
+  fixture.feed('/lang fr')
+  await waitFor(() => { expect(fixture.sent.length).toBe(1) })
+
+  fixture.feed('/help')
+  await waitFor(() => { expect(fixture.sent.length).toBe(2) })
+  const listed = fixture.sent[1]?.text ?? ''
+  // Two plugins' descriptions, not one: a locale collapsed to a single command's domain
+  // would still satisfy a single assertion.
+  expect(listed).toContain('Vérification de santé')
+  expect(listed).toContain('Lister les commandes que vous êtes autorisé à utiliser')
+  expect(listed).not.toContain('Health check')
+})

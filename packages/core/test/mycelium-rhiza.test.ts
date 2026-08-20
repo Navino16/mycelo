@@ -658,17 +658,24 @@ describe('commands.read', () => {
       .toThrow(/commands.read/)
   })
 
+  // Renders the locale into the description: stubTranslator ignores its locale argument, so
+  // the mount could hardcode one and this test would still pass (review, Important 4).
+  const localeAware = {
+    translate: (_d: string, key: string, locale: string) => `${key}@${locale}`,
+    availableLocales: () => ['en', 'fr'],
+  }
+
   it('answers through the mount, filtered by the caller and described in the given locale', async () => {
     const db = fresh()
     createRole(db, 'admins', ['admin.*'])
     const bob = resolvePrincipal(db, { channel: 'console', externalId: 'bob' })
     assignRole(db, bob.id, 'admins')
     const api = createMyceliumApi(routed(), ['commands.read'], noSend, db, SPORES,
-      { translator: stubTranslator }) as CommandsRead
+      { translator: localeAware }) as CommandsRead
 
     expect(await api.available(bob, 'fr')).toEqual([
-      { qualified: 'admin.plugins', name: 'plugins', plugin: 'admin', description: 'cmd.plugins' },
-      { qualified: 'admin.whoami', name: 'whoami', plugin: 'admin', description: 'cmd.whoami' },
+      { qualified: 'admin.plugins', name: 'plugins', plugin: 'admin', description: 'cmd.plugins@fr' },
+      { qualified: 'admin.whoami', name: 'whoami', plugin: 'admin', description: 'cmd.whoami@fr' },
     ])
   })
 })
