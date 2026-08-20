@@ -1,0 +1,5 @@
+reply:
+  list: "commands: {names}"
+command:
+  help:
+    description: "List every command name the mycelium currently reports"
