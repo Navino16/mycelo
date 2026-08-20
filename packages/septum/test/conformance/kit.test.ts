@@ -359,6 +359,22 @@ describe('enzyme conformance checks', () => {
     expect(failures.join(' ')).toContain('no data')
   })
 
+  // design §5.2: a plugin whose refusal carries no issues leaves describeConfigError with
+  // nothing to render and the settings route with nothing to filter by path[0].
+  it('catches a configSchema whose invalid-config refusal carries no issues', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      module: {
+        configSchema: { safeParse: (v: unknown) => ((v as { account?: unknown })?.account === undefined
+          ? { success: false, error: 'account is required' }
+          : { success: true, data: v }) } as never,
+        create: () => ({ handlers: { links: async () => {} } }),
+      },
+      invalidConfig: {},
+    })
+    expect(failures.join(' ')).toContain('no readable issues')
+  })
+
   it('does not certify a handler resolved through Object.prototype', async () => {
     const failures = await enzymeChecks({
       name: 'sneaky',
