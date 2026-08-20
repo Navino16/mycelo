@@ -56,17 +56,18 @@ where it is missing; a command with none works on every channel.
 `respond` is a **catalogue key**, resolved in the plugin's own domain against the reader's
 locale. A plugin that ships no `translations/` directory is unaffected: an unknown key renders
 as itself, literally and without passing through ICU, so `respond: pong` still answers `pong`.
-A command's `description` and an argument's are catalogue keys too, by the same contract — but
-nothing in the core reads either field yet, so writing one as a key costs nothing today and
-avoids a rewrite once something does. The keys above resolve through `translations/en.yaml`
-beside `spore.yaml`:
+A command's `description` is a catalogue key too, by the same contract, and the core now renders
+it: `commands.read`'s `available()` resolves it in the reader's locale. An argument's `description`
+is a catalogue key as well, but nothing in the core reads it yet, so writing one as a key costs
+nothing today and avoids a rewrite once something does. The keys above resolve through
+`translations/en.yaml` beside `spore.yaml`:
 
 ```yaml
 command:
   help:
     description: Show what this plugin can do
 help:
-  text: "Try /add <title> to queue a movie."
+  text: "Try /add '<title>' to queue a movie."
 ```
 
 Catalogues are [ICU MessageFormat](https://formatjs.github.io/docs/core-concepts/icu-syntax/),
