@@ -318,7 +318,7 @@ implementation. Each returns a list of failure strings, so it works with any tes
 |---|---|
 | `hyphaChecks` | manifest, config schema, `connect`/`listen`/`stop`/`send`, `group_membership` consistency, and — given a `membershipGroupId` — that `listGroupMembers` resolves an array |
 | `rhizaChecks` | manifest, config schema, `api`, and that `health()` reports rather than throws |
-| `enzymeChecks` | manifest, config schema, lifecycle, every command with no required args, and — given `catalogs` — that every translation key compiles and that `ctx.t()` refuses a domain the manifest does not declare |
+| `enzymeChecks` | manifest, config schema, lifecycle, every command with no required args, and — given `catalogs` — that every translation key compiles, that every command's `description` resolves in at least one catalogue, and that `ctx.t()` refuses a domain the manifest does not declare |
 | `inhibitorChecks` | manifest, config schema, lifecycle, and a verdict per expected allow/deny |
 
 The harness is yours to build: the kit cannot know what your plugin depends on, so you supply
@@ -376,10 +376,11 @@ accept, so calling them would report correct validation as a failure. Those are 
 Pass `catalogs` — already-parsed translation files keyed by locale, such as
 `{ en: parse(readFileSync('translations/en.yaml', 'utf8')) }` — to have `enzymeChecks` compile
 every key the same way germination does, and to have `ctx.t()` throw for a domain your manifest
-does not declare in `requires`, exactly as the bot would. Each catalogue that holds any keys must
-also carry every command's `description`: a literal description renders as itself and logs a
-missing translation on every call. A catalogue that parses to `null`, or holds no keys at all, is
-the scaffolded-empty case and is skipped.
+does not declare in `requires`, exactly as the bot would. Every command's `description` must also
+resolve in **at least one** of the catalogues you pass: a description that resolves in none is a
+literal, and renders as itself in every language. Contributing only some keys for a locale is
+fine — a missing key cascades to the default locale, with one warning — as is a catalogue that
+parses to `null` or holds no keys at all.
 
 ## Status
 

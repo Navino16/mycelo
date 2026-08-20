@@ -22,8 +22,9 @@ export interface EnzymeHarness {
    * Already-parsed catalogues, keyed by locale — parseManifest's convention, since the kit
    * must not import `node:fs`. Compiled as germination compiles them (design §7.1), so a
    * message that would make the spore dormant in the bot fails here instead. Every command's
-   * `description` must also resolve in each catalogue that has any keys at all: a literal
-   * description renders as itself and logs a missing-translation warning for every caller.
+   * `description` must also resolve in at least one of them: one that resolves nowhere is a
+   * literal, and renders as itself in every language. A partial catalogue is fine — design
+   * §7.2 cascades a missing key to the default locale.
    */
   catalogs?: Record<string, unknown>
 }
@@ -70,7 +71,7 @@ function catalogFailures(
 ): string[] {
   if (catalogs === undefined) return []
   const failures: string[] = []
-  const descriptions = [...new Set(manifest.commands.map((c) => c.description))]
+  const declared = new Set<string>()
   for (const [locale, raw] of Object.entries(catalogs)) {
     // An empty or comment-only file parses to null: catalog.ts treats that as a
     // catalogue with no keys, not a fault, and the kit must agree.
@@ -88,15 +89,15 @@ function catalogFailures(
         failures.push(`translations for '${locale}': key '${key}' does not compile: ${(e as Error).message}`)
       }
     }
-    // A catalogue with no keys is the scaffolded-empty case above, whichever way YAML
-    // parsed it; a catalogue that has keys is expected to carry every description.
-    if (flat.size === 0) continue
-    for (const description of descriptions) {
-      if (!flat.has(description)) {
-        failures.push(
-          `translations for '${locale}': no key '${description}', which a command declares as its description`,
-        )
-      }
+    for (const key of flat.keys()) declared.add(key)
+  }
+  // One catalogue is enough: design §7.2 lets a partial contribution cascade to the default
+  // locale, so demanding every locale would fail a plugin the runtime germinates. A literal
+  // description resolves in none, which is the case this exists to catch.
+  if (declared.size === 0) return failures
+  for (const description of new Set(manifest.commands.map((c) => c.description))) {
+    if (!declared.has(description)) {
+      failures.push(`no supplied catalogue has a key '${description}', which a command declares as its description`)
     }
   }
   return failures

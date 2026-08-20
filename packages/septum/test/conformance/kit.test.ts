@@ -717,8 +717,8 @@ describe('regressions', () => {
     expect(failures).toEqual([])
   })
 
-  // 26 of this project's own 30 fixture descriptions were English literals, which the
-  // runtime renders as itself and logs a missing-translation warning for on every call.
+  // 26 of this project's own 30 fixture descriptions were English literals, which no
+  // catalogue can resolve — so they render as themselves in every language.
   it('fails a command description that is a literal rather than a catalogue key', async () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
@@ -728,13 +728,15 @@ describe('regressions', () => {
       },
       catalogs: { en: { links: { usage: 'x' } } },
     })
-    expect(failures.join(' ')).toContain("no key 'Show links'")
-    expect(failures.join(' ')).toContain("'en'")
+    expect(failures).toEqual([
+      "no supplied catalogue has a key 'Show links', which a command declares as its description",
+    ])
   })
 
-  // Two commands and two locales: a check reading only the last description, or only the
-  // first catalogue, would report nothing here.
-  it('names every description missing from every catalogue, not just the first', async () => {
+  // Two commands and two locales, one of them partial: a check reading only the first
+  // catalogue would fail `command.usage.description`, one reading only the last would fail
+  // `command.links.description`, and each command's key is absent from exactly one file.
+  it('accepts a description carried by one catalogue while another contributes partially', async () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
       manifest: {
@@ -749,9 +751,53 @@ describe('regressions', () => {
         fr: { command: { usage: { description: 'Mode d\'emploi' } } },
       },
     })
+    expect(failures).toEqual([])
+  })
+
+  // fixtures/admin/translations/ru.yaml's own shape, whose comment forbids completing it:
+  // design §7.2 cascades a missing key to the default locale with one warning, so a kit
+  // demanding every locale would refuse a plugin the runtime germinates.
+  it('accepts a deliberately partial catalogue beside a complete one', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      manifest: {
+        kind: 'enzyme', name: 'links', septum: '^1.0',
+        commands: [
+          { name: 'links', description: 'command.links.description', code: 'links' },
+          { name: 'usage', description: 'command.usage.description', code: 'links' },
+        ],
+      },
+      catalogs: {
+        en: {
+          command: { links: { description: 'Show links' }, usage: { description: 'Show usage' } },
+          links: { usage: 'usage: links' },
+        },
+        ru: { links: { usage: 'использование: links' } },
+      },
+    })
+    expect(failures).toEqual([])
+  })
+
+  // The plural failure: neither description resolves anywhere, so both must be named, and
+  // once each rather than once per locale.
+  it('names every description no catalogue at all resolves, once each', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      manifest: {
+        kind: 'enzyme', name: 'links', septum: '^1.0',
+        commands: [
+          { name: 'links', description: 'command.links.description', code: 'links' },
+          { name: 'usage', description: 'command.usage.description', code: 'links' },
+        ],
+      },
+      catalogs: {
+        en: { links: { usage: 'usage: links' } },
+        fr: { links: { usage: 'usage : links' } },
+      },
+    })
     expect(failures).toEqual([
-      "translations for 'en': no key 'command.usage.description', which a command declares as its description",
-      "translations for 'fr': no key 'command.links.description', which a command declares as its description",
+      "no supplied catalogue has a key 'command.links.description', which a command declares as its description",
+      "no supplied catalogue has a key 'command.usage.description', which a command declares as its description",
     ])
   })
 
