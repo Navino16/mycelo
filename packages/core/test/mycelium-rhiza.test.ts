@@ -643,8 +643,8 @@ describe('commands.read', () => {
   // `registry` above carries one route-less enzyme; this one carries the routes available()
   // reads, so the mount is exercised end to end rather than only checked for presence.
   function routed(): Registry {
-    const routes = new Map(['plugins', 'movies'].map((command) => {
-      const plugin = command === 'plugins' ? 'admin' : 'media'
+    const routes = new Map(['plugins', 'whoami', 'movies'].map((command) => {
+      const plugin = command === 'movies' ? 'media' : 'admin'
       return [command, {
         command, plugin, qualified: `${plugin}.${command}`,
         spec: { name: command, description: `cmd.${command}`, respond: 'x' },
@@ -668,6 +668,7 @@ describe('commands.read', () => {
 
     expect(await api.available(bob, 'fr')).toEqual([
       { qualified: 'admin.plugins', name: 'plugins', plugin: 'admin', description: 'cmd.plugins' },
+      { qualified: 'admin.whoami', name: 'whoami', plugin: 'admin', description: 'cmd.whoami' },
     ])
   })
 })

@@ -178,7 +178,7 @@ absent, not present-but-rejecting:
 | `conversations.read` | `ConversationsRead` | `listConversations()` — every conversation the bot has seen, where the channel supplies one |
 | `restrictions.manage` | `RestrictionsManage` | context rules, an inhibitor's confined channels, and the broadcast target list — confining an inhibitor's channels takes effect immediately, even for one `enforcing`, with no restart |
 | `locale.manage` | `LocaleManage` | `setPrincipalLocale(principalId, locale)`, `setConversationLocale(channel, conversationId, locale)`, `availableLocales()` — the last is synchronous, like `listPlugins()` |
-| `commands.read` | `CommandsRead` | `available(principal, locale)` — the commands that principal may invoke, sorted by `qualified`, each with its `description` already rendered in that locale |
+| `commands.read` | `CommandsRead` | `available(principal, locale)` — the commands that principal is *authorized* to invoke, sorted by `qualified`, each with its `description` already rendered in that locale. Channel capabilities and context rules are applied at dispatch, not here, so a listed command can still be refused on the channel it is asked on |
 
 `listPlugins()` and `availableLocales()` alone are synchronous; every other method returns a promise. The identity and role
 methods **reject** rather than resolve quietly when asked about something that does not exist — an

@@ -229,7 +229,9 @@ export interface CommandInfo {
  */
 export interface CommandsRead {
   /**
-   * Commands this principal may invoke, sorted by `qualified`, described in this locale.
+   * Commands this principal is *authorized* to invoke, sorted by `qualified`, described in
+   * this locale. Channel capabilities and context rules are applied at dispatch, not here —
+   * a listed command can still be refused on the channel it is asked on.
    * The principal is a parameter because a mycelium rhiza is mounted once per plugin,
    * not once per invocation.
    */

@@ -8,7 +8,8 @@ import { authorize } from './check.js'
 /**
  * design §6. Sorted by `qualified` rather than left in buildRoutes' discovery order, which
  * is an accident of the spores directory. The domain passed to translate() is the command's
- * own plugin: the caller's would answer a raw key for every command but its own.
+ * own plugin, not the caller's. Filters on authorization alone: the bus's capability and
+ * context-rule gates need a channel this signature does not carry.
  */
 export function availableCommands(
   registry: Registry,
