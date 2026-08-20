@@ -8,7 +8,9 @@ message: string }`. Migration: a schema built with `defineConfig`, or any Zod sc
 satisfies it — a `ZodError` is assignable to `ConfigError`. A **hand-written** `ConfigSchema` must
 now return that shape rather than a bare string or an arbitrary object. The conformance kit now
 checks a refusal's shape too, so a hand-written schema that previously reported "conforms" may fail
-now — which is the point: the core renders those issues into the sentence an operator sees.
+now — which is the point: the core renders those issues into the sentence an operator sees. An empty
+`path` is a refusal about the settings object as a whole, such as a top-level Zod `.refine()`: the
+core reports it against every key the write carried, so a form can highlight them all.
 
 **Breaking.** `EnzymeContext.locale: string` is a new required member: the locale the core resolved
 for the message being answered, the same one `ctx.t()` uses when none is given. It is on
