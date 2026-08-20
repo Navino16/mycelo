@@ -188,9 +188,8 @@ pattern listed twice. Three exceptions answer instead of rejecting: `getPrincipa
 answers `[]` for an unknown principal, who holds no role either way.
 
 `enable(name)` validates the stored settings against the plugin's own `configSchema` before it
-flips the row, and **rejects** with `configuration is incomplete:` followed by `String()` of that
-schema's `error` — a readable dump for a Zod error, but not yet for a hand-built `ConfigError`
-object, since the core does not render `issues` into a sentence. `disable(name)`,
+flips the row, and **rejects** with `configuration is incomplete:` followed by the plugin's own
+issues, rendered `path: message` and joined with `; `. `disable(name)`,
 `settings(name)` and `setSetting(...)` reject for a plugin that is not installed. `setSetting`
 also rejects a key the plugin's published JSON Schema neither declares nor allows as an
 additional property — such a key would be dropped silently by a loose schema, or block
@@ -255,7 +254,22 @@ carries no principal to consult. Pass its result as `t()`'s third argument for a
 
 Add a `configSchema` when the plugin takes configuration. It is duck-typed rather than typed
 as a Zod schema: a plugin is bundled with its own copy of Zod, so its schemas are not
-instances of the core's. Anything with a compatible `safeParse` is accepted.
+instances of the core's. Anything with a compatible `safeParse` is accepted — and "compatible"
+has a stated shape: a refusal's `error` carries `issues`, each an object with `path` (empty for
+a whole-object refusal) and `message`:
+
+```ts
+import type { ConfigSchema } from '@mycelo/septum'
+
+const configSchema: ConfigSchema<{ apiKey: string }> = {
+  safeParse: (input) => {
+    const apiKey = (input as { apiKey?: unknown } | null)?.apiKey
+    return typeof apiKey === 'string' && apiKey.length > 0
+      ? { success: true, data: { apiKey } }
+      : { success: false, error: { issues: [{ path: ['apiKey'], message: 'apiKey is required' }] } }
+  },
+}
+```
 
 `defineConfig` wraps a Zod schema into that shape and adds `toJsonSchema()`, which the settings
 form is generated from. It uses septum's own bundled Zod, so the schema and the converter always
