@@ -59,6 +59,13 @@
       "name": "@mycelo/fixture-ping",
       "version": "0.0.0",
     },
+    "fixtures/reactive": {
+      "name": "@mycelo/fixture-reactive",
+      "version": "0.0.0",
+      "dependencies": {
+        "@mycelo/septum": "^0.8.0",
+      },
+    },
     "fixtures/twofile": {
       "name": "@mycelo/fixture-twofile",
       "version": "0.0.0",
@@ -222,6 +229,8 @@
     "@mycelo/fixture-mock": ["@mycelo/fixture-mock@workspace:fixtures/mock"],
 
     "@mycelo/fixture-ping": ["@mycelo/fixture-ping@workspace:fixtures/ping"],
+
+    "@mycelo/fixture-reactive": ["@mycelo/fixture-reactive@workspace:fixtures/reactive"],
 
     "@mycelo/fixture-twofile": ["@mycelo/fixture-twofile@workspace:fixtures/twofile"],
 

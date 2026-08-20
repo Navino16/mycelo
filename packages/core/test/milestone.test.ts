@@ -160,7 +160,7 @@ it('reads the mycelium through a scoped rhiza', async () => {
   fixture.feed('/plugins')
   await waitFor(() => {
     expect(fixture.sent).toEqual([
-      { text: 'console, admin, helpdesk, media, ping, twofile, mock, gate' },
+      { text: 'console, reactive, admin, helpdesk, media, ping, twofile, mock, gate' },
     ])
   })
 })
@@ -335,7 +335,7 @@ it('runs the phase 4 milestone: gate admits, media stays denied until granted, c
   const { registry } = await bootstrap(configFile)
   expect(registry.dormant).toEqual([])
   expect(germinationBanner(registry)).toBe(
-    'germinated 8 spores (console, admin, helpdesk, media, ping, twofile, mock, gate)',
+    'germinated 9 spores (console, reactive, admin, helpdesk, media, ping, twofile, mock, gate)',
   )
 
   const fixture = registry.hyphae.find((h) => h.name === 'console')
