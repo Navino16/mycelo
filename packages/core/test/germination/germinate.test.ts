@@ -2,10 +2,14 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
-import type { Logger } from '@mycelo/septum'
+import { defineConfig, type ConfigSchema, type Logger } from '@mycelo/septum'
+import { z } from 'zod'
+import { undeclaredSecretKeys } from '../../src/config/plugins.js'
 import { germinate } from '../../src/germination/germinate.js'
 import { CollisionError } from '../../src/germination/registry.js'
 import { createLogger } from '../../src/support/logger.js'
+// The surface an author actually gets: configSchemaFailures, not the module-private rule it wraps.
+import { configSchemaFailures } from '../../../septum/src/conformance/config-checks.js'
 
 /** Records every warn() call instead of printing it, so a test can inspect them. */
 function spyLogger(): { logger: Logger; warnings: string[] } {
@@ -523,6 +527,76 @@ it('gives a spore with no configSchema an empty config', async () => {
   })
   const registry = await germinate([dir], createLogger(), {})
   expect(registry.rhizas[0]?.config).toEqual({})
+})
+
+const HAND_ROLLED = `
+  export default {
+    configSchema: {
+      safeParse: (input) => ({ success: true, data: input ?? {} }),
+      toJsonSchema: () => ({ type: 'object', properties: { url: {} } }),
+      secrets: ['apiKye'],
+    },
+    create: () => ({ handlers: {} }),
+  }
+`
+
+// If this string ever drifts, the replace below silently no-ops and the 'sound' fixture
+// would carry the same typo'd secret as 'typo' — the anchor is asserted, not assumed.
+if (!HAND_ROLLED.includes("secrets: ['apiKye']")) throw new Error('HAND_ROLLED anchor text has drifted')
+const SOUND_MODULE = HAND_ROLLED.replace("secrets: ['apiKye']", "secrets: ['url']")
+
+it('a spore declaring a secret its schema does not have is dormant, and the reason names the key', async () => {
+  spore('typo', {
+    'spore.yaml': 'kind: enzyme\nname: typo\nseptum: "^0.9"\ncommands:\n  - name: typo\n    description: x\n    respond: hi\n',
+    'src/index.ts': HAND_ROLLED,
+  })
+  const registry = await germinate([dir], createLogger())
+  expect(registry.enzymes).toEqual([])
+  const entry = registry.dormant.find((d) => d.name === 'typo')
+  expect(entry).toBeDefined()
+  expect(entry?.reason).toContain('apiKye')
+})
+
+it('a spore whose secret names a declared field germinates', async () => {
+  spore('sound', {
+    'spore.yaml': 'kind: enzyme\nname: sound\nseptum: "^0.9"\ncommands:\n  - name: sound\n    description: x\n    respond: hi\n',
+    'src/index.ts': SOUND_MODULE,
+  })
+  const registry = await germinate([dir], createLogger())
+  expect(registry.dormant).toEqual([])
+  expect(registry.enzymes.map((e) => e.name)).toEqual(['sound'])
+})
+
+/** Extracts the keys septum's kit names, from the one surface an author actually gets. */
+function kitUndeclaredSecretKeys(schema: unknown): string[] {
+  const failures = configSchemaFailures(schema as ConfigSchema<unknown>, undefined, undefined)
+  const named = /^configSchema\.secrets names '(.+)', which the schema does not declare$/
+  return failures.flatMap((f) => named.exec(f)?.[1] ?? [])
+}
+
+// Two implementations of one rule (plugins.ts and septum's kit) is exactly the desync a
+// prior mutation punished elsewhere in this project: compute the agreement, do not restate
+// two literal lists that could drift together unnoticed.
+it('agrees with the conformance kit on which secret keys are undeclared', () => {
+  const sound: ConfigSchema<unknown> = {
+    safeParse: (input) => ({ success: true, data: input }),
+    toJsonSchema: () => ({ type: 'object', properties: { url: {} } }),
+    secrets: ['url'],
+  }
+  const undeclared: ConfigSchema<unknown> = {
+    safeParse: (input) => ({ success: true, data: input }),
+    toJsonSchema: () => ({ type: 'object', properties: {} }),
+    secrets: ['apiKey'],
+  }
+  const noJsonSchema: ConfigSchema<unknown> = {
+    safeParse: (input) => ({ success: true, data: input }),
+    secrets: ['apiKey'],
+  }
+  const loose = defineConfig(z.looseObject({ url: z.string() }), { secrets: ['apiKey'] })
+
+  for (const schema of [sound, undeclared, noJsonSchema, loose]) {
+    expect(undeclaredSecretKeys(schema)).toEqual(kitUndeclaredSecretKeys(schema))
+  }
 })
 
 function textEnzyme(name: string): Record<string, string> {

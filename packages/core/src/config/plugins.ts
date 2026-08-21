@@ -88,6 +88,17 @@ function declaredSecrets(configSchema: unknown): readonly string[] {
 }
 
 /**
+ * Secret keys a plugin declares that its own JSON Schema does not have — same exemptions as
+ * `undeclaredKeys`: no schema, or an explicitly open one, is unguarded. Septum's conformance
+ * kit applies the same rule, pinned against this one by a test.
+ */
+export function undeclaredSecretKeys(configSchema: unknown): readonly string[] {
+  const keys = declaredSecrets(configSchema)
+  if (keys.length === 0) return []
+  return undeclaredKeys(formSchemaFor(configSchema), keys)
+}
+
+/**
  * A plugin's declared secret keys. Read through `member`, never off a typed property:
  * `configSchema` is an object the plugin built, and a getter is code.
  */
