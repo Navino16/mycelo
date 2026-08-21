@@ -96,6 +96,25 @@ describe('/api/plugins', () => {
     expect(readSettings(served.state.db, 'vault')).toEqual({ token: 's3cr3t' })
   })
 
+  it('a form round trip through the route keeps the credential', async () => {
+    booted = await bootAndLogin({ spores: vault })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { token: 's3cr3t' },
+    })
+    const shown = (await app.inject({
+      method: 'GET', url: '/api/plugins/vault/settings', headers: { cookie },
+    })).json<Record<string, string>>()
+    // Exactly what a generated form sends back: everything it was handed, with one field edited.
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { ...shown, url: 'http://changed' },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(readSettings(served.state.db, 'vault')).toEqual({ token: 's3cr3t', url: 'http://changed' })
+  })
+
   it('refuses enable by naming every missing field, not just the first', async () => {
     booted = await bootAndLogin({ spores: configurableTwoFields })
     const { app, cookie } = booted

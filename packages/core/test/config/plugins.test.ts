@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
-import { recordInstall } from '../../src/config/store.js'
+import { readSettings, recordInstall } from '../../src/config/store.js'
 import { REDACTED, redactSecrets, rejectedSettings, writeDeclaredSetting } from '../../src/config/plugins.js'
 import type { Db } from '../../src/persistence/db.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
@@ -224,5 +224,26 @@ it('both declared secrets are stored as secret, not only the last', async () => 
   await writeDeclaredSetting(db, [dir], 'twin', 'token', 'a')
   await writeDeclaredSetting(db, [dir], 'twin', 'password', 'b')
   expect(redactSecrets(db, 'twin')).toEqual({ token: REDACTED, password: REDACTED })
+  close()
+})
+
+it('writing the mask back to a secret leaves the stored credential intact', async () => {
+  const { db, close } = fresh()
+  vault()
+  recordInstall(db, 'vault', 'enzyme')
+  await writeDeclaredSetting(db, [dir], 'vault', 'token', 's3cr3t')
+  await writeDeclaredSetting(db, [dir], 'vault', 'token', REDACTED)
+  expect(readSettings(db, 'vault')).toEqual({ token: 's3cr3t' })
+  close()
+})
+
+// The discriminating case: a guard keying off the string alone, not `isSecret`, would
+// drop this write too and pass the other two tests.
+it('the mask is an ordinary value on a key that is not secret', async () => {
+  const { db, close } = fresh()
+  vault()
+  recordInstall(db, 'vault', 'enzyme')
+  await writeDeclaredSetting(db, [dir], 'vault', 'url', REDACTED)
+  expect(readSettings(db, 'vault')).toEqual({ url: REDACTED })
   close()
 })

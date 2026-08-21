@@ -238,5 +238,9 @@ export function rewriteSetting(
     .from(pluginSetting)
     .where(and(eq(pluginSetting.pluginName, name), eq(pluginSetting.key, key)))
     .get()
-  writeSetting(db, name, key, value, existing?.isSecret ?? secrets.includes(key))
+  const isSecret = existing?.isSecret ?? secrets.includes(key)
+  // A form is handed '••••' by redactSecrets and sends the whole object back. Writing it would
+  // replace the credential with its own mask, with is_secret still true and no way to tell.
+  if (isSecret && value === REDACTED) return
+  writeSetting(db, name, key, value, isSecret)
 }

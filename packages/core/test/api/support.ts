@@ -134,7 +134,7 @@ export const vault: SporeWriter = (sporesDir) => {
           safeParse: (input) => ({ success: true, data: input }),
           toJsonSchema: () => ({
             type: 'object',
-            properties: { token: { type: 'string' } },
+            properties: { token: { type: 'string' }, url: { type: 'string' } },
           }),
         },
         create: () => ({ handlers: { handleConfigured: async () => {} } }),
