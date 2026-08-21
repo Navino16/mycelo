@@ -10,6 +10,28 @@ function isWellFormedConfigError(error: unknown): boolean {
 }
 
 /**
+ * Secret keys the plugin's own JSON Schema does not declare. Mirrors the core's `undeclaredKeys`
+ * exemptions on purpose: a kit stricter than the runtime is as broken as one more lenient.
+ */
+function undeclaredSecrets(schema: ConfigSchema<unknown>): readonly string[] {
+  const secrets = schema.secrets
+  if (secrets === undefined || secrets.length === 0) return []
+  if (typeof schema.toJsonSchema !== 'function') return []
+  let emitted: unknown
+  try {
+    emitted = schema.toJsonSchema()
+  } catch {
+    // z.custom() makes the conversion throw, and such a plugin must still germinate.
+    return []
+  }
+  const asObject = emitted as { properties?: unknown, additionalProperties?: unknown } | null
+  const open = asObject?.additionalProperties !== undefined && asObject.additionalProperties !== false
+  const properties: unknown = asObject?.properties
+  if (open || typeof properties !== 'object' || properties === null) return []
+  return secrets.filter((key) => !Object.hasOwn(properties, key))
+}
+
+/**
  * The `configSchema` checks every kind's conformance kit runs identically, regardless of
  * whether the plugin is a hypha, rhiza, enzyme or inhibitor.
  */
@@ -47,6 +69,9 @@ export function configSchemaFailures(
   // Presence is not callability: a JavaScript plugin can export a non-callable toJsonSchema.
   if (schema.toJsonSchema !== undefined && typeof schema.toJsonSchema !== 'function') {
     failures.push('configSchema.toJsonSchema is present but is not a function')
+  }
+  for (const key of undeclaredSecrets(schema)) {
+    failures.push(`configSchema.secrets names '${key}', which the schema does not declare`)
   }
   return failures
 }
