@@ -2,14 +2,13 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
-import { defineConfig, type ConfigSchema, type Logger } from '@mycelo/septum'
+import { defineConfig, type ConfigSchema, type EnzymeContext, type Logger } from '@mycelo/septum'
+import { enzymeChecks, type EnzymeHarness } from '@mycelo/septum/conformance'
 import { z } from 'zod'
 import { undeclaredSecretKeys } from '../../src/config/plugins.js'
 import { germinate } from '../../src/germination/germinate.js'
 import { CollisionError } from '../../src/germination/registry.js'
 import { createLogger } from '../../src/support/logger.js'
-// The surface an author actually gets: configSchemaFailures, not the module-private rule it wraps.
-import { configSchemaFailures } from '../../../septum/src/conformance/config-checks.js'
 
 /** Records every warn() call instead of printing it, so a test can inspect them. */
 function spyLogger(): { logger: Logger; warnings: string[] } {
@@ -567,17 +566,51 @@ it('a spore whose secret names a declared field germinates', async () => {
   expect(registry.enzymes.map((e) => e.name)).toEqual(['sound'])
 })
 
-/** Extracts the keys septum's kit names, from the one surface an author actually gets. */
-function kitUndeclaredSecretKeys(schema: unknown): string[] {
-  const failures = configSchemaFailures(schema as ConfigSchema<unknown>, undefined, undefined)
+/** Minimal but real: `EnzymeContext` an author would hand the kit, never invoked here
+ *  since every command below answers via `respond:` and no handler runs. */
+function pinContext(): EnzymeContext<unknown> {
+  return {
+    config: {},
+    logger: { debug() {}, info() {}, warn() {}, error() {}, child: () => pinContext().logger },
+    async reply() {},
+    async push() {},
+    rhiza: <T,>() => ({}) as T,
+    has: () => false,
+    capabilities: { has: () => true, list: () => [] },
+    capabilitiesOf: () => ({ has: () => true, list: () => [] }),
+    principal: { id: 'p1', identities: [], roles: [] },
+    locale: 'en',
+    on() {},
+    t: (key) => (typeof key === 'string' ? key : key.key),
+    localeFor: () => Promise.resolve('en'),
+  }
+}
+
+function pinHarness(configSchema: ConfigSchema<unknown>): EnzymeHarness {
+  return {
+    name: 'pin-check',
+    manifest: {
+      kind: 'enzyme',
+      name: 'pin-check',
+      septum: '^0.9',
+      commands: [{ name: 'pin-check', description: 'x', respond: 'hi' }],
+    },
+    module: { configSchema, create: () => ({ handlers: {} }) },
+    context: pinContext,
+  }
+}
+
+/** Through `enzymeChecks`, the kit's public entry point — not its module-private rule. */
+async function kitUndeclaredSecretKeys(schema: ConfigSchema<unknown>): Promise<string[]> {
+  const failures = await enzymeChecks(pinHarness(schema))
   const named = /^configSchema\.secrets names '(.+)', which the schema does not declare$/
   return failures.flatMap((f) => named.exec(f)?.[1] ?? [])
 }
 
 // Two implementations of one rule (plugins.ts and septum's kit) is exactly the desync a
-// prior mutation punished elsewhere in this project: compute the agreement, do not restate
-// two literal lists that could drift together unnoticed.
-it('agrees with the conformance kit on which secret keys are undeclared', () => {
+// prior mutation punished elsewhere in this project: compute the agreement through the kit's
+// public surface, do not restate two literal lists that could drift together unnoticed.
+it('agrees with the conformance kit on which secret keys are undeclared', async () => {
   const sound: ConfigSchema<unknown> = {
     safeParse: (input) => ({ success: true, data: input }),
     toJsonSchema: () => ({ type: 'object', properties: { url: {} } }),
@@ -595,7 +628,7 @@ it('agrees with the conformance kit on which secret keys are undeclared', () => 
   const loose = defineConfig(z.looseObject({ url: z.string() }), { secrets: ['apiKey'] })
 
   for (const schema of [sound, undeclared, noJsonSchema, loose]) {
-    expect(undeclaredSecretKeys(schema)).toEqual(kitUndeclaredSecretKeys(schema))
+    expect(undeclaredSecretKeys(schema)).toEqual(await kitUndeclaredSecretKeys(schema))
   }
 })
 
