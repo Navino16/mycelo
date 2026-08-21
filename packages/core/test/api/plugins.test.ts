@@ -1,11 +1,12 @@
 import { rmSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'bun:test'
-import { writeSetting } from '../../src/config/store.js'
+import { REDACTED } from '../../src/config/plugins.js'
+import { readSettings, writeSetting } from '../../src/config/store.js'
 import { pluginSetting } from '../../src/persistence/schema.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
   bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configurable, configurableTwoFields,
-  cyclingPair, definedSchema, eitherOrSchema, mixedFieldSchema, noJsonSchema,
+  cyclingPair, definedSchema, eitherOrSchema, mixedFieldSchema, noJsonSchema, vault,
 } from './support.js'
 import type { LoggedIn } from './support.js'
 
@@ -78,6 +79,21 @@ describe('/api/plugins', () => {
       method: 'GET', url: '/api/plugins/needs-config/settings', headers: { cookie },
     })).json<Record<string, string>>()
     expect(body).toEqual({ token: '••••' })
+  })
+
+  // rewriteSetting has two callers; a test of writeDeclaredSetting alone proves nothing
+  // about this route, which resolves secretKeysOf before its transaction, not inside it.
+  it('the PUT route stores a declared secret as secret', async () => {
+    booted = await bootAndLogin({ spores: vault })
+    const { app, served, cookie } = booted
+    const written = await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { token: 's3cr3t' },
+    })
+    expect(written.statusCode).toBe(200)
+    const read = await app.inject({ method: 'GET', url: '/api/plugins/vault/settings', headers: { cookie } })
+    expect(read.json<Record<string, string>>()).toEqual({ token: REDACTED })
+    expect(readSettings(served.state.db, 'vault')).toEqual({ token: 's3cr3t' })
   })
 
   it('refuses enable by naming every missing field, not just the first', async () => {

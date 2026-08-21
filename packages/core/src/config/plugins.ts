@@ -80,6 +80,33 @@ export async function formSchemaOf(db: Db, sporesDirs: readonly string[], name: 
   return formSchemaFor(module?.configSchema)
 }
 
+/** Read across the plugin boundary: `configSchema` is an object the plugin built. */
+function declaredSecrets(configSchema: unknown): readonly string[] {
+  const declared = member(configSchema, 'secrets')
+  if (!Array.isArray(declared)) return []
+  return declared.filter((k): k is string => typeof k === 'string')
+}
+
+/**
+ * A plugin's declared secret keys. Read through `member`, never off a typed property:
+ * `configSchema` is an object the plugin built, and a getter is code.
+ */
+export async function secretKeysOf(
+  db: Db, sporesDirs: readonly string[], name: string,
+): Promise<readonly string[]> {
+  if (getInstall(db, name) === null) return []
+  let module: Awaited<ReturnType<typeof loadSporeModule>>
+  try {
+    module = await loadSporeModule(sporesDirs, name)
+  } catch {
+    return []
+  }
+  return declaredSecrets(module?.configSchema)
+}
+
+/** One spelling, read and written. A second literal is a desync waiting for a mutation to find. */
+export const REDACTED = '••••'
+
 // The reason plugins.configure is safe to grant: a scope that lists configuration must
 // not become a way to read every credential in the substrate.
 export function redactSecrets(db: Db, name: string): Record<string, unknown> {
@@ -89,7 +116,7 @@ export function redactSecrets(db: Db, name: string): Record<string, unknown> {
   const rows = db.select().from(pluginSetting).where(eq(pluginSetting.pluginName, name)).all()
   const out: Record<string, unknown> = {}
   for (const row of rows) {
-    const parsed: unknown = row.isSecret ? '••••' : JSON.parse(row.value)
+    const parsed: unknown = row.isSecret ? REDACTED : JSON.parse(row.value)
     out[row.key] = parsed
   }
   return out
@@ -122,7 +149,7 @@ export async function writeDeclaredSetting(
   if (undeclaredKeys(form, [key]).length > 0) {
     throw new Error(`plugin '${name}' declares no setting '${key}'`)
   }
-  rewriteSetting(db, name, key, value)
+  rewriteSetting(db, name, key, value, await secretKeysOf(db, sporesDirs, name))
 }
 
 export interface SettingRejection {
@@ -200,14 +227,16 @@ export async function rejectedSettings(
   return objectRejections(module?.configSchema, values)
 }
 
-// Carries the row's is_secret forward: writeSetting() rewrites that column too, so a
-// secret updated through this scope would come back unredacted from settings().
-// A key with no row yet is not secret — nothing in this phase can declare one.
-export function rewriteSetting(db: Db, name: string, key: string, value: unknown): void {
+// Carries the row's is_secret forward: writeSetting() rewrites that column too, so a secret
+// updated through this scope would come back unredacted from settings(). A key with no row yet
+// takes its flag from the plugin's declaration.
+export function rewriteSetting(
+  db: Db, name: string, key: string, value: unknown, secrets: readonly string[] = [],
+): void {
   const existing = db
     .select({ isSecret: pluginSetting.isSecret })
     .from(pluginSetting)
     .where(and(eq(pluginSetting.pluginName, name), eq(pluginSetting.key, key)))
     .get()
-  writeSetting(db, name, key, value, existing?.isSecret ?? false)
+  writeSetting(db, name, key, value, existing?.isSecret ?? secrets.includes(key))
 }

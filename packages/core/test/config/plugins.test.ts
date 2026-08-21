@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { recordInstall } from '../../src/config/store.js'
-import { rejectedSettings } from '../../src/config/plugins.js'
+import { REDACTED, redactSecrets, rejectedSettings, writeDeclaredSetting } from '../../src/config/plugins.js'
 import type { Db } from '../../src/persistence/db.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import { describeConfigError } from '../../src/support/thrown.js'
@@ -149,5 +149,80 @@ it('reads an issue with no usable path the way enablePlugin does, against every 
   expect(rejected).toEqual([{ key: 'a', issues }, { key: 'b', issues }])
   // The same two issues through the other reader, which has always treated them this way.
   expect(describeConfigError({ issues })).toBe('the whole thing is wrong; so is this')
+  close()
+})
+
+// Duck-typed like handwritten(): a spore under /tmp cannot resolve the workspace's zod.
+// `secrets` is a plain array literal, exactly what a plugin's own bundled septum would emit.
+function vault(): void {
+  mkdirSync(join(dir, 'vault', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'vault', 'spore.yaml'),
+    'kind: enzyme\nname: vault\nseptum: "^0.9"\n'
+      + 'commands:\n  - name: vault\n    description: x\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(
+    join(dir, 'vault', 'src/index.ts'),
+    'export default {\n'
+      + '  configSchema: {\n'
+      + '    secrets: [\'token\'],\n'
+      + '    safeParse: (input) => ({ success: true, data: input }),\n'
+      + '    toJsonSchema: () => ({ properties: { url: {}, token: {} } }),\n'
+      + '  },\n'
+      + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+      + '}\n',
+    'utf8',
+  )
+}
+
+// Two declared secrets: the cardinality case a single-secret fixture cannot exercise.
+function twin(): void {
+  mkdirSync(join(dir, 'twin', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'twin', 'spore.yaml'),
+    'kind: enzyme\nname: twin\nseptum: "^0.9"\n'
+      + 'commands:\n  - name: twin\n    description: x\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(
+    join(dir, 'twin', 'src/index.ts'),
+    'export default {\n'
+      + '  configSchema: {\n'
+      + '    secrets: [\'token\', \'password\'],\n'
+      + '    safeParse: (input) => ({ success: true, data: input }),\n'
+      + '    toJsonSchema: () => ({ properties: { token: {}, password: {} } }),\n'
+      + '  },\n'
+      + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+      + '}\n',
+    'utf8',
+  )
+}
+
+it('a declared secret is stored as secret and comes back redacted', async () => {
+  const { db, close } = fresh()
+  vault()
+  recordInstall(db, 'vault', 'enzyme')
+  await writeDeclaredSetting(db, [dir], 'vault', 'token', 's3cr3t')
+  expect(redactSecrets(db, 'vault')).toEqual({ token: REDACTED })
+  close()
+})
+
+it('a key the plugin does not declare secret comes back in the clear', async () => {
+  const { db, close } = fresh()
+  vault()
+  recordInstall(db, 'vault', 'enzyme')
+  await writeDeclaredSetting(db, [dir], 'vault', 'url', 'http://example')
+  expect(redactSecrets(db, 'vault')).toEqual({ url: 'http://example' })
+  close()
+})
+
+it('both declared secrets are stored as secret, not only the last', async () => {
+  const { db, close } = fresh()
+  twin()
+  recordInstall(db, 'twin', 'enzyme')
+  await writeDeclaredSetting(db, [dir], 'twin', 'token', 'a')
+  await writeDeclaredSetting(db, [dir], 'twin', 'password', 'b')
+  expect(redactSecrets(db, 'twin')).toEqual({ token: REDACTED, password: REDACTED })
   close()
 })
