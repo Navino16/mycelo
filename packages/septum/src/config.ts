@@ -11,7 +11,12 @@ export type FormSchema =
  * the phase 9 form is generated from. Conversion is lazy: z.custom() throws, and a plugin
  * using one must still germinate — it simply gets no generated form.
  */
-export function defineConfig<T>(schema: z.ZodType<T>): ConfigSchema<T> {
+export interface ConfigOptions {
+  /** Setting keys holding a credential. A key the schema does not declare is refused at germination. */
+  readonly secrets?: readonly string[]
+}
+
+export function defineConfig<T>(schema: z.ZodType<T>, options?: ConfigOptions): ConfigSchema<T> {
   return {
     safeParse: (input) => {
       const result = schema.safeParse(input)
@@ -22,5 +27,6 @@ export function defineConfig<T>(schema: z.ZodType<T>): ConfigSchema<T> {
     // io: 'input' — under the default 'output' a field with .default() is reported as
     // required, and the generated form would demand what the schema already fills in.
     toJsonSchema: () => z.toJSONSchema(schema, { io: 'input' }),
+    secrets: options?.secrets,
   }
 }

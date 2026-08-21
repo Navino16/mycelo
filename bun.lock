@@ -17,49 +17,49 @@
       "name": "@mycelo/fixture-admin",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.8.0",
+        "@mycelo/septum": "^0.9.0",
       },
     },
     "fixtures/console": {
       "name": "@mycelo/fixture-console",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.8.0",
+        "@mycelo/septum": "^0.9.0",
       },
     },
     "fixtures/gate": {
       "name": "@mycelo/fixture-gate",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.8.0",
+        "@mycelo/septum": "^0.9.0",
       },
     },
     "fixtures/help": {
       "name": "@mycelo/fixture-help",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.8.0",
+        "@mycelo/septum": "^0.9.0",
       },
     },
     "fixtures/helpdesk": {
       "name": "@mycelo/fixture-helpdesk",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.8.0",
+        "@mycelo/septum": "^0.9.0",
       },
     },
     "fixtures/media": {
       "name": "@mycelo/fixture-media",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.8.0",
+        "@mycelo/septum": "^0.9.0",
       },
     },
     "fixtures/mock": {
       "name": "@mycelo/fixture-mock",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.8.0",
+        "@mycelo/septum": "^0.9.0",
       },
     },
     "fixtures/ping": {
@@ -70,14 +70,14 @@
       "name": "@mycelo/fixture-reactive",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.8.0",
+        "@mycelo/septum": "^0.9.0",
       },
     },
     "fixtures/twofile": {
       "name": "@mycelo/fixture-twofile",
       "version": "0.0.0",
       "dependencies": {
-        "@mycelo/septum": "^0.8.0",
+        "@mycelo/septum": "^0.9.0",
       },
     },
     "packages/core": {
@@ -87,7 +87,7 @@
         "@fastify/cookie": "^11.1.2",
         "@fastify/rate-limit": "^11.2.0",
         "@fastify/static": "^10.1.3",
-        "@mycelo/septum": "^0.8.0",
+        "@mycelo/septum": "^0.9.0",
         "drizzle-orm": "^0.45.2",
         "fastify": "^5.12.0",
         "intl-messageformat": "^11.2.13",
@@ -97,7 +97,7 @@
     },
     "packages/septum": {
       "name": "@mycelo/septum",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "dependencies": {
         "intl-messageformat": "^11.2.13",
         "zod": "^4.4.3",
@@ -249,7 +249,7 @@
 
     "@pinojs/redact": ["@pinojs/redact@0.4.0", "", {}, "sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg=="],
 
-    "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
+    "@types/bun": ["@types/bun@1.4.0", "", { "dependencies": { "bun-types": "1.4.0" } }, "sha512-K+lZULY23vRgK/CfTjFIV+tyifaNdSMlPh9j+6mQ/cLfpOznLyAuzgV/JQysyECpkBQLVMSyvjlr2fBUSA9wFQ=="],
 
     "@types/esrecurse": ["@types/esrecurse@4.3.1", "", {}, "sha512-xJBAbDifo5hpffDBuHl0Y8ywswbiAp/Wi7Y/GtAgSlZyIABppyurxVueOPE8LUQOxdlgi6Zqce7uoEpqNTeiUw=="],
 
@@ -299,7 +299,7 @@
 
     "buffer-from": ["buffer-from@1.1.2", "", {}, "sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ=="],
 
-    "bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
+    "bun-types": ["bun-types@1.4.0", "", { "dependencies": { "@types/node": "*" } }, "sha512-iIKw23BspnQQYd3prITOBxeUsxBHnwzX6YJfGMuNOZzeNcMmVqzIIVGRm1l69ogaPQmb4wB6BN8mA5bE9YuC5Q=="],
 
     "content-disposition": ["content-disposition@2.0.1", "", {}, "sha512-e+H0ZXHSWYrENhQzw1LPuP4oF5MzVKmDU6d3hxlvaPEYLLg62MxtQNPRx4SYSuYJSBUgnQIG4HIN2tEtNv7Dog=="],
 
@@ -325,7 +325,7 @@
 
     "escape-string-regexp": ["escape-string-regexp@4.0.0", "", {}, "sha512-TtpcNJ3XAzx3Gq8sWRzJaVajRs0uVxA2YAkdb1jm2YkPz4G6egUFAyA3n5vtEIZefPk5Wa4UXbKuS5fKkJWdgA=="],
 
-    "eslint": ["eslint@10.8.1", "", { "dependencies": { "@eslint-community/eslint-utils": "^4.8.0", "@eslint-community/regexpp": "^4.12.2", "@eslint/config-array": "^0.23.5", "@eslint/config-helpers": "^0.7.0", "@eslint/core": "^1.2.1", "@eslint/plugin-kit": "^0.7.2", "@humanfs/node": "^0.16.6", "@humanwhocodes/module-importer": "^1.0.1", "@humanwhocodes/retry": "^0.4.2", "@types/estree": "^1.0.6", "ajv": "^6.14.0", "cross-spawn": "^7.0.6", "debug": "^4.3.2", "escape-string-regexp": "^4.0.0", "eslint-scope": "^9.1.2", "eslint-visitor-keys": "^5.0.1", "espree": "^11.2.0", "esquery": "^1.7.0", "esutils": "^2.0.2", "fast-deep-equal": "^3.1.3", "file-entry-cache": "^8.0.0", "find-up": "^5.0.0", "glob-parent": "^6.0.2", "ignore": "^5.2.0", "imurmurhash": "^0.1.4", "is-glob": "^4.0.0", "json-stable-stringify-without-jsonify": "^1.0.1", "minimatch": "^10.2.5", "natural-compare": "^1.4.0", "optionator": "^0.9.3" }, "peerDependencies": { "jiti": "*" }, "optionalPeers": ["jiti"], "bin": { "eslint": "bin/eslint.js" } }, "sha512-wqA7W2jbsC/BnV9Iv1UZpKVFkO1AdNoSmYW8NWG4HNOBbkAMvIqDZ27pI2f07dqn583NcIC44ckjAcOXDL1QbQ=="],
+    "eslint": ["eslint@10.9.0", "", { "dependencies": { "@eslint-community/eslint-utils": "^4.8.0", "@eslint-community/regexpp": "^4.12.2", "@eslint/config-array": "^0.23.5", "@eslint/config-helpers": "^0.7.0", "@eslint/core": "^1.2.1", "@eslint/plugin-kit": "^0.7.2", "@humanfs/node": "^0.16.6", "@humanwhocodes/module-importer": "^1.0.1", "@humanwhocodes/retry": "^0.4.2", "@types/estree": "^1.0.6", "ajv": "^6.14.0", "cross-spawn": "^7.0.6", "debug": "^4.3.2", "escape-string-regexp": "^4.0.0", "eslint-scope": "^9.1.2", "eslint-visitor-keys": "^5.0.1", "espree": "^11.2.0", "esquery": "^1.7.0", "esutils": "^2.0.2", "fast-deep-equal": "^3.1.3", "file-entry-cache": "^8.0.0", "find-up": "^5.0.0", "glob-parent": "^6.0.2", "ignore": "^5.2.0", "imurmurhash": "^0.1.4", "is-glob": "^4.0.0", "json-stable-stringify-without-jsonify": "^1.0.1", "minimatch": "^10.2.5", "natural-compare": "^1.4.0", "optionator": "^0.9.3" }, "peerDependencies": { "jiti": "*" }, "optionalPeers": ["jiti"], "bin": { "eslint": "bin/eslint.js" } }, "sha512-5KeEOJZBfEVA47boFiBsf+6MmmJpffM7qEBg4pLla2e4nlKgdKlqCW0oSLOGsT8Wl5uCGJptLV1bkaiShj90Gw=="],
 
     "eslint-scope": ["eslint-scope@9.1.2", "", { "dependencies": { "@types/esrecurse": "^4.3.1", "@types/estree": "^1.0.8", "esrecurse": "^4.3.0", "estraverse": "^5.2.0" } }, "sha512-xS90H51cKw0jltxmvmHy2Iai1LIqrfbw57b79w/J7MfvDfkIkFZ+kj6zC3BjtUwh150HsSSdxXZcsuv72miDFQ=="],
 
