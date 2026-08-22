@@ -1,11 +1,12 @@
 import { rmSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'bun:test'
-import { writeSetting } from '../../src/config/store.js'
+import { REDACTED } from '../../src/config/plugins.js'
+import { readSettings, writeSetting } from '../../src/config/store.js'
 import { pluginSetting } from '../../src/persistence/schema.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
   bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configurable, configurableTwoFields,
-  cyclingPair, definedSchema, eitherOrSchema, mixedFieldSchema, noJsonSchema,
+  cyclingPair, definedSchema, eitherOrSchema, mixedFieldSchema, noJsonSchema, vault,
 } from './support.js'
 import type { LoggedIn } from './support.js'
 
@@ -66,9 +67,9 @@ describe('/api/plugins', () => {
   it('redacts a secret on read and keeps it secret on write', async () => {
     booted = await bootAndLogin({ spores: configurable })
     const { app, served, cookie } = booted
-    // Nothing in this phase can mark a *new* setting secret (config/plugins.ts's own
-    // comment); the property under test is that an update carries an existing flag
-    // forward, so it is seeded directly, as phase 5's own regression test did.
+    // `needs-config` declares no `secrets`, so the flag can only come from the existing row:
+    // the property under test is the carry-forward, seeded directly as phase 5's own
+    // regression test did.
     writeSetting(served.state.db, 'needs-config', 'token', 'old-secret', true)
     await app.inject({
       method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
@@ -78,6 +79,40 @@ describe('/api/plugins', () => {
       method: 'GET', url: '/api/plugins/needs-config/settings', headers: { cookie },
     })).json<Record<string, string>>()
     expect(body).toEqual({ token: '••••' })
+  })
+
+  // rewriteSetting has two callers; a test of writeDeclaredSetting alone proves nothing
+  // about this route, which resolves secretKeysOf before its transaction, not inside it.
+  it('the PUT route stores a declared secret as secret', async () => {
+    booted = await bootAndLogin({ spores: vault })
+    const { app, served, cookie } = booted
+    const written = await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { token: 's3cr3t' },
+    })
+    expect(written.statusCode).toBe(200)
+    const read = await app.inject({ method: 'GET', url: '/api/plugins/vault/settings', headers: { cookie } })
+    expect(read.json<Record<string, string>>()).toEqual({ token: REDACTED })
+    expect(readSettings(served.state.db, 'vault')).toEqual({ token: 's3cr3t' })
+  })
+
+  it('a form round trip through the route keeps the credential', async () => {
+    booted = await bootAndLogin({ spores: vault })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { token: 's3cr3t' },
+    })
+    const shown = (await app.inject({
+      method: 'GET', url: '/api/plugins/vault/settings', headers: { cookie },
+    })).json<Record<string, string>>()
+    // Exactly what a generated form sends back: everything it was handed, with one field edited.
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { ...shown, url: 'http://changed' },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(readSettings(served.state.db, 'vault')).toEqual({ token: 's3cr3t', url: 'http://changed' })
   })
 
   it('refuses enable by naming every missing field, not just the first', async () => {

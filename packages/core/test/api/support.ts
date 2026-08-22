@@ -119,6 +119,30 @@ function configurableSpore(fields: readonly string[]): SporeWriter {
 /** One required setting, `token` — enough to exercise the settings routes and redaction. */
 export const configurable: SporeWriter = configurableSpore(['token'])
 
+/**
+ * Declares `token` as a secret through `ConfigSchema.secrets` — the fixture for proving
+ * both `rewriteSetting` call sites store the flag, not only `writeDeclaredSetting`'s.
+ */
+export const vault: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'vault', {
+    'spore.yaml': 'kind: enzyme\nname: vault\nseptum: "^0.9"\n'
+      + 'commands:\n  - name: vault\n    description: Report the configured setting\n    code: handleConfigured\n',
+    'src/index.ts': `
+      export default {
+        configSchema: {
+          secrets: ['token'],
+          safeParse: (input) => ({ success: true, data: input }),
+          toJsonSchema: () => ({
+            type: 'object',
+            properties: { token: { type: 'string' }, url: { type: 'string' } },
+          }),
+        },
+        create: () => ({ handlers: { handleConfigured: async () => {} } }),
+      }
+    `,
+  })
+}
+
 /** Two required settings: the plural case an `issues[0]` implementation would miss. */
 export const configurableTwoFields: SporeWriter = configurableSpore(['url', 'token'])
 

@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Enzyme, Hypha, Inhibitor, Logger, Rhiza } from '@mycelo/septum'
+import { describeUndeclaredSecrets, undeclaredSecretKeys } from '../config/plugins.js'
 import { getInstall } from '../config/store.js'
 import { loadCatalogs } from '../i18n/catalog.js'
 import type { LocaleMessages } from '../i18n/catalog.js'
@@ -130,6 +131,14 @@ export async function germinate(
           const parsed = module.configSchema.safeParse(declared)
           if (!parsed.success) {
             const reason = `configuration rejected: ${describeConfigError(parsed.error)}`
+            dormant.push({ name: manifest.name, reason })
+            failed.set(manifest.name, reason)
+            markBroken()
+            continue
+          }
+          const badSecrets = undeclaredSecretKeys(module.configSchema)
+          if (badSecrets.length > 0) {
+            const reason = describeUndeclaredSecrets(badSecrets)
             dormant.push({ name: manifest.name, reason })
             failed.set(manifest.name, reason)
             markBroken()

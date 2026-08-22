@@ -1,0 +1,8 @@
+kind: enzyme
+name: vault
+septum: "^0.9"
+description: command.vault.description
+commands:
+  - name: vault
+    description: command.vault.description
+    code: handleVault

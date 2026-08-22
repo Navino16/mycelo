@@ -1,4 +1,4 @@
-import { expect, it } from 'bun:test'
+import { expect, it, test } from 'bun:test'
 import { z } from 'zod'
 import { defineConfig } from '../src/config.js'
 
@@ -20,4 +20,22 @@ it('an unconvertible schema throws from toJsonSchema, not from defineConfig', ()
   const cs = defineConfig(z.object({ f: z.custom(() => true) }))
   expect(cs.safeParse({ f: 1 }).success).toBe(true)
   expect(() => cs.toJsonSchema?.()).toThrow()
+})
+
+test('defineConfig carries a declared secret key onto the schema', () => {
+  const schema = defineConfig(z.object({ url: z.string(), apiKey: z.string() }), {
+    secrets: ['apiKey'],
+  })
+  expect(schema.secrets).toEqual(['apiKey'])
+})
+
+test('defineConfig with no options declares no secret', () => {
+  const schema = defineConfig(z.object({ url: z.string() }))
+  expect(schema.secrets).toBeUndefined()
+})
+
+test('a declared secret does not change how safeParse behaves', () => {
+  const schema = defineConfig(z.object({ apiKey: z.string().min(1) }), { secrets: ['apiKey'] })
+  expect(schema.safeParse({ apiKey: 'k' }).success).toBe(true)
+  expect(schema.safeParse({ apiKey: '' }).success).toBe(false)
 })

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { ConfigError } from '../src/spore.js'
+import type { ConfigError, ConfigSchema } from '../src/spore.js'
 
 // Checked by `tsc -p tsconfig.spec.json`, never by bun test: `import type` is erased, so a
 // runtime assertion cannot make this claim.
@@ -18,4 +18,16 @@ if (!result.success) {
   // @ts-expect-error path is PropertyKey[], not assignable to string[]
   const wrong: WrongConfigError = result.error
   void wrong
+}
+
+// A readonly tuple of literals is assignable: the field is `readonly string[]`, not `string[]`.
+export const withSecrets: ConfigSchema<{ apiKey: string }> = {
+  safeParse: (input) => ({ success: true, data: input as { apiKey: string } }),
+  secrets: ['apiKey'] as const,
+}
+
+export const wrongShape: ConfigSchema<{ apiKey: string }> = {
+  safeParse: (input) => ({ success: true, data: input as { apiKey: string } }),
+  // @ts-expect-error — secrets is a list of key names, not a boolean flag per field.
+  secrets: { apiKey: true },
 }

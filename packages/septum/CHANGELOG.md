@@ -1,5 +1,24 @@
 # @mycelo/septum
 
+## 0.9.0
+
+Added:
+
+- `defineConfig(schema, { secrets })` and `ConfigSchema.secrets`: a plugin declares which settings
+  hold a credential. The core redacts them on read, refuses to write the redaction mask back over
+  one, and makes a spore dormant when `secrets` names a field its schema does not declare — which
+  `enable(name)` refuses beforehand, so the operator meets it while the plugin is still off.
+- Every conformance kit refuses a `secrets` key the schema does not declare, on the same rule the
+  runtime applies — a plugin publishing no JSON Schema, or an explicitly open one, is exempt in
+  both.
+- Redaction follows the write that flagged the row, so a value stored before its plugin declared the
+  key is served in the clear until it is written again.
+
+Settings are still stored as plain text. `is_secret` governs redaction on read, not encryption at
+rest; there is no key management in Mycelo, and a key beside the database it protects is theatre.
+Additive otherwise: every existing `defineConfig` call and every `ConfigSchema` implementation
+compiles unchanged.
+
 ## 0.8.0
 
 **Breaking.** `ConfigSchema.error` takes a shape instead of `unknown`: `ConfigError { readonly

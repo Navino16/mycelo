@@ -25,6 +25,17 @@ export interface ConfigSchema<T> {
    * leaves `plugins.configure`'s `setSetting` unable to refuse an undeclared key.
    */
   toJsonSchema?(): object
+  /**
+   * Setting keys holding a credential. The core flags them on write, redacts them on read and
+   * refuses to write the redaction mask back over one. `is_secret` governs redaction, not
+   * storage: the value is plain text in the database.
+   *
+   * Redaction follows the write, not the declaration, so two cases are served in the clear —
+   * a value stored before the plugin declared its key, and one written while the plugin's
+   * module throws at import, where the core cannot read `secrets` at all. Writing the value
+   * again, once the declaration is readable, is what promotes the row.
+   */
+  readonly secrets?: readonly string[]
 }
 
 /** What a spore's entry module exports. One alias per kind, all sharing this base. */

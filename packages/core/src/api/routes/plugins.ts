@@ -3,7 +3,9 @@ import { z } from 'zod'
 import type { SporeKind } from '@mycelo/septum'
 import type { RuntimeState } from '../../boot/state.js'
 import { enablePlugin } from '../../config/lifecycle.js'
-import { formSchemaOf, listPlugins, redactSecrets, rejectedSettings, rewriteSetting, undeclaredKeys } from '../../config/plugins.js'
+import {
+  formSchemaOf, listPlugins, redactSecrets, rejectedSettings, rewriteSetting, secretKeysOf, undeclaredKeys,
+} from '../../config/plugins.js'
 import { getInstall, listInstalls, setEnabled } from '../../config/store.js'
 import { badRequest, notFound } from '../errors.js'
 import { parseBody } from '../parse.js'
@@ -130,9 +132,11 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     }
     // Every key declared and every value parsed, so only the database can still fail: one
     // synchronous transaction makes that all-or-nothing. rewriteSetting is synchronous, so
-    // it can run inside bun:sqlite's transaction(), which cannot await.
+    // it can run inside bun:sqlite's transaction(), which cannot await — hence resolving
+    // the plugin's declared secrets before opening it.
+    const secrets = await secretKeysOf(state.db, state.config.sporesDirs, name)
     state.db.transaction(() => {
-      for (const [key, value] of Object.entries(body)) rewriteSetting(state.db, name, key, value)
+      for (const [key, value] of Object.entries(body)) rewriteSetting(state.db, name, key, value, secrets)
     })
     return { ok: true, restartRequired: state.germination.status === 'germinated' }
   })

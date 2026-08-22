@@ -5,6 +5,7 @@ import { isFailure, readManifest } from '../germination/manifest.js'
 import type { ManifestFailure, ReadManifest } from '../germination/manifest.js'
 import type { Db } from '../persistence/db.js'
 import { describeConfigError, describeThrown } from '../support/thrown.js'
+import { describeUndeclaredSecrets, undeclaredSecretKeys } from './plugins.js'
 import { getInstall, listInstalls, readSettings, recordInstall, setEnabled } from './store.js'
 
 export interface EnableOk { ok: true }
@@ -69,7 +70,8 @@ export async function loadSporeModule(
 /**
  * Spec §9.2: enabling validates the stored settings against the plugin's own schema
  * first, so a plugin missing a required field is refused here rather than going dormant
- * at the next startup, where the operator would only see it after a restart.
+ * at the next startup, where the operator would only see it after a restart. Every
+ * config-shaped dormancy cause germinate() has belongs here, not only safeParse's.
  */
 export async function enablePlugin(db: Db, sporesDirs: readonly string[], name: string): Promise<EnableOk | EnableRefusal> {
   if (getInstall(db, name) === null) return { ok: false, reason: `plugin '${name}' is not installed` }
@@ -96,6 +98,12 @@ export async function enablePlugin(db: Db, sporesDirs: readonly string[], name: 
     }
     if (!parsed.success) {
       return { ok: false, reason: `configuration is incomplete: ${describeConfigError(parsed.error)}` }
+    }
+    // safeParse cannot see this one, and germination's verdict for it is dormancy — which for
+    // an enforcing inhibitor refuses all traffic, with no channel command left to undo it.
+    const badSecrets = undeclaredSecretKeys(module.configSchema)
+    if (badSecrets.length > 0) {
+      return { ok: false, reason: describeUndeclaredSecrets(badSecrets) }
     }
   }
   setEnabled(db, name, true)

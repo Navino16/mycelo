@@ -2,7 +2,10 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
-import type { Logger } from '@mycelo/septum'
+import { defineConfig, type ConfigSchema, type EnzymeContext, type Logger } from '@mycelo/septum'
+import { enzymeChecks, type EnzymeHarness } from '@mycelo/septum/conformance'
+import { z } from 'zod'
+import { undeclaredSecretKeys } from '../../src/config/plugins.js'
 import { germinate } from '../../src/germination/germinate.js'
 import { CollisionError } from '../../src/germination/registry.js'
 import { createLogger } from '../../src/support/logger.js'
@@ -523,6 +526,141 @@ it('gives a spore with no configSchema an empty config', async () => {
   })
   const registry = await germinate([dir], createLogger(), {})
   expect(registry.rhizas[0]?.config).toEqual({})
+})
+
+const HAND_ROLLED = `
+  export default {
+    configSchema: {
+      safeParse: (input) => ({ success: true, data: input ?? {} }),
+      toJsonSchema: () => ({ type: 'object', properties: { url: {} } }),
+      secrets: ['apiKye'],
+    },
+    create: () => ({ handlers: {} }),
+  }
+`
+
+// If this string ever drifts, the replace below silently no-ops and the 'sound' fixture
+// would carry the same typo'd secret as 'typo' — the anchor is asserted, not assumed.
+if (!HAND_ROLLED.includes("secrets: ['apiKye']")) throw new Error('HAND_ROLLED anchor text has drifted')
+const SOUND_MODULE = HAND_ROLLED.replace("secrets: ['apiKye']", "secrets: ['url']")
+
+it('a spore declaring a secret its schema does not have is dormant, and the reason names the key', async () => {
+  spore('typo', {
+    'spore.yaml': 'kind: enzyme\nname: typo\nseptum: "^0.9"\ncommands:\n  - name: typo\n    description: x\n    respond: hi\n',
+    'src/index.ts': HAND_ROLLED,
+  })
+  const registry = await germinate([dir], createLogger())
+  expect(registry.enzymes).toEqual([])
+  const entry = registry.dormant.find((d) => d.name === 'typo')
+  expect(entry).toBeDefined()
+  expect(entry?.reason).toContain('apiKye')
+  expect(entry?.reason).toContain('declares a secret')
+})
+
+// The cardinality case: `undeclaredSecretKeys` reduced to its first element survives every
+// singular test, and an operator would fix one typo, restart, and meet the next.
+it('a spore declaring two undeclared secrets is dormant, and the reason names both', async () => {
+  const twoTypos = HAND_ROLLED.replace("secrets: ['apiKye']", "secrets: ['apiKye', 'secrit']")
+  if (twoTypos === HAND_ROLLED) throw new Error('HAND_ROLLED anchor text has drifted')
+  spore('typos', {
+    'spore.yaml': 'kind: enzyme\nname: typos\nseptum: "^0.9"\ncommands:\n  - name: typos\n    description: x\n    respond: hi\n',
+    'src/index.ts': twoTypos,
+  })
+  const registry = await germinate([dir], createLogger())
+  const entry = registry.dormant.find((d) => d.name === 'typos')
+  expect(entry?.reason).toContain('apiKye')
+  expect(entry?.reason).toContain('secrit')
+  expect(entry?.reason).toContain('declares secrets')
+})
+
+it('a spore whose secret names a declared field germinates', async () => {
+  spore('sound', {
+    'spore.yaml': 'kind: enzyme\nname: sound\nseptum: "^0.9"\ncommands:\n  - name: sound\n    description: x\n    respond: hi\n',
+    'src/index.ts': SOUND_MODULE,
+  })
+  const registry = await germinate([dir], createLogger())
+  expect(registry.dormant).toEqual([])
+  expect(registry.enzymes.map((e) => e.name)).toEqual(['sound'])
+})
+
+/** Minimal but real: `EnzymeContext` an author would hand the kit, never invoked here
+ *  since every command below answers via `respond:` and no handler runs. */
+function pinContext(): EnzymeContext<unknown> {
+  return {
+    config: {},
+    logger: { debug() {}, info() {}, warn() {}, error() {}, child: () => pinContext().logger },
+    async reply() {},
+    async push() {},
+    rhiza: <T,>() => ({}) as T,
+    has: () => false,
+    capabilities: { has: () => true, list: () => [] },
+    capabilitiesOf: () => ({ has: () => true, list: () => [] }),
+    principal: { id: 'p1', identities: [], roles: [] },
+    locale: 'en',
+    on() {},
+    t: (key) => (typeof key === 'string' ? key : key.key),
+    localeFor: () => Promise.resolve('en'),
+  }
+}
+
+function pinHarness(configSchema: ConfigSchema<unknown>): EnzymeHarness {
+  return {
+    name: 'pin-check',
+    manifest: {
+      kind: 'enzyme',
+      name: 'pin-check',
+      septum: '^0.9',
+      commands: [{ name: 'pin-check', description: 'x', respond: 'hi' }],
+    },
+    module: { configSchema, create: () => ({ handlers: {} }) },
+    context: pinContext,
+  }
+}
+
+/** Through `enzymeChecks`, the kit's public entry point — not its module-private rule. */
+async function kitUndeclaredSecretKeys(schema: ConfigSchema<unknown>): Promise<string[]> {
+  const failures = await enzymeChecks(pinHarness(schema))
+  const named = /^configSchema\.secrets names '(.+)', which the schema does not declare$/
+  return failures.flatMap((f) => named.exec(f)?.[1] ?? [])
+}
+
+// Two implementations of one rule (plugins.ts and septum's kit) is exactly the desync a
+// prior mutation punished elsewhere in this project: compute the agreement through the kit's
+// public surface, do not restate two literal lists that could drift together unnoticed.
+it('agrees with the conformance kit on which secret keys are undeclared', async () => {
+  const passthrough = (input: unknown): { success: true, data: unknown } => ({ success: true, data: input })
+  const sound: ConfigSchema<unknown> = {
+    safeParse: passthrough,
+    toJsonSchema: () => ({ type: 'object', properties: { url: {} } }),
+    secrets: ['url'],
+  }
+  const undeclared: ConfigSchema<unknown> = {
+    safeParse: (input) => ({ success: true, data: input }),
+    toJsonSchema: () => ({ type: 'object', properties: {} }),
+    secrets: ['apiKey'],
+  }
+  const noJsonSchema: ConfigSchema<unknown> = {
+    safeParse: (input) => ({ success: true, data: input }),
+    secrets: ['apiKey'],
+  }
+  const loose = defineConfig(z.looseObject({ url: z.string() }), { secrets: ['apiKey'] })
+  // Four shapes no compiler stops a JavaScript plugin from writing. The core answers [] for each;
+  // the kit used to throw on two of them and name '42' as a key on a third.
+  const closed = () => ({ type: 'object', properties: { url: {} } })
+  const stringSecrets = { safeParse: passthrough, secrets: 'token', toJsonSchema: closed }
+  const numberEntry = { safeParse: passthrough, secrets: ['url', 42], toJsonSchema: closed }
+  const thenable = { safeParse: passthrough, secrets: ['apiKey'], toJsonSchema: () => ({ then: () => {}, properties: {} }) }
+  const throwingGetter = {
+    safeParse: passthrough,
+    secrets: ['apiKey'],
+    get toJsonSchema(): unknown { throw new Error('boom') },
+  }
+
+  const malformed = [stringSecrets, numberEntry, thenable, throwingGetter]
+    .map((s) => s as unknown as ConfigSchema<unknown>)
+  for (const schema of [sound, undeclared, noJsonSchema, loose, ...malformed]) {
+    expect(undeclaredSecretKeys(schema)).toEqual(await kitUndeclaredSecretKeys(schema))
+  }
 })
 
 function textEnzyme(name: string): Record<string, string> {

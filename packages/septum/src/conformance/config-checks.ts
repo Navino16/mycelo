@@ -9,6 +9,58 @@ function isWellFormedConfigError(error: unknown): boolean {
       && typeof (i as { message?: unknown }).message === 'string')
 }
 
+/** A member of an object the plugin built. A getter is code, so the read itself is guarded. */
+function member(target: unknown, name: string): unknown {
+  if (typeof target !== 'object' || target === null) return undefined
+  try {
+    return (target as Record<string, unknown>)[name]
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * `secrets` as the core reads it — `Array.isArray` and a string filter, never the typed property.
+ * A JavaScript plugin can write `secrets: 'token'`, which the core ignores while storing that
+ * credential in the clear, so the kit has to name the mistake rather than throw on it.
+ */
+function declaredSecrets(schema: ConfigSchema<unknown>): { keys: readonly string[], malformed?: string } {
+  const secrets = member(schema, 'secrets')
+  if (secrets === undefined) return { keys: [] }
+  if (!Array.isArray(secrets)) {
+    return { keys: [], malformed: 'configSchema.secrets is present but is not an array of strings' }
+  }
+  const keys = secrets.filter((k): k is string => typeof k === 'string')
+  if (keys.length === secrets.length) return { keys }
+  return { keys, malformed: 'configSchema.secrets holds an entry that is not a string, which the core ignores' }
+}
+
+/**
+ * Secret keys the plugin's own JSON Schema does not declare. Mirrors the core's `formSchemaFor`
+ * and `undeclaredKeys` clause by clause — a kit stricter than the runtime is as broken as one
+ * more lenient, and every shape the core answers `[]` for must answer `[]` here.
+ */
+function undeclaredSecrets(schema: ConfigSchema<unknown>, keys: readonly string[]): readonly string[] {
+  if (keys.length === 0) return []
+  let emitted: unknown
+  try {
+    const emit = member(schema, 'toJsonSchema')
+    if (typeof emit !== 'function') return []
+    emitted = (emit as () => unknown).call(schema)
+  } catch {
+    // z.custom() makes the conversion throw, and such a plugin must still germinate.
+    return []
+  }
+  // typeof admits arrays and thenables; the core reads neither as a schema.
+  if (typeof emitted !== 'object' || emitted === null || Array.isArray(emitted)
+    || typeof (emitted as { then?: unknown }).then === 'function') return []
+  const asObject = emitted as { properties?: unknown, additionalProperties?: unknown }
+  const open = asObject.additionalProperties !== undefined && asObject.additionalProperties !== false
+  const properties: unknown = asObject.properties
+  if (open || typeof properties !== 'object' || properties === null) return []
+  return keys.filter((key) => !Object.hasOwn(properties, key))
+}
+
 /**
  * The `configSchema` checks every kind's conformance kit runs identically, regardless of
  * whether the plugin is a hypha, rhiza, enzyme or inhibitor.
@@ -45,8 +97,14 @@ export function configSchemaFailures(
     }
   }
   // Presence is not callability: a JavaScript plugin can export a non-callable toJsonSchema.
-  if (schema.toJsonSchema !== undefined && typeof schema.toJsonSchema !== 'function') {
+  const emit = member(schema, 'toJsonSchema')
+  if (emit !== undefined && typeof emit !== 'function') {
     failures.push('configSchema.toJsonSchema is present but is not a function')
+  }
+  const secrets = declaredSecrets(schema)
+  if (secrets.malformed !== undefined) failures.push(secrets.malformed)
+  for (const key of undeclaredSecrets(schema, secrets.keys)) {
+    failures.push(`configSchema.secrets names '${key}', which the schema does not declare`)
   }
   return failures
 }
