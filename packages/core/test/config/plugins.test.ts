@@ -264,6 +264,27 @@ it('a secret row stays secret on a key the plugin does not declare', async () =>
   close()
 })
 
+// KNOWN LIMITATION, ruled deliberate: the core reads `secrets` off the plugin's module, so a
+// module that throws at import leaves it unreadable and the write is not refused — refusing it
+// would remove the operator's only surface while fixing nothing config can fix. Documented in
+// septum's README and on ConfigSchema.secrets. The recovery is the promotion test above: writing
+// the value again, once the module loads, flags the row.
+it('a value written while the plugin throws at import is stored in the clear (known limitation)', async () => {
+  const { db, close } = fresh()
+  mkdirSync(join(dir, 'boomvault', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'boomvault', 'spore.yaml'),
+    'kind: enzyme\nname: boomvault\nseptum: "^0.9"\n'
+      + 'commands:\n  - name: boomvault\n    description: x\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(join(dir, 'boomvault', 'src/index.ts'), 'throw new Error("import explodes")\n', 'utf8')
+  recordInstall(db, 'boomvault', 'enzyme')
+  await writeDeclaredSetting(db, [dir], 'boomvault', 'token', 's3cr3t')
+  expect(redactSecrets(db, 'boomvault')).toEqual({ token: 's3cr3t' })
+  close()
+})
+
 it('writing the mask back to a secret leaves the stored credential intact', async () => {
   const { db, close } = fresh()
   vault()

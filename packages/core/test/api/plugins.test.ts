@@ -67,9 +67,9 @@ describe('/api/plugins', () => {
   it('redacts a secret on read and keeps it secret on write', async () => {
     booted = await bootAndLogin({ spores: configurable })
     const { app, served, cookie } = booted
-    // Nothing in this phase can mark a *new* setting secret (config/plugins.ts's own
-    // comment); the property under test is that an update carries an existing flag
-    // forward, so it is seeded directly, as phase 5's own regression test did.
+    // `needs-config` declares no `secrets`, so the flag can only come from the existing row:
+    // the property under test is the carry-forward, seeded directly as phase 5's own
+    // regression test did.
     writeSetting(served.state.db, 'needs-config', 'token', 'old-secret', true)
     await app.inject({
       method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },

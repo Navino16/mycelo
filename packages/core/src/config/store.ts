@@ -47,6 +47,8 @@ export function readSettings(db: Db, name: string): Record<string, unknown> {
   return out
 }
 
+// Takes is_secret raw and rewrites it on conflict. config/plugins.ts's rewriteSetting holds the
+// invariants — promote-never-demote and the redaction-mask guard — so a new caller belongs there.
 export function writeSetting(db: Db, name: string, key: string, value: unknown, isSecret: boolean): void {
   if (getInstall(db, name) === null) throw new Error(`plugin '${name}' is not installed`)
   db.insert(pluginSetting)
