@@ -26,9 +26,14 @@ export interface ConfigSchema<T> {
    */
   toJsonSchema?(): object
   /**
-   * Setting keys holding a credential. The core redacts them on read and refuses to write the
-   * redaction mask back. `is_secret` governs redaction, not storage: the value is plain text in
-   * the database.
+   * Setting keys holding a credential. The core flags them on write, redacts them on read and
+   * refuses to write the redaction mask back over one. `is_secret` governs redaction, not
+   * storage: the value is plain text in the database.
+   *
+   * Redaction follows the write, not the declaration, so two cases are served in the clear —
+   * a value stored before the plugin declared its key, and one written while the plugin's
+   * module throws at import, where the core cannot read `secrets` at all. Writing the value
+   * again, once the declaration is readable, is what promotes the row.
    */
   readonly secrets?: readonly string[]
 }

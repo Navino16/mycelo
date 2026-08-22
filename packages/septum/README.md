@@ -196,7 +196,9 @@ answers `[]` for an unknown principal, who holds no role either way.
 
 `enable(name)` validates the stored settings against the plugin's own `configSchema` before it
 flips the row, and **rejects** with `configuration is incomplete:` followed by the plugin's own
-issues, rendered `path: message` and joined with `; `. `disable(name)`,
+issues, rendered `path: message` and joined with `; `. It rejects for a `secrets` entry the schema
+does not declare too, on the same rule germination applies — a config fault that would make the
+spore dormant is refused here instead, while the row is still off. `disable(name)`,
 `settings(name)` and `setSetting(...)` reject for a plugin that is not installed. `setSetting`
 also rejects a key the plugin's published JSON Schema neither declares nor allows as an
 additional property — such a key would be dropped silently by a loose schema, or block
@@ -308,25 +310,38 @@ A setting holding a credential is named in `defineConfig`'s second argument:
 
 ```ts
 import { defineConfig } from '@mycelo/septum'
+import type { EnzymeModule } from '@mycelo/septum'
 import { z } from 'zod'
 
-export const configSchema = defineConfig(
-  z.object({ url: z.url(), apiKey: z.string().min(1) }),
-  { secrets: ['apiKey'] },
-)
+export default {
+  configSchema: defineConfig(
+    z.object({ url: z.url(), apiKey: z.string().min(1) }),
+    { secrets: ['apiKey'] },
+  ),
+  create: () => ({ handlers: {} }),
+} satisfies EnzymeModule
 ```
+
+It belongs on the **default export**: the core reads `configSchema` off that object and nowhere
+else, so a named `export const configSchema` is ignored in silence — which here means a credential
+stored and served in the clear.
 
 What the core then does, and what it does not:
 
 | | |
 |---|---|
-| Reading settings | The value is replaced by `••••` |
+| Reading settings | The value is replaced by `••••`, once the row carries the flag — see the limitations below |
 | Writing a value equal to `••••` | Ignored, so a form round trip cannot destroy the credential |
 | A key `secrets` names but the schema does not declare | The spore is **dormant** and the reason names the key — *only when the schema publishes a closed JSON Schema*, below |
 | Storage | **Plain text in the database.** `is_secret` governs redaction on read, not encryption |
 
-Four limitations, stated rather than worked around:
+Five limitations, stated rather than worked around:
 
+- **A value is only redacted from the write that flagged it.** The core reads `secrets` off the
+  plugin's own module, so a value stored before the plugin declared its key — or written while the
+  module throws at import, when the declaration cannot be read at all — sits in the database
+  unflagged and is returned in the clear. Writing it again, once the declaration is readable,
+  promotes the row; nothing else does.
 - **The undeclared-key check needs a closed JSON Schema.** A plugin publishing no JSON Schema —
   including a hand-rolled `ConfigSchema` with no `toJsonSchema`, the pattern documented above —
   or one that is explicitly open (`additionalProperties` allowed) is exempt from it: a typo'd
