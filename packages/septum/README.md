@@ -30,7 +30,7 @@ capabilities are declared here rather than in the module.
 ```yaml
 kind: enzyme
 name: radarr-helper
-septum: "^0.8"
+septum: "^0.9"
 description: Movie shortcuts for Radarr
 commands:
   - name: help
@@ -302,6 +302,42 @@ A plugin whose commands all carry `respond:` needs no module at all — `help` a
 without one. The manifest is then the entire plugin: no `src/index.ts`, nothing to bundle,
 nothing that can throw at germination.
 
+### Declaring a credential
+
+A setting holding a credential is named in `defineConfig`'s second argument:
+
+```ts
+import { defineConfig } from '@mycelo/septum'
+import { z } from 'zod'
+
+export const configSchema = defineConfig(
+  z.object({ url: z.url(), apiKey: z.string().min(1) }),
+  { secrets: ['apiKey'] },
+)
+```
+
+What the core then does, and what it does not:
+
+| | |
+|---|---|
+| Reading settings | The value is replaced by `••••` |
+| Writing a value equal to `••••` | Ignored, so a form round trip cannot destroy the credential |
+| A key `secrets` names but the schema does not declare | The spore is **dormant**, and the reason names the key |
+| Storage | **Plain text in the database.** `is_secret` governs redaction on read, not encryption |
+
+Three limitations, stated rather than worked around:
+
+- **`••••` cannot be set as a value** on a key declared secret. It is the sentinel the write path
+  keys off; writing it to a key that is *not* secret stores it as an ordinary string.
+- **A key already stored keeps its flag.** Removing a key from `secrets` does not un-redact a value
+  already written as secret — a credential does not stop being one because a later version forgot to
+  say so.
+- **A written value takes effect after a restart**, like every other plugin setting — declaring a
+  key secret changes how it is stored and read back, not when the running spore sees it.
+
+Declaring nothing is unchanged and valid. But an undeclared credential is returned **in the clear**
+by the settings route to any authenticated operator, so a spore holding one should say so.
+
 ## TypeScript
 
 The runtime is [Bun](https://bun.sh), which compiles TypeScript directly. A plugin may use any
@@ -356,7 +392,7 @@ it('conforms to the Enzyme contract', async () => {
   const failures = await enzymeChecks({
     name: 'radarr-helper',
     manifest: {
-      kind: 'enzyme', name: 'radarr-helper', septum: '^0.8',
+      kind: 'enzyme', name: 'radarr-helper', septum: '^0.9',
       commands: [
         { name: 'help', description: 'command.help.description', respond: 'help.text' },
         { name: 'add', description: 'command.add.description', code: 'addMovie',
