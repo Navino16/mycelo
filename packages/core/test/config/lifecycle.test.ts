@@ -120,6 +120,80 @@ it('enabling succeeds once the setting is filled', async () => {
   close()
 })
 
+// A hand-rolled ConfigSchema with a closed JSON Schema: the only shape the undeclared-secret
+// rule is not exempt from, and the one an enforcing inhibitor would brick the bot with.
+const TYPO_SECRET_MODULE = `
+  export default {
+    configSchema: {
+      safeParse: (input) => ({ success: true, data: input ?? {} }),
+      toJsonSchema: () => ({ type: 'object', properties: { url: {} } }),
+      secrets: ['apiKye'],
+    },
+    create: () => ({ handlers: {} }),
+  }
+`
+
+function typoSecret(name: string, secrets: string): void {
+  const module = TYPO_SECRET_MODULE.replace("secrets: ['apiKye']", secrets)
+  if (secrets !== "secrets: ['apiKye']" && module === TYPO_SECRET_MODULE) {
+    throw new Error('TYPO_SECRET_MODULE anchor text has drifted')
+  }
+  spore(name, {
+    'spore.yaml': `kind: enzyme\nname: ${name}\nseptum: "^0.9"\n`
+      + `commands:\n  - name: ${name}\n    description: x\n    respond: hi\n`,
+    'src/index.ts': module,
+  })
+}
+
+// safeParse accepts anything here, so only the secrets cross-check can refuse: germination
+// would make this spore dormant, and for an enforcing inhibitor that refuses all traffic
+// with /plugin-disable already dead. enable() is the last surface that can still say no.
+it('enabling refuses a plugin whose secrets name a field the schema does not declare', async () => {
+  const { db, close } = fresh()
+  typoSecret('typo', "secrets: ['apiKye']")
+  recordInstall(db, 'typo', 'enzyme')
+  const result = await enablePlugin(db, [dir], 'typo')
+  expect(result.ok).toBe(false)
+  if (!result.ok) expect(result.reason).toContain('apiKye')
+  close()
+})
+
+// The regression the blocker needed: a refusal that still enabled the row is the whole
+// defect, since the next boot is what turns it into dormancy.
+it('a plugin refused for an undeclared secret stays disabled', async () => {
+  const { db, close } = fresh()
+  typoSecret('typo', "secrets: ['apiKye']")
+  recordInstall(db, 'typo', 'enzyme')
+  await enablePlugin(db, [dir], 'typo')
+  expect(getInstall(db, 'typo')?.enabled).toBe(false)
+  close()
+})
+
+it('the refusal names every undeclared secret, not only the first', async () => {
+  const { db, close } = fresh()
+  typoSecret('typos', "secrets: ['apiKye', 'secrit']")
+  recordInstall(db, 'typos', 'enzyme')
+  const result = await enablePlugin(db, [dir], 'typos')
+  expect(result.ok).toBe(false)
+  if (!result.ok) {
+    expect(result.reason).toContain('apiKye')
+    expect(result.reason).toContain('secrit')
+  }
+  close()
+})
+
+// The control: the same shape with a sound declaration must still enable, or the check
+// would refuse every plugin that declares a secret at all.
+it('enabling accepts a plugin whose secrets name a declared field', async () => {
+  const { db, close } = fresh()
+  typoSecret('sound', "secrets: ['url']")
+  recordInstall(db, 'sound', 'enzyme')
+  const result = await enablePlugin(db, [dir], 'sound')
+  expect(result.ok).toBe(true)
+  expect(getInstall(db, 'sound')?.enabled).toBe(true)
+  close()
+})
+
 it('enabling refuses a plugin that is not installed', async () => {
   const { db, close } = fresh()
   needsConfig()

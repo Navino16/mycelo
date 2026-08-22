@@ -98,6 +98,14 @@ export function undeclaredSecretKeys(configSchema: unknown): readonly string[] {
   return undeclaredKeys(formSchemaFor(configSchema), keys)
 }
 
+// One wording for germination's dormancy reason and enablePlugin's refusal: two spellings of
+// one verdict would drift, and the operator meets whichever surface they reached first.
+export function describeUndeclaredSecrets(keys: readonly string[]): string {
+  const named = keys.map((k) => `'${k}'`).join(', ')
+  const noun = keys.length === 1 ? 'a secret' : 'secrets'
+  return `configuration declares ${noun} ${named} the schema does not have`
+}
+
 /**
  * A plugin's declared secret keys. Read through `member`, never off a typed property:
  * `configSchema` is an object the plugin built, and a getter is code.

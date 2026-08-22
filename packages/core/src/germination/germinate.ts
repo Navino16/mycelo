@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Enzyme, Hypha, Inhibitor, Logger, Rhiza } from '@mycelo/septum'
-import { undeclaredSecretKeys } from '../config/plugins.js'
+import { describeUndeclaredSecrets, undeclaredSecretKeys } from '../config/plugins.js'
 import { getInstall } from '../config/store.js'
 import { loadCatalogs } from '../i18n/catalog.js'
 import type { LocaleMessages } from '../i18n/catalog.js'
@@ -138,8 +138,7 @@ export async function germinate(
           }
           const badSecrets = undeclaredSecretKeys(module.configSchema)
           if (badSecrets.length > 0) {
-            const named = badSecrets.map((k) => `'${k}'`).join(', ')
-            const reason = `configuration declares a secret ${named} the schema does not have`
+            const reason = describeUndeclaredSecrets(badSecrets)
             dormant.push({ name: manifest.name, reason })
             failed.set(manifest.name, reason)
             markBroken()

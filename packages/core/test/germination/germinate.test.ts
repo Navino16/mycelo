@@ -554,6 +554,23 @@ it('a spore declaring a secret its schema does not have is dormant, and the reas
   const entry = registry.dormant.find((d) => d.name === 'typo')
   expect(entry).toBeDefined()
   expect(entry?.reason).toContain('apiKye')
+  expect(entry?.reason).toContain('declares a secret')
+})
+
+// The cardinality case: `undeclaredSecretKeys` reduced to its first element survives every
+// singular test, and an operator would fix one typo, restart, and meet the next.
+it('a spore declaring two undeclared secrets is dormant, and the reason names both', async () => {
+  const twoTypos = HAND_ROLLED.replace("secrets: ['apiKye']", "secrets: ['apiKye', 'secrit']")
+  if (twoTypos === HAND_ROLLED) throw new Error('HAND_ROLLED anchor text has drifted')
+  spore('typos', {
+    'spore.yaml': 'kind: enzyme\nname: typos\nseptum: "^0.9"\ncommands:\n  - name: typos\n    description: x\n    respond: hi\n',
+    'src/index.ts': twoTypos,
+  })
+  const registry = await germinate([dir], createLogger())
+  const entry = registry.dormant.find((d) => d.name === 'typos')
+  expect(entry?.reason).toContain('apiKye')
+  expect(entry?.reason).toContain('secrit')
+  expect(entry?.reason).toContain('declares secrets')
 })
 
 it('a spore whose secret names a declared field germinates', async () => {
