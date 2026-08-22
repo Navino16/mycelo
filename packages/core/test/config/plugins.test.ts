@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
-import { readSettings, recordInstall } from '../../src/config/store.js'
+import { readSettings, recordInstall, writeSetting } from '../../src/config/store.js'
 import { REDACTED, redactSecrets, rejectedSettings, writeDeclaredSetting } from '../../src/config/plugins.js'
 import type { Db } from '../../src/persistence/db.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
@@ -224,6 +224,30 @@ it('both declared secrets are stored as secret, not only the last', async () => 
   await writeDeclaredSetting(db, [dir], 'twin', 'token', 'a')
   await writeDeclaredSetting(db, [dir], 'twin', 'password', 'b')
   expect(redactSecrets(db, 'twin')).toEqual({ token: REDACTED, password: REDACTED })
+  close()
+})
+
+// The ordinary upgrade path: v1 shipped `token` with no `secrets`, the operator configured it,
+// v2 declares it. Without promotion no code path in the repository could ever mask that row.
+it('a row written before the declaration is redacted once the plugin declares the key', async () => {
+  const { db, close } = fresh()
+  vault()
+  recordInstall(db, 'vault', 'enzyme')
+  writeSetting(db, 'vault', 'token', 'old-secret', false)
+  await writeDeclaredSetting(db, [dir], 'vault', 'token', 's3cr3t')
+  expect(redactSecrets(db, 'vault')).toEqual({ token: REDACTED })
+  close()
+})
+
+// The other direction stays blocked: a key the plugin does not declare secret keeps a flag it
+// already has, so a later version that forgets to say so cannot un-redact a credential.
+it('a secret row stays secret on a key the plugin does not declare', async () => {
+  const { db, close } = fresh()
+  vault()
+  recordInstall(db, 'vault', 'enzyme')
+  writeSetting(db, 'vault', 'url', 'http://old', true)
+  await writeDeclaredSetting(db, [dir], 'vault', 'url', 'http://new')
+  expect(redactSecrets(db, 'vault')).toEqual({ url: REDACTED })
   close()
 })
 

@@ -246,9 +246,9 @@ export async function rejectedSettings(
   return objectRejections(module?.configSchema, values)
 }
 
-// Carries the row's is_secret forward: writeSetting() rewrites that column too, so a secret
-// updated through this scope would come back unredacted from settings(). A key with no row yet
-// takes its flag from the plugin's declaration.
+// Promote, never demote. writeSetting() rewrites is_secret too, so carrying the row's flag
+// forward is what keeps an updated credential redacted; OR-ing the declaration in is what lets
+// a plugin that only declares an existing key in a later version ever take effect.
 export function rewriteSetting(
   db: Db, name: string, key: string, value: unknown, secrets: readonly string[] = [],
 ): void {
@@ -257,7 +257,7 @@ export function rewriteSetting(
     .from(pluginSetting)
     .where(and(eq(pluginSetting.pluginName, name), eq(pluginSetting.key, key)))
     .get()
-  const isSecret = existing?.isSecret ?? secrets.includes(key)
+  const isSecret = (existing?.isSecret ?? false) || secrets.includes(key)
   // A form is handed '••••' by redactSecrets and sends the whole object back. Writing it would
   // replace the credential with its own mask, with is_secret still true and no way to tell.
   if (isSecret && value === REDACTED) return
