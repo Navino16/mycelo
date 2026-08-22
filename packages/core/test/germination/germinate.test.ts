@@ -628,8 +628,9 @@ async function kitUndeclaredSecretKeys(schema: ConfigSchema<unknown>): Promise<s
 // prior mutation punished elsewhere in this project: compute the agreement through the kit's
 // public surface, do not restate two literal lists that could drift together unnoticed.
 it('agrees with the conformance kit on which secret keys are undeclared', async () => {
+  const passthrough = (input: unknown): { success: true, data: unknown } => ({ success: true, data: input })
   const sound: ConfigSchema<unknown> = {
-    safeParse: (input) => ({ success: true, data: input }),
+    safeParse: passthrough,
     toJsonSchema: () => ({ type: 'object', properties: { url: {} } }),
     secrets: ['url'],
   }
@@ -643,8 +644,21 @@ it('agrees with the conformance kit on which secret keys are undeclared', async 
     secrets: ['apiKey'],
   }
   const loose = defineConfig(z.looseObject({ url: z.string() }), { secrets: ['apiKey'] })
+  // Four shapes no compiler stops a JavaScript plugin from writing. The core answers [] for each;
+  // the kit used to throw on two of them and name '42' as a key on a third.
+  const closed = () => ({ type: 'object', properties: { url: {} } })
+  const stringSecrets = { safeParse: passthrough, secrets: 'token', toJsonSchema: closed }
+  const numberEntry = { safeParse: passthrough, secrets: ['url', 42], toJsonSchema: closed }
+  const thenable = { safeParse: passthrough, secrets: ['apiKey'], toJsonSchema: () => ({ then: () => {}, properties: {} }) }
+  const throwingGetter = {
+    safeParse: passthrough,
+    secrets: ['apiKey'],
+    get toJsonSchema(): unknown { throw new Error('boom') },
+  }
 
-  for (const schema of [sound, undeclared, noJsonSchema, loose]) {
+  const malformed = [stringSecrets, numberEntry, thenable, throwingGetter]
+    .map((s) => s as unknown as ConfigSchema<unknown>)
+  for (const schema of [sound, undeclared, noJsonSchema, loose, ...malformed]) {
     expect(undeclaredSecretKeys(schema)).toEqual(await kitUndeclaredSecretKeys(schema))
   }
 })
