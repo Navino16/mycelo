@@ -82,7 +82,7 @@ describe('the phase-6 milestone (api-design §15)', () => {
     }).toEqual({
       hypha: ['console', 'reactive'],
       rhiza: ['mock'],
-      enzyme: ['admin', 'help', 'helpdesk', 'media', 'ping', 'twofile'],
+      enzyme: ['admin', 'help', 'helpdesk', 'media', 'ping', 'twofile', 'vault'],
       inhibitor: ['gate'],
       unknown: [],
     })

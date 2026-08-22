@@ -1,0 +1,6 @@
+reply:
+  unset: "no token is set"
+  set: "a token is set for {url}"
+command:
+  vault:
+    description: "Report whether a credential is configured"

@@ -1,0 +1,6 @@
+reply:
+  unset: "aucun jeton n'est configuré"
+  set: "un jeton est configuré pour {url}"
+command:
+  vault:
+    description: "Indiquer si un identifiant est configuré"
