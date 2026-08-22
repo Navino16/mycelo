@@ -322,11 +322,15 @@ What the core then does, and what it does not:
 |---|---|
 | Reading settings | The value is replaced by `••••` |
 | Writing a value equal to `••••` | Ignored, so a form round trip cannot destroy the credential |
-| A key `secrets` names but the schema does not declare | The spore is **dormant**, and the reason names the key |
+| A key `secrets` names but the schema does not declare | The spore is **dormant** and the reason names the key — *only when the schema publishes a closed JSON Schema*, below |
 | Storage | **Plain text in the database.** `is_secret` governs redaction on read, not encryption |
 
-Three limitations, stated rather than worked around:
+Four limitations, stated rather than worked around:
 
+- **The undeclared-key check needs a closed JSON Schema.** A plugin publishing no JSON Schema —
+  including a hand-rolled `ConfigSchema` with no `toJsonSchema`, the pattern documented above —
+  or one that is explicitly open (`additionalProperties` allowed) is exempt from it: a typo'd
+  `secrets` entry then germinates without warning.
 - **`••••` cannot be set as a value** on a key declared secret. It is the sentinel the write path
   keys off; writing it to a key that is *not* secret stores it as an ordinary string.
 - **A key already stored keeps its flag.** Removing a key from `secrets` does not un-redact a value
