@@ -152,6 +152,19 @@ it('reads an issue with no usable path the way enablePlugin does, against every 
   close()
 })
 
+// Every other secret test hand-rolls its configSchema, because a /tmp spore cannot resolve zod.
+// This is the only place a real `defineConfig(schema, { secrets })` product meets the core's
+// reader, so it is what pins the fixture's declaration and septum's plumbing of it.
+it('the vault fixture\'s declared secret is redacted, and its other setting is not', async () => {
+  const { db, close } = fresh()
+  recordInstall(db, 'vault', 'enzyme')
+  await writeDeclaredSetting(db, SPORES, 'vault', 'token', 's3cr3t')
+  await writeDeclaredSetting(db, SPORES, 'vault', 'url', 'http://home')
+  expect(redactSecrets(db, 'vault')).toEqual({ token: REDACTED, url: 'http://home' })
+  expect(readSettings(db, 'vault')).toEqual({ token: 's3cr3t', url: 'http://home' })
+  close()
+})
+
 // Duck-typed like handwritten(): a spore under /tmp cannot resolve the workspace's zod.
 // `secrets` is a plain array literal, exactly what a plugin's own bundled septum would emit.
 function vault(): void {
