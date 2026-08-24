@@ -256,12 +256,9 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
     }
   }
 
-  // Every code command is invoked with an EMPTY bag, which is exactly what the runtime
-  // does when a caller sends too few words: `required` is a help-surface hint, not a gate
-  // (design §5). Inventing a value would be wrong — a correctly-validating enzyme would
-  // reject it — but the absent case is the author's to survive, and it is the one that
-  // crashes a handler assuming presence. An unreferenced handler produces nothing here:
-  // no author action differs for one, so the kit has no warning channel to widen for it.
+  // Every code command is invoked with an EMPTY bag — the same bag the runtime hands a
+  // handler when a caller sends too few words: `required` is a help-surface hint, not
+  // a gate (design §5).
   for (const command of codeCommands) {
     const invocation: Invocation = {
       command: command.name,
