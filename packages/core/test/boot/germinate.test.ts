@@ -2,9 +2,21 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import type { Logger } from '@mycelo/septum'
 import { germinatePhase, retryGermination } from '../../src/boot/germinate.js'
 import { serve } from '../../src/boot/serve.js'
 import { createLogger } from '../../src/support/logger.js'
+
+/** Records every warn() call instead of printing it, so a test can inspect them. */
+function spyLogger(): { logger: Logger; warnings: string[] } {
+  const warnings: string[] = []
+  const logger: Logger = {
+    debug() {}, info() {}, error() {},
+    warn: (m) => { warnings.push(m) },
+    child: () => logger,
+  }
+  return { logger, warnings }
+}
 
 let dir: string
 let closeDb: (() => void) | undefined
@@ -24,6 +36,30 @@ function config(): string {
   const file = join(dir, 'mycelo.yaml')
   writeFileSync(file, 'spores: ./spores\ndatabase: ./mycelo.db\n', 'utf8')
   return file
+}
+
+const HYPHA_BODY = 'connect: async () => {}, listen: () => {}, stop: async () => {}, send: async () => {}'
+
+/**
+ * A single 'console' hypha germinates regardless of `owner`, mirroring the real
+ * mycelo.yaml default — so the owner channel is the only variable under test.
+ */
+async function bootWith(owner: { channel: string; userId: string }): Promise<{ warnings: string[] }> {
+  spore('console', {
+    'spore.yaml': 'kind: hypha\nname: console\nseptum: "^0.7"\n',
+    'src/index.ts': `export default { create: () => ({ ${HYPHA_BODY} }) }\n`,
+  })
+  const file = join(dir, 'mycelo.yaml')
+  writeFileSync(
+    file,
+    `spores: ./spores\ndatabase: ./mycelo.db\nowner:\n  channel: ${owner.channel}\n  userId: ${owner.userId}\n`,
+    'utf8',
+  )
+  const served = serve(file)
+  closeDb = served.closeDb
+  const { logger, warnings } = spyLogger()
+  await germinatePhase(served.state, logger)
+  return { warnings }
 }
 
 /**
@@ -104,6 +140,18 @@ describe('phase 2 germination', () => {
     // The core's own domain must survive the merge, or every refusal renders as a key.
     expect(served.state.translator.translate('core', 'command.unknown', 'en', { command: 'x' }))
       .not.toBe('command.unknown')
+  })
+})
+
+describe('warnUninhabitableOwner', () => {
+  it('warns when the configured owner is on a channel no germinated hypha provides', async () => {
+    const { warnings } = await bootWith({ channel: 'signal', userId: 'u-1' })
+    expect(warnings.join(' ')).toContain("owner is on channel 'signal'")
+  })
+
+  it('says nothing when a germinated hypha provides the owner channel', async () => {
+    const { warnings } = await bootWith({ channel: 'console', userId: 'alice' })
+    expect(warnings.filter((w) => w.includes('owner is on channel'))).toEqual([])
   })
 })
 

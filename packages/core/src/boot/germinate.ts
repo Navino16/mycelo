@@ -1,14 +1,35 @@
 import type { Logger } from '@mycelo/septum'
+import type { OwnerIdentity } from '../config.js'
 import { syncInstalls } from '../config/lifecycle.js'
 import { readAllSettings } from '../config/store.js'
 import { assertNoCollisions } from '../germination/discover.js'
 import { germinate } from '../germination/germinate.js'
+import type { Registry } from '../germination/registry.js'
 import type { Catalogs } from '../i18n/catalog.js'
 import { loadCoreCatalogs } from '../i18n/core-catalogs.js'
 import { createTranslator } from '../i18n/translator.js'
 import { startMycelium } from './start.js'
 import { classifyGerminationFailure } from './state.js'
 import type { Germination, RuntimeState } from './state.js'
+
+/**
+ * The owner principal always exists (bootstrapIdentity), but nobody can send as it
+ * when no hypha germinated for its channel. A warning, not a throw: the fix is a UI
+ * action (`POST /api/people/:id/roles`), and a fault a UI action repairs must not
+ * kill the process.
+ */
+function warnUninhabitableOwner(
+  owner: OwnerIdentity | undefined,
+  registry: Registry,
+  logger: Logger,
+): void {
+  if (owner === undefined) return
+  if (registry.hyphae.some((h) => h.name === owner.channel)) return
+  logger.warn(
+    `the configured owner is on channel '${owner.channel}', which no germinated hypha provides`,
+    { userId: owner.userId, germinated: registry.hyphae.map((h) => h.name) },
+  )
+}
 
 /**
  * Phase 2 (spec §2.2). Never throws for a germination fault: a cycle or a collision becomes
@@ -31,6 +52,7 @@ export async function germinatePhase(state: RuntimeState, logger: Logger): Promi
     // refuses those two names, so the order here is belt and braces.
     const catalogs: Catalogs = new Map([...registry.catalogs, ...loadCoreCatalogs()])
     state.translator = createTranslator({ catalogs, defaultLocale: config.defaultLocale, logger })
+    warnUninhabitableOwner(config.owner, registry, logger)
     const mycelium = await startMycelium({ registry, state, logger })
     state.germination = { status: 'germinated', mycelium }
   } catch (e) {
