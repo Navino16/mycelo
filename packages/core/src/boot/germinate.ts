@@ -15,8 +15,7 @@ import type { Germination, RuntimeState } from './state.js'
 /**
  * The owner principal always exists (bootstrapIdentity), but nobody can send as it
  * when no hypha germinated for its channel. A warning, not a throw: the fix is a UI
- * action (`POST /api/people/:id/roles`), and a fault a UI action repairs must not
- * kill the process.
+ * action (`POST /api/people/:id/roles`), which a dead process would block.
  */
 function warnUninhabitableOwner(
   owner: OwnerIdentity | undefined,

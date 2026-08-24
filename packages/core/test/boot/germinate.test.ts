@@ -7,15 +7,17 @@ import { germinatePhase, retryGermination } from '../../src/boot/germinate.js'
 import { serve } from '../../src/boot/serve.js'
 import { createLogger } from '../../src/support/logger.js'
 
-/** Records every warn() call instead of printing it, so a test can inspect them. */
-function spyLogger(): { logger: Logger; warnings: string[] } {
+/** Records every info()/warn() call instead of printing it, so a test can inspect them. */
+function spyLogger(): { logger: Logger; warnings: string[]; infos: string[] } {
   const warnings: string[] = []
+  const infos: string[] = []
   const logger: Logger = {
-    debug() {}, info() {}, error() {},
+    debug() {}, error() {},
+    info: (m) => { infos.push(m) },
     warn: (m) => { warnings.push(m) },
     child: () => logger,
   }
-  return { logger, warnings }
+  return { logger, warnings, infos }
 }
 
 let dir: string
@@ -44,7 +46,7 @@ const HYPHA_BODY = 'connect: async () => {}, listen: () => {}, stop: async () =>
  * A single 'console' hypha germinates regardless of `owner`, mirroring the real
  * mycelo.yaml default — so the owner channel is the only variable under test.
  */
-async function bootWith(owner: { channel: string; userId: string }): Promise<{ warnings: string[] }> {
+async function bootWith(owner: { channel: string; userId: string }): Promise<{ warnings: string[]; infos: string[] }> {
   spore('console', {
     'spore.yaml': 'kind: hypha\nname: console\nseptum: "^0.7"\n',
     'src/index.ts': `export default { create: () => ({ ${HYPHA_BODY} }) }\n`,
@@ -57,9 +59,9 @@ async function bootWith(owner: { channel: string; userId: string }): Promise<{ w
   )
   const served = serve(file)
   closeDb = served.closeDb
-  const { logger, warnings } = spyLogger()
+  const { logger, warnings, infos } = spyLogger()
   await germinatePhase(served.state, logger)
-  return { warnings }
+  return { warnings, infos }
 }
 
 /**
@@ -150,7 +152,10 @@ describe('warnUninhabitableOwner', () => {
   })
 
   it('says nothing when a germinated hypha provides the owner channel', async () => {
-    const { warnings } = await bootWith({ channel: 'console', userId: 'alice' })
+    const { warnings, infos } = await bootWith({ channel: 'console', userId: 'alice' })
+    // Proves the spy captured this germination at all, so the empty filter below
+    // is not vacuously true of a capture that recorded nothing.
+    expect(infos.join(' ')).toContain('recorded 1 spore(s): console')
     expect(warnings.filter((w) => w.includes('owner is on channel'))).toEqual([])
   })
 })
