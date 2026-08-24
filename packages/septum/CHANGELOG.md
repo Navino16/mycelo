@@ -1,5 +1,25 @@
 # @mycelo/septum
 
+## 0.10.0
+
+### Added
+- `ArgInfo`, and `CommandInfo.args?: readonly ArgInfo[]` — a command's declared arguments,
+  each description already rendered by the core in the reader's locale. Absent, not `[]`,
+  for a command declaring none, so a help surface can branch on presence.
+
+### Changed
+- **`ArgSpec.required` is a help-surface hint and a conformance obligation, never a gate.**
+  The runtime has always handed a handler an empty bag when a caller sends too few words, and
+  it still does: a handler owns its own absent-argument answer, which it can phrase in the
+  reader's language and with the command's exact syntax. The previous doc comment implied the
+  runtime refused the invocation. It did not, and making it do so would render a spore's own
+  usage sentence unreachable.
+- `enzymeChecks` **invokes** every code command with an empty bag instead of skipping those
+  declaring a required argument. A handler that throws on the absent case now fails
+  conformance — in production that throw reaches the bus as `command '<name>' failed`.
+  **Authors: if a handler assumed a required argument was present, it will fail the kit.**
+  Answer your own usage sentence instead.
+
 ## 0.9.0
 
 Added:
