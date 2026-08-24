@@ -51,16 +51,18 @@ A command carries exactly one of `respond` or `code`, never both and never neith
 exports. `args` only makes sense on a `code` command — `respond` has no way to
 interpolate one, so declaring it there is rejected. `capabilities` is optional on
 every command: the core checks it against the emitting hypha and refuses the command
-where it is missing; a command with none works on every channel.
+where it is missing; a command with none works on every channel. An arg's `required` is a
+help-surface hint and a conformance obligation, never a gate: the runtime hands the handler
+an empty bag when a caller sends too few words, so the handler owns its own usage sentence.
 
 `respond` is a **catalogue key**, resolved in the plugin's own domain against the reader's
 locale. A plugin that ships no `translations/` directory is unaffected: an unknown key renders
 as itself, literally and without passing through ICU, so `respond: pong` still answers `pong`.
 A command's `description` is a catalogue key too, by the same contract, and the core now renders
 it: `commands.read`'s `available()` resolves it in the reader's locale. An argument's `description`
-is a catalogue key as well, but nothing in the core reads it yet, so writing one as a key costs
-nothing today and avoids a rewrite once something does. The keys above resolve through
-`translations/en.yaml` beside `spore.yaml`:
+is a catalogue key as well; `CommandInfo.args` carries it per `ArgInfo`, rendered the same way —
+but the core does not populate `args` yet, so today's `available()` omits the field regardless of
+what a command declares. The keys above resolve through `translations/en.yaml` beside `spore.yaml`:
 
 ```yaml
 command:
@@ -184,7 +186,7 @@ absent, not present-but-rejecting:
 | `conversations.read` | `ConversationsRead` | `listConversations()` — every conversation the bot has seen, where the channel supplies one |
 | `restrictions.manage` | `RestrictionsManage` | context rules, an inhibitor's confined channels, and the broadcast target list — confining an inhibitor's channels takes effect immediately, even for one `enforcing`, with no restart |
 | `locale.manage` | `LocaleManage` | `setPrincipalLocale(principalId, locale)`, `setConversationLocale(channel, conversationId, locale)`, `availableLocales()` — the last is synchronous, like `listPlugins()` |
-| `commands.read` | `CommandsRead` | `available(principal, locale)` — the commands that principal is *authorized* to invoke, sorted by `qualified`, each with its `description` already rendered in that locale. Channel capabilities and context rules are applied at dispatch, not here, so a listed command can still be refused on the channel it is asked on |
+| `commands.read` | `CommandsRead` | `available(principal, locale)` — the commands that principal is *authorized* to invoke, sorted by `qualified`, each with its `description` already rendered in that locale and an optional `args: readonly ArgInfo[]` (absent when the command declares none). Channel capabilities and context rules are applied at dispatch, not here, so a listed command can still be refused on the channel it is asked on |
 
 `listPlugins()` and `availableLocales()` alone are synchronous; every other method returns a promise. The identity and role
 methods **reject** rather than resolve quietly when asked about something that does not exist — an

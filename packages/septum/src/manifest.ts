@@ -18,6 +18,9 @@ const targetSchema = z.string().regex(/^[a-z][a-z0-9-]*(@.+)?$/)
 const argSpecSchema = z.object({
   name: nameSchema,
   description: z.string(),
+  // A help-surface hint and a conformance obligation, never a gate: the runtime hands the
+  // handler an empty bag when a caller sends too few words, so the handler owns the answer.
+  // design §5 argues why — a spore's own usage sentence beats anything the core could say.
   required: z.boolean().default(false),
 })
 export type ArgSpec = z.infer<typeof argSpecSchema>

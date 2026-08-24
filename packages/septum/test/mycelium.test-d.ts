@@ -175,3 +175,21 @@ declare const locales: LocaleManage
 export const _h: readonly string[] = locales.availableLocales()
 export const _i: Promise<void> = locales.setPrincipalLocale('p1', 'fr')
 export const _j: Promise<void> = locales.setConversationLocale('console', 'weekend', 'ru')
+
+// `args` is optional, so a CommandInfo for a command declaring none needs no empty array.
+const noArgs: CommandInfo = { qualified: 'a.b', name: 'b', plugin: 'a', description: 'x' }
+// And an ArgInfo's `required` is a plain boolean, not optional: ArgSpec's `.default(false)`
+// makes it present in the output type, so a consumer never has to widen it.
+const withArgs: CommandInfo = {
+  qualified: 'a.b',
+  name: 'b',
+  plugin: 'a',
+  description: 'x',
+  args: [{ name: 'title', description: 'Title', required: true }],
+}
+const missingRequired: CommandInfo = {
+  qualified: 'a.b', name: 'b', plugin: 'a', description: 'x',
+  // @ts-expect-error `required` is not optional on ArgInfo
+  args: [{ name: 'title', description: 'Title' }],
+}
+void noArgs; void withArgs; void missingRequired
