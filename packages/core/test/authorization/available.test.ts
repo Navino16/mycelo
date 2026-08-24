@@ -23,10 +23,20 @@ const ROUTES: readonly (readonly [command: string, plugin: string, description: 
   ['plugins', 'admin', 'cmd.plugins'],
 ]
 
+// Only 'plugins' declares an arg, so the other two routes exercise the "declares none" case.
+const ARGS: Record<string, readonly { name: string, description: string, required: boolean }[]> = {
+  plugins: [{ name: 'verbose', description: 'arg.plugins-verbose.description', required: false }],
+}
+
 function registry(): Registry {
   const routes = new Map<string, CommandRoute>(ROUTES.map(([command, plugin, description]) => [
     command,
-    { command, plugin, qualified: `${plugin}.${command}`, spec: { name: command, description, respond: 'x' } } as CommandRoute,
+    {
+      command,
+      plugin,
+      qualified: `${plugin}.${command}`,
+      spec: { name: command, description, respond: 'x', args: ARGS[command] },
+    } as CommandRoute,
   ]))
   return { routes } as unknown as Registry
 }
@@ -35,8 +45,8 @@ function registry(): Registry {
 // command's own plugin answers the raw key, exactly as the real translator does.
 const CATALOGUE: Record<string, Record<string, Record<string, string>>> = {
   admin: {
-    en: { 'cmd.plugins': 'List plugins', 'cmd.whoami': 'Who am I' },
-    fr: { 'cmd.plugins': 'Lister les extensions', 'cmd.whoami': 'Qui suis-je' },
+    en: { 'cmd.plugins': 'List plugins', 'cmd.whoami': 'Who am I', 'arg.plugins-verbose.description': 'Show extra detail' },
+    fr: { 'cmd.plugins': 'Lister les extensions', 'cmd.whoami': 'Qui suis-je', 'arg.plugins-verbose.description': 'Afficher le détail' },
   },
   ping: {
     en: { 'cmd.ping': 'Health check' },
@@ -112,5 +122,23 @@ describe('availableCommands, descriptions', () => {
     const en = availableCommands(registry(), db, translator, alice, 'en')
 
     expect(en.map((c) => c.description)).toEqual(['List plugins', 'Who am I', 'Health check'])
+  })
+
+  it('renders each argument description through the declaring plugin, in the asked locale', () => {
+    const { db, alice } = ownerDb()
+
+    const fr = availableCommands(registry(), db, translator, alice, 'fr')
+
+    expect(fr.find((c) => c.qualified === 'admin.plugins')?.args).toEqual([
+      { name: 'verbose', description: 'Afficher le détail', required: false },
+    ])
+  })
+
+  it('omits args entirely for a command declaring none', () => {
+    const { db, alice } = ownerDb()
+
+    const en = availableCommands(registry(), db, translator, alice, 'en')
+
+    expect(en.find((c) => c.qualified === 'admin.whoami')?.args).toBeUndefined()
   })
 })

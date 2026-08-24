@@ -60,9 +60,9 @@ locale. A plugin that ships no `translations/` directory is unaffected: an unkno
 as itself, literally and without passing through ICU, so `respond: pong` still answers `pong`.
 A command's `description` is a catalogue key too, by the same contract, and the core now renders
 it: `commands.read`'s `available()` resolves it in the reader's locale. An argument's `description`
-is a catalogue key as well; `CommandInfo.args` carries it per `ArgInfo`, rendered the same way —
-but the core does not populate `args` yet, so today's `available()` omits the field regardless of
-what a command declares. The keys above resolve through `translations/en.yaml` beside `spore.yaml`:
+is a catalogue key as well; `CommandInfo.args` carries it per `ArgInfo`, rendered the same way and
+in declaration order, and is absent when the command declares none. The keys above resolve through
+`translations/en.yaml` beside `spore.yaml`:
 
 ```yaml
 command:
