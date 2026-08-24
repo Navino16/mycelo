@@ -375,7 +375,7 @@ implementation. Each returns a list of failure strings, so it works with any tes
 |---|---|
 | `hyphaChecks` | manifest, config schema, `connect`/`listen`/`stop`/`send`, `group_membership` consistency, and — given a `membershipGroupId` — that `listGroupMembers` resolves an array |
 | `rhizaChecks` | manifest, config schema, `api`, and that `health()` reports rather than throws |
-| `enzymeChecks` | manifest, config schema, lifecycle, every command with no required args, and — given `catalogs` — that every translation key compiles, that every command's `description` resolves in at least one catalogue, and that `ctx.t()` refuses a domain the manifest does not declare |
+| `enzymeChecks` | manifest, config schema, lifecycle, every command invoked with an empty bag, and — given `catalogs` — that every translation key compiles, that every command's `description` resolves in at least one catalogue, and that `ctx.t()` refuses a domain the manifest does not declare |
 | `inhibitorChecks` | manifest, config schema, lifecycle, and a verdict per expected allow/deny |
 
 The harness is yours to build: the kit cannot know what your plugin depends on, so you supply
@@ -427,8 +427,10 @@ it('conforms to the Enzyme contract', async () => {
 })
 ```
 
-Commands with required arguments are skipped: the kit cannot invent a value your enzyme would
-accept, so calling them would report correct validation as a failure. Those are yours to test.
+A command with required arguments is invoked with an empty bag too, exactly as the runtime
+invokes it when a caller sends too few words: `required` is a help-surface hint, not a gate.
+A handler that throws on the absent argument fails the check; answer with a usage sentence
+instead.
 
 Pass `catalogs` — already-parsed translation files keyed by locale, such as
 `{ en: parse(readFileSync('translations/en.yaml', 'utf8')) }` — to have `enzymeChecks` compile

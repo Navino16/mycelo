@@ -256,13 +256,13 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
     }
   }
 
-  // Only commands with no required arguments are invoked: the kit cannot invent a
-  // value the enzyme would accept, so a correctly-validating one would fail here.
-  // Commands with required args are the author's to test. An unreferenced handler
-  // produces nothing here: no author action differs for one, so the kit has no
-  // warning channel to widen for it.
+  // Every code command is invoked with an EMPTY bag, which is exactly what the runtime
+  // does when a caller sends too few words: `required` is a help-surface hint, not a gate
+  // (design §5). Inventing a value would be wrong — a correctly-validating enzyme would
+  // reject it — but the absent case is the author's to survive, and it is the one that
+  // crashes a handler assuming presence. An unreferenced handler produces nothing here:
+  // no author action differs for one, so the kit has no warning channel to widen for it.
   for (const command of codeCommands) {
-    if (command.args?.some((a) => a.required) === true) continue
     const invocation: Invocation = {
       command: command.name,
       args: {},
