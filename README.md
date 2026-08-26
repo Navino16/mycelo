@@ -45,7 +45,7 @@ structurally, a plugin architecture.
 
 ## Development
 
-Requires [Bun](https://bun.sh) `1.3.14` (see `.bun-version`).
+Requires [Bun](https://bun.sh) `1.4.0` (see `.bun-version`).
 
 ```sh
 bun install
