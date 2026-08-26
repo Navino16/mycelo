@@ -1,5 +1,8 @@
+import { resolve } from 'node:path'
 import { expect, it } from 'bun:test'
+import { MYCELIUM_SCOPES } from '@mycelo/septum'
 import type { EnzymeContext, Invocation, Translate } from '@mycelo/septum'
+import { readManifest } from '../../src/germination/manifest.js'
 import module from '../../../../fixtures/admin/src/index.js'
 
 function invocation(args: Record<string, string>, message: Partial<Invocation['message']> = {}): Invocation {
@@ -239,4 +242,17 @@ it('refuses /lang-group in a direct message', async () => {
   )
   expect(replies[0]).toContain('group')
   expect(written).toEqual([])
+})
+
+// README.md's own justification for declaring all fifteen was false: MYCELIUM_SCOPES and
+// MOUNTABLE_SCOPES are pinned symmetrically against each other, with no manifest involved
+// (anastomoses.test.ts, mycelium-rhiza.test.ts), so this fixture's own declaration was
+// pinned by nothing. Reverting it to a subset must fail here.
+it("requires every scope MYCELIUM_SCOPES declares, which is what CI actually needs from it", () => {
+  const path = resolve(import.meta.dirname, '../../../../fixtures/admin')
+  const result = readManifest({ directory: 'admin', path, manifestPath: resolve(path, 'spore.yaml') })
+  if (!('manifest' in result) || result.manifest.kind !== 'enzyme') throw new Error('admin fixture did not parse')
+  const requirement = result.manifest.requires?.find((r) => 'rhiza' in r && r.rhiza === 'mycelium')
+  const scopes = requirement !== undefined && 'scopes' in requirement ? requirement.scopes : undefined
+  expect(new Set(scopes)).toEqual(new Set(MYCELIUM_SCOPES))
 })

@@ -23,9 +23,14 @@ const ROUTES: readonly (readonly [command: string, plugin: string, description: 
   ['plugins', 'admin', 'cmd.plugins'],
 ]
 
-// Only 'plugins' declares an arg, so the other two routes exercise the "declares none" case.
+// Only 'plugins' declares args, so the other two routes exercise the "declares none" case.
+// Two args, one required and one not, so a collapse to the first element or a dropped
+// `required: true` both fail an assertion below.
 const ARGS: Record<string, readonly { name: string, description: string, required: boolean }[]> = {
-  plugins: [{ name: 'verbose', description: 'arg.plugins-verbose.description', required: false }],
+  plugins: [
+    { name: 'name', description: 'arg.plugins-name.description', required: true },
+    { name: 'verbose', description: 'arg.plugins-verbose.description', required: false },
+  ],
 }
 
 function registry(): Registry {
@@ -45,8 +50,14 @@ function registry(): Registry {
 // command's own plugin answers the raw key, exactly as the real translator does.
 const CATALOGUE: Record<string, Record<string, Record<string, string>>> = {
   admin: {
-    en: { 'cmd.plugins': 'List plugins', 'cmd.whoami': 'Who am I', 'arg.plugins-verbose.description': 'Show extra detail' },
-    fr: { 'cmd.plugins': 'Lister les extensions', 'cmd.whoami': 'Qui suis-je', 'arg.plugins-verbose.description': 'Afficher le détail' },
+    en: {
+      'cmd.plugins': 'List plugins', 'cmd.whoami': 'Who am I',
+      'arg.plugins-name.description': 'Plugin name', 'arg.plugins-verbose.description': 'Show extra detail',
+    },
+    fr: {
+      'cmd.plugins': 'Lister les extensions', 'cmd.whoami': 'Qui suis-je',
+      'arg.plugins-name.description': 'Nom de l’extension', 'arg.plugins-verbose.description': 'Afficher le détail',
+    },
   },
   ping: {
     en: { 'cmd.ping': 'Health check' },
@@ -124,12 +135,13 @@ describe('availableCommands, descriptions', () => {
     expect(en.map((c) => c.description)).toEqual(['List plugins', 'Who am I', 'Health check'])
   })
 
-  it('renders each argument description through the declaring plugin, in the asked locale', () => {
+  it('renders every argument, in order, through the declaring plugin, in the asked locale', () => {
     const { db, alice } = ownerDb()
 
     const fr = availableCommands(registry(), db, translator, alice, 'fr')
 
     expect(fr.find((c) => c.qualified === 'admin.plugins')?.args).toEqual([
+      { name: 'name', description: 'Nom de l’extension', required: true },
       { name: 'verbose', description: 'Afficher le détail', required: false },
     ])
   })
