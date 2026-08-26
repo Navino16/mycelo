@@ -212,6 +212,19 @@ export interface RestrictionsManage {
   removeBroadcastTarget(target: PushTarget): Promise<void>
 }
 
+export interface ArgInfo {
+  /** As declared in the manifest, and as `Invocation.args` keys it. */
+  name: string
+  /** Rendered text, falling back to the default locale and then to the key itself. */
+  description: string
+  /**
+   * Shown by a help surface. The core does **not** refuse an invocation missing it: a
+   * handler owns its own absent-argument answer, which it can phrase in the reader's
+   * language and with the command's exact syntax. See `ArgSpec.required`.
+   */
+  required: boolean
+}
+
 export interface CommandInfo {
   /** The authorization identifier: 'plugin.command'. */
   qualified: string
@@ -221,6 +234,8 @@ export interface CommandInfo {
   plugin: string
   /** Rendered text, falling back to the default locale and then to the key itself. */
   description: string
+  /** Absent when the command declares none. Positional, in declaration order. */
+  args?: readonly ArgInfo[]
 }
 
 /**

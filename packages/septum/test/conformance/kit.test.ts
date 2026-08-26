@@ -196,29 +196,53 @@ describe('enzyme conformance checks', () => {
     expect(failures.join(' ')).toContain('both present or both absent')
   })
 
-  it('does not invoke a command that has required arguments', async () => {
-    // A correct enzyme validating its input would throw on empty args. Reporting
-    // that as non-conformance would punish the right behaviour, so the kit skips.
+  const requiredArgManifest = {
+    kind: 'enzyme' as const,
+    name: 'radarr-add',
+    septum: '^1.0',
+    commands: [
+      {
+        name: 'add',
+        description: 'Add a movie',
+        code: 'add',
+        args: [{ name: 'title', description: 'Title', required: true }],
+      },
+    ],
+  }
+
+  it('invokes a command with required arguments using an empty bag, and fails a handler that throws', async () => {
+    // `required` is a help-surface hint, not a gate (design §5): the runtime hands the
+    // handler an empty bag, and a throw there reaches the bus as "command 'add' failed".
     const failures = await enzymeChecks({
       ...goodEnzyme,
-      manifest: {
-        kind: 'enzyme',
-        name: 'radarr-add',
-        septum: '^1.0',
-        commands: [
-          {
-            name: 'add',
-            description: 'Add a movie',
-            code: 'add',
-            args: [{ name: 'title', description: 'Title', required: true }],
-          },
-        ],
-      },
+      manifest: requiredArgManifest,
       module: {
         create: () => ({
           handlers: {
             async add(inv) {
               if (inv.args['title'] === undefined) throw new Error('missing required arg title')
+              await Promise.resolve()
+            },
+          },
+        }),
+      },
+    })
+    expect(failures.join(' ')).toContain("handler threw for declared command 'add'")
+  })
+
+  it('accepts a handler that answers its own usage when a required argument is absent', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      manifest: requiredArgManifest,
+      module: {
+        create: () => ({
+          handlers: {
+            async add(inv, ctx) {
+              if (inv.args['title'] === undefined) {
+                await ctx.reply({ text: 'usage: add <title>' })
+                return
+              }
+              await Promise.resolve()
             },
           },
         }),

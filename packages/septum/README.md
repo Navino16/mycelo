@@ -30,7 +30,7 @@ capabilities are declared here rather than in the module.
 ```yaml
 kind: enzyme
 name: radarr-helper
-septum: "^0.9"
+septum: "^0.10"
 description: Movie shortcuts for Radarr
 commands:
   - name: help
@@ -51,15 +51,17 @@ A command carries exactly one of `respond` or `code`, never both and never neith
 exports. `args` only makes sense on a `code` command — `respond` has no way to
 interpolate one, so declaring it there is rejected. `capabilities` is optional on
 every command: the core checks it against the emitting hypha and refuses the command
-where it is missing; a command with none works on every channel.
+where it is missing; a command with none works on every channel. An arg's `required` is a
+help-surface hint and a conformance obligation, never a gate: the runtime hands the handler
+an empty bag when a caller sends too few words, so the handler owns its own usage sentence.
 
 `respond` is a **catalogue key**, resolved in the plugin's own domain against the reader's
 locale. A plugin that ships no `translations/` directory is unaffected: an unknown key renders
 as itself, literally and without passing through ICU, so `respond: pong` still answers `pong`.
 A command's `description` is a catalogue key too, by the same contract, and the core now renders
 it: `commands.read`'s `available()` resolves it in the reader's locale. An argument's `description`
-is a catalogue key as well, but nothing in the core reads it yet, so writing one as a key costs
-nothing today and avoids a rewrite once something does. The keys above resolve through
+is a catalogue key as well; `CommandInfo.args` carries it per `ArgInfo`, rendered the same way and
+in declaration order, and is absent when the command declares none. The keys above resolve through
 `translations/en.yaml` beside `spore.yaml`:
 
 ```yaml
@@ -184,7 +186,7 @@ absent, not present-but-rejecting:
 | `conversations.read` | `ConversationsRead` | `listConversations()` — every conversation the bot has seen, where the channel supplies one |
 | `restrictions.manage` | `RestrictionsManage` | context rules, an inhibitor's confined channels, and the broadcast target list — confining an inhibitor's channels takes effect immediately, even for one `enforcing`, with no restart |
 | `locale.manage` | `LocaleManage` | `setPrincipalLocale(principalId, locale)`, `setConversationLocale(channel, conversationId, locale)`, `availableLocales()` — the last is synchronous, like `listPlugins()` |
-| `commands.read` | `CommandsRead` | `available(principal, locale)` — the commands that principal is *authorized* to invoke, sorted by `qualified`, each with its `description` already rendered in that locale. Channel capabilities and context rules are applied at dispatch, not here, so a listed command can still be refused on the channel it is asked on |
+| `commands.read` | `CommandsRead` | `available(principal, locale)` — the commands that principal is *authorized* to invoke, sorted by `qualified`, each with its `description` already rendered in that locale and an optional `args: readonly ArgInfo[]` (absent when the command declares none). Channel capabilities and context rules are applied at dispatch, not here, so a listed command can still be refused on the channel it is asked on |
 
 `listPlugins()` and `availableLocales()` alone are synchronous; every other method returns a promise. The identity and role
 methods **reject** rather than resolve quietly when asked about something that does not exist — an
@@ -373,7 +375,7 @@ implementation. Each returns a list of failure strings, so it works with any tes
 |---|---|
 | `hyphaChecks` | manifest, config schema, `connect`/`listen`/`stop`/`send`, `group_membership` consistency, and — given a `membershipGroupId` — that `listGroupMembers` resolves an array |
 | `rhizaChecks` | manifest, config schema, `api`, and that `health()` reports rather than throws |
-| `enzymeChecks` | manifest, config schema, lifecycle, every command with no required args, and — given `catalogs` — that every translation key compiles, that every command's `description` resolves in at least one catalogue, and that `ctx.t()` refuses a domain the manifest does not declare |
+| `enzymeChecks` | manifest, config schema, lifecycle, every command invoked with an empty bag, and — given `catalogs` — that every translation key compiles, that every command's `description` resolves in at least one catalogue, and that `ctx.t()` refuses a domain the manifest does not declare |
 | `inhibitorChecks` | manifest, config schema, lifecycle, and a verdict per expected allow/deny |
 
 The harness is yours to build: the kit cannot know what your plugin depends on, so you supply
@@ -411,7 +413,7 @@ it('conforms to the Enzyme contract', async () => {
   const failures = await enzymeChecks({
     name: 'radarr-helper',
     manifest: {
-      kind: 'enzyme', name: 'radarr-helper', septum: '^0.9',
+      kind: 'enzyme', name: 'radarr-helper', septum: '^0.10',
       commands: [
         { name: 'help', description: 'command.help.description', respond: 'help.text' },
         { name: 'add', description: 'command.add.description', code: 'addMovie',
@@ -425,8 +427,10 @@ it('conforms to the Enzyme contract', async () => {
 })
 ```
 
-Commands with required arguments are skipped: the kit cannot invent a value your enzyme would
-accept, so calling them would report correct validation as a failure. Those are yours to test.
+A command with required arguments is invoked with an empty bag too, exactly as the runtime
+invokes it when a caller sends too few words: `required` is a help-surface hint, not a gate.
+A handler that throws on the absent argument fails the check; answer with a usage sentence
+instead.
 
 Pass `catalogs` — already-parsed translation files keyed by locale, such as
 `{ en: parse(readFileSync('translations/en.yaml', 'utf8')) }` — to have `enzymeChecks` compile

@@ -27,5 +27,12 @@ export function availableCommands(
       name: route.command,
       plugin: route.plugin,
       description: translator.translate(route.plugin, route.spec.description, locale),
+      ...(route.spec.args === undefined ? {} : {
+        args: route.spec.args.map((arg) => ({
+          name: arg.name,
+          description: translator.translate(route.plugin, arg.description, locale),
+          required: arg.required,
+        })),
+      }),
     }))
 }
