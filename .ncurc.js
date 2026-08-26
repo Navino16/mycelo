@@ -1,7 +1,7 @@
 // Configuration for npm-check-updates.
 //
-// Two dependencies are deliberately held back: raising either breaks something no
-// version checker can see.
+// Four entries are rejected for three reasons: the Node and Bun runtime pins and
+// the TypeScript peer range. Raising any breaks something no version checker can see.
 export default {
   reject: [
     // Must track the major of the Node runtime pinned in .nvmrc. Newer types describe
