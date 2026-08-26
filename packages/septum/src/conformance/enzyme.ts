@@ -100,6 +100,13 @@ function catalogFailures(
       failures.push(`no supplied catalogue has a key '${description}', which a command declares as its description`)
     }
   }
+  // Same rule as above, applied to the other key kind available() renders (design §6).
+  const argDescriptions = manifest.commands.flatMap((c) => (c.args ?? []).map((a) => a.description))
+  for (const description of new Set(argDescriptions)) {
+    if (!declared.has(description)) {
+      failures.push(`no supplied catalogue has a key '${description}', which an argument declares as its description`)
+    }
+  }
   return failures
 }
 
