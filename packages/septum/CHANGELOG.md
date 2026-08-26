@@ -1,5 +1,18 @@
 # @mycelo/septum
 
+## 0.10.1
+
+### Fixed
+- `enzymeChecks` now checks an argument's `description` against the supplied catalogues, the same
+  way it already checked a command's own `description`. Before this, a command whose description
+  was a real catalogue key but whose *argument* descriptions were literal English strings passed
+  conformance — the kit certified a plugin that renders untranslated argument text in `/help` for
+  every non-English reader. **Authors: give every `ArgSpec.description` a catalogue key**, exactly
+  as `CommandSpec.description` already requires; a description resolving in at least one supplied
+  catalogue is enough (design §7.2's partial-catalogue cascade still applies).
+- `CHANGELOG.md` now ships in the published tarball (`files`), so a plugin author reading the
+  installed package sees the same history as the repository.
+
 ## 0.10.0
 
 ### Added

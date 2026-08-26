@@ -24,6 +24,10 @@ export function parseCommand(text: string, prefix: string): ParsedCommand | null
 /**
  * Positional binding against the manifest's arg specs. The last declared arg absorbs
  * the remainder, so a trailing free-text argument does not need quoting.
+ *
+ * `spec.required` is never read here, deliberately: design §5 (phase 7.6) rules it a
+ * `/help` hint and a conformance obligation, not a core gate — a spore's own usage
+ * sentence, in its own catalogue, beats a generic refusal the core could give instead.
  */
 export function bindArgs(rest: string, specs: readonly ArgSpec[] = []): Record<string, string> {
   const args: Record<string, string> = {}

@@ -8,16 +8,22 @@ import { serve } from '../../src/boot/serve.js'
 import { createLogger } from '../../src/support/logger.js'
 
 /** Records every info()/warn() call instead of printing it, so a test can inspect them. */
-function spyLogger(): { logger: Logger; warnings: string[]; infos: string[] } {
+function spyLogger(): {
+  logger: Logger
+  warnings: string[]
+  infos: string[]
+  warnMeta: (Record<string, unknown> | undefined)[]
+} {
   const warnings: string[] = []
   const infos: string[] = []
+  const warnMeta: (Record<string, unknown> | undefined)[] = []
   const logger: Logger = {
     debug() {}, error() {},
     info: (m) => { infos.push(m) },
-    warn: (m) => { warnings.push(m) },
+    warn: (m, meta) => { warnings.push(m); warnMeta.push(meta) },
     child: () => logger,
   }
-  return { logger, warnings, infos }
+  return { logger, warnings, infos, warnMeta }
 }
 
 let dir: string
@@ -46,7 +52,9 @@ const HYPHA_BODY = 'connect: async () => {}, listen: () => {}, stop: async () =>
  * A single 'console' hypha germinates regardless of `owner`, mirroring the real
  * mycelo.yaml default — so the owner channel is the only variable under test.
  */
-async function bootWith(owner: { channel: string; userId: string }): Promise<{ warnings: string[]; infos: string[] }> {
+async function bootWith(
+  owner: { channel: string; userId: string },
+): Promise<{ warnings: string[]; infos: string[]; warnMeta: (Record<string, unknown> | undefined)[] }> {
   spore('console', {
     'spore.yaml': 'kind: hypha\nname: console\nseptum: "^0.7"\n',
     'src/index.ts': `export default { create: () => ({ ${HYPHA_BODY} }) }\n`,
@@ -59,9 +67,9 @@ async function bootWith(owner: { channel: string; userId: string }): Promise<{ w
   )
   const served = serve(file)
   closeDb = served.closeDb
-  const { logger, warnings, infos } = spyLogger()
+  const { logger, warnings, infos, warnMeta } = spyLogger()
   await germinatePhase(served.state, logger)
-  return { warnings, infos }
+  return { warnings, infos, warnMeta }
 }
 
 /**
@@ -147,8 +155,11 @@ describe('phase 2 germination', () => {
 
 describe('warnUninhabitableOwner', () => {
   it('warns when the configured owner is on a channel no germinated hypha provides', async () => {
-    const { warnings } = await bootWith({ channel: 'signal', userId: 'u-1' })
+    const { warnings, warnMeta } = await bootWith({ channel: 'signal', userId: 'u-1' })
     expect(warnings.join(' ')).toContain("owner is on channel 'signal'")
+    // The operator's whole remedy path: userId is what POST /api/people/:id/roles needs,
+    // and germinated is which channel to write in owner: instead.
+    expect(warnMeta[0]).toEqual({ userId: 'u-1', germinated: ['console'] })
   })
 
   it('says nothing when a germinated hypha provides the owner channel', async () => {

@@ -825,6 +825,46 @@ describe('regressions', () => {
     ])
   })
 
+  // Mirrors the description check above, applied to argument descriptions: available()
+  // renders both key kinds (design §6), so a literal one is as wrong as a literal description.
+  it('fails an argument description that is a literal rather than a catalogue key', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      manifest: {
+        kind: 'enzyme', name: 'links', septum: '^1.0',
+        commands: [{
+          name: 'links', description: 'command.links.description', code: 'links',
+          args: [{ name: 'name', description: 'Plugin name', required: true }],
+        }],
+      },
+      catalogs: { en: { command: { links: { description: 'Show links' } } } },
+    })
+    expect(failures).toEqual([
+      "no supplied catalogue has a key 'Plugin name', which an argument declares as its description",
+    ])
+  })
+
+  it('accepts an argument description carried by only one of two supplied catalogues', async () => {
+    const failures = await enzymeChecks({
+      ...goodEnzyme,
+      manifest: {
+        kind: 'enzyme', name: 'links', septum: '^1.0',
+        commands: [{
+          name: 'links', description: 'command.links.description', code: 'links',
+          args: [{ name: 'name', description: 'arg.links-name.description', required: true }],
+        }],
+      },
+      catalogs: {
+        en: {
+          command: { links: { description: 'Show links' } },
+          arg: { 'links-name': { description: 'Plugin name' } },
+        },
+        fr: { command: { links: { description: 'Voir les liens' } } },
+      },
+    })
+    expect(failures).toEqual([])
+  })
+
   // The inverted phase-2 divergence: the kit's stub t used to accept every domain while
   // the runtime throws for one the manifest never declared.
   it('throws in start() for a domain the manifest does not require, exactly as the bot would', async () => {
