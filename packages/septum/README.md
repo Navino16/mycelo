@@ -93,7 +93,11 @@ that key. Three interactions are worth knowing before writing one:
   crashing the reply.
 
 Every manifest carries `kind`, `name` (lowercase, digits and dashes) and `septum`, the
-contract range it targets. `description`, `externals` and `requires` are optional everywhere.
+contract range it targets. `septum` must be a range `Bun.semver` can parse — a caret (`^0.10`), a
+comparator (`>=0.10.0`), an `x` range (`0.10.x`) or a pair of comparators (`>=0.9 <0.12`). `*`,
+`latest` and anything that fails to parse are **rejected**, because such a range matches every
+version there will ever be and would make the core's compatibility check silently inert for that
+spore. `description`, `externals` and `requires` are optional everywhere.
 Each kind then adds its own:
 
 | Kind | Adds |
@@ -446,6 +450,12 @@ parses to `null` or holds no keys at all.
 `0.x` — the contract is expected to change. The core's runtime implements it: `bun run
 start` answers a `respond:` command directly and dispatches a `code:` command to its
 `handlers` entry. Pin an exact version if that matters to you.
+
+`SEPTUM_VERSION` is exported and equals this package's own `version`, so a plugin that needs to
+branch on the contract it was loaded against can read it rather than guess. **A caret range below
+`1.0` is bounded, not a floor**: `^0.10` means `>=0.10.0 <0.11.0`, so a `septum:` range written
+against one minor excludes the next. The core refuses to germinate a spore whose range excludes the
+septum it is running.
 
 ## Licence
 

@@ -1,5 +1,35 @@
 # @mycelo/septum
 
+## 0.10.2
+
+### Added
+- `SEPTUM_VERSION`, the running septum's own version. The core reads it to decide whether a
+  spore's declared `septum:` range admits the septum actually loaded, rather than duplicating the
+  number where the two could drift. A test pins it against `package.json`.
+- `PluginInfo.source` and `PluginInfo.strain`, both optional: the sporangium a spore was installed
+  from and the strain installed. Both are **absent** for a spore from a local root, which is neither
+  versioned nor traceable.
+- `SporangiumSource` and `InoculateOutcome`, the shapes the core's sporangium routes answer with. A
+  source's `token` is never the stored value — it comes back as the literal `••••` when one is set
+  and is absent when not — and `official` is settable through no API: it marks the reviewed
+  registry, and a flag an operator could set would be a one-field bypass of the trust model.
+- `SourcesManage`, the interface for a `sources.manage` scope that **does not exist yet**. Exported
+  now so the core can compile against one shape rather than declaring a second; a plugin cannot
+  reach it until the scope ships, and the README deliberately does not list it.
+
+### Changed
+- **`septum:` must now be a range `Bun.semver` can parse.** An unparseable range — `*`, `latest`,
+  or any typo — matches *every* version, which made the core's compatibility check silently inert
+  for that spore instead of failing loudly. `parseManifest` now rejects it with `path: 'septum'`.
+
+  This is **non-breaking for every manifest that exists**: all twenty in the Mycelo project declare
+  a caret range, and `^0.10`, `>=0.10.0`, `0.10.x`, `>=0.9 <0.12` and even the doubled-caret
+  `^^0.10` all still parse — measured on Bun 1.4.0, and `^^0.10` is measured to behave identically
+  to `^0.10`, so it is accepted rather than refused. It **is** a behaviour change for a third-party
+  manifest whose range does not parse: such a spore now fails to load, where before it loaded and
+  its compatibility was never really checked. Shipped in a patch for that reason — it closes a hole
+  rather than moving the contract.
+
 ## 0.10.1
 
 ### Fixed

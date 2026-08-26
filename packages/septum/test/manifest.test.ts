@@ -233,3 +233,43 @@ it('rejects a capability that is not a ChannelCapability', () => {
     commands: [{ name: 'c', description: 'd', respond: 'ok', capabilities: ['telepathy'] }],
   })).toThrow(ManifestError)
 })
+
+describe('the septum range', () => {
+  const base = {
+    kind: 'enzyme' as const,
+    name: 'x',
+    commands: [{ name: 'c', description: 'command.c.description', respond: 'reply.c' }],
+  }
+
+  it('accepts every range form Bun.semver actually parses', () => {
+    // Measured on Bun 1.4.0. `0.10.x` and `>=0.9 <0.12` are forms this project does not write;
+    // `^^0.10` behaves identically to `^0.10`, so refusing it would make the schema stricter
+    // than the runtime.
+    for (const septum of ['^0.10', '>=0.10.0', '0.10.x', '>=0.9 <0.12', '^^0.10']) {
+      expect(parseManifest({ ...base, septum }).septum).toBe(septum)
+    }
+  })
+
+  it('rejects a range Bun.semver cannot parse, naming the field', () => {
+    // An unparseable range matches every version, so without this the core's compatibility
+    // check is silently inert for that spore rather than failing loudly (design §10.1).
+    try {
+      parseManifest({ ...base, septum: 'not a range' })
+      throw new Error('should have thrown')
+    } catch (e) {
+      expect((e as ManifestError).path).toBe('septum')
+      expect((e as ManifestError).message).toContain('semver range')
+    }
+  })
+
+  it('rejects the wildcard forms that match every version', () => {
+    for (const septum of ['*', 'latest']) {
+      try {
+        parseManifest({ ...base, septum })
+        throw new Error(`should have thrown for '${septum}'`)
+      } catch (e) {
+        expect((e as ManifestError).path).toBe('septum')
+      }
+    }
+  })
+})

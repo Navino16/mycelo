@@ -46,6 +46,12 @@ export interface PluginInfo {
    * render its toggle from this field alone.
    */
   enabled: boolean
+  /**
+   * The sporangium this spore was installed from, and the strain installed. Both absent
+   * for a spore from a local root, which is neither versioned nor traceable (design §7.4).
+   */
+  source?: string
+  strain?: string
 }
 
 export interface RhizaHealth {
@@ -264,4 +270,49 @@ export interface LocaleManage {
   setConversationLocale(channel: string, conversationId: string, locale: string): Promise<void>
   /** Locales at least one catalogue provides, canonical and sorted. Synchronous, like listPlugins(). */
   availableLocales(): readonly string[]
+}
+
+export interface SporangiumSource {
+  id: number
+  label: string
+  driver: 'local' | 'github'
+  /** A URL for 'github', an absolute path for 'local'. */
+  location: string
+  /** Never the stored value: the literal '••••' when one is set, absent when not. */
+  token?: string
+  /**
+   * Whether this is the reviewed registry. Seeded by the core and settable through no API:
+   * a flag an operator could set would be a one-field bypass of the trust model (design §11).
+   */
+  official: boolean
+  enabled: boolean
+}
+
+export interface InoculateOutcome {
+  name: string
+  strain: string
+  /**
+   * Owned by the core, not composed by the caller, so a third-party install cannot be made
+   * to look official by a UI that forgets to render a flag (design §11).
+   */
+  warnings: readonly string[]
+  /** Always true: germination orders the whole resolved set at boot, so a spore arriving after it has no place in that order. */
+  restartRequired: true
+}
+
+export interface SourcesManage {
+  /** Tokens come back as the literal '••••', never the value itself. */
+  listSources(): Promise<readonly SporangiumSource[]>
+  /** The new source is third-party whatever the label says. */
+  addSource(s: { label: string, driver: 'local' | 'github', location: string, token?: string }): Promise<SporangiumSource>
+  /** A token sent back as the mask is skipped rather than stored; an empty string clears it. */
+  updateSource(id: number, patch: { label?: string, location?: string, token?: string, enabled?: boolean }): Promise<SporangiumSource | null>
+  /** False for the official source, which can be disabled but never deleted (design §11). */
+  deleteSource(id: number): Promise<boolean>
+  /**
+   * Rejects for an unknown or disabled source, for a local one, for an unknown spore or
+   * strain, for a directory collision, and for any archive that fails validation — every
+   * one of them before anything is written to disk (design §9).
+   */
+  inoculate(request: { sourceId: number, name: string, strain?: string }): Promise<InoculateOutcome>
 }
