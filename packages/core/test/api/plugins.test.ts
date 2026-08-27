@@ -13,8 +13,9 @@ import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
   bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configurable, configurableTwoFields,
   cyclingPair, definedSchema, eitherOrSchema, mixedFieldSchema, noJsonSchema, twoPluginsTwoCommands, vault,
+  writeSpore,
 } from './support.js'
-import type { LoggedIn } from './support.js'
+import type { LoggedIn, SporeWriter } from './support.js'
 
 let booted: LoggedIn | undefined
 
@@ -523,6 +524,29 @@ describe('a spore installed into the managed root', () => {
     expect(enabled.statusCode).toBe(200)
   })
 
+  // spec §4.2: the consent moment. Before this the detail route answered scopes: [] for a
+  // disabled plugin, which reads as 'this plugin asks for nothing' at the enable decision.
+  it('answers the demands of a disabled plugin, read from its manifest on disk', async () => {
+    booted = await bootAndLogin({ spores: configurable })
+    await inoculateKeyring(booted)
+    const { app, cookie } = booted
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/plugins/keyring', headers: { cookie },
+    })).json<{
+      state: string
+      demands?: { commands: { name: string, capabilities: string[] }[] }
+      mounted?: string[]
+    }>()
+
+    expect(body.state).toBe('disabled')
+    // Present at all is the property: the manifest was read while nothing germinated it.
+    expect(body.demands).toBeDefined()
+    expect(body.demands?.commands).toEqual([{ name: 'keyring', capabilities: [] }])
+    // Not germinated, so nothing was mounted — and absent, never [].
+    expect(body.mounted).toBeUndefined()
+  })
+
   // spec §5: before this, an enabled install awaiting germination was dropped from the list
   // entirely, so the screen an operator lands on after enabling did not show the plugin.
   it('reports an enabled install awaiting germination as pending, having reported it disabled', async () => {
@@ -546,5 +570,95 @@ describe('a spore installed into the managed root', () => {
     expect(enabled.statusCode).toBe(200)
 
     expect(await listed()).toMatchObject({ state: 'pending', enabled: true })
+  })
+})
+
+// An advisory inhibitor that mounts a scope. No fixture does: `fixtures/gate` is an inhibitor
+// and declares no `requires`, so the inhibitor branch of mountedScopesOf was pinned by nothing.
+const scopedInhibitor: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'watcher', {
+    'spore.yaml': [
+      'kind: inhibitor', 'name: watcher', 'septum: "^0.10"', 'enforcing: false',
+      'requires:', '  - rhiza: mycelium', '    scopes: [principals.read]', '',
+    ].join('\n'),
+    'src/index.ts': `
+      export default {
+        create: () => ({
+          inspect: async () => ({ allow: true }),
+        }),
+      }
+    `,
+  })
+}
+
+// spec §4.3: declared and mounted are two fields because they can disagree, and a
+// disagreement is information. One field whose source depends on the plugin's state is the
+// "two halves each correct, the pair broken" shape ten whole-branch reviews have found.
+describe('GET /api/plugins/:name, declared against mounted', () => {
+  let booted: LoggedIn | undefined
+  afterEach(async () => {
+    if (booted === undefined) return
+    await closeBooted(booted)
+    booted = undefined
+  })
+
+  it('answers what a germinated enzyme declared and what germination mounted, and they agree', async () => {
+    booted = await bootAndLogin()
+    const { app, cookie } = booted
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/plugins/help', headers: { cookie },
+    })).json<{
+      state: string
+      demands?: { requires: unknown[], scopes: string[] }
+      mounted?: string[]
+    }>()
+
+    expect(body.state).toBe('germinated')
+    expect(body.demands?.requires).toEqual([
+      { targets: ['mycelium'], anyOf: false, optional: false, scopes: ['commands.read'] },
+    ])
+    expect(body.demands?.scopes).toEqual(['commands.read'])
+    expect(body.mounted).toEqual(['commands.read'])
+  })
+
+  it('answers an empty mounted set for a germinated hypha, never an absent one', async () => {
+    booted = await bootAndLogin()
+    const { app, cookie } = booted
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/plugins/console', headers: { cookie },
+    })).json<{ state: string, mounted?: string[] }>()
+
+    expect(body.state).toBe('germinated')
+    // [] and absent are different facts: a hypha mounts nothing, it is not un-germinated.
+    expect(body.mounted).toEqual([])
+  })
+
+  it('answers a germinated inhibitor its own mounted scopes, not an absent set', async () => {
+    booted = await bootAndLogin({ spores: scopedInhibitor })
+    const { app, cookie } = booted
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/plugins/watcher', headers: { cookie },
+    })).json<{ state: string, demands?: { scopes: string[] }, mounted?: string[] }>()
+
+    expect(body.state).toBe('germinated')
+    expect(body.demands?.scopes).toEqual(['principals.read'])
+    expect(body.mounted).toEqual(['principals.read'])
+  })
+
+  it('never carries scopes on the list, which could only be the mounted set', async () => {
+    booted = await bootAndLogin()
+    const { app, cookie } = booted
+
+    const groups = (await app.inject({
+      method: 'GET', url: '/api/plugins', headers: { cookie },
+    })).json<Record<string, Record<string, unknown>[]>>()
+    const entries = Object.values(groups).flat()
+
+    expect(entries.length).toBeGreaterThan(5)
+    expect(entries.every((e) => !('scopes' in e))).toBe(true)
+    expect(entries.every((e) => !('demands' in e))).toBe(true)
   })
 })

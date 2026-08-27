@@ -46,7 +46,7 @@ export const FIXTURES = resolve(import.meta.dirname, '../../../../fixtures')
 
 export type SporeWriter = (sporesDir: string) => void
 
-function writeSpore(sporesDir: string, name: string, files: Record<string, string>): void {
+export function writeSpore(sporesDir: string, name: string, files: Record<string, string>): void {
   for (const [rel, content] of Object.entries(files)) {
     const file = join(sporesDir, name, rel)
     mkdirSync(join(file, '..'), { recursive: true })
