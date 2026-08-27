@@ -50,6 +50,19 @@ export const principalRole = sqliteTable(
   (t) => [primaryKey({ columns: [t.principalId, t.roleId] })],
 )
 
+// `official` is not operator-settable and no API writes it: a flag an operator could set
+// is a one-field bypass of the trust model (design §11).
+export const source = sqliteTable('source', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  label: text('label').notNull(),
+  driver: text('driver', { enum: ['local', 'github'] }).notNull(),
+  location: text('location').notNull(),
+  /** Redacted on read like a secret setting; `sourceToken` is the only reader. */
+  token: text('token'),
+  official: integer('official', { mode: 'boolean' }).notNull().default(false),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+})
+
 // `name` is the primary key: a spore name is already unique across the substrate and every
 // lookup in phase 5 is by name. The sporangium columns of spec §9.3 arrive with phase 8.
 export const pluginInstall = sqliteTable('plugin_install', {
@@ -57,6 +70,9 @@ export const pluginInstall = sqliteTable('plugin_install', {
   kind: text('kind').notNull(),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(false),
   installedAt: integer('installed_at', { mode: 'timestamp_ms' }).notNull(),
+  // Nullable: every existing row and every spore from a local root has neither.
+  sourceId: integer('source_id').references(() => source.id),
+  strain: text('strain'),
 })
 
 // One row per setting rather than a JSON blob: `is_secret` is per key, and the phase 9 form
