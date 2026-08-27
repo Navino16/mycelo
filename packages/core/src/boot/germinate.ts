@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 import type { Logger } from '@mycelo/septum'
 import type { OwnerIdentity } from '../config.js'
 import { syncInstalls } from '../config/lifecycle.js'
@@ -8,6 +10,9 @@ import type { Registry } from '../germination/registry.js'
 import type { Catalogs } from '../i18n/catalog.js'
 import { loadCoreCatalogs } from '../i18n/core-catalogs.js'
 import { createTranslator } from '../i18n/translator.js'
+import { managedRoot, sweepStaging } from '../sporangium/inoculate.js'
+import { seedOfficialSource, upsertLocalSource } from '../sporangium/sources.js'
+import { describeThrown } from '../support/thrown.js'
 import { startMycelium } from './start.js'
 import { classifyGerminationFailure } from './state.js'
 import type { Germination, RuntimeState } from './state.js'
@@ -41,12 +46,29 @@ export async function germinatePhase(state: RuntimeState, logger: Logger): Promi
   // screen repairs an unwritable database — serving an API over one only buys a bot that
   // answers HTTP while its authorization tables are unreadable. A collision is a startup
   // failure for the same reason (design §4.2).
-  assertNoCollisions(config.sporesDirs)
-  const { added } = syncInstalls(db, config.sporesDirs)
+  seedOfficialSource(db)
+  // mycelo.yaml stays the authority; the rows are a mirror the UI renders §7.4's warning
+  // against. The managed root gets none: it is the core's, not a hand-edited one.
+  for (const dir of config.sporesDirs) upsertLocalSource(db, resolve(dir))
+  const managed = resolve(managedRoot(config.databaseFile))
+  // Never fatal: what a crashed install left sits two levels down, invisible to discover(),
+  // so failing to remove it must not stop the bot from booting.
+  try {
+    sweepStaging(managed)
+  } catch (e) {
+    logger.warn('could not remove the managed root\'s staging directory', { error: describeThrown(e) })
+  }
+  // Only once it exists — before the first inoculate there is nothing there and germinate()
+  // would report it as a misconfigured root — and never twice, when a configured root is it.
+  const sporesDirs = existsSync(managed) && !config.sporesDirs.some((dir) => resolve(dir) === managed)
+    ? [...config.sporesDirs, managed]
+    : config.sporesDirs
+  assertNoCollisions(sporesDirs)
+  const { added } = syncInstalls(db, sporesDirs)
   if (added.length > 0) logger.info(`recorded ${String(added.length)} spore(s): ${added.join(', ')}`)
   const settings = readAllSettings(db)
   try {
-    const registry = await germinate(config.sporesDirs, logger, settings, db)
+    const registry = await germinate(sporesDirs, logger, settings, db)
     // Spore-first would let a plugin shadow the core's own domain; germination already
     // refuses those two names, so the order here is belt and braces.
     const catalogs: Catalogs = new Map([...registry.catalogs, ...loadCoreCatalogs()])

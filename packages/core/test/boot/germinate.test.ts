@@ -1,10 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import type { Logger } from '@mycelo/septum'
 import { germinatePhase, retryGermination } from '../../src/boot/germinate.js'
 import { serve } from '../../src/boot/serve.js'
+import { listSources } from '../../src/sporangium/sources.js'
 import { createLogger } from '../../src/support/logger.js'
 
 /** Records every info()/warn() call instead of printing it, so a test can inspect them. */
@@ -40,10 +41,18 @@ function spore(name: string, files: Record<string, string>): void {
   }
 }
 
-function config(): string {
+/** `database: ./mycelo.db` puts the managed root at `<dir>/spores`, which `spore()` writes into. */
+function config(roots: readonly string[] = ['./spores']): string {
   const file = join(dir, 'mycelo.yaml')
-  writeFileSync(file, 'spores: ./spores\ndatabase: ./mycelo.db\n', 'utf8')
+  const spores = roots.length === 1 ? roots.join('') : `\n${roots.map((r) => `  - ${r}`).join('\n')}`
+  writeFileSync(file, `spores: ${spores}\ndatabase: ./mycelo.db\n`, 'utf8')
   return file
+}
+
+function root(name: string): string {
+  const path = join(dir, name)
+  mkdirSync(path, { recursive: true })
+  return path
 }
 
 const HYPHA_BODY = 'connect: async () => {}, listen: () => {}, stop: async () => {}, send: async () => {}'
@@ -211,5 +220,100 @@ describe('retryGermination', () => {
     // Break the cycle, exactly as `POST /api/plugins/beta/disable` does, then retry again.
     rmSync(join(dir, 'spores', 'beta'), { recursive: true, force: true })
     expect((await retryGermination(served.state, createLogger())).status).toBe('germinated')
+  })
+})
+
+describe('the sporangium rows boot writes', () => {
+  it('seeds the official source once and writes one local row per configured root', async () => {
+    const roots = [root('a'), root('b')]
+    const served = serve(config(['./a', './b']))
+    closeDb = served.closeDb
+    await germinatePhase(served.state, createLogger())
+    const listed = listSources(served.state.db)
+    expect(listed.filter((s) => s.official)).toHaveLength(1)
+    // Two roots, two rows: a single-root fixture passes even if only the last is written.
+    expect(listed.filter((s) => s.driver === 'local').map((s) => s.location).sort()).toEqual([...roots].sort())
+    // The managed root is the core's, so it is discovered but never mirrored as a local one.
+    expect(listed.map((s) => s.location)).not.toContain(join(dir, 'spores'))
+  })
+
+  it('is idempotent across boots: no duplicate official row and no duplicate local rows', async () => {
+    const first = serve(config(['./a', './b']))
+    root('a'); root('b')
+    await germinatePhase(first.state, createLogger())
+    first.closeDb()
+    const second = serve(config(['./a', './b']))
+    closeDb = second.closeDb
+    await germinatePhase(second.state, createLogger())
+    const listed = listSources(second.state.db)
+    expect(listed.filter((s) => s.official)).toHaveLength(1)
+    expect(listed.filter((s) => s.driver === 'local')).toHaveLength(2)
+  })
+})
+
+describe('the managed root', () => {
+  it('germinates a spore no configured root lists', async () => {
+    root('elsewhere')
+    spore('installed', {
+      'spore.yaml': 'kind: enzyme\nname: installed\nseptum: "^0.10"\ncommands:\n  - name: installed\n    description: x\n    respond: installed.reply\n',
+    })
+    const served = serve(config(['./elsewhere']))
+    closeDb = served.closeDb
+    const result = await germinatePhase(served.state, createLogger())
+    expect(result.status).toBe('germinated')
+    if (result.status !== 'germinated') throw new Error('unreachable')
+    expect(result.mycelium.registry.enzymes.map((e) => e.name)).toEqual(['installed'])
+  })
+
+  it('is not discovered twice when a configured root already names it', async () => {
+    spore('good', {
+      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.10"\ncommands:\n  - name: good\n    description: x\n    respond: good.reply\n',
+    })
+    // `spores: ./spores` and `database: ./mycelo.db` is the ordinary layout, and it puts
+    // both roots on the same directory: unguarded, assertNoCollisions refuses the boot.
+    const served = serve(config())
+    closeDb = served.closeDb
+    const result = await germinatePhase(served.state, createLogger())
+    expect(result.status).toBe('germinated')
+    if (result.status !== 'germinated') throw new Error('unreachable')
+    expect(result.mycelium.registry.enzymes.map((e) => e.name)).toEqual(['good'])
+  })
+
+  it('is not reported as a missing spores directory before the first install', async () => {
+    root('elsewhere')
+    const served = serve(config(['./elsewhere']))
+    closeDb = served.closeDb
+    const { logger, warnings } = spyLogger()
+    await germinatePhase(served.state, logger)
+    expect(existsSync(join(dir, 'spores'))).toBe(false)
+    expect(warnings.filter((w) => w.includes('spores directory does not exist'))).toEqual([])
+  })
+
+  it('sweeps what a crashed install left in .staging', async () => {
+    root('elsewhere')
+    const staging = join(dir, 'spores', '.staging', 'x-abc')
+    mkdirSync(staging, { recursive: true })
+    writeFileSync(join(staging, 'junk'), 'residue', 'utf8')
+    const served = serve(config(['./elsewhere']))
+    closeDb = served.closeDb
+    await germinatePhase(served.state, createLogger())
+    expect(existsSync(join(dir, 'spores', '.staging'))).toBe(false)
+  })
+
+  it('boots anyway, warning, when the staging directory cannot be removed', async () => {
+    root('elsewhere')
+    const managed = join(dir, 'spores')
+    mkdirSync(join(managed, '.staging', 'x-abc'), { recursive: true })
+    chmodSync(managed, 0o500)
+    try {
+      const served = serve(config(['./elsewhere']))
+      closeDb = served.closeDb
+      const { logger, warnings } = spyLogger()
+      const result = await germinatePhase(served.state, logger)
+      expect(result.status).toBe('germinated')
+      expect(warnings.filter((w) => w.includes('staging directory'))).toHaveLength(1)
+    } finally {
+      chmodSync(managed, 0o700)
+    }
   })
 })
