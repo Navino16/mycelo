@@ -249,16 +249,32 @@ export interface CommandInfo {
  * The core filters and renders, because it holds the pattern matcher and every catalogue;
  * a spore can only render its own domain and those its manifest requires (design §6).
  */
+/**
+ * Where a caller would type the command. Supplied to available() so its answer matches what
+ * dispatch would do rather than only what authorization allows.
+ */
+export interface CommandScope {
+  /** The channel whose declared capabilities gate the answer. */
+  channel: string
+  /** Omitted leaves context rules unapplied, for a caller that knows no conversation. */
+  kind?: ConversationKind
+}
+
 export interface CommandsRead {
   /**
    * Commands this principal is *authorized* to invoke, sorted by `qualified`, described in
-   * this locale. Channel capabilities and context rules are applied at dispatch, not here —
-   * a listed command can still be refused on the channel it is asked on.
+   * this locale. Without `where`, channel capabilities and context rules are applied at
+   * dispatch and not here, so a listed command can still be refused on the channel it is
+   * asked on. With `where`, both are applied and the answer matches dispatch.
    * The principal is a parameter because a mycelium rhiza is mounted once per plugin,
    * not once per invocation — so a spore holding any principal's id learns that principal's
    * authorized command set without holding `roles.read` (design §6).
    */
-  available(principal: Principal, locale: string): Promise<readonly CommandInfo[]>
+  available(
+    principal: Principal,
+    locale: string,
+    where?: CommandScope,
+  ): Promise<readonly CommandInfo[]>
 }
 
 export interface LocaleManage {

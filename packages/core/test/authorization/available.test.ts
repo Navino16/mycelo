@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test'
 import type { Principal } from '@mycelo/septum'
 import { availableCommands } from '../../src/authorization/available.js'
 import { assignRole, createRole } from '../../src/authorization/roles.js'
+import { contextRules, setContextRule } from '../../src/restrictions/rules.js'
 import type { CommandRoute, Registry } from '../../src/germination/registry.js'
 import { resolvePrincipal } from '../../src/identity/resolve.js'
 import type { Translator } from '../../src/i18n/translator.js'
@@ -152,5 +153,103 @@ describe('availableCommands, descriptions', () => {
     const en = availableCommands(registry(), db, translator, alice, 'en')
 
     expect(en.find((c) => c.qualified === 'admin.whoami')?.args).toBeUndefined()
+  })
+})
+
+// Two hyphae and two commands, one of which requires a capability: a filter collapsed to
+// "always true" or "always false" fails a different assertion in each direction.
+function registryWithChannels(): Registry {
+  const routes = new Map<string, CommandRoute>([
+    ['ping', {
+      command: 'ping', plugin: 'ping', qualified: 'ping.ping',
+      spec: { name: 'ping', description: 'cmd.ping', respond: 'x' },
+    } as CommandRoute],
+    ['react', {
+      command: 'react', plugin: 'ping', qualified: 'ping.react',
+      spec: { name: 'react', description: 'cmd.ping', respond: 'x', capabilities: ['reactions'] },
+    } as CommandRoute],
+  ])
+  const hyphae = [
+    { name: 'plain', manifest: { kind: 'hypha', capabilities: [] } },
+    { name: 'rich', manifest: { kind: 'hypha', capabilities: ['reactions'] } },
+  ]
+  return { routes, hyphae } as unknown as Registry
+}
+
+function owner(db: Db): Principal {
+  createRole(db, 'owner', ['*'])
+  const alice = resolvePrincipal(db, { channel: 'console', externalId: 'alice' })
+  assignRole(db, alice.id, 'owner')
+  return alice
+}
+
+describe('availableCommands filters on the channel', () => {
+  it('drops a command whose capability the channel does not declare, and keeps it where it does', () => {
+    const db = fresh()
+    const alice = owner(db)
+    const registry = registryWithChannels()
+
+    const plain = availableCommands(registry, db, translator, alice, 'en', { channel: 'plain' })
+    const rich = availableCommands(registry, db, translator, alice, 'en', { channel: 'rich' })
+
+    expect(plain.map((c) => c.name)).toEqual(['ping'])
+    expect(rich.map((c) => c.name)).toEqual(['ping', 'react'])
+  })
+
+  it('drops every capability-requiring command for a channel that does not exist, as dispatch does', () => {
+    const db = fresh()
+    const alice = owner(db)
+
+    const answer = availableCommands(
+      registryWithChannels(), db, translator, alice, 'en', { channel: 'absent' },
+    )
+
+    expect(answer.map((c) => c.name)).toEqual(['ping'])
+  })
+
+  it('applies no channel filter at all when no scope is given', () => {
+    const db = fresh()
+    const alice = owner(db)
+
+    const answer = availableCommands(registryWithChannels(), db, translator, alice, 'en')
+
+    expect(answer.map((c) => c.name)).toEqual(['ping', 'react'])
+  })
+})
+
+describe('availableCommands filters on the conversation kind', () => {
+  it('drops a command a rule confines to a dm when asked about a group, and keeps it in the dm', () => {
+    const db = fresh()
+    const alice = owner(db)
+    setContextRule(db, 'ping.react', 'dm')
+    const registry = registryWithChannels()
+
+    const inGroup = availableCommands(registry, db, translator, alice, 'en', { channel: 'rich', kind: 'group' })
+    const inDm = availableCommands(registry, db, translator, alice, 'en', { channel: 'rich', kind: 'dm' })
+
+    expect(inGroup.map((c) => c.name)).toEqual(['ping'])
+    expect(inDm.map((c) => c.name)).toEqual(['ping', 'react'])
+  })
+
+  it('applies no context filter when the scope carries no kind', () => {
+    const db = fresh()
+    const alice = owner(db)
+    setContextRule(db, 'ping.react', 'dm')
+
+    const answer = availableCommands(
+      registryWithChannels(), db, translator, alice, 'en', { channel: 'rich' },
+    )
+
+    expect(answer.map((c) => c.name)).toEqual(['ping', 'react'])
+  })
+
+  it('resolves every command from one read of the rule table', () => {
+    const db = fresh()
+    setContextRule(db, '*', 'dm')
+
+    const resolve = contextRules(db)
+
+    expect(resolve('ping.ping')).toBe('dm')
+    expect(resolve('ping.react')).toBe('dm')
   })
 })

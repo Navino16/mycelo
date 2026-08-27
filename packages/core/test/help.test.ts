@@ -92,3 +92,25 @@ it("renders /help's descriptions in the caller's own language after /lang", asyn
   expect(listed).toContain('Lister les commandes que vous êtes autorisé à utiliser')
   expect(listed).not.toContain('Health check')
 })
+
+// spec §7: available() is given the emitting channel, so the list stops naming a command the
+// bus would then refuse. `console` declares group_membership only; ping.react needs reactions.
+it('/help omits a command the emitting channel cannot serve', async () => {
+  const sporesDir = resolve(import.meta.dirname, '../../../fixtures')
+  const configFile = join(dir, 'mycelo.yaml')
+  writeFileSync(configFile, `prefix: "/"\nspores: ${sporesDir}\nowner:\n  channel: console\n  userId: local\n`, 'utf8')
+
+  const { registry } = await bootstrap(configFile)
+  expect(registry.dormant).toEqual([])
+
+  const fixture = registry.hyphae.find((h) => h.name === 'console')
+    ?.instance as unknown as ConsoleFixture
+
+  fixture.feed('/help')
+  await waitFor(() => { expect(fixture.sent.length).toBe(1) })
+  const listed = fixture.sent[0]?.text ?? ''
+
+  // Positive first: .not.toContain passes identically on an empty reply.
+  expect(listed).toContain('Health check')
+  expect(listed).not.toContain('Answer only where reactions exist')
+})
