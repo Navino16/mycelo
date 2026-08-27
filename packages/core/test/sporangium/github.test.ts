@@ -331,10 +331,47 @@ describe('githubDriver location host and scheme', () => {
     expect(driver.list()).rejects.toThrow(/^(?!.*secret-pat).*not a GitHub repository URL/)
   })
 
-  // Unparseable (a stray space, an out-of-range port) still must not echo the credential —
-  // the redaction happens before new URL() is even attempted to succeed.
+  // Unparseable (a stray space, an out-of-range port) still must not echo the credential — the
+  // redaction runs in the catch branch, on the raw string, after new URL() has already thrown.
   test('a refusal for an unparseable credentialed location does not echo the credential', () => {
     const driver = githubDriver('https://x-access-token:secret-pat@not a valid url', null, fakeFetch({}))
+    expect(driver.list()).rejects.toThrow(/^(?!.*secret-pat).*not a GitHub repository URL/)
+  })
+})
+
+describe('githubDriver credential redaction, exact boundary', () => {
+  test('no @ at all is left as-is', () => {
+    const driver = githubDriver('https://gitlab.com/o/r', null, fakeFetch({}))
+    expect(driver.list()).rejects.toThrow(/gitlab\.com\/o\/r/)
+  })
+
+  test('a single @ (one credential) is redacted', () => {
+    const driver = githubDriver('https://secret-pat@gitlab.com/o/r', null, fakeFetch({}))
+    expect(driver.list()).rejects.toThrow(/^(?!.*secret-pat).*gitlab\.com\/o\/r/)
+  })
+
+  // WHATWG treats the LAST @ before the path as the userinfo/host boundary — a naive
+  // non-greedy or first-@ match leaks everything after the first @.
+  test('several @ in the userinfo are all redacted, using the last one as the boundary', () => {
+    const driver = githubDriver('https://u:sec@ret-pat@not a valid url', null, fakeFetch({}))
+    expect(driver.list()).rejects.toThrow(/^(?!.*sec)(?!.*ret-pat).*not a GitHub repository URL/)
+  })
+
+  test('an empty userinfo (bare @) is dropped too', () => {
+    const driver = githubDriver('https://@gitlab.com/o/r', null, fakeFetch({}))
+    expect(driver.list()).rejects.toThrow(/^(?!.*\/\/@).*gitlab\.com\/o\/r/)
+  })
+
+  // An @ after the path has started is not a credential and must survive redaction verbatim.
+  test('an @ appearing after the path begins is left untouched', () => {
+    const driver = githubDriver('https://github.com/o@evil', null, fakeFetch({}))
+    expect(driver.list()).rejects.toThrow(/o@evil/)
+  })
+
+  // A scheme-less paste ("user:pat@host/path", no //) parses as an opaque URL with an empty
+  // host — everything after the scheme colon lands in `pathname`, including the credential.
+  test('a scheme-less (opaque) credentialed paste does not echo the credential', () => {
+    const driver = githubDriver('x-access-token:secret-pat@github.com/o/r', null, fakeFetch({}))
     expect(driver.list()).rejects.toThrow(/^(?!.*secret-pat).*not a GitHub repository URL/)
   })
 })

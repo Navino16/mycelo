@@ -10,8 +10,8 @@ const MAX_TAG_PAGES = 10
 // A released bundle's SporeOffer.name becomes a directory name under the managed root.
 const SPORE_NAME = /^[a-z][a-z0-9-]*$/
 
-// Bun.semver.satisfies tolerates trailing garbage after a parseable prefix — '1.0.0/../../etc'
-// and '1.0.0@bar' both satisfy `=<v>` — and SporeBundle.strain is written to disk by task 5.
+// Bun.semver.satisfies tolerates trailing garbage and is strictly looser than this regex on
+// every input that matches it (measured) — this is the whole guard on the strain's shape.
 const STRAIN_SHAPE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/
 
 /** `<name>@<semver>`: the tag format half A cut, and the only one this driver reads. */
@@ -22,25 +22,31 @@ export function parseTag(tag: string): { name: string, strain: string } | null {
   const strain = tag.slice(at + 1)
   if (!SPORE_NAME.test(name)) return null
   if (!STRAIN_SHAPE.test(strain)) return null
-  // `=<v>` is satisfied only by that exact version, so it doubles as a semantic validator.
-  if (!Bun.semver.satisfies(strain, `=${strain}`)) return null
   return { name, strain }
 }
 
-// A location may carry embedded credentials, a standard GitHub form
-// (`https://user:pat@github.com/o/r`) — redact them before any refusal message, parseable or not.
+// Strips a credential-looking userinfo segment before any refusal message: the last @ before
+// the first / — WHATWG's own delimiter — in either authority ("scheme://user:pass@host/…") or
+// opaque ("scheme:user:pass@host/…", no //) form. An @ appearing after the path is untouched.
 function redactCredentials(location: string): string {
-  return location.replace(/\/\/[^/@]*@/, '//')
+  const schemeMatch = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.exec(location)
+  const afterScheme = schemeMatch === null ? 0 : schemeMatch[0].length
+  const authorityStart = location.startsWith('//', afterScheme) ? afterScheme + 2 : afterScheme
+  const pathStart = location.indexOf('/', authorityStart)
+  const authorityEnd = pathStart === -1 ? location.length : pathStart
+  const at = location.slice(authorityStart, authorityEnd).lastIndexOf('@')
+  if (at === -1) return location
+  return location.slice(0, authorityStart) + location.slice(authorityStart + at + 1)
 }
 
 function repoOf(location: string): { owner: string, repo: string } {
+  const safe = redactCredentials(location)
   let url: URL
   try {
     url = new URL(location)
   } catch {
-    throw new Error(`'${redactCredentials(location)}' is not a GitHub repository URL`)
+    throw new Error(`'${safe}' is not a GitHub repository URL`)
   }
-  const safe = `${url.host}${url.pathname}`
   if (url.protocol !== 'https:' || (url.host !== 'github.com' && url.host !== 'www.github.com')) {
     throw new Error(`'${safe}' is not a GitHub repository URL`)
   }
@@ -93,8 +99,6 @@ export function githubDriver(
       if (page >= MAX_TAG_PAGES) {
         throw new Error(`sporangium tag list exceeds ${MAX_TAG_PAGES} pages; refusing to keep paginating`)
       }
-      // The label is the page actually being fetched, not a fixed literal: a failure past
-      // page 1 must name the page that failed.
       const response = await fetchOk(url, url)
       collected.push(...await response.json() as readonly { name: string }[])
       url = nextPageUrl(response)
