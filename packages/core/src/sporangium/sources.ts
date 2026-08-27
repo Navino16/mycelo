@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import type { SporangiumSource } from '@mycelo/septum'
 import { REDACTED } from '../config/plugins.js'
 import type { Db } from '../persistence/db.js'
-import { source } from '../persistence/schema.js'
+import { pluginInstall, source } from '../persistence/schema.js'
 
 export const TOKEN_MASK = REDACTED
 
@@ -84,10 +84,15 @@ export function updateSource(
   return present(row)
 }
 
-/** False when the source is official: it can be disabled, never deleted (design §11). */
+/**
+ * False when the source is official (it can be disabled, never deleted — design §11), and
+ * false when a spore is still installed from it: deleting the row would erase that spore's
+ * provenance, and with foreign keys on the delete would throw rather than answer.
+ */
 export function deleteSource(db: Db, id: number): boolean {
   const existing = db.select().from(source).where(eq(source.id, id)).get()
   if (existing === undefined || existing.official) return false
+  if (db.select().from(pluginInstall).where(eq(pluginInstall.sourceId, id)).all().length > 0) return false
   db.delete(source).where(eq(source.id, id)).run()
   return true
 }

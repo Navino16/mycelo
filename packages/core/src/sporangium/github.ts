@@ -1,18 +1,11 @@
 import { parse as parseYaml } from 'yaml'
 import { parseManifest } from '@mycelo/septum'
+import { SPORE_NAME, STRAIN_SHAPE } from './driver.js'
 import type { SporangiumDriver, SporeBundle, SporeDetail, SporeOffer } from './driver.js'
 
 // GitHub does not cap `per_page`, so a hard page cap turns an unbounded sporangium into a
 // refusal instead of a silently truncated list.
 const MAX_TAG_PAGES = 10
-
-// Mirrors septum's manifest nameSchema (packages/septum/src/manifest.ts), which is not exported.
-// A released bundle's SporeOffer.name becomes a directory name under the managed root.
-const SPORE_NAME = /^[a-z][a-z0-9-]*$/
-
-// Bun.semver.satisfies tolerates trailing garbage and is strictly looser than this regex on
-// every input that matches it (measured) — this is the whole guard on the strain's shape.
-const STRAIN_SHAPE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/
 
 /** `<name>@<semver>`: the tag format half A cut, and the only one this driver reads. */
 export function parseTag(tag: string): { name: string, strain: string } | null {
