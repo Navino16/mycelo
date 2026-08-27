@@ -279,6 +279,21 @@ describe('the managed root', () => {
     expect(result.mycelium.registry.enzymes.map((e) => e.name)).toEqual(['good'])
   })
 
+  it('collides with a configured root that holds the same directory name', async () => {
+    // The managed root is a root like any other, and design §4.2 refuses a duplicate directory
+    // across all of them — pinned across the managed root, not only across configured ones.
+    root('elsewhere')
+    const manifest = 'kind: enzyme\nname: dup\nseptum: "^0.10"\ncommands:\n  - name: dup\n    description: x\n    respond: dup.reply\n'
+    mkdirSync(join(dir, 'elsewhere', 'dup'), { recursive: true })
+    writeFileSync(join(dir, 'elsewhere', 'dup', 'spore.yaml'), manifest, 'utf8')
+    spore('dup', { 'spore.yaml': manifest })
+    const served = serve(config(['./elsewhere']))
+    closeDb = served.closeDb
+    // Thrown, not degraded: the remedy is a filesystem edit, not a UI action (design §4.2).
+    expect(germinatePhase(served.state, createLogger()))
+      .rejects.toThrow(new RegExp(`'dup'.*${join(dir, 'elsewhere', 'dup')}.*${join(dir, 'spores', 'dup')}`, 's'))
+  })
+
   it('is not reported as a missing spores directory before the first install', async () => {
     root('elsewhere')
     const served = serve(config(['./elsewhere']))

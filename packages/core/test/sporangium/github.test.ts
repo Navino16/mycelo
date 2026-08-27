@@ -129,6 +129,24 @@ describe('githubDriver.list', () => {
     ])
   })
 
+  // The ascending fixture above cannot see the newest-selection: under "last one wins" the last
+  // tag is also the newest. design §8 calls the sort non-optional because GitHub's tag order is
+  // not documented as semver-aware.
+  test('takes the newest strain whatever order the tags arrive in', async () => {
+    const descending = [
+      { name: 'radarr@0.10.0' }, { name: 'radarr@0.2.0' }, { name: 'radarr@0.1.0' },
+      { name: 'help@0.2.0' },
+    ]
+    const driver = githubDriver('https://github.com/o/r', null, fakeFetch({ '/tags': descending }))
+    expect(await driver.list()).toEqual([
+      { name: 'help', strain: '0.2.0' },
+      { name: 'radarr', strain: '0.10.0' },
+    ])
+    // Both read paths over the same tag list must agree on what the newest strain is:
+    // list() advertises it and inoculate installs strains()[0].
+    expect((await driver.strains('radarr'))[0]).toBe('0.10.0')
+  })
+
   test('strains are newest first, and only for the name asked for', async () => {
     const driver = githubDriver('https://github.com/o/r', null, fakeFetch({ '/tags': TAGS }))
     expect(await driver.strains('radarr')).toEqual(['0.10.0', '0.2.0', '0.1.0'])
