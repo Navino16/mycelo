@@ -302,6 +302,19 @@ describe('githubDriver rate limit', () => {
     expect(driver.list()).rejects.toThrow(/rate limit is exhausted; a token/)
   })
 
+  test('a malformed or out-of-range reset header still delivers the repair sentence', () => {
+    // toISOString throws RangeError on both, out of the error construction itself — so the
+    // operator would get 'Invalid Date' instead of the 403 and the repair this note exists for.
+    for (const reset of ['soon', '99999999999999', '', '-1e400']) {
+      const driver = githubDriver('https://github.com/o/r', null, limited({
+        'x-ratelimit-remaining': '0', 'x-ratelimit-reset': reset,
+      }))
+      expect(driver.list()).rejects.toThrow(/rate limit is exhausted/)
+      expect(driver.list()).rejects.toThrow(/60 to 5000/)
+      expect(driver.list()).rejects.toThrow(/^(?!.*Invalid Date)/s)
+    }
+  })
+
   test('a 404 carrying the exhausted headers is not diagnosed as a rate limit', () => {
     const driver = githubDriver('https://github.com/o/r', null, limited({ 'x-ratelimit-remaining': '0' }, 404))
     expect(driver.list()).rejects.toThrow(/^(?!.*rate limit).*GitHub answered 404/s)
@@ -360,19 +373,67 @@ describe('githubDriver download cap', () => {
     }) as typeof fetch
   }
 
-  test('refuses an asset declaring more than the cap, naming it, without buffering it', async () => {
+  test('refuses an asset declaring more than the cap, naming it, on the header alone', async () => {
     const driver = githubDriver('https://github.com/o/r', null, serving(
       new Uint8Array([1, 2, 3]), { 'content-length': String(MAX_BUNDLE_BYTES + 1) },
     ))
     expect(driver.fetch('radarr', '0.2.0')).rejects.toThrow(new RegExp(String(MAX_BUNDLE_BYTES)))
   })
 
-  test('refuses an asset over the cap that declared no content-length', async () => {
-    // A sporangium is not obliged to send the header and can lie in it, so the buffered
-    // length is what actually bounds the allocation.
-    const driver = githubDriver('https://github.com/o/r', null, serving(new Uint8Array(MAX_BUNDLE_BYTES + 1)))
-    expect(driver.fetch('radarr', '0.2.0')).rejects.toThrow(new RegExp(String(MAX_BUNDLE_BYTES)))
+  // The adversarial shape, and the only one the cap exists for: a stream body carries no
+  // content-length, so the header precheck cannot fire and the read is the whole bound.
+  test('refuses an over-cap asset with no content-length, having read only past the cap', async () => {
+    const CHUNK = 1024 * 1024
+    const AVAILABLE = MAX_BUNDLE_BYTES * 4
+    let produced = 0
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (produced >= AVAILABLE) {
+          controller.close()
+          return
+        }
+        produced += CHUNK
+        controller.enqueue(new Uint8Array(CHUNK))
+      },
+    })
+    const driver = githubDriver('https://github.com/o/r', null, streaming(body))
+    let message = ''
+    try {
+      await driver.fetch('radarr', '0.2.0')
+    } catch (e) {
+      message = (e as Error).message
+    }
+    expect(message).toContain(String(MAX_BUNDLE_BYTES))
+    // Refused before the allocation, not after it: buffering the body whole and measuring it
+    // afterwards answers the same message having pulled all four caps' worth. The margin is
+    // wide because a stream's default queuing strategy pre-pulls a few chunks past the cap.
+    expect(produced).toBeLessThan(MAX_BUNDLE_BYTES * 2)
+    expect(produced).toBeLessThan(AVAILABLE)
   })
+
+  test('reads a whole under-cap streamed body rather than stopping early', () => {
+    // The positive control for the counter: the cap must not truncate a legitimate bundle.
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(1024))
+        controller.enqueue(new Uint8Array(512))
+        controller.close()
+      },
+    })
+    const driver = githubDriver('https://github.com/o/r', null, streaming(body))
+    expect(driver.fetch('radarr', '0.2.0')).resolves.toMatchObject({ strain: '0.2.0' })
+  })
+
+  function streaming(body: ReadableStream<Uint8Array>): typeof fetch {
+    return ((input: string | URL | Request) => {
+      if (urlOf(input).includes('/releases/tags/')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          assets: [{ name: 'radarr-0.2.0.tgz', browser_download_url: 'https://dl/radarr' }],
+        }), { status: 200 }))
+      }
+      return Promise.resolve(new Response(body, { status: 200 }))
+    }) as typeof fetch
+  }
 
   test('accepts an asset under the cap, header or no header', async () => {
     const bytes = new Uint8Array([1, 2, 3])

@@ -79,7 +79,15 @@ describe('extractTarball', () => {
     const dest = mkdtempSync(join(tmpdir(), 'dest-'))
     const bomb = new Uint8Array(gzipSync(Buffer.alloc(MAX_UNPACKED_BYTES + 1024, 0)))
     expect(bomb.byteLength).toBeLessThan(1024 * 1024)
-    expect(extractTarball(bomb, dest)).rejects.toThrow(new RegExp(String(MAX_UNPACKED_BYTES)))
+    // Awaited, not the unawaited `.rejects` idiom: the second assertion is about what is on
+    // disk *after* the refusal, and unawaited it runs before the first write either way.
+    let message = ''
+    try {
+      await extractTarball(bomb, dest)
+    } catch (e) {
+      message = (e as Error).message
+    }
+    expect(message).toContain(String(MAX_UNPACKED_BYTES))
     expect(readdirSync(dest)).toEqual([])
   })
 

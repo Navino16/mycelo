@@ -1,6 +1,7 @@
 import { parse as parseYaml } from 'yaml'
 import { parseManifest } from '@mycelo/septum'
 import { redactCredentials } from '../support/redaction.js'
+import { readCapped } from './bounded.js'
 import { MAX_BUNDLE_BYTES, SPORE_NAME, STRAIN_SHAPE } from './driver.js'
 import type { SporangiumDriver, SporeBundle, SporeDetail, SporeOffer } from './driver.js'
 
@@ -65,8 +66,12 @@ export function githubDriver(
   // 403 here and 'forbidden' alone points the operator at the wrong repair.
   function rateLimitNote(response: Response): string {
     if (response.status !== 403 || response.headers.get('x-ratelimit-remaining') !== '0') return ''
-    const reset = response.headers.get('x-ratelimit-reset')
-    const at = reset === null ? '' : `, resetting at ${new Date(Number(reset) * 1000).toISOString()}`
+    // Two ways to have no time to report, and both must stay silent rather than render one:
+    // a missing header (Number(null) is 0, which is a valid epoch) and toISOString throwing
+    // RangeError on an unparseable or out-of-range one, out of the error this note delivers.
+    const header = response.headers.get('x-ratelimit-reset')
+    const reset = header === null ? new Date(NaN) : new Date(Number(header) * 1000)
+    const at = Number.isNaN(reset.getTime()) ? '' : `, resetting at ${reset.toISOString()}`
     return `: the rate limit is exhausted${at}; a token on this source raises it from 60 to 5000 requests an hour`
   }
 
@@ -137,16 +142,16 @@ export function githubDriver(
       if (asset === undefined) throw new Error(`release '${tag}' carries no asset named '${wanted}'`)
       const response = await fetchImpl(asset.browser_download_url, { headers })
       if (!response.ok) throw new Error(`downloading '${wanted}' answered ${String(response.status)}`)
-      // Both checks: the header is the cheap refusal, and an uncurated sporangium can omit it
-      // or lie. The buffered length is what actually bounds the allocation.
+      // The header is the cheap early exit; an uncurated sporangium can omit it or lie, so the
+      // body is read through the cap rather than buffered whole and measured afterwards.
       const declared = Number(response.headers.get('content-length'))
       if (Number.isFinite(declared) && declared > MAX_BUNDLE_BYTES) {
         throw new Error(`'${wanted}' declares ${String(declared)} bytes, over the ${String(MAX_BUNDLE_BYTES)} byte limit`)
       }
-      const tarball = new Uint8Array(await response.arrayBuffer())
-      if (tarball.byteLength > MAX_BUNDLE_BYTES) {
-        throw new Error(`'${wanted}' is ${String(tarball.byteLength)} bytes, over the ${String(MAX_BUNDLE_BYTES)} byte limit`)
-      }
+      const body = response.body
+      if (body === null) throw new Error(`downloading '${wanted}' answered no body`)
+      const tarball = await readCapped(body, MAX_BUNDLE_BYTES, () =>
+        new Error(`'${wanted}' is over the ${String(MAX_BUNDLE_BYTES)} byte limit`))
       return { tarball, strain } satisfies SporeBundle
     },
   }

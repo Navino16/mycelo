@@ -1,5 +1,6 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { readCapped } from './bounded.js'
 import { MAX_UNPACKED_BYTES } from './driver.js'
 
 /** Decompressed before tar sees it, so this is a plain tar. treeProblem filters it by name. */
@@ -22,28 +23,9 @@ async function gunzipBounded(tarball: Uint8Array, cap: number): Promise<Uint8Arr
     },
   })
   // DecompressionStream's readable is typed `any` under these libs, so the chunk type is
-  // restated here rather than propagated as `any` into the length arithmetic below.
+  // restated here rather than propagated as `any` into readCapped's length arithmetic.
   const decompressed = source.pipeThrough(new DecompressionStream('gzip')) as ReadableStream<Uint8Array>
-  const reader = decompressed.getReader()
-  const chunks: Uint8Array[] = []
-  let total = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    total += value.byteLength
-    if (total > cap) {
-      await reader.cancel()
-      throw new Error(`the archive unpacks to more than ${String(cap)} bytes`)
-    }
-    chunks.push(value)
-  }
-  const out = new Uint8Array(total)
-  let at = 0
-  for (const chunk of chunks) {
-    out.set(chunk, at)
-    at += chunk.byteLength
-  }
-  return out
+  return await readCapped(decompressed, cap, () => new Error(`the archive unpacks to more than ${String(cap)} bytes`))
 }
 
 /**
