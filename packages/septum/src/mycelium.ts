@@ -304,9 +304,16 @@ export interface InoculateOutcome {
 export interface SourcesManage {
   /** Tokens come back as the literal '••••', never the value itself. */
   listSources(): Promise<readonly SporangiumSource[]>
-  /** The new source is third-party whatever the label says. */
+  /**
+   * The new source is third-party whatever the label says. Rejects `driver: 'local'`: a local
+   * root is declared in mycelo.yaml and mirrored at boot (design §7).
+   */
   addSource(s: { label: string, driver: 'local' | 'github', location: string, token?: string }): Promise<SporangiumSource>
-  /** A token sent back as the mask is skipped rather than stored; an empty string clears it. */
+  /**
+   * A token sent back as the mask is skipped rather than stored; an empty string clears it.
+   * `location` is ignored on the official source: repointing it would relabel an unreviewed
+   * sporangium as reviewed (design §11). It stays disable-able and re-tokenable.
+   */
   updateSource(id: number, patch: { label?: string, location?: string, token?: string, enabled?: boolean }): Promise<SporangiumSource | null>
   /** False for the official source, which can be disabled but never deleted (design §11). */
   deleteSource(id: number): Promise<boolean>

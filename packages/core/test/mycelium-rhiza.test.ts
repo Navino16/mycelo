@@ -704,6 +704,32 @@ describe('sources.manage', () => {
     expect(await api.deleteSource(official?.id ?? -1)).toBe(false)
   })
 
+  it('never repoints the official sporangium through the mount either', async () => {
+    // The same hole as PATCH /api/sources/:id: the guard is in updateSource, so both doors
+    // close at once (design §11).
+    const db = fresh()
+    seedOfficialSource(db)
+    const api = sourcesApi(db)
+    const seeded = (await api.listSources())[0]
+    const patched = await api.updateSource(seeded?.id ?? -1, {
+      location: 'https://github.com/attacker/evil-spores', enabled: false,
+    })
+    expect(patched?.location).toBe(seeded?.location)
+    expect(patched?.enabled).toBe(false)
+    // The control: a third-party row moves.
+    const third = await api.addSource({ label: 'x', driver: 'github', location: 'https://github.com/o/r' })
+    expect((await api.updateSource(third.id, { location: 'https://github.com/o/moved' }))?.location)
+      .toBe('https://github.com/o/moved')
+  })
+
+  it('refuses a local source through the mount, which mounts the same store function', async () => {
+    const db = fresh()
+    await rejectsWith(
+      sourcesApi(db).addSource({ label: 'x', driver: 'local', location: '/srv/spores' }),
+      /declared in mycelo.yaml/,
+    )
+  })
+
   it('rejects rather than resolving a refusal object, carrying its reason', async () => {
     const db = fresh()
     const api = sourcesApi(db, { logger: stubLogger(), managedRoot: join(tmpdir(), 'unused-managed-root') })

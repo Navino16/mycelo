@@ -34,7 +34,7 @@ api:
   sourceNotFound: "aucune source de sporange avec l'id « {id} »"
   sourceOfficial: "le sporange officiel ne peut pas être supprimé, seulement désactivé"
   sourceInUse: "« {label} » fournit encore des spores installées : {spores}"
-  sourceLocalBrowse: "« {label} » est un répertoire de spores local : il n'y a rien à parcourir, ses spores sont déjà installées"
+  sourceLocalBrowse: "ceci est un répertoire de spores local : il n'y a rien à parcourir, ses spores sont déjà installées"
   sourceUnreachable: "« {label} » n'a pas pu être lu"
   sporeNotOffered: "« {label} » ne propose aucune spore nommée « {name} »"
   inoculateRefused: "« {name} » n'a pas pu être installé depuis « {label} »"

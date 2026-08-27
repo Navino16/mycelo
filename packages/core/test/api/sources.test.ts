@@ -5,7 +5,7 @@ import type { SporangiumSource } from '@mycelo/septum'
 import type { DriverFactory, SporeOffer } from '../../src/sporangium/driver.js'
 import { recordInstall } from '../../src/config/store.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
-import { sourceToken, TOKEN_MASK } from '../../src/sporangium/sources.js'
+import { sourceLocation, sourceToken, TOKEN_MASK } from '../../src/sporangium/sources.js'
 import { bundleOf } from '../support/bundle.js'
 import { bootAndLogin, closeBooted, twoPluginsTwoCommands } from './support.js'
 import type { LoggedIn } from './support.js'
@@ -49,6 +49,8 @@ async function addThirdParty(b: LoggedIn, label: string): Promise<SporangiumSour
 const MANIFEST = (name: string): string =>
   `kind: enzyme\nname: ${name}\nseptum: "^0.10"\n`
   + `commands:\n  - name: ${name}\n    description: x\n    respond: ${name}.reply\n`
+  // `needy` is the two-warning case: third-party *and* an unsatisfied mandatory requirement.
+  + (name === 'needy' ? 'requires:\n  - rhiza: absent-connector\n' : '')
 
 const MODULE = 'export default { create: () => ({ handlers: {} }) }'
 
@@ -200,6 +202,80 @@ describe('/api/sources', () => {
     })
     expect(refused.statusCode).toBe(409)
     expect(refused.json<ErrorBody>().error.message).toContain('lonely')
+  })
+
+  it('never repoints the official sporangium, while a third-party one is repointed freely', async () => {
+    // Repointing the official row relabels an unreviewed sporangium as reviewed, and
+    // inoculate keys its trust warning off `official` — worse than the deletion design §11
+    // already forbids.
+    booted = await bootAndLogin({ spores: twoPluginsTwoCommands })
+    const { app, cookie } = booted
+    const seeded = await official(booted)
+    const evil = 'https://github.com/attacker/evil-spores'
+    const patched = (await app.inject({
+      method: 'PATCH', url: `/api/sources/${String(seeded.id)}`, headers: { cookie },
+      payload: { location: evil, label: 'Relabelled', enabled: false, token: 'ghp_x' },
+    })).json<SporangiumSource>()
+    expect(patched.location).toBe(seeded.location)
+    // §11 keeps it disable-able and re-tokenable: only the location is frozen.
+    expect(patched).toMatchObject({ label: 'Relabelled', enabled: false, token: TOKEN_MASK })
+
+    // The control: the same field, on a third-party row, is written.
+    const third = await addThirdParty(booted, 'movable')
+    const moved = (await app.inject({
+      method: 'PATCH', url: `/api/sources/${String(third.id)}`, headers: { cookie }, payload: { location: evil },
+    })).json<SporangiumSource>()
+    expect(moved.location).toBe(evil)
+  })
+
+  it('refuses to add a local source, so no phantom row exists beside the mirrored ones', async () => {
+    booted = await bootAndLogin({ spores: twoPluginsTwoCommands })
+    const refused = await booted.app.inject({
+      method: 'POST', url: '/api/sources', headers: { cookie: booted.cookie },
+      payload: { label: 'hand-made', driver: 'local', location: '/srv/spores' },
+    })
+    expect(refused.statusCode).toBe(400)
+    // The control: the boot-time mirror's own local row is still there and still listed.
+    expect((await sources(booted)).filter((s) => s.driver === 'local')).toHaveLength(1)
+  })
+
+  it('masks a credential carried in a location userinfo, as it masks the token beside it', async () => {
+    booted = await bootAndLogin({ spores: twoPluginsTwoCommands })
+    const { app, cookie } = booted
+    const created = (await app.inject({
+      method: 'POST', url: '/api/sources', headers: { cookie },
+      payload: {
+        label: 'private', driver: 'github',
+        location: 'https://user:ghp_INURL@github.com/o/r', token: 'ghp_INHEADER',
+      },
+    })).json<SporangiumSource>()
+    expect(created.location).toBe('https://github.com/o/r')
+    expect(JSON.stringify(await sources(booted))).not.toContain('ghp_INURL')
+    // The positive beside the negative: the driver still gets the credential it has to send.
+    expect(sourceLocation(booted.served.state.db, created.id)).toBe('https://user:ghp_INURL@github.com/o/r')
+  })
+
+  it('never puts a local root\'s absolute path in a client-visible message', async () => {
+    booted = await bootAndLogin({ spores: twoPluginsTwoCommands })
+    const { app, cookie } = booted
+    const local = await localRoot(booted)
+    // The label of a local row IS its absolute path, so each of these three would carry it.
+    recordInstall(booted.served.state.db, 'zz-installed', 'enzyme', false, { sourceId: local.id, strain: '0.2.0' })
+    const bodies = await Promise.all([
+      app.inject({ method: 'GET', url: `/api/sources/${String(local.id)}/spores`, headers: { cookie } }),
+      app.inject({ method: 'DELETE', url: `/api/sources/${String(local.id)}`, headers: { cookie } }),
+      app.inject({
+        method: 'POST', url: `/api/sources/${String(local.id)}/inoculate`,
+        headers: { cookie }, payload: { name: 'greeter' },
+      }),
+    ])
+    expect(bodies.map((r) => r.statusCode)).toEqual([404, 409, 400])
+    for (const response of bodies) expect(response.body).not.toContain(local.location)
+    // The positive beside it: each still says enough to act on, and the DTO still carries
+    // the path where design §12 puts it.
+    expect(bodies[0]?.json<ErrorBody>().error.message).toContain('local')
+    expect(bodies[1]?.json<ErrorBody>().error.message).toContain('zz-installed')
+    expect(local.location).toContain(booted.dir)
   })
 
   it('answers 401 without the session cookie, on a route that exists', async () => {
@@ -368,6 +444,24 @@ describe('POST /api/sources/:id/inoculate', () => {
     expect(after.enzyme.filter((p) => p.name === 'radarr' && p.reason !== undefined)).toEqual([])
   })
 
+  it('carries every warning inoculate produced, not the first of them', async () => {
+    // Two at once, in inoculate's own order: the trust sentence then the dormancy one. A
+    // response keeping either end alone reads as a complete answer (design §11).
+    booted = await bootAndLogin({
+      spores: twoPluginsTwoCommands,
+      driverFor: await fakeSporangium({ needy: ['0.2.0'] }),
+    })
+    const third = await addThirdParty(booted, 'elsewhere')
+    const body = (await booted.app.inject({
+      method: 'POST', url: `/api/sources/${String(third.id)}/inoculate`,
+      headers: { cookie: booted.cookie }, payload: { name: 'needy' },
+    })).json<{ warnings: string[] }>()
+    expect(body.warnings).toHaveLength(2)
+    expect(body.warnings[0]).toContain('not code-reviewed')
+    expect(body.warnings[1]).toContain("'absent-connector'")
+    expect(body.warnings[1]).toContain('dormant')
+  })
+
   it('answers 400 naming the strains that exist', async () => {
     booted = await bootWithSporangium()
     const seeded = await official(booted)
@@ -401,7 +495,7 @@ describe('POST /api/sources/:id/inoculate', () => {
     expect(unknown.statusCode).toBe(400)
   })
 
-  it('classifies a throw out of inoculate as a refusal, and keeps the fault out of the body', async () => {
+  it('classifies a throw out of inoculate as an internal fault, and keeps it out of the body', async () => {
     booted = await bootAndLogin({
       spores: twoPluginsTwoCommands,
       driverFor: () => { throw new Error(`ENOENT: no such file, scandir '/tmp/secret-path/spores'`) },
@@ -411,8 +505,10 @@ describe('POST /api/sources/:id/inoculate', () => {
       method: 'POST', url: `/api/sources/${String(seeded.id)}/inoculate`,
       headers: { cookie: booted.cookie }, payload: { name: 'radarr' },
     })
-    // Spec §10: classified, and the absolute path stays in the operator's log.
-    expect(response.statusCode).toBe(400)
+    // Spec §10: classified, and the absolute path stays in the operator's log. 500, not 400:
+    // the fault is on the server's own managed root, so re-prompting the operator is a lie.
+    expect(response.statusCode).toBe(500)
+    expect(response.json<ErrorBody>().error.code).toBe('internal')
     expect(response.body).not.toContain('/tmp/secret-path')
     expect(response.json<ErrorBody>().error.message).toContain('radarr')
   })

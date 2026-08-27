@@ -12,7 +12,9 @@ import type { SporangiumDriver } from '../../src/sporangium/driver.js'
 import { parseTag } from '../../src/sporangium/github.js'
 import { createStagingDir, inoculate, STAGING_DIR, sweepStaging, treeProblem } from '../../src/sporangium/inoculate.js'
 import { managedRoot } from '../../src/sporangium/layout.js'
-import { addSource, deleteSource, installsFromSource, listSources, seedOfficialSource, updateSource } from '../../src/sporangium/sources.js'
+import {
+  addSource, deleteSource, installsFromSource, listSources, seedOfficialSource, updateSource, upsertLocalSource,
+} from '../../src/sporangium/sources.js'
 import { bundleOf } from '../support/bundle.js'
 import { freshDb } from '../support/db.js'
 import { recordingLogger, silentLogger } from '../support/logger.js'
@@ -629,14 +631,26 @@ describe('inoculate', () => {
     expect(why(result)).toContain('managed root cannot be written')
   })
 
-  test('refuses a local source rather than failing later', async () => {
-    // The row is written directly: design §7 gives a local source no driver, and the
-    // refusal has to be reachable anyway.
+  test('refuses a local source without naming the root, whose label is its absolute path', async () => {
+    // Written through the boot-time mirror, the only writer of a local row (design §7).
     const { db } = freshDb()
-    const local = addSource(db, { label: '/srv/spores', driver: 'local', location: '/srv/spores' })
-    const result = await inoculate(ctxOf(db, stubDriver(new Uint8Array()), managedDir()), { sourceId: local.id, name: 'radarr' })
+    upsertLocalSource(db, '/srv/spores')
+    const local = listSources(db).find((source) => source.driver === 'local')
+    const result = await inoculate(
+      ctxOf(db, stubDriver(new Uint8Array()), managedDir()), { sourceId: local?.id ?? -1, name: 'radarr' },
+    )
     expect(result.ok).toBe(false)
     expect(why(result)).toContain('local')
+    // Spec §10: a refusal reaching an API client carries the kind of root, never the path.
+    expect(why(result)).not.toContain('/srv/spores')
+  })
+
+  test('refuses adding a local source at all, so no phantom row exists to inoculate from', () => {
+    const { db } = freshDb()
+    expect(() => addSource(db, { label: 'x', driver: 'local', location: '/srv/spores' }))
+      .toThrow(/declared in mycelo.yaml/)
+    // The control: the same call with the driver that does have one is accepted.
+    expect(addSource(db, { label: 'x', driver: 'github', location: 'https://github.com/o/r' }).driver).toBe('github')
   })
 
   test('refuses a disabled source, and an id that does not exist', async () => {

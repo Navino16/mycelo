@@ -7,18 +7,19 @@ import type { DriverFactory, SporangiumDriver } from '../../sporangium/driver.js
 import { githubDriver } from '../../sporangium/github.js'
 import { inoculate } from '../../sporangium/inoculate.js'
 import {
-  addSource, deleteSource, getSource, installsFromSource, listSources, sourceToken, updateSource,
+  addSource, deleteSource, getSource, installsFromSource, listSources, sourceLocation, sourceToken,
+  updateSource,
 } from '../../sporangium/sources.js'
 import { createLogger } from '../../support/logger.js'
 import { describeFault, describeThrown } from '../../support/thrown.js'
-import { badRequest, conflict, notFound } from '../errors.js'
+import { ApiError, badRequest, conflict, notFound } from '../errors.js'
 import { parseBody } from '../parse.js'
 
 // `official` is absent by construction: Zod strips what the schema does not name, and a
 // source an operator could mark official would bypass the whole trust model (design §11).
 const addSchema = z.object({
   label: z.string().min(1),
-  driver: z.enum(['local', 'github']),
+  driver: z.literal('github'),
   location: z.string().min(1),
   token: z.string().optional(),
 })
@@ -50,8 +51,19 @@ export function registerSourceRoutes(
   function driverOf(source: SporangiumSource): SporangiumDriver {
     // design §7: a local root's contents are the installed list, so there is nothing to
     // browse. An empty list would read as "this source offers nothing".
-    if (source.driver === 'local') throw notFound('api.sourceLocalBrowse', { label: source.label })
-    return driverFor?.(source.id) ?? githubDriver(source.location, sourceToken(state.db, source.id))
+    if (source.driver === 'local') throw notFound('api.sourceLocalBrowse')
+    // sourceLocation, not source.location: the DTO's userinfo is redacted (spec §10) and the
+    // driver has to send it.
+    return driverFor?.(source.id)
+      ?? githubDriver(sourceLocation(state.db, source.id) ?? source.location, sourceToken(state.db, source.id))
+  }
+
+  /**
+   * A local source's label is its absolute path (upsertLocalSource), which spec §10 keeps out
+   * of a client-visible message. Only `github` sources are ever named.
+   */
+  function nameOf(source: SporangiumSource): string {
+    return source.driver === 'local' ? 'a local spores directory' : source.label
   }
 
   async function reachable<T>(source: SporangiumSource, run: () => Promise<T>): Promise<T> {
@@ -59,7 +71,9 @@ export function registerSourceRoutes(
       return await run()
     } catch (e) {
       logger.error(`sporangium '${source.label}' could not be read`, { error: describeFault(e) })
-      throw badRequest('api.sourceUnreachable', { label: source.label }, describeThrown(e))
+      // describeThrown is safe as a detail only while githubDriver is the sole driver: its
+      // messages are the core's own and carry no path. A third-party driver would not be.
+      throw badRequest('api.sourceUnreachable', { label: nameOf(source) }, describeThrown(e))
     }
   }
 
@@ -81,7 +95,7 @@ export function registerSourceRoutes(
     if (source.official) throw conflict('api.sourceOfficial', { label: source.label })
     const installed = installsFromSource(state.db, source.id)
     if (installed.length > 0) {
-      throw conflict('api.sourceInUse', { label: source.label, spores: installed.join(', ') })
+      throw conflict('api.sourceInUse', { label: nameOf(source), spores: installed.join(', ') })
     }
     deleteSource(state.db, source.id)
     return reply.code(204).send()
@@ -97,11 +111,11 @@ export function registerSourceRoutes(
     const source = requireSource(request)
     const { name } = request.params as { name: string }
     // A name reaches the driver as a URL path segment, so it is validated before it does.
-    if (!SPORE_NAME.test(name)) throw notFound('api.sporeNotOffered', { name, label: source.label })
+    if (!SPORE_NAME.test(name)) throw notFound('api.sporeNotOffered', { name, label: nameOf(source) })
     const driver = driverOf(source)
     const strains = await reachable(source, () => driver.strains(name))
     const newest = strains[0]
-    if (newest === undefined) throw notFound('api.sporeNotOffered', { name, label: source.label })
+    if (newest === undefined) throw notFound('api.sporeNotOffered', { name, label: nameOf(source) })
     return { strains, detail: await reachable(source, () => driver.detail(name, newest)) }
   })
 
@@ -112,7 +126,7 @@ export function registerSourceRoutes(
     try {
       result = await inoculate({
         db: state.db,
-        sporesDirs: state.config.sporesDirs,
+        sporesDirs: state.config.discoveryDirs,
         managedRoot: state.config.managedRoot,
         logger,
         ...(driverFor === undefined ? {} : { driverFor }),
@@ -122,13 +136,15 @@ export function registerSourceRoutes(
         ...(body.strain === undefined ? {} : { strain: body.strain }),
       })
     } catch (e) {
-      // design §9 leaves discover() outside inoculate's own guards, so a throw is reachable.
+      // design §9 leaves discover() outside inoculate's own guards, so a throw is reachable —
+      // on the server's own managed root, never on client input, which is validated first.
+      // 500 rather than 400: re-prompting an operator who can do nothing is a false diagnosis.
       // Spec §10: the fault carries absolute paths and belongs in the log, not in the answer.
       logger.error(`inoculating '${body.name}' threw`, { error: describeFault(e) })
-      throw badRequest('api.inoculateFailed', { name: body.name })
+      throw new ApiError(500, 'internal', 'api.inoculateFailed', { name: body.name })
     }
     if (!result.ok) {
-      throw badRequest('api.inoculateRefused', { name: body.name, label: source.label }, result.reason)
+      throw badRequest('api.inoculateRefused', { name: body.name, label: nameOf(source) }, result.reason)
     }
     // The warnings are inoculate's, never composed here: a UI that forgets to render a flag
     // must still receive the sentence (design §11).

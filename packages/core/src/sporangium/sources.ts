@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import type { SporangiumSource } from '@mycelo/septum'
 import type { Db } from '../persistence/db.js'
 import { pluginInstall, source } from '../persistence/schema.js'
-import { REDACTED } from '../support/redaction.js'
+import { REDACTED, redactCredentials } from '../support/redaction.js'
 
 export const TOKEN_MASK = REDACTED
 
@@ -20,7 +20,9 @@ function present(row: Row): SporangiumSource {
     id: row.id,
     label: row.label,
     driver: row.driver,
-    location: row.location,
+    // A location can carry a credential in its userinfo, and the API masks the other
+    // credential carrier on this same row: sourceLocation() is what a driver reads.
+    location: redactCredentials(row.location),
     official: row.official,
     enabled: row.enabled,
   }
@@ -42,6 +44,11 @@ export function getSource(db: Db, id: number): SporangiumSource | null {
   return row === undefined ? null : present(row)
 }
 
+/** The raw location, userinfo included, for a driver. Never crosses the API boundary. */
+export function sourceLocation(db: Db, id: number): string | null {
+  return db.select().from(source).where(eq(source.id, id)).get()?.location ?? null
+}
+
 /** The raw token, for a driver. Never crosses the API boundary. */
 export function sourceToken(db: Db, id: number): string | null {
   const row = db.select().from(source).where(eq(source.id, id)).get()
@@ -53,6 +60,10 @@ export function addSource(
   db: Db,
   s: { label: string, driver: 'local' | 'github', location: string, token?: string },
 ): SporangiumSource {
+  // design §7: a local root is declared in mycelo.yaml and mirrored at boot, so a row added
+  // here would be a phantom nothing manages. Refused in the store, like `official` below,
+  // because the mycelium mounts this function too.
+  if (s.driver === 'local') throw new Error('a local spores directory is declared in mycelo.yaml, not added as a source')
   // official is never taken from the caller (design §11).
   const row = db.insert(source)
     .values({ label: s.label, driver: s.driver, location: s.location, token: s.token || null, official: false, enabled: true })
@@ -70,7 +81,10 @@ export function updateSource(
   if (existing === undefined) return null
   const values: Partial<Row> = {}
   if (patch.label !== undefined) values.label = patch.label
-  if (patch.location !== undefined) values.location = patch.location
+  // Repointing the official row relabels an unreviewed sporangium as reviewed, and
+  // inoculate keys its trust warning off `official` — strictly worse than the deletion
+  // design §11 already forbids. Disabling and re-tokening it stay open.
+  if (patch.location !== undefined && !existing.official) values.location = patch.location
   if (patch.enabled !== undefined) values.enabled = patch.enabled
   // The mask is what a form reads back, so it is not a value: writing it keeps what is
   // stored, and an explicit empty string is the only way to clear a token.

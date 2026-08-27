@@ -1,5 +1,6 @@
 import { parse as parseYaml } from 'yaml'
 import { parseManifest } from '@mycelo/septum'
+import { redactCredentials } from '../support/redaction.js'
 import { SPORE_NAME, STRAIN_SHAPE } from './driver.js'
 import type { SporangiumDriver, SporeBundle, SporeDetail, SporeOffer } from './driver.js'
 
@@ -16,20 +17,6 @@ export function parseTag(tag: string): { name: string, strain: string } | null {
   if (!SPORE_NAME.test(name)) return null
   if (!STRAIN_SHAPE.test(strain)) return null
   return { name, strain }
-}
-
-// Strips a credential-looking userinfo segment before any refusal message: the last @ before
-// the first / — WHATWG's own delimiter — in either authority ("scheme://user:pass@host/…") or
-// opaque ("scheme:user:pass@host/…", no //) form. An @ appearing after the path is untouched.
-function redactCredentials(location: string): string {
-  const schemeMatch = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.exec(location)
-  const afterScheme = schemeMatch === null ? 0 : schemeMatch[0].length
-  const authorityStart = location.startsWith('//', afterScheme) ? afterScheme + 2 : afterScheme
-  const pathStart = location.indexOf('/', authorityStart)
-  const authorityEnd = pathStart === -1 ? location.length : pathStart
-  const at = location.slice(authorityStart, authorityEnd).lastIndexOf('@')
-  if (at === -1) return location
-  return location.slice(0, authorityStart) + location.slice(authorityStart + at + 1)
 }
 
 function repoOf(location: string): { owner: string, repo: string } {

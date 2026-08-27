@@ -14,7 +14,7 @@ import { SPORE_NAME, STRAIN_SHAPE } from './driver.js'
 import type { DriverFactory } from './driver.js'
 import { extractTarball } from './extract.js'
 import { githubDriver } from './github.js'
-import { getSource, sourceToken } from './sources.js'
+import { getSource, sourceLocation, sourceToken } from './sources.js'
 
 export interface InoculateContext {
   db: Db
@@ -195,12 +195,17 @@ export async function inoculate(
 
   const source = getSource(db, request.sourceId)
   if (source === null) return { ok: false, reason: `no source with id ${String(request.sourceId)}` }
-  if (!source.enabled) return { ok: false, reason: `source '${source.label}' is disabled` }
+  // A local source's label is its absolute path (sources.ts), and a refusal reaches an API
+  // client: spec §10 gives it the kind of root instead.
+  const named = source.driver === 'local' ? 'a local spores directory' : `'${source.label}'`
+  if (!source.enabled) return { ok: false, reason: `source ${named} is disabled` }
   if (source.driver === 'local') {
-    return { ok: false, reason: `source '${source.label}' is a local root: its spores are already installed` }
+    return { ok: false, reason: `${named} is a local root: its spores are already installed` }
   }
+  // sourceLocation, not source.location: the DTO's is redacted, and a userinfo credential
+  // is part of what the driver has to send.
   const driver = ctx.driverFor?.(request.sourceId)
-    ?? githubDriver(source.location, sourceToken(db, request.sourceId))
+    ?? githubDriver(sourceLocation(db, request.sourceId) ?? source.location, sourceToken(db, request.sourceId))
 
   let strains: readonly string[]
   try {

@@ -34,7 +34,7 @@ api:
   sourceNotFound: "no sporangium source with id ''{id}''"
   sourceOfficial: "the official sporangium cannot be deleted, only disabled"
   sourceInUse: "''{label}'' still provides installed spores: {spores}"
-  sourceLocalBrowse: "''{label}'' is a local spores directory: there is nothing to browse, its spores are already installed"
+  sourceLocalBrowse: "this is a local spores directory: there is nothing to browse, its spores are already installed"
   sourceUnreachable: "''{label}'' could not be read"
   sporeNotOffered: "''{label}'' offers no spore named ''{name}''"
   inoculateRefused: "''{name}'' could not be installed from ''{label}''"
