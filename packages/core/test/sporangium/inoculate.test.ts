@@ -1,15 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { getInstall } from '../../src/config/store.js'
+import { basename, dirname, join } from 'node:path'
+import { getInstall, recordInstall, setEnabled } from '../../src/config/store.js'
+import { discover } from '../../src/germination/discover.js'
 import type { Db } from '../../src/persistence/db.js'
 import { pluginInstall } from '../../src/persistence/schema.js'
 import type { SporangiumDriver } from '../../src/sporangium/driver.js'
 import { parseTag } from '../../src/sporangium/github.js'
-import { inoculate, managedRoot, treeProblem } from '../../src/sporangium/inoculate.js'
-import { addSource, deleteSource, listSources, seedOfficialSource, updateSource } from '../../src/sporangium/sources.js'
+import { createStagingDir, inoculate, managedRoot, STAGING_DIR, sweepStaging, treeProblem } from '../../src/sporangium/inoculate.js'
+import { addSource, deleteSource, installsFromSource, listSources, seedOfficialSource, updateSource } from '../../src/sporangium/sources.js'
 import { freshDb } from '../support/db.js'
 import { silentLogger } from '../support/logger.js'
 
@@ -102,6 +103,36 @@ describe('treeProblem', () => {
     }), 'radarr')).toContain('src')
   })
 
+  test('refuses a symlink anywhere in the bundle, naming it', () => {
+    // A bundle from an unreviewed sporangium is unpacked and read before it ever runs, so a
+    // link out of the tree is read as this process's uid.
+    const shallow = tree({ 'radarr/spore.yaml': MANIFEST })
+    symlinkSync('/etc/hostname', join(shallow, 'radarr', 'index.js'))
+    expect(treeProblem(shallow, 'radarr')).toContain('index.js')
+    expect(treeProblem(shallow, 'radarr')).toContain('symlink')
+
+    const deep = tree({ 'radarr/spore.yaml': MANIFEST, 'radarr/index.js': MODULE, 'radarr/translations/en.yaml': 'a: b' })
+    symlinkSync('/etc/hostname', join(deep, 'radarr', 'translations', 'fr.yaml'))
+    expect(treeProblem(deep, 'radarr')).toContain('translations/fr.yaml')
+
+    // The manifest itself is the worst case: it is read, and the yaml parser quotes the
+    // offending source line back into the refusal.
+    const manifestLink = tree({ 'radarr/index.js': MODULE })
+    symlinkSync('/etc/hostname', join(manifestLink, 'radarr', 'spore.yaml'))
+    expect(treeProblem(manifestLink, 'radarr')).toContain('symlink')
+  })
+
+  test.skipIf(process.getuid?.() === 0)('never puts the staging path in a read failure', () => {
+    // EACCES carries the absolute path; EISDIR does not. This string is returned to an API
+    // client, and spec §10 forbids an absolute path there.
+    const dir = tree({ 'radarr/spore.yaml': MANIFEST, 'radarr/index.js': MODULE })
+    chmodSync(join(dir, 'radarr', 'spore.yaml'), 0o000)
+    const problem = treeProblem(dir, 'radarr')
+    expect(problem).toContain('permission denied')
+    expect(problem).not.toContain(dir)
+    expect(problem).not.toContain('/tmp')
+  })
+
   test('refuses a spore whose septum range excludes the running core', () => {
     expect(treeProblem(tree({
       'radarr/spore.yaml': 'name: radarr\nkind: rhiza\nseptum: "^0.9"\n',
@@ -174,7 +205,7 @@ function managedDir(): string {
 
 function officialId(db: Db): number {
   seedOfficialSource(db)
-  return listSources(db)[0]!.id
+  return listSources(db).find((source) => source.official)!.id
 }
 
 function why(result: { ok: boolean, reason?: string }): string {
@@ -272,6 +303,46 @@ describe('inoculate', () => {
     const result = await inoculate(ctxOf(db, stubDriver(tarball), managedDir()), { sourceId: third.id, name: 'radarr' })
     expect(result.ok).toBe(true)
     expect(result.ok && result.warnings.join(' ')).toContain('not code-reviewed')
+  })
+
+  test('a third-party install with a missing dependency carries both warnings', async () => {
+    // The plural case on the output array: appending one warning must not drop the other,
+    // and the trust warning is the one phase 8 exists to deliver.
+    const { db } = freshDb()
+    const third = addSource(db, { label: 'someone else', driver: 'github', location: 'https://github.com/x/y' })
+    const manifest = [
+      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.10"',
+      'requires:', '  - rhiza: radarr',
+      'commands:', '  - name: upcoming', '    description: command.upcoming.description', '    code: handleUpcoming',
+    ].join('\n')
+    const tarball = await bundleOf('upcoming-movies', { 'spore.yaml': manifest, 'index.js': MODULE })
+    const result = await inoculate(ctxOf(db, stubDriver(tarball, ['0.2.0']), managedDir()), { sourceId: third.id, name: 'upcoming-movies' })
+    expect(result.ok).toBe(true)
+    const warnings = result.ok ? result.warnings : []
+    expect(warnings).toHaveLength(2)
+    expect(warnings[0]).toContain('not code-reviewed')
+    expect(warnings[1]).toContain("'radarr'")
+  })
+
+  test('a disabled install satisfies nothing, so the requirement is still warned about', async () => {
+    const { db } = freshDb()
+    const id = officialId(db)
+    const held = mkdtempSync(join(tmpdir(), 'operator-'))
+    mkdirSync(join(held, 'radarr'))
+    writeFileSync(join(held, 'radarr', 'spore.yaml'), MANIFEST)
+    recordInstall(db, 'radarr', 'rhiza', false)
+    const manifest = [
+      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.10"',
+      'requires:', '  - rhiza: radarr',
+      'commands:', '  - name: upcoming', '    description: command.upcoming.description', '    code: handleUpcoming',
+    ].join('\n')
+    const tarball = await bundleOf('upcoming-movies', { 'spore.yaml': manifest, 'index.js': MODULE })
+    const result = await inoculate(ctxOf(db, stubDriver(tarball, ['0.2.0']), managedDir(), [held]), { sourceId: id, name: 'upcoming-movies' })
+    expect(result.ok && result.warnings.join(' ')).toContain("'radarr'")
+    // The control: the same tree with the install enabled warns about nothing.
+    setEnabled(db, 'radarr', true)
+    const second = await inoculate(ctxOf(db, stubDriver(tarball, ['0.2.0']), managedDir(), [held]), { sourceId: id, name: 'upcoming-movies' })
+    expect(second.ok && second.warnings).toEqual([])
   })
 
   test('warns by name about a requirement nothing installed provides', async () => {
@@ -390,6 +461,57 @@ describe('inoculate', () => {
     expect(result.ok && result.warnings.join(' ')).toContain('radarr')
   })
 
+  test('refuses a real tarball carrying a symlink, leaving nothing on disk', async () => {
+    // tar stores a symlink as a symlink, so this is the shape an unreviewed sporangium would
+    // actually ship: the link is read as this process's uid before the spore ever runs.
+    const { db } = freshDb()
+    const id = officialId(db)
+    const root = managedDir()
+    const src = mkdtempSync(join(tmpdir(), 'bundle-'))
+    mkdirSync(join(src, 'radarr'))
+    writeFileSync(join(src, 'radarr', 'spore.yaml'), MANIFEST)
+    symlinkSync('/etc/hostname', join(src, 'radarr', 'index.js'))
+    const out = join(mkdtempSync(join(tmpdir(), 'tgz-')), 'a.tgz')
+    expect(await Bun.spawn(['tar', '-czf', out, '-C', src, 'radarr']).exited).toBe(0)
+    const tarball = new Uint8Array(await Bun.file(out).arrayBuffer())
+    const result = await inoculate(ctxOf(db, stubDriver(tarball), root), { sourceId: id, name: 'radarr' })
+    expect(result.ok).toBe(false)
+    expect(why(result)).toContain('symlink')
+    expect(existsSync(join(root, 'radarr'))).toBe(false)
+    expect(getInstall(db, 'radarr')).toBeNull()
+  })
+
+  test('refuses an unreadable bundle without throwing, and still clears staging', async () => {
+    // tar preserves modes, so a bundle can ship its own directory at mode 000: readdirSync
+    // then fails inside validation and rmSync cannot remove what it cannot traverse.
+    const { db } = freshDb()
+    const id = officialId(db)
+    const root = managedDir()
+    const src = mkdtempSync(join(tmpdir(), 'bundle-'))
+    mkdirSync(join(src, 'radarr'))
+    writeFileSync(join(src, 'radarr', 'spore.yaml'), MANIFEST)
+    writeFileSync(join(src, 'radarr', 'index.js'), MODULE)
+    const out = join(mkdtempSync(join(tmpdir(), 'tgz-')), 'a.tgz')
+    expect(await Bun.spawn(['tar', '-czf', out, '--mode=0000', '-C', src, 'radarr']).exited).toBe(0)
+    const tarball = new Uint8Array(await Bun.file(out).arrayBuffer())
+    const result = await inoculate(ctxOf(db, stubDriver(tarball), root), { sourceId: id, name: 'radarr' })
+    expect(result.ok).toBe(false)
+    expect(why(result)).toContain('cannot be inspected')
+    expect(why(result)).not.toContain(root)
+    expect(readdirSync(join(root, STAGING_DIR))).toEqual([])
+    expect(getInstall(db, 'radarr')).toBeNull()
+  })
+
+  test('sweepStaging removes a leftover it cannot traverse', () => {
+    const root = managedDir()
+    const leftover = join(root, STAGING_DIR, 'x-abc', 'radarr')
+    mkdirSync(leftover, { recursive: true })
+    writeFileSync(join(leftover, 'spore.yaml'), MANIFEST)
+    chmodSync(leftover, 0o000)
+    sweepStaging(root)
+    expect(existsSync(join(root, STAGING_DIR))).toBe(false)
+  })
+
   test('a rejected bundle leaves nothing on disk and no install row', async () => {
     const { db } = freshDb()
     const id = officialId(db)
@@ -413,16 +535,81 @@ describe('inoculate', () => {
     expect(getInstall(db, 'radarr')).toBeNull()
   })
 
-  test('leaves no staging directory behind, on the happy path and on a refusal', async () => {
-    const staging = (): number => readdirSync(tmpdir()).filter((e) => e.startsWith('inoculate-')).length
+  test('stages two levels inside the managed root, and leaves nothing behind either way', async () => {
     const { db } = freshDb()
     const id = officialId(db)
-    const before = staging()
+    const root = managedDir()
     const good = await bundleOf('radarr', { 'spore.yaml': MANIFEST, 'index.js': MODULE })
-    expect((await inoculate(ctxOf(db, stubDriver(good), managedDir()), { sourceId: id, name: 'radarr' })).ok).toBe(true)
-    const bad = await bundleOf('radarr', { 'spore.yaml': MANIFEST, 'index.js': MODULE, 'src/index.ts': 'x' })
-    expect((await inoculate(ctxOf(db, stubDriver(bad), managedDir()), { sourceId: id, name: 'radarr' })).ok).toBe(false)
-    expect(staging()).toBe(before)
+    expect((await inoculate(ctxOf(db, stubDriver(good), root), { sourceId: id, name: 'radarr' })).ok).toBe(true)
+    // The parent survives and is empty: that is what says staging happened here, two levels
+    // down, rather than in the OS temp directory.
+    expect(existsSync(join(root, STAGING_DIR))).toBe(true)
+    expect(readdirSync(join(root, STAGING_DIR))).toEqual([])
+    const bad = await bundleOf('other', { 'spore.yaml': MANIFEST, 'index.js': MODULE })
+    expect((await inoculate(ctxOf(db, stubDriver(bad), root), { sourceId: id, name: 'other' })).ok).toBe(false)
+    expect(readdirSync(join(root, STAGING_DIR))).toEqual([])
+    expect(discover([root]).map((l) => l.directory)).toEqual(['radarr'])
+  })
+
+  test('createStagingDir sits exactly two levels below the managed root, and is unique', () => {
+    const root = managedDir()
+    const first = createStagingDir(root)
+    const second = createStagingDir(root)
+    expect(first).not.toBe(second)
+    for (const staging of [first, second]) {
+      expect(basename(dirname(staging))).toBe(STAGING_DIR)
+      expect(dirname(dirname(staging))).toBe(root)
+    }
+  })
+
+  test('a crashed install is invisible to discover at two levels, and visible at one', () => {
+    // discover skips no dot-directory — it requires only a spore.yaml — so the depth is the
+    // whole guard: at one level the staging directory is itself discovered as a spore.
+    const root = managedDir()
+    mkdirSync(join(root, STAGING_DIR, 'x-abc'), { recursive: true })
+    writeFileSync(join(root, STAGING_DIR, 'x-abc', 'spore.yaml'), MANIFEST)
+    expect(discover([root])).toEqual([])
+    mkdirSync(join(root, `${STAGING_DIR}-abc`), { recursive: true })
+    writeFileSync(join(root, `${STAGING_DIR}-abc`, 'spore.yaml'), MANIFEST)
+    expect(discover([root]).map((l) => l.directory)).toEqual([`${STAGING_DIR}-abc`])
+  })
+
+  test('sweepStaging removes what a crashed install left, and tolerates a root with none', () => {
+    const root = managedDir()
+    mkdirSync(join(root, STAGING_DIR, 'x-abc'), { recursive: true })
+    writeFileSync(join(root, STAGING_DIR, 'x-abc', 'spore.yaml'), MANIFEST)
+    sweepStaging(root)
+    expect(existsSync(join(root, STAGING_DIR))).toBe(false)
+    expect(() => { sweepStaging(root) }).not.toThrow()
+    expect(() => { sweepStaging(join(root, 'never-created')) }).not.toThrow()
+  })
+
+  test('refuses when a stray directory already occupies the name, naming neither path', async () => {
+    // The collision check uses discover(), which needs a spore.yaml, so a directory without
+    // one is invisible to it and only surfaces at the rename.
+    const { db } = freshDb()
+    const id = officialId(db)
+    const root = managedDir()
+    mkdirSync(join(root, 'radarr'), { recursive: true })
+    writeFileSync(join(root, 'radarr', 'leftover.txt'), 'x')
+    const tarball = await bundleOf('radarr', { 'spore.yaml': MANIFEST, 'index.js': MODULE })
+    const result = await inoculate(ctxOf(db, stubDriver(tarball), root), { sourceId: id, name: 'radarr' })
+    expect(result.ok).toBe(false)
+    expect(why(result)).toContain('managed root')
+    expect(why(result)).not.toContain(root)
+    expect(getInstall(db, 'radarr')).toBeNull()
+    expect(readdirSync(join(root, 'radarr'))).toEqual(['leftover.txt'])
+  })
+
+  test('refuses when the managed root cannot be created', async () => {
+    const { db } = freshDb()
+    const id = officialId(db)
+    const file = join(mkdtempSync(join(tmpdir(), 'blocked-')), 'a-file')
+    writeFileSync(file, 'x')
+    const tarball = await bundleOf('radarr', { 'spore.yaml': MANIFEST, 'index.js': MODULE })
+    const result = await inoculate(ctxOf(db, stubDriver(tarball), join(file, 'spores')), { sourceId: id, name: 'radarr' })
+    expect(result.ok).toBe(false)
+    expect(why(result)).toContain('managed root cannot be written')
   })
 
   test('refuses a local source rather than failing later', async () => {
@@ -456,6 +643,9 @@ describe('inoculate', () => {
       expect(why(result)).toContain('not a spore name')
       expect(existsSync(join(root, name))).toBe(false)
     }
+    // Stated on its own rather than left to `join(root, '') === root`: the guard runs before
+    // anything creates the managed root, and the staging directory lives inside it.
+    expect(existsSync(root)).toBe(false)
   })
 
   test('parseTag refuses a traversal name, so such an offer never reaches inoculate', () => {
@@ -507,5 +697,21 @@ describe('inoculate', () => {
     expect((await inoculate(ctxOf(db, stubDriver(tarball), managedDir()), { sourceId: third.id, name: 'radarr' })).ok).toBe(true)
     expect(deleteSource(db, third.id)).toBe(false)
     expect(listSources(db).some((s) => s.id === third.id)).toBe(true)
+    // The boolean cannot say why; this is what lets a caller name the blockers.
+    expect(installsFromSource(db, third.id)).toEqual(['radarr'])
+    expect(installsFromSource(db, officialId(db))).toEqual([])
+  })
+
+  test('installsFromSource names every blocker, sorted, not just the first', async () => {
+    const { db } = freshDb()
+    const third = addSource(db, { label: 'someone else', driver: 'github', location: 'https://github.com/x/y' })
+    const root = managedDir()
+    for (const name of ['sonarr', 'radarr']) {
+      const manifest = MANIFEST.replace('name: radarr', `name: ${name}`)
+      const tarball = await bundleOf(name, { 'spore.yaml': manifest, 'index.js': MODULE })
+      expect((await inoculate(ctxOf(db, stubDriver(tarball), root), { sourceId: third.id, name })).ok).toBe(true)
+    }
+    expect(installsFromSource(db, third.id)).toEqual(['radarr', 'sonarr'])
+    expect(deleteSource(db, third.id)).toBe(false)
   })
 })

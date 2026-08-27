@@ -84,15 +84,23 @@ export function updateSource(
   return present(row)
 }
 
+/** The spores still installed from a source, by name. Empty when the source is deletable. */
+export function installsFromSource(db: Db, id: number): readonly string[] {
+  return db.select().from(pluginInstall).where(eq(pluginInstall.sourceId, id)).all()
+    .map((row) => row.name)
+    .sort((a, b) => a.localeCompare(b))
+}
+
 /**
  * False when the source is official (it can be disabled, never deleted — design §11), and
  * false when a spore is still installed from it: deleting the row would erase that spore's
- * provenance, and with foreign keys on the delete would throw rather than answer.
+ * provenance, and with foreign keys on the delete would throw rather than answer. A caller
+ * separates the three causes with getSource, .official and installsFromSource.
  */
 export function deleteSource(db: Db, id: number): boolean {
   const existing = db.select().from(source).where(eq(source.id, id)).get()
   if (existing === undefined || existing.official) return false
-  if (db.select().from(pluginInstall).where(eq(pluginInstall.sourceId, id)).all().length > 0) return false
+  if (installsFromSource(db, id).length > 0) return false
   db.delete(source).where(eq(source.id, id)).run()
   return true
 }

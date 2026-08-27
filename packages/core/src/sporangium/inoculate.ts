@@ -1,13 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { InoculateOutcome, Logger } from '@mycelo/septum'
-import { recordInstall } from '../config/store.js'
+import { listInstalls, recordInstall } from '../config/store.js'
 import { targetName } from '../germination/anastomoses.js'
 import { septumIncompatibility } from '../germination/compat.js'
 import { discover } from '../germination/discover.js'
 import { CODE_ENTRIES, needsNoModule } from '../germination/load.js'
 import { isFailure, readManifest } from '../germination/manifest.js'
+import type { ReadManifest } from '../germination/manifest.js'
 import type { Db } from '../persistence/db.js'
 import { describeThrown } from '../support/thrown.js'
 import { SPORE_NAME, STRAIN_SHAPE } from './driver.js'
@@ -33,9 +33,74 @@ export function managedRoot(dbFile: string): string {
   return join(dirname(dbFile), 'spores')
 }
 
+/**
+ * Staging sits two levels down inside the managed root: `discover` skips no dot-directory,
+ * it only requires a `spore.yaml`, so a one-level `.staging-xxxx/` holding one would itself
+ * be discovered as a spore with no install row. Nothing an archive contains can reach an
+ * immediate child of the root from here.
+ */
+export const STAGING_DIR = '.staging'
+
+// chmod on a directory needs permission on its parent, not on itself, so the top-down walk
+// works where readdirSync alone would not.
+function restoreTraversal(dir: string): void {
+  try {
+    chmodSync(dir, 0o700)
+  } catch {
+    return
+  }
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) restoreTraversal(join(dir, entry.name))
+  }
+}
+
+/** rmSync cannot remove a directory it cannot traverse, and a bundle may ship one at mode 000. */
+function removeTree(dir: string): void {
+  try {
+    rmSync(dir, { recursive: true, force: true })
+  } catch {
+    restoreTraversal(dir)
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+/** Removes what a crashed install left behind. Boot's, not inoculate's: the finally covers the rest. */
+export function sweepStaging(managedRootPath: string): void {
+  removeTree(join(managedRootPath, STAGING_DIR))
+}
+
+/** A unique directory exactly two levels below the managed root. Creates both levels. */
+export function createStagingDir(managedRootPath: string): string {
+  const parent = join(managedRootPath, STAGING_DIR)
+  mkdirSync(parent, { recursive: true })
+  return mkdtempSync(join(parent, 'x-'))
+}
+
 // A bundle's own entry points: design §4.1 forbids sources in a bundle, and treeProblem
 // refuses one, so `src/index.ts` is filtered out rather than named to an author.
 const BUNDLE_ENTRIES = CODE_ENTRIES.filter((entry) => !entry.startsWith('src/'))
+
+/** A refusal reaches an API client, and readManifest's errno messages carry the staging path. */
+function withoutStagingPath(reason: string, staging: string): string {
+  return reason.replaceAll(`${staging}/`, '').replaceAll(staging, '')
+}
+
+/**
+ * The first symlink found below `dir`, relative to it. A bundle from an unreviewed
+ * sporangium is unpacked and read before it ever runs, so a link out of the tree is read
+ * as this process's uid — and the yaml parser quotes the offending source line back.
+ */
+function firstSymlink(dir: string, prefix = ''): string | null {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const relative = prefix === '' ? entry.name : `${prefix}/${entry.name}`
+    if (lstatSync(join(dir, entry.name)).isSymbolicLink()) return relative
+    if (entry.isDirectory()) {
+      const deeper = firstSymlink(join(dir, entry.name), relative)
+      if (deeper !== null) return deeper
+    }
+  }
+  return null
+}
 
 function manifestAt(root: string, directory: string): ReturnType<typeof readManifest> {
   return readManifest({
@@ -57,12 +122,14 @@ export function treeProblem(dir: string, name: string): string | null {
   }
   if (dirs[0] !== name) return `the archive holds '${dirs[0]}', not the requested '${name}'`
   const root = join(dir, name)
+  const link = firstSymlink(root)
+  if (link !== null) return `the archive carries a symlink at '${link}'; a bundle ships regular files only`
   if (existsSync(join(root, 'src'))) {
     return 'the archive carries a src/ directory: a bundle ships one index.js and no sources (design §4.1)'
   }
   if (!existsSync(join(root, 'spore.yaml'))) return 'the archive holds no spore.yaml'
   const read = manifestAt(dir, name)
-  if (isFailure(read)) return `the archive's spore.yaml does not parse: ${read.reason}`
+  if (isFailure(read)) return `the archive's spore.yaml does not parse: ${withoutStagingPath(read.reason, dir)}`
   if (read.manifest.name !== name) {
     return `the archive's manifest declares '${read.manifest.name}', not the requested '${name}'`
   }
@@ -74,14 +141,16 @@ export function treeProblem(dir: string, name: string): string | null {
   return null
 }
 
-/** Every mandatory requirement the installed set does not satisfy, by name (design §9.2). */
+/**
+ * Every mandatory `requires:` target the installed set does not satisfy, by name (design
+ * §9.2). Narrower than germination's own resolution on purpose: an unmountable mycelium
+ * scope and a requirement cycle also cause dormancy and are not reported here.
+ */
 function unsatisfiedRequirements(
-  stagingDir: string,
-  name: string,
+  manifest: ReadManifest['manifest'],
+  db: Db,
   sporesDirs: readonly string[],
 ): readonly string[] {
-  const read = manifestAt(stagingDir, name)
-  if (isFailure(read)) return []
   // A `rhiza:` requirement is satisfied by a rhiza and nothing else (core spec §6.1), so a
   // name match alone would promise a dependency the next boot goes dormant for.
   const installed = new Map<string, string>([['mycelium', 'rhiza']])
@@ -89,9 +158,14 @@ function unsatisfiedRequirements(
     const other = readManifest(location)
     if (!isFailure(other)) installed.set(other.manifest.name, other.manifest.kind)
   }
-  const satisfied = (target: string): boolean => installed.get(targetName(target)) === 'rhiza'
+  // A disabled install never germinates, so it satisfies nothing.
+  const disabled = new Set(listInstalls(db).filter((i) => !i.enabled).map((i) => i.name))
+  const satisfied = (target: string): boolean => {
+    const n = targetName(target)
+    return installed.get(n) === 'rhiza' && !disabled.has(n)
+  }
   const missing: string[] = []
-  for (const requirement of read.manifest.requires ?? []) {
+  for (const requirement of manifest.requires ?? []) {
     if ('any_of' in requirement) {
       // Not resolved and not chosen for the operator: design §9.2 refuses to collapse an
       // any_of on their behalf, so the message names every alternative.
@@ -160,37 +234,66 @@ export async function inoculate(
     return { ok: false, reason: `cannot fetch '${request.name}@${strain}': ${describeThrown(e)}` }
   }
 
-  const staging = mkdtempSync(join(tmpdir(), 'inoculate-'))
+  // Inside the managed root, so the move below is a rename on one filesystem rather than a
+  // cross-device one, which renameSync does not fall back from.
+  let staging: string
+  try {
+    staging = createStagingDir(root)
+  } catch (e) {
+    const code = (e as { code?: unknown }).code
+    return { ok: false, reason: `the managed root cannot be written${typeof code === 'string' ? ` (${code})` : ''}` }
+  }
   try {
     try {
       await extractTarball(tarball, staging)
     } catch (e) {
-      return { ok: false, reason: `cannot unpack '${request.name}@${strain}': ${describeThrown(e)}` }
+      return { ok: false, reason: `cannot unpack '${request.name}@${strain}': ${withoutStagingPath(describeThrown(e), staging)}` }
     }
-    const problem = treeProblem(staging, request.name)
+    // treeProblem walks the unpacked tree, and a bundle may ship a directory it cannot read.
+    let problem: string | null
+    try {
+      problem = treeProblem(staging, request.name)
+    } catch (e) {
+      problem = `the archive cannot be inspected: ${withoutStagingPath(describeThrown(e), staging)}`
+    }
     if (problem !== null) {
       return { ok: false, reason: `'${request.name}@${strain}' is not installable: ${problem}` }
+    }
+    const read = manifestAt(staging, request.name)
+    // treeProblem parsed this same file and returned null, so the guard only narrows the type.
+    if (isFailure(read)) {
+      return { ok: false, reason: `'${request.name}@${strain}' is not installable: ${withoutStagingPath(read.reason, staging)}` }
     }
 
     const warnings: string[] = []
     if (!source.official) {
       warnings.push(`'${source.label}' is not the official sporangium: its spores are not code-reviewed before publication`)
     }
-    const missing = unsatisfiedRequirements(staging, request.name, roots)
+    const missing = unsatisfiedRequirements(read.manifest, db, roots)
     if (missing.length > 0) {
       warnings.push(`'${request.name}' requires ${missing.join(', ')}, which nothing installed provides: it will be dormant until you install them`)
     }
 
-    const read = manifestAt(staging, request.name)
-    if (isFailure(read)) return { ok: false, reason: `'${request.name}' became unreadable: ${read.reason}` }
-
-    mkdirSync(root, { recursive: true })
     // One rename, so a spore is never half-visible to a concurrent discover() (design §9 step 8).
-    renameSync(join(staging, request.name), join(root, request.name))
+    // The collision check above uses discover(), which needs a spore.yaml, so a stray directory
+    // in the managed root is invisible to it and only surfaces here.
+    try {
+      renameSync(join(staging, request.name), join(root, request.name))
+    } catch (e) {
+      const code = (e as { code?: unknown }).code
+      const detail = typeof code === 'string' ? ` (${code})` : ''
+      return { ok: false, reason: `cannot move '${request.name}' into the managed root${detail}: something already occupies its directory there` }
+    }
     recordInstall(db, read.manifest.name, read.manifest.kind, false, { sourceId: request.sourceId, strain })
     logger.info(`inoculated '${request.name}@${strain}' from '${source.label}'`)
     return { ok: true, name: request.name, strain, warnings, restartRequired: true }
   } finally {
-    rmSync(staging, { recursive: true, force: true })
+    try {
+      removeTree(staging)
+    } catch (e) {
+      // Never turn a completed install into a rejection; the residue is two levels down,
+      // invisible to discover(), and swept at the next boot.
+      logger.warn(`could not remove the staging directory for '${request.name}'`, { error: describeThrown(e) })
+    }
   }
 }
