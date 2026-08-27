@@ -10,8 +10,10 @@ export function rangeRejection(range: string): string | undefined {
   if (parseRange(range) === null) return 'is not a range this matcher can parse'
   // A probe, not a universality test (design §10.1): a range admitting versions this far apart
   // cannot distinguish one septum from another, whatever it excludes in between.
+  // No trailing inference: a bounded union bracketing both probes (`<0.5 || >=2`) is refused here
+  // and would also have been excluded by the version check, so "nothing to check" is false of it.
   if (satisfies('0.0.1', range) && satisfies('99999.0.0', range)) {
-    return 'admits both 0.0.1 and 99999.0.0, so it leaves the compatibility check with nothing to check'
+    return 'admits both 0.0.1 and 99999.0.0'
   }
   return undefined
 }

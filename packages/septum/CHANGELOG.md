@@ -29,8 +29,8 @@
 - **`septum:` is now validated.** Through 0.10.1 it was any non-empty string, and nothing compared
   it to anything. `parseManifest` now rejects two kinds of range with `path: 'septum'`, each with
   its own message: one the matcher cannot parse (`latest`, `1.2.3.4`, `^0.10.`, `>=x`, a bare
-  `||`), and one that admits both `0.0.1` and `99999.0.0` (`*`, `x`, an empty range), which would
-  leave the compatibility check with nothing to check.
+  `||`), and one that parses and admits both `0.0.1` and `99999.0.0` (`*`, `x`, `X`). The second is
+  a probe rather than a universality test, so it also rejects a range as narrow as `>=0.0.1`.
 
   This is **non-breaking for every manifest that exists**: all twenty in the Mycelo project declare
   a caret range, and `^0.10`, `>=0.10.0`, `0.10.x`, `>=0.9 <0.12` and the doubled-caret `^^0.10`
@@ -48,9 +48,9 @@
   the one field this release's other change is about. **Authors: a harness whose manifest declares
   a range below the septum it is tested against now reports a failure**; declare the range you
   actually support.
-- The `septum:` refusal now echoes the offending value: `'latest' is not a semver range: …` rather
-  than a sentence that never contained what the author wrote. A non-string `septum:` still reports
-  as a wrong type.
+- The `septum:` refusal now echoes the offending value — `'latest' is not a range this matcher can
+  parse` rather than a sentence that never contained what the author wrote. A non-string `septum:`
+  still reports as a wrong type.
 - `SourcesManage.updateSource` **rejects** a `location` that would repoint the official source,
   where it previously ignored the field and answered success. Resending the source's own location
   is not a repointing and still succeeds, so an idempotent form submit is unaffected.
