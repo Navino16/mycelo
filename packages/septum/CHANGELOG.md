@@ -15,9 +15,9 @@
   registry, and a flag an operator could set would be a one-field bypass of the trust model.
 - `septumIncompatibility(range, version?)`, the one implementation of the range check: the core's
   germination, `enablePlugin` and `inoculate` all call it, and so do the four conformance kits, so
-  the runtime and the kit cannot drift at the septum release where the check matters. That name alone is exported,
-  deliberately — the range predicate and the matcher behind it are internal, and a public export is
-  frozen by the tag whether anything uses it or not.
+  the runtime and the kit cannot drift at the septum release where the check matters. That name
+  alone is exported, deliberately — the range predicate and the matcher behind it are internal, and
+  a public export is frozen by the tag whether anything uses it or not.
 - `sources.manage`, the sixteenth `MyceliumScope`, and the `SourcesManage` interface it mounts:
   `listSources`, `addSource`, `updateSource`, `deleteSource` and `inoculate`. It is the scope that
   installs a spore from a sporangium, so grant it only to a spore an operator administers the
@@ -26,40 +26,27 @@
   publication, and that warning cannot be suppressed by the caller.
 
 ### Changed
-- **`septum:` must now be a range septum's own matcher can parse.** A range that cannot be parsed —
-  `*`, `latest`, or a typo the matcher does not recognise — matched *every* version, which made the
-  core's compatibility check silently inert for that spore instead of failing loudly. `parseManifest` now rejects it with
-  `path: 'septum'`.
+- **`septum:` is now validated.** Through 0.10.1 it was any non-empty string, and nothing compared
+  it to anything. `parseManifest` now rejects two kinds of range with `path: 'septum'`: one matching
+  every version (`*`, `x`, `>=x`, a bare `||`), which would leave the compatibility check with
+  nothing to check, and one the matcher cannot parse (`latest`, `1.2.3.4`, `^0.10.`).
 
   This is **non-breaking for every manifest that exists**: all twenty in the Mycelo project declare
-  a caret range, and `^0.10`, `>=0.10.0`, `0.10.x`, `>=0.9 <0.12` and even the doubled-caret
-  `^^0.10` all still parse — `^^0.10` behaving identically to `^0.10`, so it is accepted rather
-  than refused. It **is** a behaviour change for a third-party manifest whose range does not parse:
-  such a spore now fails to load, where before it loaded and its compatibility was never really
-  checked. Shipped in a patch for that reason — it closes a hole rather than moving the contract.
-- **Range matching no longer calls `Bun.semver`; septum ships its own matcher.** The package
-  resolves to `src/` on Bun and to `dist/` on Node, so a `Bun.` reference made every manifest parse
-  throw `ReferenceError` for a Node consumer — and with it every conformance check, which answered
-  `manifest does not parse: Bun is not defined` for a perfectly sound plugin. The replacement is a
-  node-semver subset with no new dependency, pinned against `Bun.semver` by a differential test
-  over several thousand (version, range) pairs.
-
-  **It is not byte-identical to what 0.10.1 used**, though nothing this contract documents moves.
-  On every range node-semver itself accepts, the new matcher agrees with node-semver **exactly** —
-  0 divergences over 142 585 evaluated pairs, cross-checked against both `Bun.semver` and
-  node-semver 7. Every difference is on malformed input, and it runs both ways: septum now refuses
-  some of what `Bun.semver` read as *something* (`1.2.3.4`, `^0.10.`, `>=x`, a bare `||`), and it
-  keeps accepting the typo forms it has always accepted — a doubled or mixed prefix such as
-  `^^0.10`, a comma separator, a wildcard that is not the last component, a partial carrying a
-  prerelease. Each of those is read as a **bounded** range, so none of them can make the
-  compatibility check inert, which is the property this release exists to protect.
-- **All four conformance kits now apply the septum-range check the runtime applies.** A manifest
-  declaring a range that excludes the running septum was certified as conforming while every core
-  running that septum made the spore dormant, refused to enable it and refused to install it — the
-  kit is the author's only pre-publication gate, and it was more lenient than the runtime on the one
-  field this release's other change is about. **Authors: a harness whose manifest declares a range
-  below the septum it is tested against now reports a failure**; declare the range you actually
-  support.
+  a caret range, and `^0.10`, `>=0.10.0`, `0.10.x`, `>=0.9 <0.12` and the doubled-caret `^^0.10`
+  are all accepted, `^^0.10` behaving identically to `^0.10`. It **is** a behaviour change for a
+  third-party manifest carrying one of the two rejected kinds: such a spore now fails to load,
+  where before it loaded unchecked. Shipped in a patch for that reason — it closes a hole rather
+  than moving the contract.
+- **The matcher behind that check is septum's own**, with no new dependency. The package resolves
+  to `dist/` on Node and to `src/` on Bun, so it cannot call `Bun.semver`; a differential test
+  checks it against `Bun.semver` over the range forms this contract documents.
+- **All four conformance kits apply the septum-range check the runtime applies.** Without it a
+  manifest declaring a range that excludes the running septum would be certified as conforming
+  while the core makes that spore dormant, refuses to enable it and refuses to install it — the kit
+  is the author's only pre-publication gate, and it must not be more lenient than the runtime on
+  the one field this release's other change is about. **Authors: a harness whose manifest declares
+  a range below the septum it is tested against now reports a failure**; declare the range you
+  actually support.
 - The `septum:` refusal now echoes the offending value: `'latest' is not a semver range: …` rather
   than a sentence that never contained what the author wrote. A non-string `septum:` still reports
   as a wrong type.
