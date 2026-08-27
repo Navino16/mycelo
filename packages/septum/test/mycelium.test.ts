@@ -6,7 +6,7 @@ import { CONVERSATION_KINDS, MYCELIUM_SCOPES } from '../src/mycelium.js'
 describe('MYCELIUM_SCOPES', () => {
   // A published runtime constant: consumers read these strings, so renaming one is a
   // breaking change. Asserted whole, not sampled.
-  it('publishes exactly these fifteen scope names, in this order', () => {
+  it('publishes exactly these sixteen scope names, in this order', () => {
     expect(MYCELIUM_SCOPES).toEqual([
       'principals.read',
       'principals.manage',
@@ -23,6 +23,7 @@ describe('MYCELIUM_SCOPES', () => {
       'restrictions.manage',
       'locale.manage',
       'commands.read',
+      'sources.manage',
     ])
   })
 })

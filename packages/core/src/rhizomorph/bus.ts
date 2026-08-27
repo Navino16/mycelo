@@ -149,6 +149,9 @@ export function createBus({
   const hyphaByName = new Map(registry.hyphae.map((h) => [h.name, h]))
   const send = (channel: string, conversationId: string, out: OutgoingContent): Promise<void> =>
     sendVia(hyphaByName, channel, conversationId, out)
+  // The fallback carries neither logger nor managedRoot, so a `sources.manage` mounted through
+  // it would reject at inoculate. Unreachable: boot always supplies `mycelium` (boot/start.ts),
+  // and a bus built without one is a test bus whose spores declare no such scope.
   const mounted = mycelium ?? ((scopes: readonly MyceliumScope[]) =>
     createMyceliumApi(
       registry,

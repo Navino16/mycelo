@@ -1,13 +1,14 @@
 kind: enzyme
 name: admin
-septum: "^0.7"
+septum: "^0.10"
 description: Reads and administers the mycelium through scopes. Test fixture, never distributed.
 requires:
   - rhiza: mycelium
     scopes: [plugins.read, plugins.toggle, plugins.configure, principals.read,
              principals.manage, roles.read, roles.assign, roles.manage,
              conversations.read, messages.broadcast, messages.send,
-             restrictions.manage, locale.manage, health.read, commands.read]
+             restrictions.manage, locale.manage, health.read, commands.read,
+             sources.manage]
 commands:
   - name: plugins
     description: command.plugins.description

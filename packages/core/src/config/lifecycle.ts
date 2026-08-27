@@ -1,3 +1,4 @@
+import { septumIncompatibility } from '@mycelo/septum'
 import type { ConfigSchema, SporeModule } from '@mycelo/septum'
 import { discover } from '../germination/discover.js'
 import { loadModule } from '../germination/load.js'
@@ -78,6 +79,10 @@ export async function enablePlugin(db: Db, sporesDirs: readonly string[], name: 
   const found = findSpore(sporesDirs, name)
   if (found === undefined) return { ok: false, reason: `no spore named '${name}' is present on disk` }
   if (isFailure(found)) return { ok: false, reason: `spore '${name}' has an unreadable manifest: ${found.reason}` }
+  // germinate()'s verdict for this is dormancy, which for an enforcing inhibitor refuses all
+  // traffic with no channel command left to undo it (design §10).
+  const incompatible = septumIncompatibility(found.manifest.septum)
+  if (incompatible !== undefined) return { ok: false, reason: `spore '${name}' ${incompatible}` }
   let module: SporeModule<unknown, unknown> | null
   try {
     // loadModule throws on a missing entry point, a default export with no create(), and

@@ -6,7 +6,7 @@ export const MOUNTABLE_SCOPES: readonly MyceliumScope[] = [
   'plugins.read', 'plugins.toggle', 'plugins.configure', 'health.read', 'messages.send',
   'principals.read', 'principals.manage', 'roles.read', 'roles.assign', 'roles.manage',
   'messages.broadcast', 'conversations.read', 'restrictions.manage', 'locale.manage',
-  'commands.read',
+  'commands.read', 'sources.manage',
 ]
 
 // Every scope MYCELIUM_SCOPES carries that MOUNTABLE_SCOPES does not yet mount, and the

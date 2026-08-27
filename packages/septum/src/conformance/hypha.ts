@@ -1,3 +1,4 @@
+import { septumIncompatibility } from '../compat.js'
 import { parseManifest } from '../manifest.js'
 import { configSchemaFailures } from './config-checks.js'
 import type { HyphaModule } from '../hypha.js'
@@ -40,6 +41,11 @@ export async function hyphaChecks(harness: HyphaHarness): Promise<string[]> {
     failures.push(`manifest kind is '${manifest.kind}', expected 'hypha'`)
     return failures
   }
+
+  // The same check germination, enablePlugin and inoculate apply: a kit that certifies a range
+  // the runtime refuses fails the author at the operator's install instead of at authoring time.
+  const incompatible = septumIncompatibility(manifest.septum)
+  if (incompatible !== undefined) failures.push(`the manifest ${incompatible}`)
 
   failures.push(
     ...configSchemaFailures(harness.module.configSchema, harness.validConfig, harness.invalidConfig),

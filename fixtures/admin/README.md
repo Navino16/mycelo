@@ -7,7 +7,7 @@ There are two `admin`s and they are **allowed to diverge**:
 | Purpose | the core's test double | the spore an operator installs |
 | Published | never | yes, through the official registry |
 | Replies | mostly literal English (`lang`/`lang-group` call `ctx.t` five times) | catalogue keys, `en` + `fr` complete |
-| Scopes | all fifteen, pinned against `MYCELIUM_SCOPES` by `admin.test.ts`'s own test | the eleven it actually uses |
+| Scopes | all sixteen, pinned against `MYCELIUM_SCOPES` by `admin.test.ts`'s own test | the eleven it actually uses |
 
 Deleting this file breaks **14 tests, and every test in `admin.test.ts` on top of that**, which does
 not appear in that count: `admin.test.ts` imports it by path
@@ -19,7 +19,7 @@ assignment, the mycelium's own diagnostics reaching a reader, `/help` filtering,
 settings override and context rules. **Do not delete it to remove the duplication.**
 
 `messages.send` and `messages.broadcast` are declared and reached by no command: invoking `send` from
-a fixture would push a message during the suite. **Declaring all fifteen scopes here pins nothing
+a fixture would push a message during the suite. **Declaring all sixteen scopes here pins nothing
 against `MOUNTABLE_SCOPES`**: `MYCELIUM_SCOPES` and `MOUNTABLE_SCOPES` are already pinned symmetrically
 against each other, with no manifest involved (`anastomoses.test.ts`, `mycelium-rhiza.test.ts`), and a
 synthetic spore already resolves one per mountable scope. Trimming this list to eleven left the whole

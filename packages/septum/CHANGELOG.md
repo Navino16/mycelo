@@ -1,5 +1,63 @@
 # @mycelo/septum
 
+## 0.10.2
+
+### Added
+- `SEPTUM_VERSION`, the running septum's own version. The core reads it to decide whether a
+  spore's declared `septum:` range admits the septum actually loaded, rather than duplicating the
+  number where the two could drift. A test pins it against `package.json`.
+- `PluginInfo.source` and `PluginInfo.strain`, both optional: the sporangium a spore was installed
+  from and the strain installed. Both are **absent** for a spore from a local root, which is neither
+  versioned nor traceable.
+- `SporangiumSource` and `InoculateOutcome`, the shapes the core's sporangium routes answer with. A
+  source's `token` is never the stored value — it comes back as the literal `••••` when one is set
+  and is absent when not — and `official` is settable through no API: it marks the reviewed
+  registry, and a flag an operator could set would be a one-field bypass of the trust model.
+- `septumIncompatibility(range, version?)`, the one implementation of the range check: the core's
+  germination, `enablePlugin` and `inoculate` all call it, and so do the four conformance kits, so
+  the runtime and the kit cannot drift at the septum release where the check matters. That name
+  alone is exported, deliberately — the range predicate and the matcher behind it are internal, and
+  a public export is frozen by the tag whether anything uses it or not.
+- `sources.manage`, the sixteenth `MyceliumScope`, and the `SourcesManage` interface it mounts:
+  `listSources`, `addSource`, `updateSource`, `deleteSource` and `inoculate`. It is the scope that
+  installs a spore from a sporangium, so grant it only to a spore an operator administers the
+  substrate with. `inoculate` **rejects** rather than resolving a refusal, and its `warnings` are
+  composed by the core — a third-party sporangium's spores are not code-reviewed before
+  publication, and that warning cannot be suppressed by the caller.
+
+### Changed
+- **`septum:` is now validated.** Through 0.10.1 it was any non-empty string, and nothing compared
+  it to anything. `parseManifest` now rejects two kinds of range with `path: 'septum'`, each with
+  its own message: one the matcher cannot parse (`latest`, `1.2.3.4`, `^0.10.`, `>=x`, a bare
+  `||`), and one that parses and admits both `0.0.1` and `99999.0.0` (`*`, `x`, `X`). The second is
+  a probe rather than a universality test, so it also rejects a range as narrow as `>=0.0.1`.
+
+  This is **non-breaking for every manifest that exists**: all twenty in the Mycelo project declare
+  a caret range, and `^0.10`, `>=0.10.0`, `0.10.x`, `>=0.9 <0.12` and the doubled-caret `^^0.10`
+  are all accepted, `^^0.10` behaving identically to `^0.10`. It **is** a behaviour change for a
+  third-party manifest carrying one of the two rejected kinds: such a spore now fails to load,
+  where before it loaded unchecked. Shipped in a patch for that reason — it closes a hole rather
+  than moving the contract.
+- **The matcher behind that check is septum's own**, with no new dependency. The package resolves
+  to `dist/` on Node and to `src/` on Bun, so it cannot call `Bun.semver`; a differential test
+  checks it against `Bun.semver` over the range forms this contract documents.
+- **All four conformance kits apply the septum-range check the runtime applies.** Without it a
+  manifest declaring a range that excludes the running septum would be certified as conforming
+  while the core makes that spore dormant, refuses to enable it and refuses to install it — the kit
+  is the author's only pre-publication gate, and it must not be more lenient than the runtime on
+  the one field this release's other change is about. **Authors: a harness whose manifest declares
+  a range below the septum it is tested against now reports a failure**; declare the range you
+  actually support.
+- The `septum:` refusal now echoes the offending value — `'latest' is not a range this matcher can
+  parse` rather than a sentence that never contained what the author wrote. A non-string `septum:`
+  still reports as a wrong type.
+- `SourcesManage.updateSource` **rejects** a `location` that would repoint the official source,
+  where it previously ignored the field and answered success. Resending the source's own location
+  is not a repointing and still succeeds, so an idempotent form submit is unaffected.
+- `SourcesManage.inoculate`'s doc comment no longer claims every refusal happens "before anything is
+  written to disk". The archive is unpacked into a staging directory before it is validated; what
+  the ordering guarantees is that nothing reaches the tree the core discovers spores in.
+
 ## 0.10.1
 
 ### Fixed

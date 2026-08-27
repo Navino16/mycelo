@@ -3,26 +3,53 @@ import type { FormSchema, PluginInfo, SporeKind } from '@mycelo/septum'
 import type { Registry } from '../germination/registry.js'
 import type { Db } from '../persistence/db.js'
 import { pluginSetting } from '../persistence/schema.js'
+import { listSources } from '../sporangium/sources.js'
+import { REDACTED } from '../support/redaction.js'
 import { describeThrown } from '../support/thrown.js'
 import { formSchemaFor } from './jsonschema.js'
 import { enablePlugin, findSpore, loadSporeModule } from './lifecycle.js'
 import { getInstall, listInstalls, writeSetting } from './store.js'
 
+export interface Provenance {
+  /** The source's label, never its id: a read path is what an operator reads. */
+  source?: string
+  strain?: string
+}
+
+/**
+ * Provenance per install name, for the read paths. Built as one pair of queries: a per-entry
+ * lookup would be one query per plugin, and every caller reports a whole list.
+ */
+export function provenanceByName(db: Db): ReadonlyMap<string, Provenance> {
+  const labels = new Map(listSources(db).map((s) => [s.id, s.label]))
+  const out = new Map<string, Provenance>()
+  for (const install of listInstalls(db)) {
+    if (install.sourceId === null || install.strain === null) continue
+    const label = labels.get(install.sourceId)
+    if (label !== undefined) out.set(install.name, { source: label, strain: install.strain })
+  }
+  return out
+}
+
 // germinate.ts skips a disabled install before it can ever become a registry entry —
 // germinated or dormant — so this is the only place that can still name it, and the only
 // place that can name an install whose spore has gone from disk.
 export function listPlugins(registry: Registry, sporesDirs: readonly string[], db?: Db): readonly PluginInfo[] {
+  const installs = db === undefined ? [] : listInstalls(db)
+  const provenance = db === undefined ? new Map<string, Provenance>() : provenanceByName(db)
+  const from = (name: string): Provenance => provenance.get(name) ?? {}
   const germinated: PluginInfo[] = [
-    ...registry.hyphae.map((h) => ({ name: h.name, kind: h.manifest.kind, commands: [], state: 'germinated' as const, enabled: true })),
+    ...registry.hyphae.map((h) => ({ name: h.name, kind: h.manifest.kind, commands: [], state: 'germinated' as const, enabled: true, ...from(h.name) })),
     ...registry.enzymes.map((e) => ({
       name: e.name,
       kind: e.manifest.kind,
       commands: e.manifest.commands.map((c) => c.name),
       state: 'germinated' as const,
       enabled: true,
+      ...from(e.name),
     })),
-    ...registry.rhizas.map((r) => ({ name: r.name, kind: r.manifest.kind, commands: [], state: 'germinated' as const, enabled: true })),
-    ...registry.inhibitors.map((i) => ({ name: i.name, kind: i.manifest.kind, commands: [], state: 'germinated' as const, enabled: true })),
+    ...registry.rhizas.map((r) => ({ name: r.name, kind: r.manifest.kind, commands: [], state: 'germinated' as const, enabled: true, ...from(r.name) })),
+    ...registry.inhibitors.map((i) => ({ name: i.name, kind: i.manifest.kind, commands: [], state: 'germinated' as const, enabled: true, ...from(i.name) })),
   ]
   // Dormant carries no kind: a spore may fail before its manifest ever parses. `enabled`
   // is what germination saw, like every other entry here — an operator's later toggle is
@@ -33,14 +60,15 @@ export function listPlugins(registry: Registry, sporesDirs: readonly string[], d
     state: 'dormant' as const,
     reason: d.reason,
     enabled: true,
+    ...from(d.name),
   }))
   const known = new Set([...germinated, ...dormant].map((p) => p.name))
   // install.kind came from manifest.kind at record time (lifecycle.ts), so widening it
   // back is not a real cast across the plugin boundary.
-  const rest: PluginInfo[] = db === undefined ? [] : listInstalls(db)
+  const rest: PluginInfo[] = installs
     .filter((install) => !known.has(install.name))
     .flatMap((install): PluginInfo[] => {
-      const base = { name: install.name, kind: install.kind as SporeKind, commands: [] }
+      const base = { name: install.name, kind: install.kind as SporeKind, commands: [], ...from(install.name) }
       if (!install.enabled) return [{ ...base, state: 'disabled' as const, enabled: false }]
       // syncInstalls keeps the row of a spore whose directory has gone, so the operator
       // can recover it — which requires being able to see that it is still there.
@@ -122,9 +150,6 @@ export async function secretKeysOf(
   }
   return declaredSecrets(module?.configSchema)
 }
-
-/** One spelling, read and written. A second literal is a desync waiting for a mutation to find. */
-export const REDACTED = '••••'
 
 // The reason plugins.configure is safe to grant: a scope that lists configuration must
 // not become a way to read every credential in the substrate.

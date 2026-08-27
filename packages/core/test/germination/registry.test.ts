@@ -9,7 +9,7 @@ function enzyme(name: string, commands: string[]): GerminatedEnzyme {
   return {
     name,
     manifest: {
-      kind: 'enzyme', name, septum: '^1.0',
+      kind: 'enzyme', name, septum: '^0.10',
       commands: commands.map((c) => ({ name: c, description: c, code: c })),
     },
     instance,

@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { septumIncompatibility } from '@mycelo/septum'
 import type { Enzyme, Hypha, Inhibitor, Logger, Rhiza } from '@mycelo/septum'
 import { describeUndeclaredSecrets, undeclaredSecretKeys } from '../config/plugins.js'
 import { getInstall } from '../config/store.js'
@@ -81,6 +82,16 @@ export async function germinate(
     const { manifest } = spore.read
     const markBroken = (): void => {
       if (manifest.kind === 'inhibitor' && manifest.enforcing) brokenEnforcing.push(manifest.name)
+    }
+    // design §10: refused here as well as at inoculate, because a spore installed by an
+    // older core, or dropped into a local root by hand, never went through inoculate.
+    const incompatible = septumIncompatibility(manifest.septum)
+    if (incompatible !== undefined) {
+      const reason = `spore '${manifest.name}' ${incompatible}`
+      dormant.push({ name: manifest.name, reason })
+      failed.set(manifest.name, reason)
+      markBroken()
+      continue
     }
     // design §3: the runtime owns these two domains, and a spore taking either would
     // replace the bot's own refusal sentences.

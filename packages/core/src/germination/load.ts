@@ -4,7 +4,8 @@ import { pathToFileURL } from 'node:url'
 import type { SporeModule } from '@mycelo/septum'
 import type { ReadManifest } from './manifest.js'
 
-const CODE_ENTRIES = ['src/index.ts', 'index.ts', 'dist/index.js', 'index.js']
+/** Entry points a spore may ship, in resolution order. */
+export const CODE_ENTRIES = ['src/index.ts', 'index.ts', 'dist/index.js', 'index.js']
 
 function entryPoint(sporePath: string): string | null {
   for (const candidate of CODE_ENTRIES) {
@@ -15,7 +16,7 @@ function entryPoint(sporePath: string): string | null {
 }
 
 /** True when nothing in the manifest can reach a module. */
-function needsNoModule(manifest: ReadManifest['manifest']): boolean {
+export function needsNoModule(manifest: ReadManifest['manifest']): boolean {
   return manifest.kind === 'enzyme' && manifest.commands.every((c) => c.respond !== undefined)
 }
 

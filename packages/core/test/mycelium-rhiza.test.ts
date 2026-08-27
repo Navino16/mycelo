@@ -6,7 +6,7 @@ import { z } from 'zod'
 import type {
   CommandsRead, ConversationsRead, HealthRead, IncomingMessage, LocaleManage, MessagesBroadcast, PluginsConfigure,
   PluginsRead, PluginsToggle, PrincipalsManage, PrincipalsRead, PushTarget, RestrictionsManage,
-  RolesAssign, RolesManage, RolesRead,
+  RolesAssign, RolesManage, RolesRead, SourcesManage,
 } from '@mycelo/septum'
 import { assignRole, createRole } from '../src/authorization/roles.js'
 import { addBroadcastTarget, recordConversation } from '../src/conversations/registry.js'
@@ -19,10 +19,16 @@ import type { MyceliumScope } from '@mycelo/septum'
 import { MOUNTABLE_SCOPES, resolve } from '../src/germination/anastomoses.js'
 import { resolveLocale } from '../src/i18n/locale.js'
 import { createMyceliumApi } from '../src/mycelium-rhiza.js'
+import type { MyceliumApiOptions } from '../src/mycelium-rhiza.js'
+import type { SporangiumDriver } from '../src/sporangium/driver.js'
+import { addSource, seedOfficialSource, sourceLocation } from '../src/sporangium/sources.js'
 import { migrateDatabase, openDatabase } from '../src/persistence/db.js'
 import type { Db } from '../src/persistence/db.js'
 import { principal } from '../src/persistence/schema.js'
+import { bundleOf } from './support/bundle.js'
+import { silentLogger as stubLogger } from './support/logger.js'
 import { rejectsWith } from './support/rejects.js'
+import { emptyRegistry } from './support/registry.js'
 
 const stubTranslator = { translate: (_d: string, key: string) => key, availableLocales: () => ['en', 'fr'] }
 
@@ -40,13 +46,9 @@ function fresh(): Db {
   return db
 }
 
-function emptyRegistry(): Registry {
-  return { hyphae: [], rhizas: [], enzymes: [], inhibitors: [], dormant: [], routes: new Map(), order: [], brokenEnforcing: [], catalogs: new Map() }
-}
-
 const registry = {
   hyphae: [], rhizas: [], inhibitors: [], dormant: [{ name: 'broken', reason: 'create() returned no api' }],
-  enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^0.4',
+  enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^0.10',
     commands: [{ name: 'movies', description: 'x', code: 'h' }] }, instance: null }],
   routes: new Map(),
 } as unknown as Registry
@@ -80,7 +82,7 @@ it('omits kind for a dormant plugin rather than inventing one, since none was ev
 it('lists a germinated inhibitor with an empty command list', () => {
   const withInhibitor = {
     ...registry,
-    inhibitors: [{ name: 'gate', manifest: { kind: 'inhibitor', name: 'gate', septum: '^0.5', enforcing: true } }],
+    inhibitors: [{ name: 'gate', manifest: { kind: 'inhibitor', name: 'gate', septum: '^0.10', enforcing: true } }],
   } as unknown as Registry
   const api = createMyceliumApi(withInhibitor, ['plugins.read'], stubSend, fresh(), SPORES) as PluginsRead
   expect(api.listPlugins()).toContainEqual({ name: 'gate', kind: 'inhibitor', commands: [], state: 'germinated', enabled: true })
@@ -231,7 +233,7 @@ describe('MOUNTABLE_SCOPES against what createMyceliumApi actually mounts', () =
       const r = resolve([{
         location: { directory: 'user', manifestPath: 'user/spore.yaml' },
         manifest: {
-          kind: 'enzyme', name: 'user', septum: '^0.5',
+          kind: 'enzyme', name: 'user', septum: '^0.10',
           commands: [{ name: 'user', description: 'x', respond: 'hi' }],
           requires: [{ rhiza: 'mycelium', scopes: [scope] }],
         },
@@ -392,7 +394,7 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
       mkdirSync(join(dir, 'boomspore', 'src'), { recursive: true })
       writeFileSync(
         join(dir, 'boomspore', 'spore.yaml'),
-        'kind: enzyme\nname: boomspore\nseptum: "^0.6"\n'
+        'kind: enzyme\nname: boomspore\nseptum: "^0.10"\n'
           + 'commands:\n  - name: boom\n    description: x\n    code: handleBoom\n',
         'utf8',
       )
@@ -460,7 +462,7 @@ describe('setSetting against the keys the plugin declares', () => {
     mkdirSync(join(dir, 'declares', 'src'), { recursive: true })
     writeFileSync(
       join(dir, 'declares', 'spore.yaml'),
-      'kind: enzyme\nname: declares\nseptum: "^0.6"\n'
+      'kind: enzyme\nname: declares\nseptum: "^0.10"\n'
         + 'commands:\n  - name: declares\n    description: x\n    code: handleIt\n',
       'utf8',
     )
@@ -677,5 +679,104 @@ describe('commands.read', () => {
       { qualified: 'admin.plugins', name: 'plugins', plugin: 'admin', description: 'cmd.plugins@fr' },
       { qualified: 'admin.whoami', name: 'whoami', plugin: 'admin', description: 'cmd.whoami@fr' },
     ])
+  })
+})
+
+describe('sources.manage', () => {
+  const MANIFEST = 'kind: rhiza\nname: radarr\nseptum: "^0.10"\nrequires:\n  - rhiza: plex\n'
+
+  function sourcesApi(db: Db, options: MyceliumApiOptions = {}): SourcesManage {
+    return createMyceliumApi(emptyRegistry(), ['sources.manage'], noSend, db, SPORES, options) as SourcesManage
+  }
+
+  it('reads, adds, renames and deletes a source through the mount', async () => {
+    const db = fresh()
+    seedOfficialSource(db)
+    const api = sourcesApi(db)
+    const added = await api.addSource({ label: 'Someone else', driver: 'github', location: 'https://github.com/o/r' })
+    // Two rows, not one: the official one must survive every operation on the other.
+    expect((await api.listSources()).map((s) => s.label)).toEqual(['Mycelo spores', 'Someone else'])
+    expect((await api.updateSource(added.id, { label: 'Renamed' }))?.label).toBe('Renamed')
+    expect(await api.deleteSource(added.id)).toBe(true)
+    expect((await api.listSources()).map((s) => s.label)).toEqual(['Mycelo spores'])
+    // design §11: the official source is disabled, never deleted.
+    const official = (await api.listSources())[0]
+    expect(await api.deleteSource(official?.id ?? -1)).toBe(false)
+  })
+
+  it('rejects repointing the official sporangium through the mount, rather than answering success', async () => {
+    // The same guard as PATCH /api/sources/:id: it lives in updateSource, so both doors close
+    // at once (design §11). Rejecting, not ignoring: a silent no-op through this door is
+    // indistinguishable from the designed one the token mask relies on.
+    const db = fresh()
+    seedOfficialSource(db)
+    const api = sourcesApi(db)
+    const seeded = (await api.listSources())[0]
+    await rejectsWith(
+      api.updateSource(seeded?.id ?? -1, {
+        location: 'https://github.com/attacker/evil-spores', enabled: false,
+      }),
+      /cannot be repointed/,
+    )
+    // Atomic: `enabled` travelled in the refused patch and did not land either.
+    expect((await api.listSources())[0]).toEqual(seeded)
+    // Resending the row's own location is not a repointing, and the rest of the patch lands —
+    // the idempotent PATCH the API route already answers 200 for.
+    const same = await api.updateSource(seeded?.id ?? -1, {
+      location: seeded?.location ?? '', label: 'Renamed', enabled: false,
+    })
+    expect(same).toMatchObject({ label: 'Renamed', enabled: false, location: seeded?.location })
+    // The control: a third-party row moves, with its userinfo stripped on the way in. Read
+    // raw, never off the DTO — present() redacts too, so a DTO field cannot tell the two apart.
+    const third = await api.addSource({ label: 'x', driver: 'github', location: 'https://u:p@github.com/o/r' })
+    expect(sourceLocation(db, third.id)).toBe('https://github.com/o/r')
+    await api.updateSource(third.id, { location: 'https://u:p@github.com/o/moved' })
+    expect(sourceLocation(db, third.id)).toBe('https://github.com/o/moved')
+  })
+
+  it('refuses a local source through the mount, which mounts the same store function', async () => {
+    const db = fresh()
+    await rejectsWith(
+      sourcesApi(db).addSource({ label: 'x', driver: 'local', location: '/srv/spores' }),
+      /declared in mycelo.yaml/,
+    )
+  })
+
+  it('rejects rather than resolving a refusal object, carrying its reason', async () => {
+    const db = fresh()
+    const api = sourcesApi(db, { logger: stubLogger(), managedRoot: join(tmpdir(), 'unused-managed-root') })
+    await rejectsWith(api.inoculate({ sourceId: 999, name: 'radarr' }), /no source with id 999/)
+  })
+
+  it('rejects when the core mounted the scope without a logger or a managed root', async () => {
+    const db = fresh()
+    seedOfficialSource(db)
+    await rejectsWith(sourcesApi(db).inoculate({ sourceId: 1, name: 'radarr' }), /no logger or managed root/)
+  })
+
+  it('installs through the mount and answers every warning the core owns', async () => {
+    const db = fresh()
+    const tarball = await bundleOf('radarr', { 'spore.yaml': MANIFEST, 'index.js': 'export default { create: () => ({}) }' })
+    const source = addSource(db, { label: 'Someone else', driver: 'github', location: 'https://github.com/o/r' })
+    const managed = join(mkdtempSync(join(tmpdir(), 'mycelium-managed-')), 'spores')
+    const driverFor = (): SporangiumDriver => ({
+      list: () => Promise.resolve([{ name: 'radarr', strain: '0.2.0' }]),
+      strains: () => Promise.resolve(['0.2.0']),
+      detail: () => Promise.resolve({ name: 'radarr', kind: 'rhiza' as const, description: '', septum: '^0.10' }),
+      fetch: (_name, strain) => Promise.resolve({ tarball, strain }),
+    })
+    try {
+      const api = sourcesApi(db, { logger: stubLogger(), managedRoot: managed, driverFor })
+      const outcome = await api.inoculate({ sourceId: source.id, name: 'radarr' })
+      expect(outcome).toMatchObject({ name: 'radarr', strain: '0.2.0', restartRequired: true })
+      // Both warnings, not the first: a third-party sporangium is not code-reviewed, and
+      // nothing installed satisfies the bundle's own `requires: plex`.
+      expect(outcome.warnings).toHaveLength(2)
+      expect(outcome.warnings.join(' ')).toContain('not code-reviewed')
+      expect(outcome.warnings.join(' ')).toContain("'plex'")
+      expect(getInstall(db, 'radarr')).toMatchObject({ strain: '0.2.0', sourceId: source.id, enabled: false })
+    } finally {
+      rmSync(managed, { recursive: true, force: true })
+    }
   })
 })

@@ -164,3 +164,22 @@ it('collapses a repeated spores root, keeping the order it was first named in', 
     join(dir, 'fixtures'),
   ])
 })
+
+describe('the managed root and the discovery roots', () => {
+  it('sits beside the database and is appended to every configured root', () => {
+    const file = writeConfig('spores: [./a, ./b]\ndatabase: ./data/mycelo.db\n')
+    const config = loadBootstrap(file)
+    expect(config.managedRoot).toBe(join(dir, 'data', 'spores'))
+    // Both configured roots survive: a discoveryDirs collapsed to its last element would
+    // still carry the managed root and pass a single-root fixture.
+    expect(config.discoveryDirs).toEqual([join(dir, 'a'), join(dir, 'b'), join(dir, 'data', 'spores')])
+  })
+
+  it('lists a configured root that is the managed root exactly once', () => {
+    // `spores: ./spores` beside `database: ./mycelo.db` is the ordinary layout; undeclared,
+    // assertNoCollisions would refuse the boot for every spore under it.
+    const config = loadBootstrap(writeConfig('spores: ./spores\ndatabase: ./mycelo.db\n'))
+    expect(config.managedRoot).toBe(join(dir, 'spores'))
+    expect(config.discoveryDirs).toEqual([join(dir, 'spores')])
+  })
+})

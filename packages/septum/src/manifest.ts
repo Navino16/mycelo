@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { CHANNEL_CAPABILITIES } from './capabilities.js'
+import { isParseableRange, rangeRejection } from './compat.js'
 import { MYCELIUM_SCOPES } from './mycelium.js'
 
 /** Plugin kinds. */
@@ -92,7 +93,13 @@ export type Requirement = z.infer<typeof requirementSchema>
 /** Fields every manifest carries. */
 const commonFields = {
   name: nameSchema,
-  septum: z.string().min(1),
+  septum: z.string().min(1).refine(isParseableRange, {
+    // The undefined branch is inert — a refinement never runs on a type failure, so a non-string
+    // septum: keeps Zod's message either way. It is here because issue.input is typed unknown.
+    error: (issue) => (typeof issue.input === 'string'
+      ? `'${issue.input}' ${rangeRejection(issue.input) ?? 'is not usable as a septum range'}`
+      : undefined),
+  }),
   description: z.string().optional(),
   externals: z.array(z.string()).optional(),
   requires: z.array(requirementSchema).optional(),

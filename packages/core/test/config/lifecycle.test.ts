@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import type { PluginsRead } from '@mycelo/septum'
+import { SEPTUM_VERSION, type PluginsRead } from '@mycelo/septum'
 import { getInstall, listInstalls, recordInstall, setEnabled, writeSetting } from '../../src/config/store.js'
 import { enablePlugin, syncInstalls } from '../../src/config/lifecycle.js'
 import { germinate } from '../../src/germination/germinate.js'
@@ -52,7 +52,7 @@ const NEEDS_CONFIG_MODULE = `
 
 function needsConfig(): void {
   spore('needs-config', {
-    'spore.yaml': 'kind: enzyme\nname: needs-config\nseptum: "^0.6"\n'
+    'spore.yaml': 'kind: enzyme\nname: needs-config\nseptum: "^0.10"\n'
       + 'commands:\n  - name: configured\n    description: Report the configured url\n    code: handleConfigured\n',
     'src/index.ts': NEEDS_CONFIG_MODULE,
   })
@@ -139,7 +139,7 @@ function typoSecret(name: string, secrets: string): void {
     throw new Error('TYPO_SECRET_MODULE anchor text has drifted')
   }
   spore(name, {
-    'spore.yaml': `kind: enzyme\nname: ${name}\nseptum: "^0.9"\n`
+    'spore.yaml': `kind: enzyme\nname: ${name}\nseptum: "^0.10"\n`
       + `commands:\n  - name: ${name}\n    description: x\n    respond: hi\n`,
     'src/index.ts': module,
   })
@@ -219,7 +219,7 @@ it('enabling refuses a plugin whose directory is absent from disk', async () => 
 it('enabling refuses, rather than throwing, when the module throws at import', async () => {
   const { db, close } = fresh()
   spore('boomspore', {
-    'spore.yaml': 'kind: enzyme\nname: boomspore\nseptum: "^0.6"\n'
+    'spore.yaml': 'kind: enzyme\nname: boomspore\nseptum: "^0.10"\n'
       + 'commands:\n  - name: boom\n    description: x\n    code: handleBoom\n',
     'src/index.ts': 'throw new Error("import explodes")\n',
   })
@@ -234,7 +234,7 @@ it('enabling refuses, rather than throwing, when the module throws at import', a
 it('enabling refuses, rather than throwing, when the spore has no entry point', async () => {
   const { db, close } = fresh()
   spore('nocode', {
-    'spore.yaml': 'kind: enzyme\nname: nocode\nseptum: "^0.6"\n'
+    'spore.yaml': 'kind: enzyme\nname: nocode\nseptum: "^0.10"\n'
       + 'commands:\n  - name: nocode\n    description: x\n    code: handleNocode\n',
   })
   recordInstall(db, 'nocode', 'enzyme')
@@ -247,7 +247,7 @@ it('enabling refuses, rather than throwing, when the spore has no entry point', 
 it('enabling refuses, rather than throwing, when the default export has no create()', async () => {
   const { db, close } = fresh()
   spore('nocreate', {
-    'spore.yaml': 'kind: enzyme\nname: nocreate\nseptum: "^0.6"\n'
+    'spore.yaml': 'kind: enzyme\nname: nocreate\nseptum: "^0.10"\n'
       + 'commands:\n  - name: nocreate\n    description: x\n    code: handleNocreate\n',
     'src/index.ts': 'export default { }\n',
   })
@@ -360,7 +360,7 @@ describe('enablePlugin refuses rather than rejecting when validation itself thro
   it('when the plugin\'s own safeParse throws', async () => {
     const { db, close } = fresh()
     spore('throwspore', {
-      'spore.yaml': 'kind: enzyme\nname: throwspore\nseptum: "^0.6"\n'
+      'spore.yaml': 'kind: enzyme\nname: throwspore\nseptum: "^0.10"\n'
         + 'commands:\n  - name: throwspore\n    description: x\n    code: handleIt\n',
       'src/index.ts': 'export default {\n'
         + '  configSchema: { safeParse: () => { throw new Error("predicate exploded") } },\n'
@@ -414,4 +414,54 @@ describe('syncInstalls writes all or nothing', () => {
     expect(listInstalls(db)).toEqual([])
     close()
   })
+})
+
+it('refuses to enable a spore whose septum range excludes the running septum', async () => {
+  // The third config-shaped dormancy cause enablePlugin has to see: for an enforcing
+  // inhibitor, dormancy refuses all traffic and no channel command can undo it.
+  spore('stale', {
+    'spore.yaml': [
+      'kind: enzyme',
+      'name: stale',
+      'septum: "^0.9"',
+      'commands:',
+      '  - name: hi',
+      '    description: command.hi.description',
+      '    respond: reply.hi',
+    ].join('\n'),
+  })
+  const { db, close } = fresh()
+  try {
+    recordInstall(db, 'stale', 'enzyme')
+    const result = await enablePlugin(db, [dir], 'stale')
+    expect(result.ok).toBe(false)
+    expect(result.ok ? '' : result.reason).toContain('^0.9')
+    expect(result.ok ? '' : result.reason).toContain(SEPTUM_VERSION)
+    // The positive beside the negative: the row must still be off.
+    expect(getInstall(db, 'stale')?.enabled).toBe(false)
+  } finally {
+    close()
+  }
+})
+
+it('enables a spore whose septum range covers the running septum', async () => {
+  spore('fresh-enough', {
+    'spore.yaml': [
+      'kind: enzyme',
+      'name: fresh-enough',
+      `septum: ">=${SEPTUM_VERSION}"`,
+      'commands:',
+      '  - name: hi',
+      '    description: command.hi.description',
+      '    respond: reply.hi',
+    ].join('\n'),
+  })
+  const { db, close } = fresh()
+  try {
+    recordInstall(db, 'fresh-enough', 'enzyme')
+    expect(await enablePlugin(db, [dir], 'fresh-enough')).toEqual({ ok: true })
+    expect(getInstall(db, 'fresh-enough')?.enabled).toBe(true)
+  } finally {
+    close()
+  }
 })

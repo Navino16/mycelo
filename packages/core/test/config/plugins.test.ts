@@ -3,10 +3,14 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { readSettings, recordInstall, writeSetting } from '../../src/config/store.js'
-import { REDACTED, redactSecrets, rejectedSettings, writeDeclaredSetting } from '../../src/config/plugins.js'
+import { listPlugins, redactSecrets, rejectedSettings, writeDeclaredSetting } from '../../src/config/plugins.js'
+import { REDACTED } from '../../src/support/redaction.js'
 import type { Db } from '../../src/persistence/db.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
+import type { Registry } from '../../src/germination/registry.js'
+import { addSource, listSources, seedOfficialSource } from '../../src/sporangium/sources.js'
 import { describeConfigError } from '../../src/support/thrown.js'
+import { emptyRegistry } from '../support/registry.js'
 
 const SPORES = [resolve(import.meta.dirname, '../../../../fixtures')]
 
@@ -37,7 +41,7 @@ function handwritten(): void {
   mkdirSync(join(dir, 'handwritten', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'handwritten', 'spore.yaml'),
-    'kind: enzyme\nname: handwritten\nseptum: "^0.8"\n'
+    'kind: enzyme\nname: handwritten\nseptum: "^0.10"\n'
       + 'commands:\n  - name: handwritten\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -73,7 +77,7 @@ function eitherOr(): void {
   mkdirSync(join(dir, 'eitheror', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'eitheror', 'spore.yaml'),
-    'kind: enzyme\nname: eitheror\nseptum: "^0.8"\n'
+    'kind: enzyme\nname: eitheror\nseptum: "^0.10"\n'
       + 'commands:\n  - name: eitheror\n    description: command.eitheror.description\n    code: handleIt\n',
     'utf8',
   )
@@ -118,7 +122,7 @@ function pathless(): void {
   mkdirSync(join(dir, 'pathless', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'pathless', 'spore.yaml'),
-    'kind: enzyme\nname: pathless\nseptum: "^0.8"\n'
+    'kind: enzyme\nname: pathless\nseptum: "^0.10"\n'
       + 'commands:\n  - name: pathless\n    description: command.pathless.description\n    code: handleIt\n',
     'utf8',
   )
@@ -171,7 +175,7 @@ function vault(): void {
   mkdirSync(join(dir, 'vault', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'vault', 'spore.yaml'),
-    'kind: enzyme\nname: vault\nseptum: "^0.9"\n'
+    'kind: enzyme\nname: vault\nseptum: "^0.10"\n'
       + 'commands:\n  - name: vault\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -194,7 +198,7 @@ function twin(): void {
   mkdirSync(join(dir, 'twin', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'twin', 'spore.yaml'),
-    'kind: enzyme\nname: twin\nseptum: "^0.9"\n'
+    'kind: enzyme\nname: twin\nseptum: "^0.10"\n'
       + 'commands:\n  - name: twin\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -274,7 +278,7 @@ it('a value written while the plugin throws at import is stored in the clear (kn
   mkdirSync(join(dir, 'boomvault', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'boomvault', 'spore.yaml'),
-    'kind: enzyme\nname: boomvault\nseptum: "^0.9"\n'
+    'kind: enzyme\nname: boomvault\nseptum: "^0.10"\n'
       + 'commands:\n  - name: boomvault\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -303,5 +307,76 @@ it('the mask is an ordinary value on a key that is not secret', async () => {
   recordInstall(db, 'vault', 'enzyme')
   await writeDeclaredSetting(db, [dir], 'vault', 'url', REDACTED)
   expect(readSettings(db, 'vault')).toEqual({ url: REDACTED })
+  close()
+})
+
+// Two installs, not one: with a single row the same label could be reported for every entry
+// and the test would still pass (design §14.2 step 9).
+it('an installed spore reports its source label and strain; a local one reports neither', () => {
+  const { db, close } = fresh()
+  seedOfficialSource(db)
+  const source = listSources(db)[0]
+  if (source === undefined) throw new Error('the official source was not seeded')
+  recordInstall(db, 'radarr', 'rhiza', false, { sourceId: source.id, strain: '0.2.0' })
+  recordInstall(db, 'admin', 'enzyme', false)
+  const infos = listPlugins(emptyRegistry(), [], db)
+  const radarr = infos.find((p) => p.name === 'radarr')
+  expect(radarr?.source).toBe(source.label)
+  expect(radarr?.strain).toBe('0.2.0')
+  const admin = infos.find((p) => p.name === 'admin')
+  expect(admin?.source).toBeUndefined()
+  expect(admin?.strain).toBeUndefined()
+  close()
+})
+
+// Two sources with different labels, and the two branches a reviewer skips because an install
+// row reads as a disabled-plugin concern: a germinated spore and a dormant one.
+it('carries provenance onto a germinated and a dormant entry, each from its own source', () => {
+  const { db, close } = fresh()
+  const official = addSource(db, { label: 'Mycelo spores', driver: 'github', location: 'https://example/a' })
+  const third = addSource(db, { label: 'Someone else', driver: 'github', location: 'https://example/b' })
+  recordInstall(db, 'media', 'enzyme', true, { sourceId: official.id, strain: '1.0.0' })
+  recordInstall(db, 'broken', 'rhiza', true, { sourceId: third.id, strain: '2.3.4' })
+  const registry = {
+    ...emptyRegistry(),
+    enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^0.10', commands: [] } }],
+    dormant: [{ name: 'broken', reason: 'create() returned no api' }],
+  } as unknown as Registry
+  const infos = listPlugins(registry, [], db)
+  const media = infos.find((p) => p.name === 'media')
+  expect([media?.state, media?.source, media?.strain]).toEqual(['germinated', 'Mycelo spores', '1.0.0'])
+  const broken = infos.find((p) => p.name === 'broken')
+  expect([broken?.state, broken?.source, broken?.strain]).toEqual(['dormant', 'Someone else', '2.3.4'])
+  close()
+})
+
+// The other three germinated kinds. Both tests above use an enzyme, and dropping the spread
+// from any one of hyphae, rhizas or inhibitors left the whole suite green — while design
+// §14.2 step 9's own subject, `radarr`, is a rhiza.
+it('carries provenance onto a germinated hypha, rhiza and inhibitor, each from its own source', () => {
+  const { db, close } = fresh()
+  const kinds = [
+    ['signal', 'hypha', 'Sporangium A', '1.0.0'],
+    ['radarr', 'rhiza', 'Sporangium B', '0.2.0'],
+    ['group-gate', 'inhibitor', 'Sporangium C', '3.1.4'],
+  ] as const
+  const entries = kinds.map(([name, kind, label, strain]) => {
+    const s = addSource(db, { label, driver: 'github', location: `https://example/${name}` })
+    recordInstall(db, name, kind, true, { sourceId: s.id, strain })
+    return { name, manifest: { kind, name, septum: '^0.10' } }
+  })
+  const registry = {
+    ...emptyRegistry(),
+    hyphae: [entries[0]], rhizas: [entries[1]], inhibitors: [entries[2]],
+  } as unknown as Registry
+  const infos = listPlugins(registry, [], db)
+  expect(kinds.map(([name]) => {
+    const info = infos.find((p) => p.name === name)
+    return [info?.kind, info?.state, info?.source, info?.strain]
+  })).toEqual([
+    ['hypha', 'germinated', 'Sporangium A', '1.0.0'],
+    ['rhiza', 'germinated', 'Sporangium B', '0.2.0'],
+    ['inhibitor', 'germinated', 'Sporangium C', '3.1.4'],
+  ])
   close()
 })

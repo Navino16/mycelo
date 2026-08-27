@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import { z } from 'zod'
 import { canonicalLocale } from './i18n/locale.js'
+import { managedRoot } from './sporangium/layout.js'
 
 const ownerSchema = z.object({
   channel: z.string().min(1),
@@ -43,6 +44,13 @@ const bootstrapSchema = z.object({
 export type Bootstrap = z.infer<typeof bootstrapSchema> & {
   sporesDirs: readonly string[]
   databaseFile: string
+  /** The root the core installs into, beside the database. Never a configured root. */
+  managedRoot: string
+  /**
+   * Every root a spore can be found under: the configured ones plus the managed one. What
+   * every disk lookup reads — an inoculated spore lives in none of `sporesDirs` (design §9).
+   */
+  discoveryDirs: readonly string[]
 }
 
 export class BootstrapError extends Error {
@@ -82,15 +90,20 @@ export function loadBootstrap(file: string): Bootstrap {
   } catch (e) {
     throw new BootstrapError((e as Error).message, 'defaultLocale')
   }
+  // Deduped after resolution, so two spellings of one directory collapse too: a repeated
+  // root is a typo, and assertNoCollisions would otherwise refuse it against itself.
+  const sporesDirs = [...new Set(
+    (typeof result.data.spores === 'string' ? [result.data.spores] : result.data.spores)
+      .map((dir) => resolve(file, '..', dir)),
+  )]
+  const databaseFile = resolve(file, '..', result.data.database)
+  const managed = resolve(managedRoot(databaseFile))
   return {
     ...result.data,
     defaultLocale,
-    // Deduped after resolution, so two spellings of one directory collapse too: a repeated
-    // root is a typo, and assertNoCollisions would otherwise refuse it against itself.
-    sporesDirs: [...new Set(
-      (typeof result.data.spores === 'string' ? [result.data.spores] : result.data.spores)
-        .map((dir) => resolve(file, '..', dir)),
-    )],
-    databaseFile: resolve(file, '..', result.data.database),
+    sporesDirs,
+    databaseFile,
+    managedRoot: managed,
+    discoveryDirs: [...new Set([...sporesDirs, managed])],
   }
 }

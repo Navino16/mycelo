@@ -4,7 +4,8 @@ import type { SporeKind } from '@mycelo/septum'
 import type { RuntimeState } from '../../boot/state.js'
 import { enablePlugin } from '../../config/lifecycle.js'
 import {
-  formSchemaOf, listPlugins, redactSecrets, rejectedSettings, rewriteSetting, secretKeysOf, undeclaredKeys,
+  formSchemaOf, listPlugins, provenanceByName, redactSecrets, rejectedSettings, rewriteSetting, secretKeysOf,
+  undeclaredKeys,
 } from '../../config/plugins.js'
 import { getInstall, listInstalls, setEnabled } from '../../config/store.js'
 import { badRequest, notFound } from '../errors.js'
@@ -20,6 +21,12 @@ export interface PluginDto {
   /** From the install row, which can disagree with `state` until the next germination. */
   enabled: boolean
   scopes: readonly string[]
+  /**
+   * The sporangium's label and the installed strain. Both absent for a spore from a local
+   * root, which is neither versioned nor traceable (design §7.4).
+   */
+  source?: string
+  strain?: string
 }
 
 /**
@@ -40,6 +47,7 @@ function groupByKind(plugins: readonly PluginDto[]): PluginGroups {
 
 function pluginsOf(state: RuntimeState): readonly PluginDto[] {
   const installs = new Map(listInstalls(state.db).map((i) => [i.name, i]))
+  const provenance = provenanceByName(state.db)
   if (state.germination.status !== 'germinated') {
     // Nothing germinated, so nothing is known about any individual plugin (spec §4.1).
     return [...installs.values()].map((install) => ({
@@ -51,6 +59,7 @@ function pluginsOf(state: RuntimeState): readonly PluginDto[] {
       state: 'unknown' as const,
       enabled: install.enabled,
       scopes: [],
+      ...(provenance.get(install.name) ?? {}),
     }))
   }
   const { registry } = state.germination.mycelium
@@ -58,7 +67,7 @@ function pluginsOf(state: RuntimeState): readonly PluginDto[] {
     ...registry.enzymes.map((e) => [e.name, e.scopes] as const),
     ...registry.inhibitors.map((i) => [i.name, i.scopes] as const),
   ])
-  return listPlugins(registry, state.config.sporesDirs, state.db).map((info) => ({
+  return listPlugins(registry, state.config.discoveryDirs, state.db).map((info) => ({
     name: info.name,
     ...(info.kind === undefined ? {} : { kind: info.kind }),
     commands: info.commands,
@@ -66,6 +75,8 @@ function pluginsOf(state: RuntimeState): readonly PluginDto[] {
     ...(info.reason === undefined ? {} : { reason: info.reason }),
     enabled: installs.get(info.name)?.enabled ?? info.enabled,
     scopes: scopesOf.get(info.name) ?? [],
+    ...(info.source === undefined ? {} : { source: info.source }),
+    ...(info.strain === undefined ? {} : { strain: info.strain }),
   }))
 }
 
@@ -85,7 +96,7 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     // enablePlugin(), not enableOrThrow(): its EnableRefusal is a discriminated result,
     // never a throw, so an exception reaching here is a genuine fault and must not be
     // relabelled a client mistake (task 10's review, Important 3, applied here too).
-    const result = await enablePlugin(state.db, state.config.sporesDirs, name)
+    const result = await enablePlugin(state.db, state.config.discoveryDirs, name)
     if (!result.ok) throw badRequest('api.pluginEnableRefused', { plugin: name }, result.reason)
     return { ok: true, restartRequired: state.germination.status === 'germinated' }
   })
@@ -102,7 +113,7 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
   app.get('/api/plugins/:name/schema', async (request) => {
     const { name } = request.params as { name: string }
     requireInstalled(state, name)
-    return await formSchemaOf(state.db, state.config.sporesDirs, name)
+    return await formSchemaOf(state.db, state.config.discoveryDirs, name)
   })
 
   app.get('/api/plugins/:name/settings', (request) => {
@@ -116,7 +127,7 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     requireInstalled(state, name)
     const body = parseBody(z.record(z.string(), z.unknown()), request.body)
     const keys = Object.keys(body)
-    const form = await formSchemaOf(state.db, state.config.sporesDirs, name)
+    const form = await formSchemaOf(state.db, state.config.discoveryDirs, name)
     const bad = undeclaredKeys(form, keys)
     if (bad.length > 0) {
       // detail carries the structure (§9): a form wanting to highlight fields would
@@ -125,7 +136,7 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     }
     // Declared is not valid: without this an enabled plugin takes a value that makes it
     // dormant at the next boot, which is the failure enablePlugin() exists to prevent (§8).
-    const rejected = await rejectedSettings(state.db, state.config.sporesDirs, name, body)
+    const rejected = await rejectedSettings(state.db, state.config.discoveryDirs, name, body)
     if (rejected.length > 0) {
       const rejectedKeys = rejected.map((r) => r.key).join(', ')
       throw badRequest('api.pluginSettingInvalid', { plugin: name, keys: rejectedKeys }, rejected)
@@ -134,7 +145,7 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     // synchronous transaction makes that all-or-nothing. rewriteSetting is synchronous, so
     // it can run inside bun:sqlite's transaction(), which cannot await — hence resolving
     // the plugin's declared secrets before opening it.
-    const secrets = await secretKeysOf(state.db, state.config.sporesDirs, name)
+    const secrets = await secretKeysOf(state.db, state.config.discoveryDirs, name)
     state.db.transaction(() => {
       for (const [key, value] of Object.entries(body)) rewriteSetting(state.db, name, key, value, secrets)
     })

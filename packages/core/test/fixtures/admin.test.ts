@@ -244,7 +244,7 @@ it('refuses /lang-group in a direct message', async () => {
   expect(written).toEqual([])
 })
 
-// README.md's own justification for declaring all fifteen was false: MYCELIUM_SCOPES and
+// README.md's own justification for declaring all sixteen was false: MYCELIUM_SCOPES and
 // MOUNTABLE_SCOPES are pinned symmetrically against each other, with no manifest involved
 // (anastomoses.test.ts, mycelium-rhiza.test.ts), so this fixture's own declaration was
 // pinned by nothing. Reverting it to a subset must fail here.

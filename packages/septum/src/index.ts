@@ -1,4 +1,7 @@
 export * from './capabilities.js'
+// Named, unlike every other line here: isParseableRange is manifest.ts's own helper, and a
+// public export is frozen by the tag whether anything uses it or not.
+export { septumIncompatibility } from './compat.js'
 export * from './config.js'
 export * from './context.js'
 export * from './enzyme.js'
@@ -11,3 +14,4 @@ export * from './message.js'
 export * from './mycelium.js'
 export * from './rhiza.js'
 export * from './spore.js'
+export * from './version.js'

@@ -1,3 +1,4 @@
+import { septumIncompatibility } from '../compat.js'
 import { parseManifest } from '../manifest.js'
 import { configSchemaFailures } from './config-checks.js'
 import type { HealthState } from '../context.js'
@@ -31,6 +32,11 @@ export async function rhizaChecks(harness: RhizaHarness): Promise<string[]> {
   if (manifest.kind !== 'rhiza') {
     return [...failures, `manifest kind is '${manifest.kind}', expected 'rhiza'`]
   }
+
+  // The same check germination, enablePlugin and inoculate apply: a kit that certifies a range
+  // the runtime refuses fails the author at the operator's install instead of at authoring time.
+  const incompatible = septumIncompatibility(manifest.septum)
+  if (incompatible !== undefined) failures.push(`the manifest ${incompatible}`)
 
   failures.push(
     ...configSchemaFailures(harness.module.configSchema, harness.validConfig, harness.invalidConfig),

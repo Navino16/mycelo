@@ -19,7 +19,7 @@ function spore(name: string, files: Record<string, string>): void {
   }
 }
 
-const HYPHA_MANIFEST = 'kind: hypha\nname: probe\nseptum: "^1.0"\n'
+const HYPHA_MANIFEST = 'kind: hypha\nname: probe\nseptum: "^0.10"\n'
 
 async function read(name: string) {
   const location = discover([dir]).find((l) => l.directory === name)!
@@ -119,28 +119,28 @@ it('loads non-erasable syntax like enum, which Bun compiles rather than strips',
 
 it('needs no module when every command answers with text', async () => {
   spore('textonly', {
-    'spore.yaml': 'kind: enzyme\nname: textonly\nseptum: "^1.0"\ncommands:\n  - name: hi\n    description: Greet\n    respond: hello\n',
+    'spore.yaml': 'kind: enzyme\nname: textonly\nseptum: "^0.10"\ncommands:\n  - name: hi\n    description: Greet\n    respond: hello\n',
   })
   expect(await loadModule(await read('textonly'))).toBeNull()
 })
 
 it('still refuses a spore with a code command and no entry point', async () => {
   spore('needy', {
-    'spore.yaml': 'kind: enzyme\nname: needy\nseptum: "^1.0"\ncommands:\n  - name: hi\n    description: Greet\n    code: handleHi\n',
+    'spore.yaml': 'kind: enzyme\nname: needy\nseptum: "^0.10"\ncommands:\n  - name: hi\n    description: Greet\n    code: handleHi\n',
   })
   expect(loadModule(await read('needy'))).rejects.toThrow('no entry point')
 })
 
 it('refuses a spore mixing respond and code commands with no entry point', async () => {
   spore('mixed', {
-    'spore.yaml': 'kind: enzyme\nname: mixed\nseptum: "^1.0"\ncommands:\n  - name: hi\n    description: Greet\n    respond: hello\n  - name: bye\n    description: Farewell\n    code: handleBye\n',
+    'spore.yaml': 'kind: enzyme\nname: mixed\nseptum: "^0.10"\ncommands:\n  - name: hi\n    description: Greet\n    respond: hello\n  - name: bye\n    description: Farewell\n    code: handleBye\n',
   })
   expect(loadModule(await read('mixed'))).rejects.toThrow('no entry point')
 })
 
 it('loads an entry point that is present even when no command needs it', async () => {
   spore('extra', {
-    'spore.yaml': 'kind: enzyme\nname: extra\nseptum: "^1.0"\ncommands:\n  - name: hi\n    description: Greet\n    respond: hello\n',
+    'spore.yaml': 'kind: enzyme\nname: extra\nseptum: "^0.10"\ncommands:\n  - name: hi\n    description: Greet\n    respond: hello\n',
     'src/index.ts': 'export default { create: () => ({ handlers: {} }) }\n',
   })
   expect(await loadModule(await read('extra'))).not.toBeNull()

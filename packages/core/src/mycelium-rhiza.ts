@@ -3,6 +3,7 @@ import type {
   CommandsRead,
   ConversationsRead,
   HealthRead,
+  Logger,
   LocaleManage,
   MessagesBroadcast,
   MessagesSend,
@@ -18,6 +19,7 @@ import type {
   RolesAssign,
   RolesManage,
   RolesRead,
+  SourcesManage,
 } from '@mycelo/septum'
 import { availableCommands } from './authorization/available.js'
 import {
@@ -41,6 +43,9 @@ import type { Db } from './persistence/db.js'
 import {
   clearContextRule, inhibitorChannels, listContextRules, setContextRule, setInhibitorChannels,
 } from './restrictions/rules.js'
+import { inoculate } from './sporangium/inoculate.js'
+import type { DriverFactory } from './sporangium/driver.js'
+import { addSource, deleteSource, listSources, updateSource } from './sporangium/sources.js'
 import { describeThrown } from './support/thrown.js'
 
 // Defers the call into .then() so a throwing driver rejects the returned promise
@@ -71,6 +76,14 @@ export interface MyceliumApiOptions {
   defaultRole?: string
   /** Required by locale.manage and commands.read; createMyceliumApi throws if either is granted without it. */
   translator?: Translator
+  /**
+   * Both required by `inoculate` alone, and optional so that granting any other scope needs
+   * neither. Without them `sources.manage` still mounts, and only `inoculate` rejects.
+   */
+  logger?: Logger
+  managedRoot?: string
+  /** Injected wherever a test must not reach the network; production resolves it from the source row. */
+  driverFor?: DriverFactory
 }
 
 // The writer's guard the reader depends on: a locale nobody has a catalogue for would be
@@ -96,14 +109,15 @@ export function createMyceliumApi(
   sporesDirs: readonly string[],
   options?: MyceliumApiOptions,
 ): object {
-  const { defaultRole, translator } = options ?? {}
+  const { defaultRole, translator, logger, managedRoot, driverFor } = options ?? {}
   const granted = new Set(scopes)
   // No prototype: a global Object.prototype pollution must not forge an absent scope
   // as present through `in`, which is exactly how a caller is expected to check.
   const api = Object.create(null) as Partial<
     PluginsRead & HealthRead & MessagesSend & PrincipalsRead & PrincipalsManage &
     RolesRead & RolesAssign & RolesManage & PluginsToggle & PluginsConfigure &
-    ConversationsRead & MessagesBroadcast & RestrictionsManage & LocaleManage & CommandsRead
+    ConversationsRead & MessagesBroadcast & RestrictionsManage & LocaleManage & CommandsRead &
+    SourcesManage
   >
 
   if (granted.has('plugins.read')) api.listPlugins = () => listPlugins(registry, sporesDirs, db)
@@ -152,6 +166,23 @@ export function createMyceliumApi(
     api.listBroadcastTargets = () => toPromise(() => listBroadcastTargets(db))
     api.addBroadcastTarget = (target) => toPromise(() => { addBroadcastTarget(db, target) })
     api.removeBroadcastTarget = (target) => toPromise(() => { removeBroadcastTarget(db, target) })
+  }
+  if (granted.has('sources.manage')) {
+    api.listSources = () => toPromise(() => listSources(db))
+    api.addSource = (s) => toPromise(() => addSource(db, s))
+    api.updateSource = (id, patch) => toPromise(() => updateSource(db, id, patch))
+    api.deleteSource = (id) => toPromise(() => deleteSource(db, id))
+    api.inoculate = async (request) => {
+      if (logger === undefined || managedRoot === undefined) {
+        throw new Error('sources.manage was granted with no logger or managed root')
+      }
+      const result = await inoculate(
+        { db, sporesDirs, managedRoot, logger, ...(driverFor === undefined ? {} : { driverFor }) }, request,
+      )
+      // The published contract says inoculate rejects; a refusal object would read as success.
+      if (!result.ok) throw new Error(result.reason)
+      return { name: result.name, strain: result.strain, warnings: result.warnings, restartRequired: result.restartRequired }
+    }
   }
   if (granted.has('commands.read')) {
     if (translator === undefined) throw new Error('commands.read was granted with no translator')
