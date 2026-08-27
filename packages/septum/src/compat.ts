@@ -1,10 +1,14 @@
+import { parseRange, satisfies } from './semver.js'
 import { SEPTUM_VERSION } from './version.js'
 
-// Bun.semver exposes no range validator, so parseability is established by use: an unparseable
-// range matches every version (design §10.1), and a real range cannot admit two versions this
-// far apart. Measured on Bun 1.4.0.
+/**
+ * False for a range that admits every version and for one that cannot be parsed at all — both
+ * would make the compatibility check silently inert for that spore (design §10.1). The two
+ * probes catch the wildcard forms (`*`, `x`, an empty range); the parse catches the rest.
+ */
 export function isParseableRange(range: string): boolean {
-  return !(Bun.semver.satisfies('0.0.1', range) && Bun.semver.satisfies('99999.0.0', range))
+  if (parseRange(range) === null) return false
+  return !(satisfies('0.0.1', range) && satisfies('99999.0.0', range))
 }
 
 /**
@@ -16,6 +20,6 @@ export function septumIncompatibility(range: string, septumVersion: string = SEP
   if (!isParseableRange(range)) {
     return `declares septum '${range}', which is not a semver range: an unparseable range would admit every version, including ${septumVersion}`
   }
-  if (Bun.semver.satisfies(septumVersion, range)) return undefined
+  if (satisfies(septumVersion, range)) return undefined
   return `declares septum '${range}', which excludes the septum actually running (${septumVersion})`
 }
