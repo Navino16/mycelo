@@ -26,17 +26,28 @@
   publication, and that warning cannot be suppressed by the caller.
 
 ### Changed
-- **`septum:` must now be a range `Bun.semver` can parse.** An unparseable range — `*`, `latest`,
-  or any typo — matches *every* version, which made the core's compatibility check silently inert
-  for that spore instead of failing loudly. `parseManifest` now rejects it with `path: 'septum'`.
+- **`septum:` must now be a range septum's own matcher can parse.** An unparseable range — `*`,
+  `latest`, or any typo — matches *every* version, which made the core's compatibility check
+  silently inert for that spore instead of failing loudly. `parseManifest` now rejects it with
+  `path: 'septum'`.
 
   This is **non-breaking for every manifest that exists**: all twenty in the Mycelo project declare
   a caret range, and `^0.10`, `>=0.10.0`, `0.10.x`, `>=0.9 <0.12` and even the doubled-caret
-  `^^0.10` all still parse — measured on Bun 1.4.0, and `^^0.10` is measured to behave identically
-  to `^0.10`, so it is accepted rather than refused. It **is** a behaviour change for a third-party
-  manifest whose range does not parse: such a spore now fails to load, where before it loaded and
-  its compatibility was never really checked. Shipped in a patch for that reason — it closes a hole
-  rather than moving the contract.
+  `^^0.10` all still parse — `^^0.10` behaving identically to `^0.10`, so it is accepted rather
+  than refused. It **is** a behaviour change for a third-party manifest whose range does not parse:
+  such a spore now fails to load, where before it loaded and its compatibility was never really
+  checked. Shipped in a patch for that reason — it closes a hole rather than moving the contract.
+- **Range matching no longer calls `Bun.semver`; septum ships its own matcher.** The package
+  resolves to `src/` on Bun and to `dist/` on Node, so a `Bun.` reference made every manifest parse
+  throw `ReferenceError` for a Node consumer — and with it every conformance check, which answered
+  `manifest does not parse: Bun is not defined` for a perfectly sound plugin. The replacement is a
+  node-semver subset with no new dependency, pinned against `Bun.semver` by a differential test
+  over several thousand (version, range) pairs.
+
+  **It is not byte-identical to what 0.10.1 used.** The two agree on every well-formed range this
+  contract documents; they differ on malformed input, where `Bun.semver` interprets a typo into
+  *something* and the new matcher refuses it. A range that parses behaves as node-semver says it
+  does. Anything genuinely ambiguous is a refusal, never a silent reinterpretation.
 - **All four conformance kits now apply the septum-range check the runtime applies.** A manifest
   declaring a range that excludes the running septum was certified as conforming while every core
   running that septum made the spore dormant, refused to enable it and refused to install it — the
