@@ -1,5 +1,11 @@
 import type { ArgSpec } from '@mycelo/septum'
 
+/**
+ * What a caller can actually type after the prefix. Exported because an alias is validated
+ * against it: an alias this refuses is a stored value with no effect (spec §3.1).
+ */
+export const COMMAND_NAME = /^[a-z][a-z0-9-]*$/
+
 export interface ParsedCommand {
   command: string
   args: Record<string, string>
@@ -17,7 +23,7 @@ export function parseCommand(text: string, prefix: string): ParsedCommand | null
   const space = body.indexOf(' ')
   const command = space === -1 ? body : body.slice(0, space)
   const rest = space === -1 ? '' : body.slice(space + 1).trim()
-  if (!/^[a-z][a-z0-9-]*$/.test(command)) return null
+  if (!COMMAND_NAME.test(command)) return null
   return { command, args: {}, rest }
 }
 
