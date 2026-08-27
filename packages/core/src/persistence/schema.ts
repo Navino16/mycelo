@@ -64,7 +64,7 @@ export const source = sqliteTable('source', {
 })
 
 // `name` is the primary key: a spore name is already unique across the substrate and every
-// lookup in phase 5 is by name. The sporangium columns of spec §9.3 arrive with phase 8.
+// lookup in phase 5 is by name.
 export const pluginInstall = sqliteTable('plugin_install', {
   name: text('name').primaryKey(),
   kind: text('kind').notNull(),

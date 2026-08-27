@@ -55,7 +55,7 @@ export function addSource(
 ): SporangiumSource {
   // official is never taken from the caller (design §11).
   const row = db.insert(source)
-    .values({ label: s.label, driver: s.driver, location: s.location, token: s.token ?? null, official: false, enabled: true })
+    .values({ label: s.label, driver: s.driver, location: s.location, token: s.token || null, official: false, enabled: true })
     .returning()
     .get()
   return present(row)
@@ -66,7 +66,8 @@ export function updateSource(
   id: number,
   patch: { label?: string, location?: string, token?: string, enabled?: boolean },
 ): SporangiumSource | null {
-  if (db.select().from(source).where(eq(source.id, id)).get() === undefined) return null
+  const existing = db.select().from(source).where(eq(source.id, id)).get()
+  if (existing === undefined) return null
   const values: Partial<Row> = {}
   if (patch.label !== undefined) values.label = patch.label
   if (patch.location !== undefined) values.location = patch.location
@@ -76,6 +77,9 @@ export function updateSource(
   if (patch.token !== undefined && patch.token !== TOKEN_MASK) {
     values.token = patch.token === '' ? null : patch.token
   }
+  // A patch that changes nothing (e.g. the mask round-tripped alone) must not reach
+  // drizzle's `set({})`, which throws rather than being a no-op.
+  if (Object.keys(values).length === 0) return present(existing)
   const row = db.update(source).set(values).where(eq(source.id, id)).returning().get()
   return present(row)
 }
