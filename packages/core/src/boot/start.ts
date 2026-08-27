@@ -3,6 +3,7 @@ import { createAdmissionChain, createInhibitorContext } from '../admission/chain
 import type { AdmissionChain } from '../admission/chain.js'
 import { createMembershipCache } from '../admission/membership.js'
 import { buildRoutes } from '../germination/registry.js'
+import { listAliases } from '../rhizomorph/aliases.js'
 import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor, GerminatedRhiza, Registry } from '../germination/registry.js'
 import { createMyceliumApi } from '../mycelium-rhiza.js'
 import { allInhibitorChannels } from '../restrictions/rules.js'
@@ -201,8 +202,9 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
     })
 
     // A failed start() must not leave the enzyme routable: routes are rebuilt from
-    // only the enzymes that started (safe — buildRoutes() already accepted the full
-    // set at germination, and removing entries cannot introduce a new collision).
+    // only the enzymes that started. Safe because germination already accepted the full
+    // set under the SAME alias map — removing entries cannot introduce a collision, but
+    // rebuilding under a different map could (spec §3.3).
     const routedRegistry: Registry = {
       ...registry,
       hyphae: connectedHyphae,
@@ -210,7 +212,7 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
       enzymes: startedEnzymes,
       inhibitors: startedInhibitors,
       brokenEnforcing,
-      routes: buildRoutes(startedEnzymes),
+      routes: buildRoutes(startedEnzymes, listAliases(db)),
     }
 
     const bus = createBus({

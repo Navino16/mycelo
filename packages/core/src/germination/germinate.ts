@@ -14,6 +14,7 @@ import { loadModule } from './load.js'
 import { isFailure, readManifest } from './manifest.js'
 import type { ReadManifest } from './manifest.js'
 import { buildRoutes } from './registry.js'
+import { listAliases } from '../rhizomorph/aliases.js'
 import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor, GerminatedRhiza, Registry } from './registry.js'
 import { capabilityShapeError, enzymeShapeError, hyphaShapeError, inhibitorShapeError, rhizaShapeError, unreferencedHandlers } from './shape.js'
 
@@ -32,6 +33,7 @@ export async function germinate(
   // (spec-compliant on their own), but their combination — run from the wrong cwd —
   // produced "germinated 0 spores" and exit 0 with no word said. Not a crash, but not
   // legible either.
+  const aliases = db === undefined ? new Map<string, string>() : listAliases(db)
   const missing = sporesDirs.filter((dir) => !existsSync(dir))
   if (missing.length === sporesDirs.length) {
     logger.warn(`no spores directory exists: ${missing.map((d) => `'${d}'`).join(', ')} — nothing will germinate`)
@@ -242,5 +244,5 @@ export async function germinate(
     .map((spore) => spore.read.manifest.name)
     .filter((name) => registered.has(name))
 
-  return { hyphae, enzymes, rhizas, inhibitors, dormant, routes: buildRoutes(enzymes), order, brokenEnforcing, catalogs }
+  return { hyphae, enzymes, rhizas, inhibitors, dormant, routes: buildRoutes(enzymes, aliases), order, brokenEnforcing, catalogs }
 }

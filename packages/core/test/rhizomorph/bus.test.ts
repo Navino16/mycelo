@@ -74,7 +74,7 @@ function setup(
   }]
   const order = [...rhizas.map((r) => r.name), 'ping']
   return {
-    registry: { hyphae, enzymes, rhizas, inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order, brokenEnforcing: [], catalogs: new Map() },
+    registry: { hyphae, enzymes, rhizas, inhibitors: [], dormant: [], routes: buildRoutes(enzymes, new Map()), order, brokenEnforcing: [], catalogs: new Map() },
     sent,
   }
 }
@@ -157,7 +157,7 @@ it('names the failed command, not just the channel, when a respond: send throws'
     scopes: [],
     config: {},
   }]
-  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'], brokenEnforcing: [], catalogs: new Map() }
+  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes, new Map()), order: ['ping'], brokenEnforcing: [], catalogs: new Map() }
   const errors: string[] = []
   const logger: Logger = {
     debug() {}, info() {}, warn() {},
@@ -278,7 +278,7 @@ describe("respond: resolves through the declaring spore's domain", () => {
     ]
     const registry: Registry = {
       hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [],
-      routes: buildRoutes(enzymes), order: ['alpha', 'beta'], brokenEnforcing: [], catalogs: new Map(),
+      routes: buildRoutes(enzymes, new Map()), order: ['alpha', 'beta'], brokenEnforcing: [], catalogs: new Map(),
     }
     const bus = busFor(registry, {
       translator: createTranslator({
@@ -493,7 +493,7 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
   ]
   const registry: Registry = {
     hyphae, enzymes, rhizas, inhibitors: [], dormant: [],
-    routes: buildRoutes(enzymes),
+    routes: buildRoutes(enzymes, new Map()),
     order: ['mock', 'other', 'alpha', 'beta'],
     brokenEnforcing: [],
     catalogs: new Map(),
@@ -554,7 +554,7 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
     scopes: [],
     config: {},
   }]
-  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'], brokenEnforcing: [], catalogs: new Map() }
+  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes, new Map()), order: ['ping'], brokenEnforcing: [], catalogs: new Map() }
   // A bespoke logger, not createLogger(): distinguishes "contained by the specific
   // recovery-send try" from "contained by the outer catch-all" — both would make the
   // promise resolve, but only the former logs both failures under their own messages.
@@ -652,7 +652,7 @@ function harness(options: {
   } as unknown as GerminatedEnzyme
   const registry: Registry = {
     hyphae: [hypha], enzymes: [enzyme], rhizas: [], inhibitors: [], dormant: [],
-    routes: buildRoutes([enzyme]), order: ['media'], brokenEnforcing: [], catalogs: new Map(),
+    routes: buildRoutes([enzyme], new Map()), order: ['media'], brokenEnforcing: [], catalogs: new Map(),
   }
   const logger = {
     info: () => {}, debug: () => {}, warn: () => {}, error: () => {},
@@ -956,7 +956,7 @@ describe('the four refusal callbacks, threaded with the locale bus.ts resolved',
     } as unknown as GerminatedEnzyme
     const registry: Registry = {
       hyphae: [hypha], enzymes: [enzyme], rhizas: [], inhibitors: [], dormant: [],
-      routes: buildRoutes([enzyme]), order: ['media'], brokenEnforcing: [], catalogs: new Map(),
+      routes: buildRoutes([enzyme], new Map()), order: ['media'], brokenEnforcing: [], catalogs: new Map(),
     }
 
     // Mirrors boot/start.ts's own four callbacks, so a passing test here proves bus.ts's
