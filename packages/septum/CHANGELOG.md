@@ -13,7 +13,9 @@
   source's `token` is never the stored value — it comes back as the literal `••••` when one is set
   and is absent when not — and `official` is settable through no API: it marks the reviewed
   registry, and a flag an operator could set would be a one-field bypass of the trust model.
-- `septumIncompatibility(range, version?)`, the one implementation of the range check. The core's
+- `septumIncompatibility(range, version?)` — and that name alone, deliberately: the range
+  predicate behind it is `manifest.ts`'s own helper and is not part of the public surface. The one
+  implementation of the range check. The core's
   germination, `enablePlugin` and `inoculate` all call it, and so do the four conformance kits: two
   copies would drift at exactly the septum release where the check matters.
 - `sources.manage`, the sixteenth `MyceliumScope`, and the `SourcesManage` interface it mounts:

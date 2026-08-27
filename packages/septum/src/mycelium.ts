@@ -319,10 +319,11 @@ export interface SourcesManage {
   /** False for the official source, which can be disabled but never deleted (design §11). */
   deleteSource(id: number): Promise<boolean>
   /**
-   * Rejects for an unknown or disabled source, for a local one, for an unknown spore or
-   * strain, for a directory collision, and for any archive that fails validation — every one
-   * of them before anything is written where the core would discover it (design §9). An
-   * archive is unpacked into a staging directory first, which a failed install discards.
+   * Rejects for an unknown or disabled source, for a local one, for an unknown spore or strain,
+   * for a directory collision, for a download or an expansion over the core's size limit, and
+   * for any archive that fails validation — every one of them before anything is written where
+   * the core would discover it (design §9). An archive is unpacked into a staging directory
+   * first, which a failed install discards.
    */
   inoculate(request: { sourceId: number, name: string, strain?: string }): Promise<InoculateOutcome>
 }

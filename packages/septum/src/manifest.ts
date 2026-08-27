@@ -94,8 +94,8 @@ export type Requirement = z.infer<typeof requirementSchema>
 const commonFields = {
   name: nameSchema,
   septum: z.string().min(1).refine(isParseableRange, {
-    // issue.input is unknown, and returning undefined keeps Zod's own message: a non-string
-    // septum: reports a wrong type rather than a range error.
+    // The undefined branch is inert — a refinement never runs on a type failure, so a non-string
+    // septum: keeps Zod's message either way. It is here because issue.input is typed unknown.
     error: (issue) => (typeof issue.input === 'string'
       ? `'${issue.input}' is not a semver range: a range that cannot be parsed matches every version`
       : undefined),
