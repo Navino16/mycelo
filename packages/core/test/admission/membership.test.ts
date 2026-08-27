@@ -11,7 +11,7 @@ function hypha(name: string, capabilities: string[], members: ChannelIdentity[])
   const germinated = {
     name,
     config: {},
-    manifest: { kind: 'hypha' as const, name, septum: '^0.5', capabilities },
+    manifest: { kind: 'hypha' as const, name, septum: '^0.10', capabilities },
     instance: {
       connect: () => Promise.resolve(),
       listen: () => {},
@@ -69,7 +69,7 @@ describe('createMembershipCache', () => {
     let calls = 0
     const germinated = {
       name: 'console', config: {},
-      manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.5', capabilities: ['group_membership'] },
+      manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.10', capabilities: ['group_membership'] },
       instance: {
         connect: () => Promise.resolve(), listen: () => {}, stop: () => Promise.resolve(),
         send: () => Promise.resolve(),
@@ -122,7 +122,7 @@ describe('createMembershipCache', () => {
 describe('a listGroupMembers that breaks its contract', () => {
   const returning = (value: unknown): GerminatedHypha => ({
     name: 'console', config: {},
-    manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.5', capabilities: ['group_membership'] },
+    manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.10', capabilities: ['group_membership'] },
     instance: {
       connect: () => Promise.resolve(),
       listen: () => {},

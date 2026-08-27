@@ -57,7 +57,7 @@ function writeSpore(sporesDir: string, name: string, files: Record<string, strin
 export const cyclingPair: SporeWriter = (sporesDir) => {
   for (const [self, other] of [['alpha', 'beta'], ['beta', 'alpha']] as const) {
     writeSpore(sporesDir, self, {
-      'spore.yaml': `kind: rhiza\nname: ${self}\nseptum: "^0.7"\nrequires:\n  - rhiza: ${other}\n`,
+      'spore.yaml': `kind: rhiza\nname: ${self}\nseptum: "^0.10"\nrequires:\n  - rhiza: ${other}\n`,
     })
   }
 }
@@ -70,7 +70,7 @@ export const cyclingPair: SporeWriter = (sporesDir) => {
 export const cyclingTriple: SporeWriter = (sporesDir) => {
   cyclingPair(sporesDir)
   writeSpore(sporesDir, 'gamma', {
-    'spore.yaml': 'kind: enzyme\nname: gamma\nseptum: "^0.7"\ncommands:\n'
+    'spore.yaml': 'kind: enzyme\nname: gamma\nseptum: "^0.10"\ncommands:\n'
       + '  - name: noop\n    description: No-op\n    respond: noop.text\n'
       + 'requires:\n  - rhiza: alpha\n',
   })
@@ -109,7 +109,7 @@ function configSchemaModule(fields: readonly string[]): string {
 function configurableSpore(fields: readonly string[]): SporeWriter {
   return (sporesDir) => {
     writeSpore(sporesDir, 'needs-config', {
-      'spore.yaml': 'kind: enzyme\nname: needs-config\nseptum: "^0.7"\n'
+      'spore.yaml': 'kind: enzyme\nname: needs-config\nseptum: "^0.10"\n'
         + 'commands:\n  - name: configured\n    description: Report the configured setting\n    code: handleConfigured\n',
       'src/index.ts': configSchemaModule(fields),
     })
@@ -125,7 +125,7 @@ export const configurable: SporeWriter = configurableSpore(['token'])
  */
 export const vault: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'vault', {
-    'spore.yaml': 'kind: enzyme\nname: vault\nseptum: "^0.9"\n'
+    'spore.yaml': 'kind: enzyme\nname: vault\nseptum: "^0.10"\n'
       + 'commands:\n  - name: vault\n    description: Report the configured setting\n    code: handleConfigured\n',
     'src/index.ts': `
       export default {
@@ -153,7 +153,7 @@ export const configurableTwoFields: SporeWriter = configurableSpore(['url', 'tok
  */
 export const noJsonSchema: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'freeform', {
-    'spore.yaml': 'kind: enzyme\nname: freeform\nseptum: "^0.7"\n'
+    'spore.yaml': 'kind: enzyme\nname: freeform\nseptum: "^0.10"\n'
       + 'commands:\n  - name: freeform\n    description: Report the configured setting\n    code: handleConfigured\n',
     'src/index.ts': `
       export default {
@@ -171,7 +171,7 @@ export const noJsonSchema: SporeWriter = (sporesDir) => {
  */
 export const closedJsonSchema: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'strict', {
-    'spore.yaml': 'kind: enzyme\nname: strict\nseptum: "^0.7"\n'
+    'spore.yaml': 'kind: enzyme\nname: strict\nseptum: "^0.10"\n'
       + 'commands:\n  - name: strict\n    description: Report the configured setting\n    code: handleConfigured\n',
     'src/index.ts': `
       export default {
@@ -199,7 +199,7 @@ export const closedJsonSchema: SporeWriter = (sporesDir) => {
  */
 export const mixedFieldSchema: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'mixed', {
-    'spore.yaml': 'kind: enzyme\nname: mixed\nseptum: "^0.8"\n'
+    'spore.yaml': 'kind: enzyme\nname: mixed\nseptum: "^0.10"\n'
       + 'commands:\n  - name: mixed\n    description: Report the configured setting\n    code: handleConfigured\n',
     'src/index.ts': `
       const permissive = { safeParse: (v) => ({ success: true, data: v }) }
@@ -236,7 +236,7 @@ export const mixedFieldSchema: SporeWriter = (sporesDir) => {
  */
 export const definedSchema: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'defined', {
-    'spore.yaml': 'kind: enzyme\nname: defined\nseptum: "^0.7"\n'
+    'spore.yaml': 'kind: enzyme\nname: defined\nseptum: "^0.10"\n'
       + 'commands:\n  - name: defined\n    description: Report the configured setting\n    code: handleConfigured\n',
     'src/index.ts': `
       export default {
@@ -272,14 +272,14 @@ export const definedSchema: SporeWriter = (sporesDir) => {
 // test output carries no "no translation for" warning.
 export const twoPluginsTwoCommands: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'greeter', {
-    'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^0.7"\ncommands:\n'
+    'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^0.10"\ncommands:\n'
       + '  - name: hello\n    description: command.hello.description\n    respond: hello.text\n'
       + '  - name: farewell\n    description: command.farewell.description\n    respond: farewell.text\n',
     'translations/en.yaml': 'command:\n  hello:\n    description: Say hello\n  farewell:\n    description: Say goodbye\n'
       + 'hello:\n  text: Hi\nfarewell:\n  text: Bye\n',
   })
   writeSpore(sporesDir, 'counter', {
-    'spore.yaml': 'kind: enzyme\nname: counter\nseptum: "^0.7"\ncommands:\n'
+    'spore.yaml': 'kind: enzyme\nname: counter\nseptum: "^0.10"\ncommands:\n'
       + '  - name: tally\n    description: command.tally.description\n    respond: tally.text\n'
       + '  - name: reset\n    description: command.reset.description\n    respond: reset.text\n',
     'translations/en.yaml': 'command:\n  tally:\n    description: Count things\n  reset:\n    description: Reset the count\n'
@@ -292,7 +292,7 @@ export const twoPluginsTwoCommands: SporeWriter = (sporesDir) => {
 // any other fixture's untranslated description.
 export const capabilityCommand: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'signaler', {
-    'spore.yaml': 'kind: enzyme\nname: signaler\nseptum: "^0.7"\ncommands:\n'
+    'spore.yaml': 'kind: enzyme\nname: signaler\nseptum: "^0.10"\ncommands:\n'
       + '  - name: plain\n    description: command.plain.description\n    respond: plain.text\n'
       + '  - name: flagged\n    description: command.flagged.description\n    respond: flagged.text\n'
       + '    capabilities: [reactions]\n',
@@ -306,7 +306,7 @@ export const capabilityCommand: SporeWriter = (sporesDir) => {
 // in the reader's locale, without the noise of every other fixture's untranslated ones.
 export const translatedCommand: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'announcer', {
-    'spore.yaml': 'kind: enzyme\nname: announcer\nseptum: "^0.7"\ncommands:\n'
+    'spore.yaml': 'kind: enzyme\nname: announcer\nseptum: "^0.10"\ncommands:\n'
       + '  - name: shout\n    description: command.shout.description\n    respond: shout.text\n',
     'translations/en.yaml': 'command:\n  shout:\n    description: Announce loudly\nshout:\n  text: Loud!\n',
     'translations/fr.yaml': 'command:\n  shout:\n    description: Annoncer bruyamment\nshout:\n  text: Fort !\n',
@@ -332,7 +332,7 @@ const RHIZA_STUB = `
  */
 export const unhealthyRhiza: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'flapping', {
-    'spore.yaml': 'kind: rhiza\nname: flapping\nseptum: "^0.7"\n',
+    'spore.yaml': 'kind: rhiza\nname: flapping\nseptum: "^0.10"\n',
     'src/index.ts': `
       export default {
         create: () => ({
@@ -366,14 +366,14 @@ export const cyclingPairWithModules: SporeWriter = (sporesDir) => {
 // answer optional for coreconn instead of mandatory, and so be caught.
 export const mandatoryAndOptionalDependency: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'coreconn', {
-    'spore.yaml': 'kind: rhiza\nname: coreconn\nseptum: "^0.7"\n', 'src/index.ts': RHIZA_STUB,
+    'spore.yaml': 'kind: rhiza\nname: coreconn\nseptum: "^0.10"\n', 'src/index.ts': RHIZA_STUB,
   })
   writeSpore(sporesDir, 'sideconn', {
-    'spore.yaml': 'kind: rhiza\nname: sideconn\nseptum: "^0.7"\n', 'src/index.ts': RHIZA_STUB,
+    'spore.yaml': 'kind: rhiza\nname: sideconn\nseptum: "^0.10"\n', 'src/index.ts': RHIZA_STUB,
   })
   writeSpore(sporesDir, 'grapher', {
     // A respond: command needs no module (enzymeManifestSchema requires at least one command).
-    'spore.yaml': 'kind: enzyme\nname: grapher\nseptum: "^0.7"\ncommands:\n'
+    'spore.yaml': 'kind: enzyme\nname: grapher\nseptum: "^0.10"\ncommands:\n'
       + '  - name: noop\n    description: No-op\n    respond: noop.text\n'
       + 'requires:\n'
       + '  - any_of:\n      - rhiza: nowhere\n      - rhiza: coreconn\n'
@@ -430,7 +430,7 @@ export interface BootAndLoginOptions {
  */
 export const eitherOrSchema: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'eitheror', {
-    'spore.yaml': 'kind: enzyme\nname: eitheror\nseptum: "^0.8"\n'
+    'spore.yaml': 'kind: enzyme\nname: eitheror\nseptum: "^0.10"\n'
       + 'commands:\n  - name: eitheror\n    description: command.eitheror.description\n    code: handleConfigured\n',
     'translations/en.yaml': 'command:\n  eitheror:\n    description: Report the configured setting\n',
     'src/index.ts': `

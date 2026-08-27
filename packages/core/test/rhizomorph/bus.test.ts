@@ -60,13 +60,13 @@ function setup(
   }
   const hyphae: GerminatedHypha[] = [{
     name: 'console',
-    manifest: { kind: 'hypha', name: 'console', septum: '^1.0', capabilities: ['reactions'] },
+    manifest: { kind: 'hypha', name: 'console', septum: '^0.10', capabilities: ['reactions'] },
     instance: hypha,
     config: {},
   }]
   const enzymes: GerminatedEnzyme[] = [{
     name: 'ping',
-    manifest: { kind: 'enzyme', name: 'ping', septum: '^1.0', commands },
+    manifest: { kind: 'enzyme', name: 'ping', septum: '^0.10', commands },
     instance,
     resolved: new Set(resolved),
     scopes: [],
@@ -82,7 +82,7 @@ function setup(
 const access = (resolved: string[]): SporeAccess => ({ resolved: new Set(resolved), scopes: [] })
 const stubRhiza = (name: string, api: unknown): GerminatedRhiza => ({
   name,
-  manifest: { kind: 'rhiza', name, septum: '^0.4' },
+  manifest: { kind: 'rhiza', name, septum: '^0.10' },
   instance: { api } as unknown as Rhiza,
   config: {},
 })
@@ -142,14 +142,14 @@ it('names the failed command, not just the channel, when a respond: send throws'
   }
   const hyphae: GerminatedHypha[] = [{
     name: 'console',
-    manifest: { kind: 'hypha', name: 'console', septum: '^1.0', capabilities: [] },
+    manifest: { kind: 'hypha', name: 'console', septum: '^0.10', capabilities: [] },
     instance: hypha,
     config: {},
   }]
   const enzymes: GerminatedEnzyme[] = [{
     name: 'ping',
     manifest: {
-      kind: 'enzyme', name: 'ping', septum: '^1.0',
+      kind: 'enzyme', name: 'ping', septum: '^0.10',
       commands: [{ name: 'links', description: 'x', respond: 'Radarr http://radarr:7878' }],
     },
     instance: null,
@@ -254,7 +254,7 @@ describe("respond: resolves through the declaring spore's domain", () => {
     }
     const hyphae: GerminatedHypha[] = [{
       name: 'console',
-      manifest: { kind: 'hypha', name: 'console', septum: '^1.0', capabilities: [] },
+      manifest: { kind: 'hypha', name: 'console', septum: '^0.10', capabilities: [] },
       instance: hypha,
       config: {},
     }]
@@ -262,7 +262,7 @@ describe("respond: resolves through the declaring spore's domain", () => {
       {
         name: 'alpha',
         manifest: {
-          kind: 'enzyme', name: 'alpha', septum: '^1.0',
+          kind: 'enzyme', name: 'alpha', septum: '^0.10',
           commands: [{ name: 'hello-alpha', description: 'x', respond: 'greeting.text' }],
         },
         instance: null, resolved: new Set(), scopes: [], config: {},
@@ -270,7 +270,7 @@ describe("respond: resolves through the declaring spore's domain", () => {
       {
         name: 'beta',
         manifest: {
-          kind: 'enzyme', name: 'beta', septum: '^1.0',
+          kind: 'enzyme', name: 'beta', septum: '^0.10',
           commands: [{ name: 'hello-beta', description: 'x', respond: 'greeting.text' }],
         },
         instance: null, resolved: new Set(), scopes: [], config: {},
@@ -442,7 +442,7 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
   }
   const hyphae: GerminatedHypha[] = [{
     name: 'console',
-    manifest: { kind: 'hypha', name: 'console', septum: '^1.0', capabilities: [] },
+    manifest: { kind: 'hypha', name: 'console', septum: '^0.10', capabilities: [] },
     instance: hypha,
     config: {},
   }]
@@ -451,7 +451,7 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
     {
       name: 'alpha',
       manifest: {
-        kind: 'enzyme', name: 'alpha', septum: '^1.0',
+        kind: 'enzyme', name: 'alpha', septum: '^0.10',
         commands: [{ name: 'alpha', description: 'x', code: 'alpha' }],
       },
       instance: {
@@ -472,7 +472,7 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
     {
       name: 'beta',
       manifest: {
-        kind: 'enzyme', name: 'beta', septum: '^1.0',
+        kind: 'enzyme', name: 'beta', septum: '^0.10',
         commands: [{ name: 'beta', description: 'x', code: 'beta' }],
       },
       instance: {
@@ -539,14 +539,14 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
   }
   const hyphae: GerminatedHypha[] = [{
     name: 'console',
-    manifest: { kind: 'hypha', name: 'console', septum: '^1.0', capabilities: [] },
+    manifest: { kind: 'hypha', name: 'console', septum: '^0.10', capabilities: [] },
     instance: hypha,
     config: {},
   }]
   const enzymes: GerminatedEnzyme[] = [{
     name: 'ping',
     manifest: {
-      kind: 'enzyme', name: 'ping', septum: '^1.0',
+      kind: 'enzyme', name: 'ping', septum: '^0.10',
       commands: [{ name: 'ping', description: 'Health check', code: 'ping' }],
     },
     instance: { handlers: { ping: async () => { throw new Error('boom') } } },
@@ -627,7 +627,7 @@ function harness(options: {
   const hypha = {
     name: 'console',
     config: {},
-    manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.5', capabilities: options.capabilities ?? [] },
+    manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.10', capabilities: options.capabilities ?? [] },
     instance: {
       connect: () => Promise.resolve(),
       listen: () => {},
@@ -640,7 +640,7 @@ function harness(options: {
     config: {},
     resolved: new Set<string>(),
     scopes: [],
-    manifest: { kind: 'enzyme' as const, name: 'media', septum: '^0.5', commands: options.commands },
+    manifest: { kind: 'enzyme' as const, name: 'media', septum: '^0.10', commands: options.commands },
     instance: {
       handlers: {
         handleMovies: async (_invocation: unknown, ctx: { principal: Principal; reply: (c: { text: string }) => Promise<void> }) => {
@@ -936,7 +936,7 @@ describe('the four refusal callbacks, threaded with the locale bus.ts resolved',
 
     const hypha = {
       name: 'console', config: {},
-      manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.5', capabilities: [] },
+      manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.10', capabilities: [] },
       instance: {
         connect: () => Promise.resolve(), listen: () => {}, stop: () => Promise.resolve(),
         send: () => Promise.resolve(),
@@ -945,7 +945,7 @@ describe('the four refusal callbacks, threaded with the locale bus.ts resolved',
     const enzyme = {
       name: 'media', config: {}, resolved: new Set<string>(), scopes: [],
       manifest: {
-        kind: 'enzyme' as const, name: 'media', septum: '^0.5',
+        kind: 'enzyme' as const, name: 'media', septum: '^0.10',
         commands: [
           { name: 'movies', description: 'x', code: 'movies' },
           { name: 'react', description: 'x', code: 'react', capabilities: ['reactions'] },

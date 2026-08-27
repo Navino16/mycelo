@@ -37,7 +37,7 @@ function handwritten(): void {
   mkdirSync(join(dir, 'handwritten', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'handwritten', 'spore.yaml'),
-    'kind: enzyme\nname: handwritten\nseptum: "^0.8"\n'
+    'kind: enzyme\nname: handwritten\nseptum: "^0.10"\n'
       + 'commands:\n  - name: handwritten\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -73,7 +73,7 @@ function eitherOr(): void {
   mkdirSync(join(dir, 'eitheror', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'eitheror', 'spore.yaml'),
-    'kind: enzyme\nname: eitheror\nseptum: "^0.8"\n'
+    'kind: enzyme\nname: eitheror\nseptum: "^0.10"\n'
       + 'commands:\n  - name: eitheror\n    description: command.eitheror.description\n    code: handleIt\n',
     'utf8',
   )
@@ -118,7 +118,7 @@ function pathless(): void {
   mkdirSync(join(dir, 'pathless', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'pathless', 'spore.yaml'),
-    'kind: enzyme\nname: pathless\nseptum: "^0.8"\n'
+    'kind: enzyme\nname: pathless\nseptum: "^0.10"\n'
       + 'commands:\n  - name: pathless\n    description: command.pathless.description\n    code: handleIt\n',
     'utf8',
   )
@@ -171,7 +171,7 @@ function vault(): void {
   mkdirSync(join(dir, 'vault', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'vault', 'spore.yaml'),
-    'kind: enzyme\nname: vault\nseptum: "^0.9"\n'
+    'kind: enzyme\nname: vault\nseptum: "^0.10"\n'
       + 'commands:\n  - name: vault\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -194,7 +194,7 @@ function twin(): void {
   mkdirSync(join(dir, 'twin', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'twin', 'spore.yaml'),
-    'kind: enzyme\nname: twin\nseptum: "^0.9"\n'
+    'kind: enzyme\nname: twin\nseptum: "^0.10"\n'
       + 'commands:\n  - name: twin\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -274,7 +274,7 @@ it('a value written while the plugin throws at import is stored in the clear (kn
   mkdirSync(join(dir, 'boomvault', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'boomvault', 'spore.yaml'),
-    'kind: enzyme\nname: boomvault\nseptum: "^0.9"\n'
+    'kind: enzyme\nname: boomvault\nseptum: "^0.10"\n'
       + 'commands:\n  - name: boomvault\n    description: x\n    code: handleIt\n',
     'utf8',
   )

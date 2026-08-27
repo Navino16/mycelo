@@ -56,7 +56,7 @@ async function bootWith(
   owner: { channel: string; userId: string },
 ): Promise<{ warnings: string[]; infos: string[]; warnMeta: (Record<string, unknown> | undefined)[] }> {
   spore('console', {
-    'spore.yaml': 'kind: hypha\nname: console\nseptum: "^0.7"\n',
+    'spore.yaml': 'kind: hypha\nname: console\nseptum: "^0.10"\n',
     'src/index.ts': `export default { create: () => ({ ${HYPHA_BODY} }) }\n`,
   })
   const file = join(dir, 'mycelo.yaml')
@@ -80,7 +80,7 @@ async function bootWith(
 function cyclingPair(): void {
   for (const [self, other] of [['alpha', 'beta'], ['beta', 'alpha']] as const) {
     spore(self, {
-      'spore.yaml': `kind: rhiza\nname: ${self}\nseptum: "^0.7"\nrequires:\n  - rhiza: ${other}\n`,
+      'spore.yaml': `kind: rhiza\nname: ${self}\nseptum: "^0.10"\nrequires:\n  - rhiza: ${other}\n`,
     })
   }
 }
@@ -104,7 +104,7 @@ describe('phase 2 germination', () => {
   it('degrades on a command collision instead of throwing', async () => {
     for (const name of ['alpha', 'beta']) {
       spore(name, {
-        'spore.yaml': `kind: enzyme\nname: ${name}\nseptum: "^0.7"\ncommands:\n  - name: ping\n    description: ping\n    respond: ${name}.reply\n`,
+        'spore.yaml': `kind: enzyme\nname: ${name}\nseptum: "^0.10"\ncommands:\n  - name: ping\n    description: ping\n    respond: ${name}.reply\n`,
       })
     }
     const served = serve(config())
@@ -128,7 +128,7 @@ describe('phase 2 germination', () => {
 
   it('germinates when nothing is fatal', async () => {
     spore('good', {
-      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.7"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
+      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.10"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
     })
     const served = serve(config())
     closeDb = served.closeDb
@@ -139,7 +139,7 @@ describe('phase 2 germination', () => {
 
   it('replaces the phase-1 translator with one carrying the spore catalogues', async () => {
     spore('good', {
-      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.7"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
+      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.10"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
       'translations/en.yaml': 'greet: hello from good\n',
     })
     const served = serve(config())
@@ -185,7 +185,7 @@ describe('retryGermination', () => {
 
   it('refuses when the runtime is not degraded', async () => {
     spore('good', {
-      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.7"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
+      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.10"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
     })
     const served = serve(config())
     closeDb = served.closeDb

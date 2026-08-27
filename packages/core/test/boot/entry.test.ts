@@ -153,7 +153,7 @@ describe('runEntry', () => {
       const sporeDir = join(dir, 'spores', self)
       mkdirSync(sporeDir, { recursive: true })
       writeFileSync(join(sporeDir, 'spore.yaml'),
-        `kind: rhiza\nname: ${self}\nseptum: "^0.7"\nrequires:\n  - rhiza: ${other}\n`, 'utf8')
+        `kind: rhiza\nname: ${self}\nseptum: "^0.10"\nrequires:\n  - rhiza: ${other}\n`, 'utf8')
     }
     const port = await freePort()
     // Read through the descriptor, not as a bare `console.log`: an unbound method reference
