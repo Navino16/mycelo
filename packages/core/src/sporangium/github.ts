@@ -66,12 +66,12 @@ export function githubDriver(
   // 403 here and 'forbidden' alone points the operator at the wrong repair.
   function rateLimitNote(response: Response): string {
     if (response.status !== 403 || response.headers.get('x-ratelimit-remaining') !== '0') return ''
-    // Two ways to have no time to report, and both must stay silent rather than render one:
-    // a missing header (Number(null) is 0, which is a valid epoch) and toISOString throwing
-    // RangeError on an unparseable or out-of-range one, out of the error this note delivers.
-    const header = response.headers.get('x-ratelimit-reset')
-    const reset = header === null ? new Date(NaN) : new Date(Number(header) * 1000)
-    const at = Number.isNaN(reset.getTime()) ? '' : `, resetting at ${reset.toISOString()}`
+    // Every way of having no time to report must stay silent rather than render one: absent or
+    // empty (Number gives 0, a valid epoch), non-positive, and unparseable or out of range —
+    // the last of which throws RangeError out of the error this note exists to deliver.
+    const seconds = Number(response.headers.get('x-ratelimit-reset'))
+    const reset = new Date(seconds * 1000)
+    const at = seconds > 0 && !Number.isNaN(reset.getTime()) ? `, resetting at ${reset.toISOString()}` : ''
     return `: the rate limit is exhausted${at}; a token on this source raises it from 60 to 5000 requests an hour`
   }
 

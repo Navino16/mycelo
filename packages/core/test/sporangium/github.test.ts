@@ -305,13 +305,16 @@ describe('githubDriver rate limit', () => {
   test('a malformed or out-of-range reset header still delivers the repair sentence', () => {
     // toISOString throws RangeError on both, out of the error construction itself — so the
     // operator would get 'Invalid Date' instead of the 403 and the repair this note exists for.
-    for (const reset of ['soon', '99999999999999', '', '-1e400']) {
+    for (const reset of ['soon', '99999999999999', '', '0', '-1', '-1e400']) {
       const driver = githubDriver('https://github.com/o/r', null, limited({
         'x-ratelimit-remaining': '0', 'x-ratelimit-reset': reset,
       }))
       expect(driver.list()).rejects.toThrow(/rate limit is exhausted/)
       expect(driver.list()).rejects.toThrow(/60 to 5000/)
       expect(driver.list()).rejects.toThrow(/^(?!.*Invalid Date)/s)
+      // No clause at all beats a wrong one: '' and '0' both give epoch 0, which would read as
+      // a quota resetting in 1970.
+      expect(driver.list()).rejects.toThrow(/^(?!.*1970)/s)
     }
   })
 
