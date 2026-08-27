@@ -6,7 +6,10 @@ import type { GerminatedEnzyme, GerminatedInhibitor, Registry } from '../../germ
 
 export interface CommandDto {
   plugin: string
+  /** What a caller types: the alias when one is set (spec §3.5). */
   command: string
+  /** As the manifest declares it, so the Roles screen can show what an alias renamed. */
+  declared: string
   /** `<plugin>.<command>` — the pattern a role grants, not what a user types. */
   qualified: string
   /** Rendered, not a key: `CommandSpec.description` is required and is a catalogue key. */
@@ -92,6 +95,7 @@ export function registerRegistryRoutes(app: FastifyInstance, state: RuntimeState
     const commands = [...registry.routes.values()].map((route): CommandDto => ({
       plugin: route.plugin,
       command: route.command,
+      declared: route.declared,
       qualified: route.qualified,
       description: state.translator.translate(route.plugin, route.spec.description, request.locale),
       capabilities: route.spec.capabilities ?? [],

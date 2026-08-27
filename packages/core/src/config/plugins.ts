@@ -8,6 +8,7 @@ import { REDACTED } from '../support/redaction.js'
 import { describeThrown } from '../support/thrown.js'
 import { formSchemaFor } from './jsonschema.js'
 import { enablePlugin, findSpore, loadSporeModule } from './lifecycle.js'
+import { listAliases } from '../rhizomorph/aliases.js'
 import { getInstall, listInstalls, writeSetting } from './store.js'
 
 export interface Provenance {
@@ -37,13 +38,16 @@ export function provenanceByName(db: Db): ReadonlyMap<string, Provenance> {
 export function listPlugins(registry: Registry, sporesDirs: readonly string[], db?: Db): readonly PluginInfo[] {
   const installs = db === undefined ? [] : listInstalls(db)
   const provenance = db === undefined ? new Map<string, Provenance>() : provenanceByName(db)
+  const aliases = db === undefined ? new Map<string, string>() : listAliases(db)
   const from = (name: string): Provenance => provenance.get(name) ?? {}
   const germinated: PluginInfo[] = [
     ...registry.hyphae.map((h) => ({ name: h.name, kind: h.manifest.kind, commands: [], state: 'germinated' as const, enabled: true, ...from(h.name) })),
     ...registry.enzymes.map((e) => ({
       name: e.name,
       kind: e.manifest.kind,
-      commands: e.manifest.commands.map((c) => c.name),
+      // The names a caller types, so this list and /api/commands cannot disagree about the
+      // same command once an alias is set (spec §3.5).
+      commands: e.manifest.commands.map((c) => aliases.get(`${e.name}.${c.name}`) ?? c.name),
       state: 'germinated' as const,
       enabled: true,
       ...from(e.name),

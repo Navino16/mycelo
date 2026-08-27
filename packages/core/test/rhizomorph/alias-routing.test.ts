@@ -6,6 +6,7 @@ import { recordInstall, setEnabled } from '../../src/config/store.js'
 import { germinate } from '../../src/germination/germinate.js'
 import { bootstrap } from '../../src/mycelium.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
+import { listPlugins } from '../../src/config/plugins.js'
 import { setAlias } from '../../src/rhizomorph/aliases.js'
 import { createLogger } from '../../src/support/logger.js'
 
@@ -65,3 +66,19 @@ it('the registry a started substrate exposes is still keyed by the alias', async
   expect(registry.routes.get('salut')?.declared).toBe('hello')
 })
 
+// spec §3.5: /api/plugins and /api/commands must not disagree about the same command's name.
+// Measured live: before this, the plugin list said 'hello' while the command list said 'salut'.
+it('the plugin list reports the name a caller types, not the declared one', async () => {
+  const root = join(dir, 'spores')
+  writeGreeter(root)
+  const { db } = openDatabase(':memory:')
+  migrateDatabase(db)
+  recordInstall(db, 'greeter', 'enzyme')
+  setEnabled(db, 'greeter', true)
+  setAlias(db, 'greeter', 'hello', 'salut')
+
+  const registry = await germinate([root], createLogger(), {}, db)
+  const listed = listPlugins(registry, [root], db).find((p) => p.name === 'greeter')
+
+  expect(listed?.commands).toEqual(['salut'])
+})

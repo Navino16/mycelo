@@ -21,10 +21,6 @@ export interface Mycelium {
 }
 
 /** The three refusal callbacks below each sliced this out of `qualified` themselves. */
-function shortName(qualified: string): string {
-  return qualified.slice(qualified.indexOf('.') + 1)
-}
-
 export function germinationBanner(registry: Registry): string {
   const spores = [...registry.hyphae, ...registry.enzymes, ...registry.rhizas, ...registry.inhibitors]
   return `germinated ${String(spores.length)} spores (${spores.map((s) => s.name).join(', ')})`
@@ -232,21 +228,23 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
           text: translator.translate('core', 'command.unknown', locale, { command }),
         })
       },
-      onDenied: async (message, qualified, locale) => {
+      // The reply names what the caller typed, which under an alias is not the declared
+      // name the qualified id carries (spec §3.5).
+      onDenied: async (message, _qualified, command, locale) => {
         await sendVia(hyphaByName, message.channel, message.conversationId, {
-          text: translator.translate('core', 'command.denied', locale, { command: shortName(qualified) }),
+          text: translator.translate('core', 'command.denied', locale, { command }),
         })
       },
-      onUnsupported: async (message, qualified, capability, locale) => {
+      onUnsupported: async (message, _qualified, command, capability, locale) => {
         await sendVia(hyphaByName, message.channel, message.conversationId, {
           text: translator.translate('core', 'command.unsupported', locale, {
-            command: shortName(qualified), capability, channel: message.channel,
+            command, capability, channel: message.channel,
           }),
         })
       },
-      onOutOfContext: async (message, qualified, where, locale) => {
+      onOutOfContext: async (message, _qualified, command, where, locale) => {
         await sendVia(hyphaByName, message.channel, message.conversationId, {
-          text: translator.translate('core', `context.${where}`, locale, { command: shortName(qualified) }),
+          text: translator.translate('core', `context.${where}`, locale, { command }),
         })
       },
     })

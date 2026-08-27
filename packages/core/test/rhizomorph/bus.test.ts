@@ -610,6 +610,8 @@ interface DeliverOptions {
 interface Harness {
   db: Db
   sent: string[]
+  /** What each refusal named to the caller, which under an alias is not the declared name. */
+  deniedAs: string[]
   seen: { principal?: Principal }
   deliver(text: string, externalId: string, options?: DeliverOptions): Promise<void>
 }
@@ -620,9 +622,11 @@ function harness(options: {
   defaultRole?: string
   db?: Db
   capabilities?: readonly ChannelCapability[]
+  aliases?: ReadonlyMap<string, string>
 }): Harness {
   const harnessDb = options.db ?? fresh()
   const sent: string[] = []
+  const deniedAs: string[] = []
   const seen: { principal?: Principal } = {}
   const hypha = {
     name: 'console',
@@ -652,7 +656,7 @@ function harness(options: {
   } as unknown as GerminatedEnzyme
   const registry: Registry = {
     hyphae: [hypha], enzymes: [enzyme], rhizas: [], inhibitors: [], dormant: [],
-    routes: buildRoutes([enzyme], new Map()), order: ['media'], brokenEnforcing: [], catalogs: new Map(),
+    routes: buildRoutes([enzyme], options.aliases ?? new Map()), order: ['media'], brokenEnforcing: [], catalogs: new Map(),
   }
   const logger = {
     info: () => {}, debug: () => {}, warn: () => {}, error: () => {},
@@ -669,21 +673,24 @@ function harness(options: {
       if (command !== null) sent.push(`unknown command '${command}'`)
       await Promise.resolve()
     },
-    onDenied: async (_msg, qualified) => {
+    onDenied: async (_msg, qualified, command) => {
       sent.push(`denied ${qualified}`)
+      // Kept apart from `sent` so the alias case can assert what the caller typed without
+      // rewriting every assertion above (spec §3.5).
+      deniedAs.push(command)
       await Promise.resolve()
     },
-    onUnsupported: async (_msg, qualified, capability) => {
+    onUnsupported: async (_msg, qualified, _command, capability) => {
       sent.push(`unsupported ${qualified} ${capability}`)
       await Promise.resolve()
     },
-    onOutOfContext: async (_msg, qualified, where) => {
+    onOutOfContext: async (_msg, qualified, _command, where) => {
       sent.push(`out-of-context ${qualified} ${where}`)
       await Promise.resolve()
     },
   })
   return {
-    db: harnessDb, sent, seen,
+    db: harnessDb, sent, seen, deniedAs,
     deliver: (text, externalId, deliverOptions = {}) => bus.deliver('console', {
       channel: 'console',
       conversationId: deliverOptions.conversationId ?? 'c1',
@@ -980,13 +987,13 @@ describe('the four refusal callbacks, threaded with the locale bus.ts resolved',
         if (command === null) return
         sent.push(stub.translate('core', 'command.unknown', locale, { command }))
       },
-      onDenied: async (_msg, qualified, locale) => {
+      onDenied: async (_msg, qualified, _command, locale) => {
         sent.push(stub.translate('core', 'command.denied', locale, { command: shortName(qualified) }))
       },
-      onUnsupported: async (_msg, qualified, capability, locale) => {
+      onUnsupported: async (_msg, qualified, _command, capability, locale) => {
         sent.push(stub.translate('core', 'command.unsupported', locale, { command: shortName(qualified), capability }))
       },
-      onOutOfContext: async (_msg, qualified, where, locale) => {
+      onOutOfContext: async (_msg, qualified, _command, where, locale) => {
         sent.push(stub.translate('core', `context.${where}`, locale, { command: shortName(qualified) }))
       },
     })
@@ -1065,5 +1072,31 @@ describe('per-message locale resolution', () => {
     setConversationLocale(db, 'console', 'c:1', 'en')
     expect(inConversation).toBe('ru')
     expect(fallback).toBe('en')
+  })
+})
+
+// spec §3.5: a refusal that named the declared command would tell an operator who typed
+// /aide that they may not use 'help'. Measured live before this test existed.
+describe('a refusal under an alias', () => {
+  it('names the command the caller typed, while the log keeps the qualified id', async () => {
+    const h = harness({
+      commands: [codeCommand],
+      aliases: new Map([['media.movies', 'films']]),
+    })
+
+    await h.deliver('/films Dune', 'bob')
+
+    expect(h.deniedAs).toEqual(['films'])
+    // The qualified id is unchanged, so a role pattern still grants the same command.
+    expect(h.sent).toEqual(['denied media.movies'])
+  })
+
+  it('still names the declared command when no alias is set', async () => {
+    const h = harness({ commands: [codeCommand] })
+
+    await h.deliver('/movies Dune', 'bob')
+
+    expect(h.deniedAs).toEqual(['movies'])
+    expect(h.sent).toEqual(['denied media.movies'])
   })
 })

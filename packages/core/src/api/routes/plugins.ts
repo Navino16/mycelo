@@ -14,6 +14,8 @@ import type { SporeDemands } from '../../germination/requirements.js'
 import { isFailure } from '../../germination/manifest.js'
 import { badRequest, notFound } from '../errors.js'
 import { parseBody } from '../parse.js'
+import { clearAlias, setAlias } from '../../rhizomorph/aliases.js'
+import { describeThrown } from '../../support/thrown.js'
 
 export interface PluginDto {
   name: string
@@ -103,6 +105,8 @@ function mountedScopesOf(state: RuntimeState, name: string): readonly MyceliumSc
   return [...registry.hyphae, ...registry.rhizas].some((s) => s.name === name) ? [] : undefined
 }
 
+const aliasSchema = z.object({ alias: z.string().min(1) })
+
 export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState): void {
   app.get('/api/plugins', () => groupByKind(pluginsOf(state)))
 
@@ -137,6 +141,32 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     // spec §4.3: retry only exists in degraded mode, so say so rather than let the
     // operator believe a live substrate has already applied it.
     return { ok: true, restartRequired: state.germination.status === 'germinated' }
+  })
+
+  // Answers in degraded mode, like disable: the only moment an alias is needed is a moment
+  // when nothing germinated, so a channel command could never reach it (spec §3.4).
+  app.put('/api/plugins/:name/commands/:command/alias', (request) => {
+    const { name, command } = request.params as { name: string, command: string }
+    requireDeclaredCommand(state, name, command)
+    const { alias } = parseBody(aliasSchema, request.body)
+    try {
+      setAlias(state.db, name, command, alias)
+    } catch (e) {
+      throw badRequest('api.aliasRefused', { plugin: name, command }, describeThrown(e))
+    }
+    return { ok: true, restartRequired: state.germination.status === 'germinated' }
+  })
+
+  app.delete('/api/plugins/:name/commands/:command/alias', (request) => {
+    const { name, command } = request.params as { name: string, command: string }
+    requireDeclaredCommand(state, name, command)
+    // `cleared` distinguishes a removal from a no-op: an operator deleting an alias that was
+    // never set must not be told one was removed.
+    return {
+      ok: true,
+      cleared: clearAlias(state.db, name, command),
+      restartRequired: state.germination.status === 'germinated',
+    }
   })
 
   app.get('/api/plugins/:name/schema', async (request) => {
@@ -184,4 +214,20 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
 
 function requireInstalled(state: RuntimeState, name: string): void {
   if (getInstall(state.db, name) === null) throw notFound('api.pluginNotFound', { plugin: name })
+}
+
+/**
+ * No table holds a command, so only the manifest on disk can say whether one exists. Read here
+ * rather than from the registry because an alias is needed exactly when nothing germinated
+ * (spec §3.4): a collision leaves no bus, no channel and no command.
+ */
+function requireDeclaredCommand(state: RuntimeState, name: string, command: string): void {
+  requireInstalled(state, name)
+  const read = findSpore(state.config.discoveryDirs, name)
+  if (read === undefined || isFailure(read)) {
+    throw badRequest('api.aliasManifestUnreadable', { plugin: name })
+  }
+  const declared = read.manifest.kind === 'enzyme'
+    && read.manifest.commands.some((spec) => spec.name === command)
+  if (!declared) throw notFound('api.commandNotFound', { plugin: name, command })
 }
