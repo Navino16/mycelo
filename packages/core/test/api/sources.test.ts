@@ -228,6 +228,15 @@ describe('/api/sources', () => {
     })).json<SporangiumSource>()
     expect(disabled).toMatchObject({ label: 'Relabelled', enabled: false, token: TOKEN_MASK })
 
+    // Resending the row's own location is not a repointing: a form submitting every field
+    // would otherwise start refusing the moment the operator renamed the official source.
+    const unchanged = await app.inject({
+      method: 'PATCH', url: `/api/sources/${String(seeded.id)}`, headers: { cookie },
+      payload: { location: seeded.location, label: 'Renamed again' },
+    })
+    expect(unchanged.statusCode).toBe(200)
+    expect(unchanged.json<SporangiumSource>()).toMatchObject({ label: 'Renamed again', location: seeded.location })
+
     // The control: the same field, on a third-party row, is written.
     const third = await addThirdParty(booted, 'movable')
     const moved = (await app.inject({

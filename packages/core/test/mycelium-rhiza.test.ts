@@ -21,7 +21,7 @@ import { resolveLocale } from '../src/i18n/locale.js'
 import { createMyceliumApi } from '../src/mycelium-rhiza.js'
 import type { MyceliumApiOptions } from '../src/mycelium-rhiza.js'
 import type { SporangiumDriver } from '../src/sporangium/driver.js'
-import { addSource, seedOfficialSource } from '../src/sporangium/sources.js'
+import { addSource, seedOfficialSource, sourceLocation } from '../src/sporangium/sources.js'
 import { migrateDatabase, openDatabase } from '../src/persistence/db.js'
 import type { Db } from '../src/persistence/db.js'
 import { principal } from '../src/persistence/schema.js'
@@ -718,11 +718,12 @@ describe('sources.manage', () => {
     expect(patched?.enabled).toBe(false)
     // No 409 through this door: updateSource answers the row it wrote, so the caller reads
     // the unchanged location back.
-    // The control: a third-party row moves, with its userinfo stripped on the way in.
+    // The control: a third-party row moves, with its userinfo stripped on the way in. Read
+    // raw, never off the DTO — present() redacts too, so a DTO field cannot tell the two apart.
     const third = await api.addSource({ label: 'x', driver: 'github', location: 'https://u:p@github.com/o/r' })
-    expect(third.location).toBe('https://github.com/o/r')
-    expect((await api.updateSource(third.id, { location: 'https://u:p@github.com/o/moved' }))?.location)
-      .toBe('https://github.com/o/moved')
+    expect(sourceLocation(db, third.id)).toBe('https://github.com/o/r')
+    await api.updateSource(third.id, { location: 'https://u:p@github.com/o/moved' })
+    expect(sourceLocation(db, third.id)).toBe('https://github.com/o/moved')
   })
 
   it('refuses a local source through the mount, which mounts the same store function', async () => {

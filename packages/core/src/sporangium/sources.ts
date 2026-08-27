@@ -44,7 +44,11 @@ export function getSource(db: Db, id: number): SporangiumSource | null {
   return row === undefined ? null : present(row)
 }
 
-/** The raw location, userinfo included, for a driver. Never crosses the API boundary. */
+/**
+ * The stored location, for a driver. Inert today: both writers strip a userinfo credential,
+ * so no row this module produces differs from the DTO's. Kept because dropping it puts
+ * githubDriver back on the DTO, making the redaction lossy for a driver that authenticates by URL.
+ */
 export function sourceLocation(db: Db, id: number): string | null {
   return db.select().from(source).where(eq(source.id, id)).get()?.location ?? null
 }
