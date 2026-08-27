@@ -191,7 +191,7 @@ absent, not present-but-rejecting:
 | `restrictions.manage` | `RestrictionsManage` | context rules, an inhibitor's confined channels, and the broadcast target list — confining an inhibitor's channels takes effect immediately, even for one `enforcing`, with no restart |
 | `locale.manage` | `LocaleManage` | `setPrincipalLocale(principalId, locale)`, `setConversationLocale(channel, conversationId, locale)`, `availableLocales()` — the last is synchronous, like `listPlugins()` |
 | `commands.read` | `CommandsRead` | `available(principal, locale)` — the commands that principal is *authorized* to invoke, sorted by `qualified`, each with its `description` already rendered in that locale and an optional `args: readonly ArgInfo[]` (absent when the command declares none). Channel capabilities and context rules are applied at dispatch, not here, so a listed command can still be refused on the channel it is asked on |
-| `sources.manage` | `SourcesManage` | `listSources()`, `addSource(s)`, `updateSource(id, patch)`, `deleteSource(id)`, `inoculate(request)` — the sporangia a spore can be installed from, and the install itself. A source's `token` is only ever the literal `••••`; a new source is third-party whatever the label says, and the official one can be disabled but never deleted. `inoculate` rejects for an unknown or disabled source, a `local` one, an unknown spore or strain, a directory collision, or an archive that fails validation — every refusal before anything reaches disk |
+| `sources.manage` | `SourcesManage` | `listSources()`, `addSource(s)`, `updateSource(id, patch)`, `deleteSource(id)`, `inoculate(request)` — the sporangia a spore can be installed from, and the install itself. A source's `token` is only ever the literal `••••`; a new source is third-party whatever the label says, and the official one can be disabled but never deleted. `inoculate` rejects for an unknown or disabled source, a `local` one, an unknown spore or strain, a directory collision, or an archive that fails validation — every refusal before anything reaches the tree the core discovers spores in. The archive itself is unpacked into a staging directory before it is validated, and a failed install discards it |
 
 `listPlugins()` and `availableLocales()` alone are synchronous; every other method returns a promise. The identity and role
 methods **reject** rather than resolve quietly when asked about something that does not exist — an
@@ -378,6 +378,7 @@ implementation. Each returns a list of failure strings, so it works with any tes
 
 | Export | Checks |
 |---|---|
+| all four | the manifest parses, its `kind` matches, and its `septum:` range admits the septum the checks are running against — the same refusal germination, `enable()` and `inoculate` apply, so a plugin the kit passes is not one the bot then rejects |
 | `hyphaChecks` | manifest, config schema, `connect`/`listen`/`stop`/`send`, `group_membership` consistency, and — given a `membershipGroupId` — that `listGroupMembers` resolves an array |
 | `rhizaChecks` | manifest, config schema, `api`, and that `health()` reports rather than throws |
 | `enzymeChecks` | manifest, config schema, lifecycle, every command invoked with an empty bag, and — given `catalogs` — that every translation key compiles, that every command's `description` resolves in at least one catalogue, and that `ctx.t()` refuses a domain the manifest does not declare |
@@ -456,7 +457,9 @@ start` answers a `respond:` command directly and dispatches a `code:` command to
 branch on the contract it was loaded against can read it rather than guess. **A caret range below
 `1.0` is bounded, not a floor**: `^0.10` means `>=0.10.0 <0.11.0`, so a `septum:` range written
 against one minor excludes the next. The core refuses to germinate a spore whose range excludes the
-septum it is running.
+septum it is running, refuses to enable it and refuses to install it — and so does the conformance
+kit, so the range in the example above is the one to keep current. `septumIncompatibility(range)` is
+exported if you want to make that check yourself.
 
 ## Licence
 

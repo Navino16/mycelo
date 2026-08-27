@@ -311,16 +311,18 @@ export interface SourcesManage {
   addSource(s: { label: string, driver: 'local' | 'github', location: string, token?: string }): Promise<SporangiumSource>
   /**
    * A token sent back as the mask is skipped rather than stored; an empty string clears it.
-   * `location` is ignored on the official source: repointing it would relabel an unreviewed
-   * sporangium as reviewed (design §11). It stays disable-able and re-tokenable.
+   * Rejects a `location` that would repoint the official source, which would relabel an
+   * unreviewed sporangium as reviewed (design §11); resending its own location is accepted.
+   * It stays disable-able and re-tokenable.
    */
   updateSource(id: number, patch: { label?: string, location?: string, token?: string, enabled?: boolean }): Promise<SporangiumSource | null>
   /** False for the official source, which can be disabled but never deleted (design §11). */
   deleteSource(id: number): Promise<boolean>
   /**
    * Rejects for an unknown or disabled source, for a local one, for an unknown spore or
-   * strain, for a directory collision, and for any archive that fails validation — every
-   * one of them before anything is written to disk (design §9).
+   * strain, for a directory collision, and for any archive that fails validation — every one
+   * of them before anything is written where the core would discover it (design §9). An
+   * archive is unpacked into a staging directory first, which a failed install discards.
    */
   inoculate(request: { sourceId: number, name: string, strain?: string }): Promise<InoculateOutcome>
 }

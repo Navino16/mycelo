@@ -13,6 +13,9 @@
   source's `token` is never the stored value — it comes back as the literal `••••` when one is set
   and is absent when not — and `official` is settable through no API: it marks the reviewed
   registry, and a flag an operator could set would be a one-field bypass of the trust model.
+- `septumIncompatibility(range, version?)`, the one implementation of the range check. The core's
+  germination, `enablePlugin` and `inoculate` all call it, and so do the four conformance kits: two
+  copies would drift at exactly the septum release where the check matters.
 - `sources.manage`, the sixteenth `MyceliumScope`, and the `SourcesManage` interface it mounts:
   `listSources`, `addSource`, `updateSource`, `deleteSource` and `inoculate`. It is the scope that
   installs a spore from a sporangium, so grant it only to a spore an operator administers the
@@ -32,6 +35,22 @@
   manifest whose range does not parse: such a spore now fails to load, where before it loaded and
   its compatibility was never really checked. Shipped in a patch for that reason — it closes a hole
   rather than moving the contract.
+- **All four conformance kits now apply the septum-range check the runtime applies.** A manifest
+  declaring a range that excludes the running septum was certified as conforming while every core
+  running that septum made the spore dormant, refused to enable it and refused to install it — the
+  kit is the author's only pre-publication gate, and it was more lenient than the runtime on the one
+  field this release's other change is about. **Authors: a harness whose manifest declares a range
+  below the septum it is tested against now reports a failure**; declare the range you actually
+  support.
+- The `septum:` refusal now echoes the offending value: `'latest' is not a semver range: …` rather
+  than a sentence that never contained what the author wrote. A non-string `septum:` still reports
+  as a wrong type.
+- `SourcesManage.updateSource` **rejects** a `location` that would repoint the official source,
+  where it previously ignored the field and answered success. Resending the source's own location
+  is not a repointing and still succeeds, so an idempotent form submit is unaffected.
+- `SourcesManage.inoculate`'s doc comment no longer claims every refusal happens "before anything is
+  written to disk". The archive is unpacked into a staging directory before it is validated; what
+  the ordering guarantees is that nothing reaches the tree the core discovers spores in.
 
 ## 0.10.1
 
