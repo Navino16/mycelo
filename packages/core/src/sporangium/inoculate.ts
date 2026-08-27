@@ -11,7 +11,7 @@ import type { ReadManifest } from '../germination/manifest.js'
 import type { Db } from '../persistence/db.js'
 import { describeThrown } from '../support/thrown.js'
 import { SPORE_NAME, STRAIN_SHAPE } from './driver.js'
-import type { SporangiumDriver } from './driver.js'
+import type { DriverFactory } from './driver.js'
 import { extractTarball } from './extract.js'
 import { githubDriver } from './github.js'
 import { getSource, sourceToken } from './sources.js'
@@ -23,15 +23,11 @@ export interface InoculateContext {
   managedRoot: string
   logger: Logger
   /** Injected in tests; production resolves it from the source row. */
-  driverFor?: (sourceId: number) => SporangiumDriver
+  driverFor?: DriverFactory
 }
 
 export interface InoculateOk extends InoculateOutcome { ok: true }
 export interface InoculateRefusal { ok: false, reason: string }
-
-export function managedRoot(dbFile: string): string {
-  return join(dirname(dbFile), 'spores')
-}
 
 /**
  * Two levels down: `discover` skips no dot-directory, so a one-level `.staging-xxxx/`
@@ -186,7 +182,7 @@ export async function inoculate(
   request: { sourceId: number, name: string, strain?: string },
 ): Promise<InoculateOk | InoculateRefusal> {
   const { db, logger, managedRoot: root } = ctx
-  const roots = [...ctx.sporesDirs, root]
+  const roots = [...new Set([...ctx.sporesDirs, root])]
 
   // Both shapes are already guaranteed by parseTag on the way in; validated again here
   // because this is where a name becomes a directory and a strain becomes a stored row.

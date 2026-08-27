@@ -5,6 +5,10 @@ import { REDACTED } from '../../src/support/redaction.js'
 import { readSettings, writeSetting } from '../../src/config/store.js'
 import { pluginInstall, pluginSetting } from '../../src/persistence/schema.js'
 import { addSource } from '../../src/sporangium/sources.js'
+import { inoculate } from '../../src/sporangium/inoculate.js'
+import { managedRoot } from '../../src/sporangium/layout.js'
+import { bundleOf } from '../support/bundle.js'
+import { silentLogger } from '../support/logger.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
   bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configurable, configurableTwoFields,
@@ -407,5 +411,112 @@ describe('PUT /api/plugins/:name/settings validates the values', () => {
       method: 'PUT', url: '/api/plugins/defined/settings', headers: { cookie },
       payload: { label: 7 },
     })).statusCode).toBe(400)
+  })
+})
+
+/**
+ * The managed root is not a configured spores root, so every disk lookup that reads
+ * `sporesDirs` alone is blind to an inoculated spore — and each of these three guards
+ * fails open rather than closed when it cannot find the module (design §9, §12).
+ */
+describe('a spore installed into the managed root', () => {
+  const MANIFEST = 'kind: enzyme\nname: keyring\nseptum: "^0.10"\n'
+    + 'commands:\n  - name: keyring\n    description: Report the configured setting\n    code: handleConfigured\n'
+
+  const MODULE = `
+    export default {
+      configSchema: {
+        secrets: ['token'],
+        safeParse: (input) => (typeof input?.token === 'string'
+          ? { success: true, data: input }
+          : { success: false, error: { issues: [{ path: ['token'], message: 'missing required field' }] } }),
+        toJsonSchema: () => ({
+          type: 'object',
+          properties: { token: { type: 'string' }, url: { type: 'string' } },
+          required: ['token'],
+        }),
+      },
+      create: () => ({ handlers: { handleConfigured: async () => {} } }),
+    }
+  `
+
+  async function inoculateKeyring(b: LoggedIn): Promise<void> {
+    const { db, config } = b.served.state
+    const source = addSource(db, {
+      label: 'Someone else', driver: 'github', location: 'https://github.com/o/r',
+    })
+    const tarball = await bundleOf('keyring', { 'spore.yaml': MANIFEST, 'index.js': MODULE })
+    const driver = {
+      list: () => Promise.resolve([{ name: 'keyring', strain: '0.2.0' }]),
+      strains: () => Promise.resolve(['0.2.0']),
+      detail: () => Promise.resolve({ name: 'keyring', kind: 'enzyme' as const, description: '', septum: '^0.10' }),
+      fetch: (_name: string, strain: string) => Promise.resolve({ tarball, strain }),
+    }
+    const result = await inoculate({
+      db,
+      sporesDirs: config.sporesDirs,
+      managedRoot: managedRoot(config.databaseFile),
+      logger: silentLogger(),
+      driverFor: () => driver,
+    }, { sourceId: source.id, name: 'keyring' })
+    if (!result.ok) throw new Error(`the fixture failed to install: ${result.reason}`)
+  }
+
+  it('refuses an undeclared key, refuses an invalid value and stores its credential masked', async () => {
+    booted = await bootAndLogin({ spores: configurable })
+    await inoculateKeyring(booted)
+    const { app, cookie } = booted
+
+    // The plural case: a route reading only issues[0] would name one of the two.
+    const undeclared = await app.inject({
+      method: 'PUT', url: '/api/plugins/keyring/settings', headers: { cookie },
+      payload: { token: 's3cret', notADeclaredKey: 42, alsoUndeclared: 'x' },
+    })
+    expect(undeclared.statusCode).toBe(400)
+    expect(undeclared.json<{ error: { detail: string[] } }>().error.detail.sort())
+      .toEqual(['alsoUndeclared', 'notADeclaredKey'])
+
+    const invalid = await app.inject({
+      method: 'PUT', url: '/api/plugins/keyring/settings', headers: { cookie },
+      payload: { token: 42 },
+    })
+    expect(invalid.statusCode).toBe(400)
+
+    // The positive beside both negatives: a declared, valid write is accepted.
+    const accepted = await app.inject({
+      method: 'PUT', url: '/api/plugins/keyring/settings', headers: { cookie },
+      payload: { token: 's3cret', url: 'https://example.test' },
+    })
+    expect(accepted.statusCode).toBe(200)
+
+    // Masked on the wire, intact in the database — the flag is written, not merely honoured.
+    const read = (await app.inject({
+      method: 'GET', url: '/api/plugins/keyring/settings', headers: { cookie },
+    })).json<Record<string, unknown>>()
+    expect(read).toEqual({ token: REDACTED, url: 'https://example.test' })
+    expect(readSettings(booted.served.state.db, 'keyring')).toEqual({ token: 's3cret', url: 'https://example.test' })
+  })
+
+  it('publishes its form schema and refuses to enable it until the required field is set', async () => {
+    booted = await bootAndLogin({ spores: configurable })
+    await inoculateKeyring(booted)
+    const { app, cookie } = booted
+
+    const refused = await app.inject({ method: 'POST', url: '/api/plugins/keyring/enable', headers: { cookie } })
+    expect(refused.statusCode).toBe(400)
+
+    const schema = (await app.inject({
+      method: 'GET', url: '/api/plugins/keyring/schema', headers: { cookie },
+    })).json<{ available: boolean, schema?: { required?: string[] } }>()
+    expect(schema.available).toBe(true)
+    expect(schema.schema?.required).toEqual(['token'])
+
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/keyring/settings', headers: { cookie },
+      payload: { token: 's3cret' },
+    })
+    // The control for the refusal above: the same route, same spore, once the field is set.
+    const enabled = await app.inject({ method: 'POST', url: '/api/plugins/keyring/enable', headers: { cookie } })
+    expect(enabled.statusCode).toBe(200)
   })
 })

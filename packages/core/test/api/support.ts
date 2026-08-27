@@ -458,7 +458,9 @@ export async function bootAndLogin(options: BootAndLoginOptions = {}): Promise<L
   const dir = freshDir()
   let sporesDir = FIXTURES
   if (options.spores !== undefined) {
-    sporesDir = join(dir, 'spores')
+    // Not `spores`: that is where the managed root sits, and a configured root there
+    // would be indistinguishable from an inoculated spore's home.
+    sporesDir = join(dir, 'local')
     mkdirSync(sporesDir, { recursive: true })
     options.spores(sporesDir)
   }

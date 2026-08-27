@@ -44,6 +44,7 @@ import {
   clearContextRule, inhibitorChannels, listContextRules, setContextRule, setInhibitorChannels,
 } from './restrictions/rules.js'
 import { inoculate } from './sporangium/inoculate.js'
+import type { DriverFactory } from './sporangium/driver.js'
 import { addSource, deleteSource, listSources, updateSource } from './sporangium/sources.js'
 import { describeThrown } from './support/thrown.js'
 
@@ -81,6 +82,8 @@ export interface MyceliumApiOptions {
    */
   logger?: Logger
   managedRoot?: string
+  /** Injected wherever a test must not reach the network; production resolves it from the source row. */
+  driverFor?: DriverFactory
 }
 
 // The writer's guard the reader depends on: a locale nobody has a catalogue for would be
@@ -106,7 +109,7 @@ export function createMyceliumApi(
   sporesDirs: readonly string[],
   options?: MyceliumApiOptions,
 ): object {
-  const { defaultRole, translator, logger, managedRoot } = options ?? {}
+  const { defaultRole, translator, logger, managedRoot, driverFor } = options ?? {}
   const granted = new Set(scopes)
   // No prototype: a global Object.prototype pollution must not forge an absent scope
   // as present through `in`, which is exactly how a caller is expected to check.
@@ -173,7 +176,9 @@ export function createMyceliumApi(
       if (logger === undefined || managedRoot === undefined) {
         throw new Error('sources.manage was granted with no logger or managed root')
       }
-      const result = await inoculate({ db, sporesDirs, managedRoot, logger }, request)
+      const result = await inoculate(
+        { db, sporesDirs, managedRoot, logger, ...(driverFor === undefined ? {} : { driverFor }) }, request,
+      )
       // The published contract says inoculate rejects; a refusal object would read as success.
       if (!result.ok) throw new Error(result.reason)
       return { name: result.name, strain: result.strain, warnings: result.warnings, restartRequired: result.restartRequired }

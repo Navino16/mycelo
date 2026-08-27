@@ -40,3 +40,6 @@ export interface SporangiumDriver {
   detail: (name: string, strain: string) => Promise<SporeDetail>
   fetch: (name: string, strain: string) => Promise<SporeBundle>
 }
+
+/** Resolved from the source row in production; injected wherever a test must not reach the network. */
+export type DriverFactory = (sourceId: number) => SporangiumDriver

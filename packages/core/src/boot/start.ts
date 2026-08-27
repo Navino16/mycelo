@@ -7,7 +7,6 @@ import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor, G
 import { createMyceliumApi } from '../mycelium-rhiza.js'
 import { allInhibitorChannels } from '../restrictions/rules.js'
 import { createBus, createEnzymeStartContext, sendVia } from '../rhizomorph/bus.js'
-import { managedRoot } from '../sporangium/inoculate.js'
 import type { Bus } from '../rhizomorph/bus.js'
 import { describeThrown } from '../support/thrown.js'
 import type { RuntimeState } from './state.js'
@@ -102,8 +101,8 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
     scopes,
     (target, content) => sendVia(hyphaByName, target.channel, target.conversationId, content),
     db,
-    config.sporesDirs,
-    { defaultRole: config.defaultRole, translator, logger, managedRoot: managedRoot(config.databaseFile) },
+    config.discoveryDirs,
+    { defaultRole: config.defaultRole, translator, logger, managedRoot: config.managedRoot },
   )
   // spec §4.2 rests on degraded mode meaning nothing is connected, so a throw from here on
   // must not leave live plugin connections behind for the retry route to double-connect.
@@ -220,7 +219,7 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
       logger,
       db,
       admission,
-      sporesDirs: config.sporesDirs,
+      sporesDirs: config.discoveryDirs,
       ...(config.defaultRole === undefined ? {} : { defaultRole: config.defaultRole }),
       translator,
       defaultLocale: config.defaultLocale,

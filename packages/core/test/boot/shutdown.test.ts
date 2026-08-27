@@ -202,7 +202,7 @@ describe('startMycelium', () => {
       catalogs: new Map(),
     }
     const state = {
-      config: { sporesDirs: ['/none'], prefix: '/', defaultLocale: 'en' },
+      config: { sporesDirs: ['/none'], discoveryDirs: ['/none'], managedRoot: '/none/spores', prefix: '/', defaultLocale: 'en' },
       db: {},
       translator: {},
     } as unknown as RuntimeState
