@@ -262,13 +262,31 @@ describe('the septum range', () => {
     }
   })
 
-  it('rejects the wildcard forms that match every version', () => {
+  it('rejects the wildcard forms that match every version, echoing what was written', () => {
     for (const septum of ['*', 'latest']) {
       try {
         parseManifest({ ...base, septum })
         throw new Error(`should have thrown for '${septum}'`)
       } catch (e) {
         expect((e as ManifestError).path).toBe('septum')
+        // An author reading the refusal must find what they wrote in it: the path names the
+        // field, the sentence names the value.
+        expect((e as ManifestError).message).toContain(`'${septum}'`)
+      }
+    }
+  })
+
+  it('reports a non-string septum as a wrong type, not as a bad range', () => {
+    // The range message is a refinement's, and a refinement never runs on a type failure —
+    // so the two diagnostics stay distinct.
+    for (const septum of [42, null, ['^0.10']]) {
+      try {
+        parseManifest({ ...base, septum })
+        throw new Error('should have thrown')
+      } catch (e) {
+        expect((e as ManifestError).path).toBe('septum')
+        expect((e as ManifestError).message).not.toContain('semver range')
+        expect((e as ManifestError).message).toContain('expected string')
       }
     }
   })

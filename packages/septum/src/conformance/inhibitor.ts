@@ -1,3 +1,4 @@
+import { septumIncompatibility } from '../compat.js'
 import { parseManifest } from '../manifest.js'
 import { configSchemaFailures } from './config-checks.js'
 import type { Inhibitor, InhibitorModule, Verdict } from '../inhibitor.js'
@@ -41,6 +42,11 @@ export async function inhibitorChecks(harness: InhibitorHarness): Promise<string
   if (manifest.kind !== 'inhibitor') {
     return [...failures, `manifest kind is '${manifest.kind}', expected 'inhibitor'`]
   }
+
+  // The same check germination, enablePlugin and inoculate apply: a kit that certifies a range
+  // the runtime refuses fails the author at the operator's install instead of at authoring time.
+  const incompatible = septumIncompatibility(manifest.septum)
+  if (incompatible !== undefined) failures.push(`the manifest ${incompatible}`)
 
   failures.push(
     ...configSchemaFailures(harness.module.configSchema, harness.validConfig, harness.invalidConfig),

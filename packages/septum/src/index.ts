@@ -1,4 +1,5 @@
 export * from './capabilities.js'
+export * from './compat.js'
 export * from './config.js'
 export * from './context.js'
 export * from './enzyme.js'

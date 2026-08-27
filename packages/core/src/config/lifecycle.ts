@@ -1,5 +1,5 @@
+import { septumIncompatibility } from '@mycelo/septum'
 import type { ConfigSchema, SporeModule } from '@mycelo/septum'
-import { septumIncompatibility } from '../germination/compat.js'
 import { discover } from '../germination/discover.js'
 import { loadModule } from '../germination/load.js'
 import { isFailure, readManifest } from '../germination/manifest.js'

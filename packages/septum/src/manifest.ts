@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { CHANNEL_CAPABILITIES } from './capabilities.js'
+import { isParseableRange } from './compat.js'
 import { MYCELIUM_SCOPES } from './mycelium.js'
 
 /** Plugin kinds. */
@@ -89,18 +90,15 @@ const anyOfRequirementSchema = z.object({
 const requirementSchema = z.union([singleRequirementSchema, anyOfRequirementSchema])
 export type Requirement = z.infer<typeof requirementSchema>
 
-// Bun.semver exposes no range validator, so parseability is established by use: an unparseable
-// range matches every version (design §10.1), and a real range cannot admit two versions this
-// far apart. Measured on Bun 1.4.0.
-function isParseableRange(range: string): boolean {
-  return !(Bun.semver.satisfies('0.0.1', range) && Bun.semver.satisfies('99999.0.0', range))
-}
-
 /** Fields every manifest carries. */
 const commonFields = {
   name: nameSchema,
   septum: z.string().min(1).refine(isParseableRange, {
-    message: 'is not a semver range: a range that cannot be parsed matches every version',
+    // issue.input is unknown, and returning undefined keeps Zod's own message: a non-string
+    // septum: reports a wrong type rather than a range error.
+    error: (issue) => (typeof issue.input === 'string'
+      ? `'${issue.input}' is not a semver range: a range that cannot be parsed matches every version`
+      : undefined),
   }),
   description: z.string().optional(),
   externals: z.array(z.string()).optional(),

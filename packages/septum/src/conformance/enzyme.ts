@@ -1,4 +1,5 @@
 import { IntlMessageFormat } from 'intl-messageformat'
+import { septumIncompatibility } from '../compat.js'
 import { parseManifest } from '../manifest.js'
 import { configSchemaFailures } from './config-checks.js'
 import type { EnzymeModule } from '../enzyme.js'
@@ -198,6 +199,11 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
   if (manifest.kind !== 'enzyme') {
     return [...failures, `manifest kind is '${manifest.kind}', expected 'enzyme'`]
   }
+
+  // The same check germination, enablePlugin and inoculate apply: a kit that certifies a range
+  // the runtime refuses fails the author at the operator's install instead of at authoring time.
+  const incompatible = septumIncompatibility(manifest.septum)
+  if (incompatible !== undefined) failures.push(`the manifest ${incompatible}`)
   failures.push(...catalogFailures(harness.catalogs, manifest))
   const allowed = declaredRhizas(manifest)
 

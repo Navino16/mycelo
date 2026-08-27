@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
-import { SEPTUM_VERSION } from '@mycelo/septum'
-import { septumIncompatibility } from '../../src/germination/compat.js'
+import { septumIncompatibility } from '../src/compat.js'
+import { SEPTUM_VERSION } from '../src/version.js'
 
 describe('septumIncompatibility', () => {
   it('admits a range covering the running septum', () => {

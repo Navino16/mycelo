@@ -10,6 +10,7 @@ import { rhizaChecks } from '../../src/conformance/rhiza.js'
 import type { RhizaHarness } from '../../src/conformance/rhiza.js'
 import type { EnzymeContext, InhibitorContext } from '../../src/context.js'
 import type { IncomingMessage } from '../../src/message.js'
+import { SEPTUM_VERSION } from '../../src/version.js'
 
 const config = z.object({ account: z.string() })
 
@@ -18,7 +19,7 @@ const goodHarness: HyphaHarness = {
   manifest: {
     kind: 'hypha',
     name: 'good',
-    septum: '^1.0',
+    septum: '^0.10',
     capabilities: ['group_membership'],
   },
   module: {
@@ -46,7 +47,7 @@ describe('hypha conformance checks', () => {
   it('catches a manifest whose kind does not match', async () => {
     const failures = await hyphaChecks({
       ...goodHarness,
-      manifest: { kind: 'rhiza', name: 'good', septum: '^1.0' },
+      manifest: { kind: 'rhiza', name: 'good', septum: '^0.10' },
     })
     expect(failures.join(' ')).toContain('kind')
   })
@@ -160,7 +161,7 @@ const goodEnzyme: EnzymeHarness = {
   manifest: {
     kind: 'enzyme',
     name: 'links',
-    septum: '^1.0',
+    septum: '^0.10',
     commands: [{ name: 'links', description: 'command.links.description', code: 'links' }],
   },
   module: { create: () => ({ handlers: { links: async () => {} } }) },
@@ -199,7 +200,7 @@ describe('enzyme conformance checks', () => {
   const requiredArgManifest = {
     kind: 'enzyme' as const,
     name: 'radarr-add',
-    septum: '^1.0',
+    septum: '^0.10',
     commands: [
       {
         name: 'add',
@@ -267,7 +268,7 @@ describe('enzyme conformance checks', () => {
     expect(await enzymeChecks({
       name: 'shared',
       manifest: {
-        kind: 'enzyme', name: 'shared', septum: '^0.2',
+        kind: 'enzyme', name: 'shared', septum: '^0.10',
         commands: [
           { name: 'links', description: 'Service URLs', respond: 'Radarr' },
           { name: 'add', description: 'Add', code: 'mutate' },
@@ -282,7 +283,7 @@ describe('enzyme conformance checks', () => {
     const failures = await enzymeChecks({
       name: 'broken',
       manifest: {
-        kind: 'enzyme', name: 'broken', septum: '^0.2',
+        kind: 'enzyme', name: 'broken', septum: '^0.10',
         commands: [{ name: 'add', description: 'Add', code: 'mutate' }],
       },
       module: { create: () => ({ handlers: {} }) },
@@ -295,7 +296,7 @@ describe('enzyme conformance checks', () => {
     expect(await enzymeChecks({
       name: 'textonly',
       manifest: {
-        kind: 'enzyme', name: 'textonly', septum: '^0.2',
+        kind: 'enzyme', name: 'textonly', septum: '^0.10',
         commands: [{ name: 'links', description: 'Service URLs', respond: 'Radarr' }],
       },
       context: enzymeContext,
@@ -306,7 +307,7 @@ describe('enzyme conformance checks', () => {
     const failures = await enzymeChecks({
       name: 'needy',
       manifest: {
-        kind: 'enzyme', name: 'needy', septum: '^0.2',
+        kind: 'enzyme', name: 'needy', septum: '^0.10',
         commands: [{ name: 'add', description: 'Add', code: 'mutate' }],
       },
       context: enzymeContext,
@@ -318,7 +319,7 @@ describe('enzyme conformance checks', () => {
     const failures = await enzymeChecks({
       name: 'shared',
       manifest: {
-        kind: 'enzyme', name: 'shared', septum: '^0.2',
+        kind: 'enzyme', name: 'shared', septum: '^0.10',
         commands: [
           { name: 'add', description: 'Add', code: 'mutate' },
           { name: 'remove', description: 'Remove', code: 'mutate' },
@@ -335,7 +336,7 @@ describe('enzyme conformance checks', () => {
     const failures = await enzymeChecks({
       name: 'shared',
       manifest: {
-        kind: 'enzyme', name: 'shared', septum: '^0.2',
+        kind: 'enzyme', name: 'shared', septum: '^0.10',
         commands: [
           { name: 'add', description: 'Add', code: 'mutate' },
           { name: 'remove', description: 'Remove', code: 'mutate' },
@@ -404,7 +405,7 @@ describe('enzyme conformance checks', () => {
     const failures = await enzymeChecks({
       name: 'sneaky',
       manifest: {
-        kind: 'enzyme', name: 'sneaky', septum: '^0.2',
+        kind: 'enzyme', name: 'sneaky', septum: '^0.10',
         commands: [{ name: 'go', description: 'Go', code: 'constructor' }],
       },
       module: { create: () => ({ handlers: {} }) },
@@ -450,7 +451,7 @@ function msg(externalId: string): IncomingMessage {
 
 const goodInhibitor: InhibitorHarness = {
   name: 'allowlist',
-  manifest: { kind: 'inhibitor', name: 'allowlist', septum: '^1.0', enforcing: true },
+  manifest: { kind: 'inhibitor', name: 'allowlist', septum: '^0.10', enforcing: true },
   module: {
     create: () => ({
       async inspect(message) {
@@ -529,7 +530,7 @@ describe('inhibitor conformance checks', () => {
 
 const goodRhiza: RhizaHarness = {
   name: 'radarr',
-  manifest: { kind: 'rhiza', name: 'radarr', septum: '^1.0' },
+  manifest: { kind: 'rhiza', name: 'radarr', septum: '^0.10' },
   module: {
     create: () => ({
       async start() {},
@@ -602,6 +603,43 @@ describe('rhiza conformance checks', () => {
 })
 
 // ---------------------------------------------------------------------------
+// the septum range, which the runtime enforces at three points
+// ---------------------------------------------------------------------------
+
+describe('the declared septum range', () => {
+  // germinate(), enablePlugin() and inoculate() all refuse a range that excludes the running
+  // septum. A kit that certifies one fails the author at the operator's install instead.
+  const excluding = (m: unknown): unknown => ({ ...(m as object), septum: '^0.1' })
+
+  it('is caught by every kit, naming the range and the running septum', async () => {
+    const reported = [
+      (await hyphaChecks({ ...goodHarness, manifest: excluding(goodHarness.manifest) })).join(' '),
+      (await enzymeChecks({ ...goodEnzyme, manifest: excluding(goodEnzyme.manifest) })).join(' '),
+      (await inhibitorChecks({ ...goodInhibitor, manifest: excluding(goodInhibitor.manifest) })).join(' '),
+      (await rhizaChecks({ ...goodRhiza, manifest: excluding(goodRhiza.manifest) })).join(' '),
+    ]
+    for (const failures of reported) {
+      expect(failures).toContain("septum '^0.1'")
+      expect(failures).toContain(SEPTUM_VERSION)
+    }
+  })
+
+  it('is caught for an unparseable range, distinctly from an excluding one', async () => {
+    // A range Bun.semver cannot parse matches every version, so it would otherwise pass here
+    // and be refused at germination. parseManifest rejects it first, which is the message seen.
+    const failures = (await rhizaChecks({
+      ...goodRhiza, manifest: { ...(goodRhiza.manifest as object), septum: 'latest' },
+    })).join(' ')
+    expect(failures).toContain("'latest' is not a semver range")
+  })
+
+  it('leaves a range covering the running septum alone', async () => {
+    const covering = (m: unknown): unknown => ({ ...(m as object), septum: `>=${SEPTUM_VERSION}` })
+    expect(await hyphaChecks({ ...goodHarness, manifest: covering(goodHarness.manifest) })).toEqual([])
+    expect(await rhizaChecks({ ...goodRhiza, manifest: covering(goodRhiza.manifest) })).toEqual([])
+  })
+})
+
 // regressions found reviewing the kit
 // ---------------------------------------------------------------------------
 
@@ -747,7 +785,7 @@ describe('regressions', () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
       manifest: {
-        kind: 'enzyme', name: 'links', septum: '^1.0',
+        kind: 'enzyme', name: 'links', septum: '^0.10',
         commands: [{ name: 'links', description: 'Show links', code: 'links' }],
       },
       catalogs: { en: { links: { usage: 'x' } } },
@@ -764,7 +802,7 @@ describe('regressions', () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
       manifest: {
-        kind: 'enzyme', name: 'links', septum: '^1.0',
+        kind: 'enzyme', name: 'links', septum: '^0.10',
         commands: [
           { name: 'links', description: 'command.links.description', code: 'links' },
           { name: 'usage', description: 'command.usage.description', code: 'links' },
@@ -785,7 +823,7 @@ describe('regressions', () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
       manifest: {
-        kind: 'enzyme', name: 'links', septum: '^1.0',
+        kind: 'enzyme', name: 'links', septum: '^0.10',
         commands: [
           { name: 'links', description: 'command.links.description', code: 'links' },
           { name: 'usage', description: 'command.usage.description', code: 'links' },
@@ -808,7 +846,7 @@ describe('regressions', () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
       manifest: {
-        kind: 'enzyme', name: 'links', septum: '^1.0',
+        kind: 'enzyme', name: 'links', septum: '^0.10',
         commands: [
           { name: 'links', description: 'command.links.description', code: 'links' },
           { name: 'usage', description: 'command.usage.description', code: 'links' },
@@ -831,7 +869,7 @@ describe('regressions', () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
       manifest: {
-        kind: 'enzyme', name: 'links', septum: '^1.0',
+        kind: 'enzyme', name: 'links', septum: '^0.10',
         commands: [{
           name: 'links', description: 'command.links.description', code: 'links',
           args: [{ name: 'name', description: 'Plugin name', required: true }],
@@ -848,7 +886,7 @@ describe('regressions', () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
       manifest: {
-        kind: 'enzyme', name: 'links', septum: '^1.0',
+        kind: 'enzyme', name: 'links', septum: '^0.10',
         commands: [{
           name: 'links', description: 'command.links.description', code: 'links',
           args: [{ name: 'name', description: 'arg.links-name.description', required: true }],
@@ -896,7 +934,7 @@ describe('regressions', () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
       manifest: {
-        kind: 'enzyme', name: 'links', septum: '^1.0',
+        kind: 'enzyme', name: 'links', septum: '^0.10',
         requires: [{ rhiza: 'radarr' }],
         commands: [{ name: 'links', description: 'Show links', code: 'links' }],
       },
