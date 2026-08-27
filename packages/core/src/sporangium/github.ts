@@ -2,29 +2,57 @@ import { parse as parseYaml } from 'yaml'
 import { parseManifest } from '@mycelo/septum'
 import type { SporangiumDriver, SporeBundle, SporeDetail, SporeOffer } from './driver.js'
 
+// GitHub does not cap `per_page`, so a hard page cap is what turns an unbounded sporangium
+// into a refusal instead of a silently truncated list (fix round 1, Important 6).
+const MAX_TAG_PAGES = 10
+
+// septum's manifest nameSchema (packages/septum/src/manifest.ts) is not exported (ruling 9
+// checked). Mirrored here because a released bundle's SporeOffer.name becomes a directory name
+// under the managed root, and a third-party sporangium is not code-reviewed (fix round 1,
+// Important 2).
+const SPORE_NAME = /^[a-z0-9][a-z0-9-]*$/
+
 /** `<name>@<semver>`: the tag format half A cut, and the only one this driver reads. */
 export function parseTag(tag: string): { name: string, strain: string } | null {
   const at = tag.lastIndexOf('@')
   if (at <= 0) return null
   const name = tag.slice(0, at)
   const strain = tag.slice(at + 1)
+  if (!SPORE_NAME.test(name)) return null
   // `=<v>` is satisfied only by that exact version, so it doubles as a version validator.
   if (!Bun.semver.satisfies(strain, `=${strain}`)) return null
   return { name, strain }
 }
 
+// host+pathname only: `location` may carry embedded credentials (`https://user:pat@github.com/o/r`)
+// and this string reaches an operator-facing refusal (fix round 1, minor 1).
+function safeLocation(url: URL): string {
+  return `${url.host}${url.pathname}`
+}
+
 function repoOf(location: string): { owner: string, repo: string } {
-  let pathname: string
+  let url: URL
   try {
-    pathname = new URL(location).pathname
+    url = new URL(location)
   } catch {
     throw new Error(`'${location}' is not a GitHub repository URL`)
   }
-  const [owner, repo] = pathname.replace(/^\//, '').replace(/\.git$/, '').split('/')
+  if (url.protocol !== 'https:' || (url.host !== 'github.com' && url.host !== 'www.github.com')) {
+    throw new Error(`'${safeLocation(url)}' is not a GitHub repository URL`)
+  }
+  const [owner, repo] = url.pathname.replace(/^\//, '').replace(/\.git$/, '').split('/')
   if (owner === undefined || owner === '' || repo === undefined || repo === '') {
-    throw new Error(`'${location}' is not a GitHub repository URL`)
+    throw new Error(`'${safeLocation(url)}' is not a GitHub repository URL`)
   }
   return { owner, repo }
+}
+
+function nextPageUrl(response: Response): string | null {
+  const link = response.headers.get('link')
+  if (link === null) return null
+  const next = link.split(',').find((part) => /rel="next"/.test(part))
+  const match = next === undefined ? null : /<([^>]+)>/.exec(next)
+  return match?.[1] ?? null
 }
 
 export function githubDriver(
@@ -33,22 +61,39 @@ export function githubDriver(
   fetchImpl: typeof fetch = fetch,
 ): SporangiumDriver {
   const headers: Record<string, string> = { accept: 'application/vnd.github+json' }
-  // Optional, and what raises the listing budget from 60 requests an hour to 5000 (§8).
+  // Optional, and what raises the listing budget from 60 requests an hour to 5000 (design §8).
   if (token !== null) headers.authorization = `Bearer ${token}`
 
-  // repoOf(location) is called here, inside an async function, rather than once at
-  // construction — a junk location must reject the call the caller awaits, not throw
-  // out of the factory (ruling 8).
-  async function get<T>(path: string): Promise<T> {
+  // repoOf(location) is resolved lazily, inside an async function, not at construction: a junk
+  // location must reject the call the caller awaits, not throw out of the factory (design §6/§9).
+  function baseUrl(): string {
     const { owner, repo } = repoOf(location)
-    const response = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}${path}`, { headers })
-    if (!response.ok) throw new Error(`GitHub answered ${String(response.status)} for ${path}`)
+    return `https://api.github.com/repos/${owner}/${repo}`
+  }
+
+  async function fetchOk(url: string, label: string): Promise<Response> {
+    const response = await fetchImpl(url, { headers })
+    if (!response.ok) throw new Error(`GitHub answered ${String(response.status)} for ${label}`)
+    return response
+  }
+
+  async function get<T>(path: string): Promise<T> {
+    const response = await fetchOk(`${baseUrl()}${path}`, path)
     return await response.json() as T
   }
 
   async function tags(): Promise<readonly { name: string, strain: string }[]> {
-    const raw = await get<readonly { name: string }[]>('/tags?per_page=100')
-    return raw.map((t) => parseTag(t.name))
+    const collected: { name: string }[] = []
+    let url: string | null = `${baseUrl()}/tags?per_page=100`
+    for (let page = 0; url !== null; page += 1) {
+      if (page >= MAX_TAG_PAGES) {
+        throw new Error(`sporangium tag list exceeds ${MAX_TAG_PAGES} pages; refusing to keep paginating`)
+      }
+      const response = await fetchOk(url, '/tags?per_page=100')
+      collected.push(...await response.json() as readonly { name: string }[])
+      url = nextPageUrl(response)
+    }
+    return collected.map((t) => parseTag(t.name))
       .filter((t): t is { name: string, strain: string } => t !== null)
   }
 
