@@ -242,7 +242,7 @@ describe('githubDriver authorization header', () => {
 
 describe('githubDriver.detail', () => {
   test('reads kind, description and the declared range from spore.yaml at the tag', async () => {
-    const yaml = ['name: radarr', 'kind: rhiza', 'septum: "^0.10"', 'description: Radarr connector'].join('\n')
+    const yaml = ['name: radarr', 'kind: rhiza', 'septum: "^0.11"', 'description: Radarr connector'].join('\n')
     const driver = githubDriver('https://github.com/o/r', null, fakeFetch({
       '/contents/': { content: Buffer.from(yaml, 'utf8').toString('base64') },
     }))
@@ -250,7 +250,7 @@ describe('githubDriver.detail', () => {
       name: 'radarr',
       kind: 'rhiza',
       description: 'Radarr connector',
-      septum: '^0.10',
+      septum: '^0.11',
       demands: { requires: [], scopes: [], externals: [], commands: [] },
     })
   })
@@ -258,7 +258,7 @@ describe('githubDriver.detail', () => {
   // spec §4.1: the consent moment. detail() already parsed the whole manifest and dropped this.
   test('reads what the spore is asking for: requirements, scopes, externals and capabilities', async () => {
     const yaml = [
-      'name: watcher', 'kind: enzyme', 'septum: "^0.10"', 'description: Watches',
+      'name: watcher', 'kind: enzyme', 'septum: "^0.11"', 'description: Watches',
       'externals: [signal-cli, tar]',
       'requires:',
       '  - rhiza: mycelium',
@@ -286,7 +286,7 @@ describe('githubDriver.detail', () => {
       name: 'watcher',
       kind: 'enzyme',
       description: 'Watches',
-      septum: '^0.10',
+      septum: '^0.11',
       demands: {
         externals: ['signal-cli', 'tar'],
         // Three requirements, one of them an any_of collapsed into `targets`: a mapper that

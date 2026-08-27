@@ -30,7 +30,7 @@ it('ctx.locale is the locale resolved for the message, not the conversation defa
     'spore.yaml': [
       'kind: enzyme',
       'name: whichlocale',
-      'septum: "^0.10"',
+      'septum: "^0.11"',
       'commands:',
       '  - name: whichlocale',
       '    description: x',

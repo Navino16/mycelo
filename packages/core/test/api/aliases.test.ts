@@ -9,7 +9,7 @@ const collidingPair: SporeWriter = (sporesDir) => {
   for (const name of ['alpha', 'beta'] as const) {
     writeSpore(sporesDir, name, {
       'spore.yaml': [
-        'kind: enzyme', `name: ${name}`, 'septum: "^0.10"',
+        'kind: enzyme', `name: ${name}`, 'septum: "^0.11"',
         'commands:', '  - name: help', '    description: command.help.description',
         '    respond: reply.help', '',
       ].join('\n'),
@@ -20,7 +20,7 @@ const collidingPair: SporeWriter = (sporesDir) => {
 const greeter: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'greeter', {
     'spore.yaml': [
-      'kind: enzyme', 'name: greeter', 'septum: "^0.10"',
+      'kind: enzyme', 'name: greeter', 'septum: "^0.11"',
       'commands:',
       '  - name: hello', '    description: command.hello.description', '    respond: reply.hello',
       '  - name: bye', '    description: command.bye.description', '    respond: reply.bye', '',

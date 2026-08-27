@@ -421,7 +421,7 @@ describe('PUT /api/plugins/:name/settings validates the values', () => {
  * fails open rather than closed when it cannot find the module (design §9, §12).
  */
 describe('a spore installed into the managed root', () => {
-  const MANIFEST = 'kind: enzyme\nname: keyring\nseptum: "^0.10"\n'
+  const MANIFEST = 'kind: enzyme\nname: keyring\nseptum: "^0.11"\n'
     + 'commands:\n  - name: keyring\n    description: Report the configured setting\n    code: handleConfigured\n'
 
   const MODULE = `
@@ -451,7 +451,7 @@ describe('a spore installed into the managed root', () => {
       list: () => Promise.resolve([{ name: 'keyring', strain: '0.2.0' }]),
       strains: () => Promise.resolve(['0.2.0']),
       detail: () => Promise.resolve({
-        name: 'keyring', kind: 'enzyme' as const, description: '', septum: '^0.10',
+        name: 'keyring', kind: 'enzyme' as const, description: '', septum: '^0.11',
         demands: { requires: [], scopes: [], externals: [], commands: [] },
       }),
       fetch: (_name: string, strain: string) => Promise.resolve({ tarball, strain }),
@@ -578,7 +578,7 @@ describe('a spore installed into the managed root', () => {
 const scopedInhibitor: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'watcher', {
     'spore.yaml': [
-      'kind: inhibitor', 'name: watcher', 'septum: "^0.10"', 'enforcing: false',
+      'kind: inhibitor', 'name: watcher', 'septum: "^0.11"', 'enforcing: false',
       'requires:', '  - rhiza: mycelium', '    scopes: [principals.read]', '',
     ].join('\n'),
     'src/index.ts': `

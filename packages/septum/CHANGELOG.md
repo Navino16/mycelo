@@ -1,5 +1,25 @@
 # @mycelo/septum
 
+## 0.11.0
+
+### Added
+- `CommandScope`, and a third optional parameter on `CommandsRead.available`. Without it the answer
+  is filtered on authorization alone, which is what every release before this one did and what the
+  method's own doc comment warned about: a listed command could still be refused on the channel it
+  was asked on. With it, the two gates the bus applies at dispatch — the channel's declared
+  capabilities and any context rule confining the command to a DM or a group — are applied here too,
+  so the answer matches what dispatch would do. Optional, so every existing caller and every
+  implementation compiles unchanged.
+
+### Changed
+- **`PluginInfo.state` gains a fourth member, `'pending'`**: an install that is enabled and present
+  on disk but not in the registry yet. That covers a plugin awaiting the restart an `enable()` asked
+  for, and also one still starting — which is how a spore reading `listPlugins()` from its own
+  `start()` now sees itself. Before this, such an install was **dropped from the answer entirely**
+  rather than mislabelled, so a UI landing on its plugin list straight after enabling did not show
+  the plugin. Breaking only for a consumer that switches exhaustively over the union; a producer
+  gains a member.
+
 ## 0.10.2
 
 ### Added

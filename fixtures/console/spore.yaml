@@ -1,5 +1,5 @@
 kind: hypha
 name: console
-septum: "^0.10"
+septum: "^0.11"
 description: Reads stdin and writes stdout. Test fixture, never distributed.
 capabilities: [group_membership]

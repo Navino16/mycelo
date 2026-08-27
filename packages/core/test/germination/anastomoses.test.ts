@@ -12,11 +12,11 @@ function read(raw: Record<string, unknown>): ReadManifest {
 }
 
 const rhiza = (name: string, requires?: unknown) =>
-  read({ kind: 'rhiza', name, septum: '^0.10', ...(requires === undefined ? {} : { requires }) })
+  read({ kind: 'rhiza', name, septum: '^0.11', ...(requires === undefined ? {} : { requires }) })
 
 const enzyme = (name: string, requires?: unknown) =>
   read({
-    kind: 'enzyme', name, septum: '^0.10',
+    kind: 'enzyme', name, septum: '^0.11',
     commands: [{ name, description: 'x', respond: 'x' }],
     ...(requires === undefined ? {} : { requires }),
   })
@@ -176,7 +176,7 @@ describe('MOUNTABLE_SCOPES against MYCELIUM_SCOPES', () => {
     const r = resolve([{
       location: { path: '/spores/future', directory: 'future', manifestPath: '/spores/future/spore.yaml' },
       manifest: {
-        kind: 'enzyme', name: 'future', septum: '^0.10',
+        kind: 'enzyme', name: 'future', septum: '^0.11',
         commands: [{ name: 'future', description: 'x', respond: 'hi' }],
         // Bypasses parseManifest deliberately: septum's z.enum makes an unmountable scope
         // unparseable, so the guard is only reachable from a hand-built manifest.
@@ -194,7 +194,7 @@ describe('MOUNTABLE_SCOPES against MYCELIUM_SCOPES', () => {
     const r = resolve([{
       location: { path: '/spores/other', directory: 'other', manifestPath: '/spores/other/spore.yaml' },
       manifest: {
-        kind: 'enzyme', name: 'other', septum: '^0.10',
+        kind: 'enzyme', name: 'other', septum: '^0.11',
         commands: [{ name: 'other', description: 'x', respond: 'hi' }],
         requires: [{ rhiza: 'mycelium', scopes: ['another.scope'] }],
       },

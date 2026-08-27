@@ -29,7 +29,7 @@ function tree(entries: Record<string, string>): string {
   return dir
 }
 
-const MANIFEST = ['name: radarr', 'kind: rhiza', 'septum: "^0.10"'].join('\n')
+const MANIFEST = ['name: radarr', 'kind: rhiza', 'septum: "^0.11"'].join('\n')
 const MODULE = 'export default { create: () => ({}) }'
 
 describe('treeProblem', () => {
@@ -93,7 +93,7 @@ describe('treeProblem', () => {
 
   test('refuses a manifest whose name is not the requested one', () => {
     expect(treeProblem(tree({
-      'radarr/spore.yaml': 'name: sonarr\nkind: rhiza\nseptum: "^0.10"\n',
+      'radarr/spore.yaml': 'name: sonarr\nkind: rhiza\nseptum: "^0.11"\n',
       'radarr/index.js': MODULE,
     }), 'radarr')).toContain('sonarr')
   })
@@ -159,7 +159,7 @@ describe('treeProblem', () => {
   test('accepts a respond-only enzyme with no module at all', () => {
     expect(treeProblem(tree({
       'hello/spore.yaml': [
-        'name: hello', 'kind: enzyme', 'septum: "^0.10"',
+        'name: hello', 'kind: enzyme', 'septum: "^0.11"',
         'commands:', '  - name: hi', '    description: command.hi.description', '    respond: reply.hi',
       ].join('\n'),
     }), 'hello')).toBeNull()
@@ -170,7 +170,7 @@ describe('treeProblem', () => {
     // enough to need an entry point.
     expect(treeProblem(tree({
       'hello/spore.yaml': [
-        'name: hello', 'kind: enzyme', 'septum: "^0.10"',
+        'name: hello', 'kind: enzyme', 'septum: "^0.11"',
         'commands:',
         '  - name: hi', '    description: command.hi.description', '    respond: reply.hi',
         '  - name: ho', '    description: command.ho.description', '    code: handleHo',
@@ -184,7 +184,7 @@ function stubDriver(tarball: Uint8Array, strains: readonly string[] = ['0.2.0', 
     list: () => Promise.resolve([{ name: 'radarr', strain: strains[0]! }]),
     strains: () => Promise.resolve(strains),
     detail: () => Promise.resolve({
-    name: 'radarr', kind: 'rhiza' as const, description: '', septum: '^0.10',
+    name: 'radarr', kind: 'rhiza' as const, description: '', septum: '^0.11',
     demands: { requires: [], scopes: [], externals: [], commands: [] },
   }),
     fetch: (_name, strain) => Promise.resolve({ tarball, strain }),
@@ -333,7 +333,7 @@ describe('inoculate', () => {
     const { db } = freshDb()
     const third = addSource(db, { label: 'someone else', driver: 'github', location: 'https://github.com/x/y' })
     const manifest = [
-      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.10"',
+      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.11"',
       'requires:', '  - rhiza: radarr',
       'commands:', '  - name: upcoming', '    description: command.upcoming.description', '    code: handleUpcoming',
     ].join('\n')
@@ -354,7 +354,7 @@ describe('inoculate', () => {
     writeFileSync(join(held, 'radarr', 'spore.yaml'), MANIFEST)
     recordInstall(db, 'radarr', 'rhiza', false)
     const manifest = [
-      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.10"',
+      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.11"',
       'requires:', '  - rhiza: radarr',
       'commands:', '  - name: upcoming', '    description: command.upcoming.description', '    code: handleUpcoming',
     ].join('\n')
@@ -373,7 +373,7 @@ describe('inoculate', () => {
     const { db } = freshDb()
     const id = officialId(db)
     const manifest = [
-      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.10"',
+      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.11"',
       'requires:', '  - rhiza: radarr',
       'commands:', '  - name: upcoming', '    description: command.upcoming.description', '    code: handleUpcoming',
     ].join('\n')
@@ -387,7 +387,7 @@ describe('inoculate', () => {
     const { db } = freshDb()
     const id = officialId(db)
     const manifest = [
-      'name: now-watching', 'kind: enzyme', 'septum: "^0.10"',
+      'name: now-watching', 'kind: enzyme', 'septum: "^0.11"',
       'requires:',
       '  - rhiza: radarr',
       '  - rhiza: sonarr',
@@ -408,7 +408,7 @@ describe('inoculate', () => {
     mkdirSync(join(held, 'radarr'))
     writeFileSync(join(held, 'radarr', 'spore.yaml'), MANIFEST)
     const manifest = [
-      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.10"',
+      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.11"',
       'requires:',
       '  - rhiza: radarr',
       '  - rhiza: sonarr', '    optional: true',
@@ -430,7 +430,7 @@ describe('inoculate', () => {
     mkdirSync(join(held, 'radarr'))
     writeFileSync(join(held, 'radarr', 'spore.yaml'), MANIFEST)
     const manifest = [
-      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.10"',
+      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.11"',
       'requires:', '  - rhiza: radarr@^2', '  - rhiza: sonarr@^2',
       'commands:', '  - name: upcoming', '    description: command.upcoming.description', '    code: handleUpcoming',
     ].join('\n')
@@ -450,9 +450,9 @@ describe('inoculate', () => {
     const id = officialId(db)
     const held = mkdtempSync(join(tmpdir(), 'operator-'))
     mkdirSync(join(held, 'jellyfin'))
-    writeFileSync(join(held, 'jellyfin', 'spore.yaml'), 'name: jellyfin\nkind: rhiza\nseptum: "^0.10"\n')
+    writeFileSync(join(held, 'jellyfin', 'spore.yaml'), 'name: jellyfin\nkind: rhiza\nseptum: "^0.11"\n')
     const manifest = [
-      'name: now-watching', 'kind: enzyme', 'septum: "^0.10"',
+      'name: now-watching', 'kind: enzyme', 'septum: "^0.11"',
       'requires:', '  - any_of:', '      - rhiza: plex', '      - rhiza: jellyfin@^10',
       'commands:', '  - name: watching', '    description: command.watching.description', '    code: handleWatching',
     ].join('\n')
@@ -470,11 +470,11 @@ describe('inoculate', () => {
     const held = mkdtempSync(join(tmpdir(), 'operator-'))
     mkdirSync(join(held, 'radarr'))
     writeFileSync(join(held, 'radarr', 'spore.yaml'), [
-      'name: radarr', 'kind: enzyme', 'septum: "^0.10"',
+      'name: radarr', 'kind: enzyme', 'septum: "^0.11"',
       'commands:', '  - name: r', '    description: command.r.description', '    respond: reply.r',
     ].join('\n'))
     const manifest = [
-      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.10"',
+      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.11"',
       'requires:', '  - rhiza: radarr',
       'commands:', '  - name: upcoming', '    description: command.upcoming.description', '    code: handleUpcoming',
     ].join('\n')

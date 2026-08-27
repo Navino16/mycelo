@@ -65,7 +65,7 @@ async function bootWith(
   owner: { channel: string; userId: string },
 ): Promise<{ warnings: string[]; infos: string[]; warnMeta: (Record<string, unknown> | undefined)[] }> {
   spore('console', {
-    'spore.yaml': 'kind: hypha\nname: console\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: hypha\nname: console\nseptum: "^0.11"\n',
     'src/index.ts': `export default { create: () => ({ ${HYPHA_BODY} }) }\n`,
   })
   const file = join(dir, 'mycelo.yaml')
@@ -89,7 +89,7 @@ async function bootWith(
 function cyclingPair(): void {
   for (const [self, other] of [['alpha', 'beta'], ['beta', 'alpha']] as const) {
     spore(self, {
-      'spore.yaml': `kind: rhiza\nname: ${self}\nseptum: "^0.10"\nrequires:\n  - rhiza: ${other}\n`,
+      'spore.yaml': `kind: rhiza\nname: ${self}\nseptum: "^0.11"\nrequires:\n  - rhiza: ${other}\n`,
     })
   }
 }
@@ -113,7 +113,7 @@ describe('phase 2 germination', () => {
   it('degrades on a command collision instead of throwing', async () => {
     for (const name of ['alpha', 'beta']) {
       spore(name, {
-        'spore.yaml': `kind: enzyme\nname: ${name}\nseptum: "^0.10"\ncommands:\n  - name: ping\n    description: ping\n    respond: ${name}.reply\n`,
+        'spore.yaml': `kind: enzyme\nname: ${name}\nseptum: "^0.11"\ncommands:\n  - name: ping\n    description: ping\n    respond: ${name}.reply\n`,
       })
     }
     const served = serve(config())
@@ -137,7 +137,7 @@ describe('phase 2 germination', () => {
 
   it('germinates when nothing is fatal', async () => {
     spore('good', {
-      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.10"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
+      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.11"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
     })
     const served = serve(config())
     closeDb = served.closeDb
@@ -148,7 +148,7 @@ describe('phase 2 germination', () => {
 
   it('replaces the phase-1 translator with one carrying the spore catalogues', async () => {
     spore('good', {
-      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.10"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
+      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.11"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
       'translations/en.yaml': 'greet: hello from good\n',
     })
     const served = serve(config())
@@ -194,7 +194,7 @@ describe('retryGermination', () => {
 
   it('refuses when the runtime is not degraded', async () => {
     spore('good', {
-      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.10"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
+      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.11"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
     })
     const served = serve(config())
     closeDb = served.closeDb
@@ -255,7 +255,7 @@ describe('the managed root', () => {
   it('germinates a spore no configured root lists', async () => {
     root('elsewhere')
     spore('installed', {
-      'spore.yaml': 'kind: enzyme\nname: installed\nseptum: "^0.10"\ncommands:\n  - name: installed\n    description: x\n    respond: installed.reply\n',
+      'spore.yaml': 'kind: enzyme\nname: installed\nseptum: "^0.11"\ncommands:\n  - name: installed\n    description: x\n    respond: installed.reply\n',
     })
     const served = serve(config(['./elsewhere']))
     closeDb = served.closeDb
@@ -267,7 +267,7 @@ describe('the managed root', () => {
 
   it('is not discovered twice when a configured root already names it', async () => {
     spore('good', {
-      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.10"\ncommands:\n  - name: good\n    description: x\n    respond: good.reply\n',
+      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.11"\ncommands:\n  - name: good\n    description: x\n    respond: good.reply\n',
     })
     // `spores: ./spores` and `database: ./mycelo.db` is the ordinary layout, and it puts
     // both roots on the same directory: unguarded, assertNoCollisions refuses the boot.
@@ -283,7 +283,7 @@ describe('the managed root', () => {
     // The managed root is a root like any other, and design §4.2 refuses a duplicate directory
     // across all of them — pinned across the managed root, not only across configured ones.
     root('elsewhere')
-    const manifest = 'kind: enzyme\nname: dup\nseptum: "^0.10"\ncommands:\n  - name: dup\n    description: x\n    respond: dup.reply\n'
+    const manifest = 'kind: enzyme\nname: dup\nseptum: "^0.11"\ncommands:\n  - name: dup\n    description: x\n    respond: dup.reply\n'
     mkdirSync(join(dir, 'elsewhere', 'dup'), { recursive: true })
     writeFileSync(join(dir, 'elsewhere', 'dup', 'spore.yaml'), manifest, 'utf8')
     spore('dup', { 'spore.yaml': manifest })
@@ -318,7 +318,7 @@ describe('the managed root', () => {
     // `available: false` for a spore that is installed and running.
     root('elsewhere')
     spore('installed', {
-      'spore.yaml': 'kind: enzyme\nname: installed\nseptum: "^0.10"\n'
+      'spore.yaml': 'kind: enzyme\nname: installed\nseptum: "^0.11"\n'
         + 'commands:\n  - name: installed\n    description: x\n    code: handleInstalled\n',
       'index.js': `
         export default {
@@ -333,7 +333,7 @@ describe('the managed root', () => {
     const probeFile = join(dir, 'probe.json')
     mkdirSync(join(dir, 'elsewhere', 'prober'), { recursive: true })
     writeFileSync(join(dir, 'elsewhere', 'prober', 'spore.yaml'),
-      'kind: enzyme\nname: prober\nseptum: "^0.10"\n'
+      'kind: enzyme\nname: prober\nseptum: "^0.11"\n'
       + 'commands:\n  - name: probe\n    description: x\n    code: handleProbe\n'
       + 'requires:\n  - rhiza: mycelium\n    scopes: [plugins.configure]\n', 'utf8')
     writeFileSync(join(dir, 'elsewhere', 'prober', 'index.js'), `

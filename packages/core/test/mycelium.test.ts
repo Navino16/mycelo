@@ -39,7 +39,7 @@ function twoRoots(): { a: string, b: string } {
   const b = join(dir, 'roots', 'b')
   for (const root of [a, b]) {
     mkdirSync(join(root, 'ping'), { recursive: true })
-    writeFileSync(join(root, 'ping', 'spore.yaml'), 'kind: enzyme\nname: ping\nseptum: "^0.10"\n'
+    writeFileSync(join(root, 'ping', 'spore.yaml'), 'kind: enzyme\nname: ping\nseptum: "^0.11"\n'
       + 'commands:\n  - name: ping\n    description: command.ping.description\n    respond: reply.pong\n', 'utf8')
   }
   return { a, b }
@@ -79,7 +79,7 @@ it('warns in the singular for one absent root while another still germinates', a
 
 it('keeps other hyphae starting when one throws in connect(), and marks it dormant', async () => {
   spore('bad', {
-    'spore.yaml': 'kind: hypha\nname: bad\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: hypha\nname: bad\nseptum: "^0.11"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -92,7 +92,7 @@ it('keeps other hyphae starting when one throws in connect(), and marks it dorma
     ].join('\n'),
   })
   spore('good', {
-    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^0.11"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -114,7 +114,7 @@ it('keeps other hyphae starting when one throws in connect(), and marks it dorma
 
 it('keeps other hyphae listening when one throws in listen(), and marks it dormant', async () => {
   spore('bad', {
-    'spore.yaml': 'kind: hypha\nname: bad\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: hypha\nname: bad\nseptum: "^0.11"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -127,7 +127,7 @@ it('keeps other hyphae listening when one throws in listen(), and marks it dorma
     ].join('\n'),
   })
   spore('good', {
-    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^0.11"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -149,7 +149,7 @@ it('keeps other hyphae listening when one throws in listen(), and marks it dorma
 
 it('starts a rhiza before the enzyme that requires it, so ctx.rhiza() sees it already started', async () => {
   spore('store', {
-    'spore.yaml': 'kind: rhiza\nname: store\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: rhiza\nname: store\nseptum: "^0.11"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => {',
@@ -166,7 +166,7 @@ it('starts a rhiza before the enzyme that requires it, so ctx.rhiza() sees it al
   })
   spore('user', {
     'spore.yaml': [
-      'kind: enzyme', 'name: user', 'septum: "^0.10"',
+      'kind: enzyme', 'name: user', 'septum: "^0.11"',
       'requires:', '  - rhiza: store',
       'commands:', '  - name: user', '    description: x', '    code: user', '',
     ].join('\n'),
@@ -197,7 +197,7 @@ it('starts a rhiza before the enzyme that requires it, so ctx.rhiza() sees it al
 
 it('invokes Enzyme.start() with a working push()/capabilitiesOf(), and has()/rhiza() reading the resolved set, not a phase gate', async () => {
   spore('good', {
-    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^0.11"\n',
     'src/index.ts': [
       'const sent = []',
       'export default {',
@@ -212,7 +212,7 @@ it('invokes Enzyme.start() with a working push()/capabilitiesOf(), and has()/rhi
     ].join('\n'),
   })
   spore('probe', {
-    'spore.yaml': 'kind: enzyme\nname: probe\nseptum: "^0.10"\ncommands:\n  - name: probe\n    description: x\n    code: probe\n',
+    'spore.yaml': 'kind: enzyme\nname: probe\nseptum: "^0.11"\ncommands:\n  - name: probe\n    description: x\n    code: probe\n',
     'src/index.ts': [
       'export default {',
       '  create: () => {',
@@ -255,7 +255,7 @@ it('invokes Enzyme.start() with a working push()/capabilitiesOf(), and has()/rhi
 
 it('lets an enzyme push from start(), because hyphae are connected before any enzyme starts', async () => {
   spore('channel', {
-    'spore.yaml': 'kind: hypha\nname: channel\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: hypha\nname: channel\nseptum: "^0.11"\n',
     'src/index.ts': [
       'const order = []',
       'export default {',
@@ -270,7 +270,7 @@ it('lets an enzyme push from start(), because hyphae are connected before any en
     ].join('\n'),
   })
   spore('pusher', {
-    'spore.yaml': 'kind: enzyme\nname: pusher\nseptum: "^0.10"\ncommands:\n  - name: pusher\n    description: x\n    code: pusher\n',
+    'spore.yaml': 'kind: enzyme\nname: pusher\nseptum: "^0.11"\ncommands:\n  - name: pusher\n    description: x\n    code: pusher\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -298,7 +298,7 @@ it('lets an enzyme push from start(), because hyphae are connected before any en
 
 it('sends an enzyme dormant and removes it from the routing table when start() throws', async () => {
   spore('exploder', {
-    'spore.yaml': 'kind: enzyme\nname: exploder\nseptum: "^0.10"\ncommands:\n  - name: boom\n    description: x\n    code: boom\n',
+    'spore.yaml': 'kind: enzyme\nname: exploder\nseptum: "^0.11"\ncommands:\n  - name: boom\n    description: x\n    code: boom\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -320,7 +320,7 @@ it('sends an enzyme dormant and removes it from the routing table when start() t
 
 it("wires ctx.rhiza('mycelium') to the real, scope-gated API during an enzyme's start()", async () => {
   spore('channel', {
-    'spore.yaml': 'kind: hypha\nname: channel\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: hypha\nname: channel\nseptum: "^0.11"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -334,7 +334,7 @@ it("wires ctx.rhiza('mycelium') to the real, scope-gated API during an enzyme's 
   })
   spore('admin', {
     'spore.yaml': [
-      'kind: enzyme', 'name: admin', 'septum: "^0.10"',
+      'kind: enzyme', 'name: admin', 'septum: "^0.11"',
       'requires:', '  - rhiza: mycelium', '    scopes: [plugins.read]',
       'commands:', '  - name: admin', '    description: x', '    code: admin', '',
     ].join('\n'),
@@ -371,7 +371,7 @@ it("wires ctx.rhiza('mycelium') to the real, scope-gated API during an enzyme's 
 
 it("confines each enzyme's start() to its own resolved set and scopes, not a union across every enzyme", async () => {
   spore('mock', {
-    'spore.yaml': 'kind: rhiza\nname: mock\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: rhiza\nname: mock\nseptum: "^0.11"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -384,7 +384,7 @@ it("confines each enzyme's start() to its own resolved set and scopes, not a uni
     ].join('\n'),
   })
   spore('other', {
-    'spore.yaml': 'kind: rhiza\nname: other\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: rhiza\nname: other\nseptum: "^0.11"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -398,7 +398,7 @@ it("confines each enzyme's start() to its own resolved set and scopes, not a uni
   })
   spore('alpha', {
     'spore.yaml': [
-      'kind: enzyme', 'name: alpha', 'septum: "^0.10"',
+      'kind: enzyme', 'name: alpha', 'septum: "^0.11"',
       'requires:', '  - rhiza: mock', '  - rhiza: mycelium', '    scopes: [plugins.read]',
       'commands:', '  - name: alpha', '    description: x', '    code: alpha', '',
     ].join('\n'),
@@ -424,7 +424,7 @@ it("confines each enzyme's start() to its own resolved set and scopes, not a uni
   })
   spore('beta', {
     'spore.yaml': [
-      'kind: enzyme', 'name: beta', 'septum: "^0.10"',
+      'kind: enzyme', 'name: beta', 'septum: "^0.11"',
       'requires:', '  - rhiza: other', '  - rhiza: mycelium', '    scopes: [health.read]',
       'commands:', '  - name: beta', '    description: x', '    code: beta', '',
     ].join('\n'),
@@ -473,7 +473,7 @@ it("confines each enzyme's start() to its own resolved set and scopes, not a uni
 
 it("keeps the mycelium's plugin list consistent with bootstrap()'s own registry when listen() throws", async () => {
   spore('good', {
-    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^0.11"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -486,7 +486,7 @@ it("keeps the mycelium's plugin list consistent with bootstrap()'s own registry 
     ].join('\n'),
   })
   spore('bad', {
-    'spore.yaml': 'kind: hypha\nname: bad\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: hypha\nname: bad\nseptum: "^0.11"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -500,7 +500,7 @@ it("keeps the mycelium's plugin list consistent with bootstrap()'s own registry 
   })
   spore('admin', {
     'spore.yaml': [
-      'kind: enzyme', 'name: admin', 'septum: "^0.10"',
+      'kind: enzyme', 'name: admin', 'septum: "^0.11"',
       'requires:', '  - rhiza: mycelium', '    scopes: [plugins.read]',
       'commands:', '  - name: probe', '    description: x', '    code: probe', '',
     ].join('\n'),
@@ -540,7 +540,7 @@ it("keeps the mycelium's plugin list consistent with bootstrap()'s own registry 
 // inhibitor listed both germinated and dormant reports a broken gate as healthy.
 it("keeps the mycelium's plugin list consistent when an inhibitor's start() throws", async () => {
   spore('good', {
-    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^0.11"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -554,7 +554,7 @@ it("keeps the mycelium's plugin list consistent when an inhibitor's start() thro
   })
   // Advisory, so admission still lets /probe through and the listing can be observed.
   spore('softgate', {
-    'spore.yaml': 'kind: inhibitor\nname: softgate\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: inhibitor\nname: softgate\nseptum: "^0.11"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -567,7 +567,7 @@ it("keeps the mycelium's plugin list consistent when an inhibitor's start() thro
   })
   spore('admin', {
     'spore.yaml': [
-      'kind: enzyme', 'name: admin', 'septum: "^0.10"',
+      'kind: enzyme', 'name: admin', 'septum: "^0.11"',
       'requires:', '  - rhiza: mycelium', '    scopes: [plugins.read]',
       'commands:', '  - name: probe', '    description: x', '    code: probe', '',
     ].join('\n'),
@@ -601,7 +601,7 @@ it("keeps the mycelium's plugin list consistent when an inhibitor's start() thro
 
 it('routes onUnrouted through the shared send path, so an unregistered channel is a contained, logged failure rather than a silent no-op', async () => {
   spore('good', {
-    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^0.11"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -631,7 +631,7 @@ it('routes onUnrouted through the shared send path, so an unregistered channel i
 
 it("names a failed start(), not a missing installation, when ctx.rhiza() reaches a mandatory dependency that failed to start", async () => {
   spore('latefail', {
-    'spore.yaml': 'kind: rhiza\nname: latefail\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: rhiza\nname: latefail\nseptum: "^0.11"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -645,7 +645,7 @@ it("names a failed start(), not a missing installation, when ctx.rhiza() reaches
   })
   spore('user', {
     'spore.yaml': [
-      'kind: enzyme', 'name: user', 'septum: "^0.10"',
+      'kind: enzyme', 'name: user', 'septum: "^0.11"',
       'requires:', '  - rhiza: latefail',
       'commands:', '  - name: user', '    description: x', '    code: user', '',
     ].join('\n'),
@@ -685,7 +685,7 @@ it("names a failed start(), not a missing installation, when ctx.rhiza() reaches
 
 it("counts and names a rhiza in the germination banner, not just hyphae and enzymes", async () => {
   spore('channel', {
-    'spore.yaml': 'kind: hypha\nname: channel\nseptum: "^0.10"\ncapabilities: []\n',
+    'spore.yaml': 'kind: hypha\nname: channel\nseptum: "^0.11"\ncapabilities: []\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -698,7 +698,7 @@ it("counts and names a rhiza in the germination banner, not just hyphae and enzy
     ].join('\n'),
   })
   spore('store', {
-    'spore.yaml': 'kind: rhiza\nname: store\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: rhiza\nname: store\nseptum: "^0.11"\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -724,7 +724,7 @@ it("counts and names a rhiza in the germination banner, not just hyphae and enzy
 
 it('admits when an enforcing inhibitor starts cleanly', async () => {
   spore('cleangate', {
-    'spore.yaml': 'kind: inhibitor\nname: cleangate\nseptum: "^0.10"\nenforcing: true\n',
+    'spore.yaml': 'kind: inhibitor\nname: cleangate\nseptum: "^0.11"\nenforcing: true\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -746,7 +746,7 @@ it('admits when an enforcing inhibitor starts cleanly', async () => {
 
 it('refuses all traffic when an enforcing inhibitor throws in start() — the startup half of the design §7 merge', async () => {
   spore('throwgate', {
-    'spore.yaml': 'kind: inhibitor\nname: throwgate\nseptum: "^0.10"\nenforcing: true\n',
+    'spore.yaml': 'kind: inhibitor\nname: throwgate\nseptum: "^0.11"\nenforcing: true\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
@@ -768,7 +768,7 @@ it('refuses all traffic when an enforcing inhibitor throws in start() — the st
 
 it('refuses all traffic when an enforcing inhibitor is dormant from a rejected config — the germination half of the design §7 merge', async () => {
   spore('badconfiggate', {
-    'spore.yaml': 'kind: inhibitor\nname: badconfiggate\nseptum: "^0.10"\nenforcing: true\n',
+    'spore.yaml': 'kind: inhibitor\nname: badconfiggate\nseptum: "^0.11"\nenforcing: true\n',
     'src/index.ts': [
       'export default {',
       '  configSchema: { safeParse: () => ({ success: false, error: { issues: [{ path: ["groupId"], message: "groupId is required" }] } }) },',
@@ -790,7 +790,7 @@ it('refuses all traffic when an enforcing inhibitor is dormant from a rejected c
 // sets hers to 'fr', the target conversation is 'ru', and the push must come back 'ru'.
 it("lets an enzyme's start() push into the target conversation's own locale, never a principal's", async () => {
   spore('good', {
-    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^0.10"\n',
+    'spore.yaml': 'kind: hypha\nname: good\nseptum: "^0.11"\n',
     'src/index.ts': [
       'const sent = []',
       'export default {',
@@ -805,7 +805,7 @@ it("lets an enzyme's start() push into the target conversation's own locale, nev
     ].join('\n'),
   })
   spore('greeter', {
-    'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^0.10"\ncommands:\n  - name: greeter\n    description: x\n    code: greeter\n',
+    'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^0.11"\ncommands:\n  - name: greeter\n    description: x\n    code: greeter\n',
     'src/index.ts': [
       'export default {',
       '  create: () => ({',
