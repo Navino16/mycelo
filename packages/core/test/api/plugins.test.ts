@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'bun:test'
-import { REDACTED } from '../../src/config/plugins.js'
+import { REDACTED } from '../../src/support/redaction.js'
 import { readSettings, writeSetting } from '../../src/config/store.js'
 import { pluginSetting } from '../../src/persistence/schema.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'

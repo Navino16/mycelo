@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm'
 import type { SporangiumSource } from '@mycelo/septum'
-import { REDACTED } from '../config/plugins.js'
 import type { Db } from '../persistence/db.js'
 import { pluginInstall, source } from '../persistence/schema.js'
+import { REDACTED } from '../support/redaction.js'
 
 export const TOKEN_MASK = REDACTED
 

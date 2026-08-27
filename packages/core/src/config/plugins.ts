@@ -3,6 +3,7 @@ import type { FormSchema, PluginInfo, SporeKind } from '@mycelo/septum'
 import type { Registry } from '../germination/registry.js'
 import type { Db } from '../persistence/db.js'
 import { pluginSetting } from '../persistence/schema.js'
+import { REDACTED } from '../support/redaction.js'
 import { describeThrown } from '../support/thrown.js'
 import { formSchemaFor } from './jsonschema.js'
 import { enablePlugin, findSpore, loadSporeModule } from './lifecycle.js'
@@ -122,9 +123,6 @@ export async function secretKeysOf(
   }
   return declaredSecrets(module?.configSchema)
 }
-
-/** One spelling, read and written. A second literal is a desync waiting for a mutation to find. */
-export const REDACTED = '••••'
 
 // The reason plugins.configure is safe to grant: a scope that lists configuration must
 // not become a way to read every credential in the substrate.
