@@ -27,9 +27,10 @@
 
 ### Changed
 - **`septum:` is now validated.** Through 0.10.1 it was any non-empty string, and nothing compared
-  it to anything. `parseManifest` now rejects two kinds of range with `path: 'septum'`: one matching
-  every version (`*`, `x`, `>=x`, a bare `||`), which would leave the compatibility check with
-  nothing to check, and one the matcher cannot parse (`latest`, `1.2.3.4`, `^0.10.`).
+  it to anything. `parseManifest` now rejects two kinds of range with `path: 'septum'`, each with
+  its own message: one the matcher cannot parse (`latest`, `1.2.3.4`, `^0.10.`, `>=x`, a bare
+  `||`), and one that admits both `0.0.1` and `99999.0.0` (`*`, `x`, an empty range), which would
+  leave the compatibility check with nothing to check.
 
   This is **non-breaking for every manifest that exists**: all twenty in the Mycelo project declare
   a caret range, and `^0.10`, `>=0.10.0`, `0.10.x`, `>=0.9 <0.12` and the doubled-caret `^^0.10`

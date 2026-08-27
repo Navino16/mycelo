@@ -630,7 +630,7 @@ describe('the declared septum range', () => {
     const failures = (await rhizaChecks({
       ...goodRhiza, manifest: { ...(goodRhiza.manifest as object), septum: 'latest' },
     })).join(' ')
-    expect(failures).toContain("'latest' is not a semver range")
+    expect(failures).toContain("'latest' is not a range this matcher can parse")
   })
 
   it('leaves a range covering the running septum alone', async () => {

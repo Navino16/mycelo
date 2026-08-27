@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'bun:test'
 import { isParseableRange, septumIncompatibility } from '../src/compat.js'
-import { satisfies } from '../src/semver.js'
+import { parseRange, satisfies } from '../src/semver.js'
 
 // Every range form the README documents, every range this project's manifests declare, the
 // operator-prefix oddities, prereleases and build metadata. Bun.semver is the oracle and it
@@ -108,6 +108,35 @@ describe('isParseableRange reaches the verdict the Bun-based definition reached'
     }
   })
 
+  it('gives the two rejection causes two different sentences, each true of its input', () => {
+    // `>=0.0.1` parses cleanly and excludes 0.0.0, so the "cannot parse" sentence is false of it.
+    // The guard is a two-version probe, not a universality test, and the message must say so.
+    const probed = septumIncompatibility('>=0.0.1', '0.10.2')
+    expect(probed).toContain('admits both 0.0.1 and 99999.0.0')
+    expect(probed).not.toContain('cannot parse')
+    const unreadable = septumIncompatibility('latest', '0.10.2')
+    expect(unreadable).toContain('is not a range this matcher can parse')
+    expect(unreadable).not.toContain('admits both')
+    // The two must stay distinct: one sentence for both causes is what this replaces.
+    expect(probed).not.toBe(unreadable)
+  })
+
+  it('carries the probe sentence for every range that parses but admits both endpoints', () => {
+    // Not only the wildcards: a hyphen range and a `||` union reach the same verdict, and the
+    // plural case is what stops the sentence being written for `*` alone.
+    for (const range of ['*', 'x', '>=0.0.1', '0.0.0 - 99999.0.0', '0.0.1 || 99999.0.0', '<99999.0.1']) {
+      expect(parseRange(range)).not.toBeNull()
+      expect(septumIncompatibility(range, '0.10.2')).toContain('admits both 0.0.1 and 99999.0.0')
+    }
+  })
+
+  it('carries the unreadable sentence for every range the matcher cannot parse', () => {
+    for (const range of ['latest', '1.2.3.4', '^0.10.', '>=x', '||', 'a.b.c']) {
+      expect(parseRange(range)).toBeNull()
+      expect(septumIncompatibility(range, '0.10.2')).toContain('is not a range this matcher can parse')
+    }
+  })
+
   it('refuses a malformed range, where Bun would interpret some of them', () => {
     // The divergence is fail-closed and deliberate: Bun reads `1.2.3.4` and `^0.10.` as
     // something, and a typo in a manifest is refused here rather than silently interpreted.
@@ -174,6 +203,6 @@ describe('septum runs on Node as well as Bun', () => {
   it('reaches the same three verdicts through septumIncompatibility', () => {
     expect(septumIncompatibility('^0.10', '0.10.2')).toBeUndefined()
     expect(septumIncompatibility('^0.10', '0.11.0')).toContain('excludes')
-    expect(septumIncompatibility('latest', '0.10.2')).toContain('not a semver range')
+    expect(septumIncompatibility('latest', '0.10.2')).toContain('is not a range this matcher can parse')
   })
 })

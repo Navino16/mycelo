@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { CHANNEL_CAPABILITIES } from './capabilities.js'
-import { isParseableRange } from './compat.js'
+import { isParseableRange, rangeRejection } from './compat.js'
 import { MYCELIUM_SCOPES } from './mycelium.js'
 
 /** Plugin kinds. */
@@ -97,7 +97,7 @@ const commonFields = {
     // The undefined branch is inert — a refinement never runs on a type failure, so a non-string
     // septum: keeps Zod's message either way. It is here because issue.input is typed unknown.
     error: (issue) => (typeof issue.input === 'string'
-      ? `'${issue.input}' is not a semver range: a range that cannot be parsed matches every version`
+      ? `'${issue.input}' ${rangeRejection(issue.input) ?? 'is not usable as a septum range'}`
       : undefined),
   }),
   description: z.string().optional(),

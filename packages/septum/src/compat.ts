@@ -2,13 +2,23 @@ import { parseRange, satisfies } from './semver.js'
 import { SEPTUM_VERSION } from './version.js'
 
 /**
- * False for a range that admits every version and for one that cannot be parsed at all — both
- * would make the compatibility check silently inert for that spore (design §10.1). The two
- * probes catch the wildcard forms (`*`, `x`, an empty range); the parse catches the rest.
+ * Why a range cannot serve as a `septum:` bound, or undefined when it can. Two causes, kept
+ * distinct because they need different sentences: one is a range the matcher cannot read, the
+ * other is a readable range that the compatibility check could not learn anything from.
  */
+export function rangeRejection(range: string): string | undefined {
+  if (parseRange(range) === null) return 'is not a range this matcher can parse'
+  // A probe, not a universality test (design §10.1): a range admitting versions this far apart
+  // cannot distinguish one septum from another, whatever it excludes in between.
+  if (satisfies('0.0.1', range) && satisfies('99999.0.0', range)) {
+    return 'admits both 0.0.1 and 99999.0.0, so it leaves the compatibility check with nothing to check'
+  }
+  return undefined
+}
+
+/** False for a range the matcher cannot read, and for one the probe above cannot learn from. */
 export function isParseableRange(range: string): boolean {
-  if (parseRange(range) === null) return false
-  return !(satisfies('0.0.1', range) && satisfies('99999.0.0', range))
+  return rangeRejection(range) === undefined
 }
 
 /**
@@ -17,9 +27,8 @@ export function isParseableRange(range: string): boolean {
  * exactly the septum release where the check matters (design §10).
  */
 export function septumIncompatibility(range: string, septumVersion: string = SEPTUM_VERSION): string | undefined {
-  if (!isParseableRange(range)) {
-    return `declares septum '${range}', which is not a semver range: an unparseable range would admit every version, including ${septumVersion}`
-  }
+  const rejection = rangeRejection(range)
+  if (rejection !== undefined) return `declares septum '${range}', which ${rejection}`
   if (satisfies(septumVersion, range)) return undefined
   return `declares septum '${range}', which excludes the septum actually running (${septumVersion})`
 }

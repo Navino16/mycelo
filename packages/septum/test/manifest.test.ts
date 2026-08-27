@@ -258,7 +258,7 @@ describe('the septum range', () => {
       throw new Error('should have thrown')
     } catch (e) {
       expect((e as ManifestError).path).toBe('septum')
-      expect((e as ManifestError).message).toContain('semver range')
+      expect((e as ManifestError).message).toContain('is not a range this matcher can parse')
     }
   })
 
@@ -285,7 +285,7 @@ describe('the septum range', () => {
         throw new Error('should have thrown')
       } catch (e) {
         expect((e as ManifestError).path).toBe('septum')
-        expect((e as ManifestError).message).not.toContain('semver range')
+        expect((e as ManifestError).message).not.toContain('this matcher can parse')
         expect((e as ManifestError).message).toContain('expected string')
       }
     }

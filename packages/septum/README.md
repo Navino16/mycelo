@@ -97,10 +97,11 @@ contract range it targets. `septum` accepts a caret (`^0.10`), a comparator (`>=
 range (`0.10.x`), a pair of comparators (`>=0.9 <0.12`), a hyphen range (`1.2.3 - 2.3.4`) and a
 `||` union.
 
-Two kinds of range are **rejected**. One is anything matching every version — `*`, `x`, an empty
-range, and every other spelling of the same thing, such as `>=x`, `^x`, `x.x` or a bare `||` —
-because it leaves the compatibility check with nothing to check. The other is anything the matcher
-cannot parse, such as `latest`, `1.2.3.4` or `^0.10.`.
+A range is **rejected** when the matcher cannot parse it — `latest`, `1.2.3.4`, `^0.10.`, and every
+wildcard spelling other than a bare `*`, `x` or an empty range (`>=x`, `^x`, `x.x`, a bare `||`) —
+or when it admits both `0.0.1` and `99999.0.0`, which is how a range that leaves the compatibility
+check with nothing to check is caught. That second test is a probe rather than a universality test,
+so it also rejects a range as narrow as `>=0.0.1`.
 
 The matcher is septum's own rather than a runtime's: the package resolves to `dist/` on Node and to
 `src/` on Bun, so it cannot call `Bun.semver`. A differential test checks it against `Bun.semver`
