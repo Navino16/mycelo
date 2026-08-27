@@ -18,6 +18,8 @@ import type {
   RolesAssign,
   RolesManage,
   RolesRead,
+  SourcesManage,
+  SporangiumSource,
 } from '../src/mycelium.js'
 import type { EnzymeContext, EnzymeStartContext, InhibitorContext, Principal, TranslatableRef } from '../src/context.js'
 
@@ -32,7 +34,7 @@ export type ScopeNamesAreExact = Expect<Equal<MyceliumScope,
   | 'plugins.read' | 'plugins.toggle' | 'plugins.configure'
   | 'health.read' | 'messages.send'
   | 'messages.broadcast' | 'conversations.read' | 'restrictions.manage' | 'locale.manage'
-  | 'commands.read'
+  | 'commands.read' | 'sources.manage'
 >>
 
 export type ScopesAreReadonly = Expect<Equal<typeof MYCELIUM_SCOPES, readonly [
@@ -41,7 +43,7 @@ export type ScopesAreReadonly = Expect<Equal<typeof MYCELIUM_SCOPES, readonly [
   'plugins.read', 'plugins.toggle', 'plugins.configure',
   'health.read', 'messages.send',
   'messages.broadcast', 'conversations.read', 'restrictions.manage', 'locale.manage',
-  'commands.read',
+  'commands.read', 'sources.manage',
 ]>>
 
 // One entry per scope, `never` for a scope no phase mounts yet. A scope added to
@@ -62,6 +64,7 @@ interface ScopeApi {
   'restrictions.manage': RestrictionsManage
   'locale.manage': LocaleManage
   'commands.read': CommandsRead
+  'sources.manage': SourcesManage
 }
 
 export type EveryScopeIsClassified = Expect<Equal<keyof ScopeApi, MyceliumScope>>
@@ -144,6 +147,20 @@ const ping: CommandInfo = { qualified: 'ping.ping', name: 'ping', plugin: 'ping'
 
 export const commandsRead: CommandsRead = {
   available: () => Promise.resolve([ping]),
+}
+
+const sporangium: SporangiumSource = {
+  id: 1, label: 'Mycelo spores', driver: 'github',
+  location: 'https://github.com/Navino16/mycelo-spores', official: true, enabled: true,
+}
+
+export const sourcesManage: SourcesManage = {
+  listSources: () => Promise.resolve([sporangium]),
+  addSource: () => Promise.resolve({ ...sporangium, id: 2, official: false }),
+  updateSource: (id) => Promise.resolve(id === sporangium.id ? sporangium : null),
+  deleteSource: () => Promise.resolve(false),
+  inoculate: (request) =>
+    Promise.resolve({ name: request.name, strain: '0.2.0', warnings: [], restartRequired: true }),
 }
 
 export const localeManage: LocaleManage = {

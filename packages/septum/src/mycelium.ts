@@ -23,6 +23,7 @@ export const MYCELIUM_SCOPES = [
   'restrictions.manage',
   'locale.manage',
   'commands.read',
+  'sources.manage',
 ] as const
 
 export type MyceliumScope = (typeof MYCELIUM_SCOPES)[number]

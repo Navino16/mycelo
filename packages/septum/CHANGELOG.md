@@ -13,9 +13,12 @@
   source's `token` is never the stored value — it comes back as the literal `••••` when one is set
   and is absent when not — and `official` is settable through no API: it marks the reviewed
   registry, and a flag an operator could set would be a one-field bypass of the trust model.
-- `SourcesManage`, the interface for a `sources.manage` scope that **does not exist yet**. Exported
-  now so the core can compile against one shape rather than declaring a second; a plugin cannot
-  reach it until the scope ships, and the README deliberately does not list it.
+- `sources.manage`, the sixteenth `MyceliumScope`, and the `SourcesManage` interface it mounts:
+  `listSources`, `addSource`, `updateSource`, `deleteSource` and `inoculate`. It is the scope that
+  installs a spore from a sporangium, so grant it only to a spore an operator administers the
+  substrate with. `inoculate` **rejects** rather than resolving a refusal, and its `warnings` are
+  composed by the core — a third-party sporangium's spores are not code-reviewed before
+  publication, and that warning cannot be suppressed by the caller.
 
 ### Changed
 - **`septum:` must now be a range `Bun.semver` can parse.** An unparseable range — `*`, `latest`,

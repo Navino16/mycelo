@@ -6,7 +6,7 @@ import { z } from 'zod'
 import type {
   CommandsRead, ConversationsRead, HealthRead, IncomingMessage, LocaleManage, MessagesBroadcast, PluginsConfigure,
   PluginsRead, PluginsToggle, PrincipalsManage, PrincipalsRead, PushTarget, RestrictionsManage,
-  RolesAssign, RolesManage, RolesRead,
+  RolesAssign, RolesManage, RolesRead, SourcesManage,
 } from '@mycelo/septum'
 import { assignRole, createRole } from '../src/authorization/roles.js'
 import { addBroadcastTarget, recordConversation } from '../src/conversations/registry.js'
@@ -19,9 +19,13 @@ import type { MyceliumScope } from '@mycelo/septum'
 import { MOUNTABLE_SCOPES, resolve } from '../src/germination/anastomoses.js'
 import { resolveLocale } from '../src/i18n/locale.js'
 import { createMyceliumApi } from '../src/mycelium-rhiza.js'
+import type { MyceliumApiOptions } from '../src/mycelium-rhiza.js'
+import { addSource, seedOfficialSource } from '../src/sporangium/sources.js'
 import { migrateDatabase, openDatabase } from '../src/persistence/db.js'
 import type { Db } from '../src/persistence/db.js'
 import { principal } from '../src/persistence/schema.js'
+import { bundleOf } from './support/bundle.js'
+import { silentLogger as stubLogger } from './support/logger.js'
 import { rejectsWith } from './support/rejects.js'
 import { emptyRegistry } from './support/registry.js'
 
@@ -674,5 +678,71 @@ describe('commands.read', () => {
       { qualified: 'admin.plugins', name: 'plugins', plugin: 'admin', description: 'cmd.plugins@fr' },
       { qualified: 'admin.whoami', name: 'whoami', plugin: 'admin', description: 'cmd.whoami@fr' },
     ])
+  })
+})
+
+describe('sources.manage', () => {
+  const MANIFEST = 'kind: rhiza\nname: radarr\nseptum: "^0.10"\nrequires:\n  - rhiza: plex\n'
+
+  function sourcesApi(db: Db, options: MyceliumApiOptions = {}): SourcesManage {
+    return createMyceliumApi(emptyRegistry(), ['sources.manage'], noSend, db, SPORES, options) as SourcesManage
+  }
+
+  it('reads, adds, renames and deletes a source through the mount', async () => {
+    const db = fresh()
+    seedOfficialSource(db)
+    const api = sourcesApi(db)
+    const added = await api.addSource({ label: 'Someone else', driver: 'github', location: 'https://github.com/o/r' })
+    // Two rows, not one: the official one must survive every operation on the other.
+    expect((await api.listSources()).map((s) => s.label)).toEqual(['Mycelo spores', 'Someone else'])
+    expect((await api.updateSource(added.id, { label: 'Renamed' }))?.label).toBe('Renamed')
+    expect(await api.deleteSource(added.id)).toBe(true)
+    expect((await api.listSources()).map((s) => s.label)).toEqual(['Mycelo spores'])
+    // design §11: the official source is disabled, never deleted.
+    const official = (await api.listSources())[0]
+    expect(await api.deleteSource(official?.id ?? -1)).toBe(false)
+  })
+
+  it('rejects rather than resolving a refusal object, carrying its reason', async () => {
+    const db = fresh()
+    const api = sourcesApi(db, { logger: stubLogger(), managedRoot: join(tmpdir(), 'unused-managed-root') })
+    await rejectsWith(api.inoculate({ sourceId: 999, name: 'radarr' }), /no source with id 999/)
+  })
+
+  it('rejects when the core mounted the scope without a logger or a managed root', async () => {
+    const db = fresh()
+    seedOfficialSource(db)
+    await rejectsWith(sourcesApi(db).inoculate({ sourceId: 1, name: 'radarr' }), /no logger or managed root/)
+  })
+
+  it('installs through the mount and answers every warning the core owns', async () => {
+    const db = fresh()
+    const tarball = await bundleOf('radarr', { 'spore.yaml': MANIFEST, 'index.js': 'export default { create: () => ({}) }' })
+    const source = addSource(db, { label: 'Someone else', driver: 'github', location: 'https://github.com/o/r' })
+    const managed = join(mkdtempSync(join(tmpdir(), 'mycelium-managed-')), 'spores')
+    const real = globalThis.fetch
+    globalThis.fetch = ((input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : (input instanceof URL ? input.href : input.url)
+      // Ordered: the release URL also ends in a tag, so the tag-list branch must not claim it.
+      if (url.includes('/releases/tags/')) {
+        return Promise.resolve(Response.json({ assets: [{ name: 'radarr-0.2.0.tgz', browser_download_url: 'https://cdn/x.tgz' }] }))
+      }
+      if (url.includes('/tags?')) return Promise.resolve(Response.json([{ name: 'radarr@0.2.0' }]))
+      return Promise.resolve(new Response(tarball))
+    }) as typeof fetch
+    try {
+      const api = sourcesApi(db, { logger: stubLogger(), managedRoot: managed })
+      const outcome = await api.inoculate({ sourceId: source.id, name: 'radarr' })
+      expect(outcome).toMatchObject({ name: 'radarr', strain: '0.2.0', restartRequired: true })
+      // Both warnings, not the first: a third-party sporangium is not code-reviewed, and
+      // nothing installed satisfies the bundle's own `requires: plex`.
+      expect(outcome.warnings).toHaveLength(2)
+      expect(outcome.warnings.join(' ')).toContain('not code-reviewed')
+      expect(outcome.warnings.join(' ')).toContain("'plex'")
+      expect(getInstall(db, 'radarr')).toMatchObject({ strain: '0.2.0', sourceId: source.id, enabled: false })
+    } finally {
+      globalThis.fetch = real
+      rmSync(managed, { recursive: true, force: true })
+    }
   })
 })

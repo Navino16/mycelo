@@ -7,7 +7,8 @@ requires:
     scopes: [plugins.read, plugins.toggle, plugins.configure, principals.read,
              principals.manage, roles.read, roles.assign, roles.manage,
              conversations.read, messages.broadcast, messages.send,
-             restrictions.manage, locale.manage, health.read, commands.read]
+             restrictions.manage, locale.manage, health.read, commands.read,
+             sources.manage]
 commands:
   - name: plugins
     description: command.plugins.description

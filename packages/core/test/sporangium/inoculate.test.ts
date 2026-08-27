@@ -12,6 +12,7 @@ import type { SporangiumDriver } from '../../src/sporangium/driver.js'
 import { parseTag } from '../../src/sporangium/github.js'
 import { createStagingDir, inoculate, managedRoot, STAGING_DIR, sweepStaging, treeProblem } from '../../src/sporangium/inoculate.js'
 import { addSource, deleteSource, installsFromSource, listSources, seedOfficialSource, updateSource } from '../../src/sporangium/sources.js'
+import { bundleOf } from '../support/bundle.js'
 import { freshDb } from '../support/db.js'
 import { recordingLogger, silentLogger } from '../support/logger.js'
 
@@ -174,18 +175,6 @@ describe('treeProblem', () => {
     }), 'hello')).toContain('entry point')
   })
 })
-
-async function bundleOf(name: string, files: Record<string, string>): Promise<Uint8Array> {
-  const src = mkdtempSync(join(tmpdir(), 'bundle-'))
-  for (const [path, body] of Object.entries(files)) {
-    const full = join(src, name, path)
-    mkdirSync(dirname(full), { recursive: true })
-    writeFileSync(full, body)
-  }
-  const out = join(mkdtempSync(join(tmpdir(), 'tgz-')), 'a.tgz')
-  expect(await Bun.spawn(['tar', '-czf', out, '-C', src, name]).exited).toBe(0)
-  return new Uint8Array(await Bun.file(out).arrayBuffer())
-}
 
 function stubDriver(tarball: Uint8Array, strains: readonly string[] = ['0.2.0', '0.1.0']): SporangiumDriver {
   return {
