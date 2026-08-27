@@ -11,6 +11,7 @@ import type { DriverFactory } from '../sporangium/driver.js'
 import { ApiError, notFound } from './errors.js'
 import { registerContext } from './context.js'
 import { registerAuthRoutes } from './routes/auth.js'
+import { registerConfigRoutes } from './routes/config.js'
 import { registerHealthRoutes } from './routes/health.js'
 import { registerPeopleRoutes } from './routes/people.js'
 import { registerPluginRoutes } from './routes/plugins.js'
@@ -99,6 +100,7 @@ export function createServer(options: ServerOptions): FastifyInstance {
     registerContext(app, options.state)
     registerAuthRoutes(app, options.state)
     registerHealthRoutes(app, options.state)
+    registerConfigRoutes(app, options.state)
     registerPeopleRoutes(app, options.state)
     registerPluginRoutes(app, options.state)
     registerRoleRoutes(app, options.state)
