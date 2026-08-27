@@ -20,6 +20,7 @@ import { MOUNTABLE_SCOPES, resolve } from '../src/germination/anastomoses.js'
 import { resolveLocale } from '../src/i18n/locale.js'
 import { createMyceliumApi } from '../src/mycelium-rhiza.js'
 import type { MyceliumApiOptions } from '../src/mycelium-rhiza.js'
+import type { SporangiumDriver } from '../src/sporangium/driver.js'
 import { addSource, seedOfficialSource } from '../src/sporangium/sources.js'
 import { migrateDatabase, openDatabase } from '../src/persistence/db.js'
 import type { Db } from '../src/persistence/db.js'
@@ -720,18 +721,14 @@ describe('sources.manage', () => {
     const tarball = await bundleOf('radarr', { 'spore.yaml': MANIFEST, 'index.js': 'export default { create: () => ({}) }' })
     const source = addSource(db, { label: 'Someone else', driver: 'github', location: 'https://github.com/o/r' })
     const managed = join(mkdtempSync(join(tmpdir(), 'mycelium-managed-')), 'spores')
-    const real = globalThis.fetch
-    globalThis.fetch = ((input: string | URL | Request) => {
-      const url = typeof input === 'string' ? input : (input instanceof URL ? input.href : input.url)
-      // Ordered: the release URL also ends in a tag, so the tag-list branch must not claim it.
-      if (url.includes('/releases/tags/')) {
-        return Promise.resolve(Response.json({ assets: [{ name: 'radarr-0.2.0.tgz', browser_download_url: 'https://cdn/x.tgz' }] }))
-      }
-      if (url.includes('/tags?')) return Promise.resolve(Response.json([{ name: 'radarr@0.2.0' }]))
-      return Promise.resolve(new Response(tarball))
-    }) as typeof fetch
+    const driverFor = (): SporangiumDriver => ({
+      list: () => Promise.resolve([{ name: 'radarr', strain: '0.2.0' }]),
+      strains: () => Promise.resolve(['0.2.0']),
+      detail: () => Promise.resolve({ name: 'radarr', kind: 'rhiza' as const, description: '', septum: '^0.10' }),
+      fetch: (_name, strain) => Promise.resolve({ tarball, strain }),
+    })
     try {
-      const api = sourcesApi(db, { logger: stubLogger(), managedRoot: managed })
+      const api = sourcesApi(db, { logger: stubLogger(), managedRoot: managed, driverFor })
       const outcome = await api.inoculate({ sourceId: source.id, name: 'radarr' })
       expect(outcome).toMatchObject({ name: 'radarr', strain: '0.2.0', restartRequired: true })
       // Both warnings, not the first: a third-party sporangium is not code-reviewed, and
@@ -741,7 +738,6 @@ describe('sources.manage', () => {
       expect(outcome.warnings.join(' ')).toContain("'plex'")
       expect(getInstall(db, 'radarr')).toMatchObject({ strain: '0.2.0', sourceId: source.id, enabled: false })
     } finally {
-      globalThis.fetch = real
       rmSync(managed, { recursive: true, force: true })
     }
   })

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { ZodError } from 'zod'
 import type { UiConfig } from '../config.js'
 import type { RuntimeState } from '../boot/state.js'
+import type { DriverFactory } from '../sporangium/driver.js'
 import { ApiError, notFound } from './errors.js'
 import { registerContext } from './context.js'
 import { registerAuthRoutes } from './routes/auth.js'
@@ -15,6 +16,7 @@ import { registerPeopleRoutes } from './routes/people.js'
 import { registerPluginRoutes } from './routes/plugins.js'
 import { registerRegistryRoutes } from './routes/registry.js'
 import { registerRoleRoutes } from './routes/roles.js'
+import { registerSourceRoutes } from './routes/sources.js'
 import { describeFault } from '../support/thrown.js'
 
 // Both roots, tried in order: a real build the day phase 9 produces one, the committed
@@ -29,6 +31,8 @@ export interface ServerOptions {
   state: RuntimeState
   /** Test seam only, never operator config: overrides UI_ROOTS to probe fallback order. */
   uiRoots?: string[]
+  /** Test seam only: the browse and inoculate routes resolve a driver from the source row. */
+  driverFor?: DriverFactory
 }
 
 /** Fastify's own faults (a malformed body, @fastify/rate-limit's 429) carry this, unlike ApiError. */
@@ -99,6 +103,7 @@ export function createServer(options: ServerOptions): FastifyInstance {
     registerPluginRoutes(app, options.state)
     registerRoleRoutes(app, options.state)
     registerRegistryRoutes(app, options.state)
+    registerSourceRoutes(app, options.state, options.driverFor)
     // wildcard: false — the plugin claims only the files it finds under UI_ROOTS, so the
     // fallback below still runs for every SPA route and API 404 (spec §12).
     void app.register(fastifyStatic, { root: options.uiRoots ?? UI_ROOTS, wildcard: false })

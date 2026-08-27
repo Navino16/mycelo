@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
@@ -287,6 +287,59 @@ describe('the managed root', () => {
     await germinatePhase(served.state, logger)
     expect(existsSync(join(dir, 'spores'))).toBe(false)
     expect(warnings.filter((w) => w.includes('spores directory does not exist'))).toEqual([])
+
+    // The control: a *configured* root that is absent is still named. Without it, filtering
+    // every absent root out passes this test while silencing the operator's only clue.
+    const other = serve(config(['./absent']))
+    const second = spyLogger()
+    await germinatePhase(other.state, second.logger)
+    other.closeDb()
+    expect(second.warnings.some((w) => w.includes(join(dir, 'absent')))).toBe(true)
+  })
+
+  it('is reachable through the mycelium mount, which every channel command goes through', async () => {
+    // The API is not the only door: `/plugin-config` and `/plugin-set` read the same lookup
+    // through createMyceliumApi, and a mount handed only the configured roots answers
+    // `available: false` for a spore that is installed and running.
+    root('elsewhere')
+    spore('installed', {
+      'spore.yaml': 'kind: enzyme\nname: installed\nseptum: "^0.10"\n'
+        + 'commands:\n  - name: installed\n    description: x\n    code: handleInstalled\n',
+      'index.js': `
+        export default {
+          configSchema: {
+            safeParse: (input) => ({ success: true, data: input }),
+            toJsonSchema: () => ({ type: 'object', properties: { token: { type: 'string' } } }),
+          },
+          create: () => ({ handlers: { handleInstalled: async () => {} } }),
+        }
+      `,
+    })
+    const probeFile = join(dir, 'probe.json')
+    mkdirSync(join(dir, 'elsewhere', 'prober'), { recursive: true })
+    writeFileSync(join(dir, 'elsewhere', 'prober', 'spore.yaml'),
+      'kind: enzyme\nname: prober\nseptum: "^0.10"\n'
+      + 'commands:\n  - name: probe\n    description: x\n    code: handleProbe\n'
+      + 'requires:\n  - rhiza: mycelium\n    scopes: [plugins.configure]\n', 'utf8')
+    writeFileSync(join(dir, 'elsewhere', 'prober', 'index.js'), `
+      import { writeFileSync } from 'node:fs'
+      export default {
+        create: () => ({
+          start: async (ctx) => {
+            const schema = await ctx.rhiza('mycelium').formSchema('installed')
+            writeFileSync(${JSON.stringify(probeFile)}, JSON.stringify(schema))
+          },
+          stop: async () => {},
+          handlers: { handleProbe: async () => {} },
+        }),
+      }
+    `, 'utf8')
+
+    const served = serve(config(['./elsewhere']))
+    closeDb = served.closeDb
+    expect((await germinatePhase(served.state, createLogger())).status).toBe('germinated')
+    expect(JSON.parse(readFileSync(probeFile, 'utf8')) as { available: boolean })
+      .toMatchObject({ available: true })
   })
 
   it('sweeps what a crashed install left in .staging', async () => {

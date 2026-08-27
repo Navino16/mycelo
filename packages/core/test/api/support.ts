@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import { createServer } from '../../src/api/server.js'
+import type { DriverFactory } from '../../src/sporangium/driver.js'
 import { SESSION_COOKIE } from '../../src/api/sessions.js'
 import { germinatePhase } from '../../src/boot/germinate.js'
 import { serve } from '../../src/boot/serve.js'
@@ -30,12 +31,12 @@ export function freshDir(): string {
  */
 export function boot(
   dir: string, extra = '', trustProxy = false, sporesDir = './none',
-  beforeServe?: (dbFile: string) => void, uiRoots?: string[],
+  beforeServe?: (dbFile: string) => void, uiRoots?: string[], driverFor?: DriverFactory,
 ): Booted {
   writeFileSync(join(dir, 'mycelo.yaml'), `spores: ${sporesDir}\ndatabase: ./d.db\n${extra}`, 'utf8')
   beforeServe?.(join(dir, 'd.db'))
   const served = serve(join(dir, 'mycelo.yaml'))
-  const app = createServer({ trustProxy, state: served.state, uiRoots })
+  const app = createServer({ trustProxy, state: served.state, uiRoots, driverFor })
   return { app, served }
 }
 
@@ -422,6 +423,8 @@ export interface BootAndLoginOptions {
    * exist, before this helper ever gets to open a session.
    */
   seedRole?: string
+  /** Keeps the browse and inoculate routes off the network. */
+  driverFor?: DriverFactory
 }
 
 /**
@@ -471,7 +474,7 @@ export async function bootAndLogin(options: BootAndLoginOptions = {}): Promise<L
     db.insert(role).values({ id: crypto.randomUUID(), name: seedRole }).run()
     close()
   }
-  const booted = boot(dir, options.config ?? '', false, sporesDir, beforeServe)
+  const booted = boot(dir, options.config ?? '', false, sporesDir, beforeServe, undefined, options.driverFor)
   await germinatePhase(booted.served.state, createLogger())
   const cookie = await setup(booted.app)
   return { ...booted, cookie, dir }
