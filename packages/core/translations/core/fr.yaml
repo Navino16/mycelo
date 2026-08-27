@@ -33,6 +33,7 @@ api:
   routeNotFound: "aucune route pour « {path} »"
   sourceNotFound: "aucune source de sporange avec l'id « {id} »"
   sourceOfficial: "le sporange officiel ne peut pas être supprimé, seulement désactivé"
+  sourceOfficialLocation: "le sporange officiel ne peut pas être redirigé vers une autre adresse"
   sourceInUse: "« {label} » fournit encore des spores installées : {spores}"
   sourceLocalBrowse: "ceci est un répertoire de spores local : il n'y a rien à parcourir, ses spores sont déjà installées"
   sourceUnreachable: "« {label} » n'a pas pu être lu"

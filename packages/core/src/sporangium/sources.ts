@@ -20,8 +20,8 @@ function present(row: Row): SporangiumSource {
     id: row.id,
     label: row.label,
     driver: row.driver,
-    // A location can carry a credential in its userinfo, and the API masks the other
-    // credential carrier on this same row: sourceLocation() is what a driver reads.
+    // Belt and braces: addSource and updateSource already strip a userinfo credential at
+    // write, so this only covers a row no writer of this module produced.
     location: redactCredentials(row.location),
     official: row.official,
     enabled: row.enabled,
@@ -64,9 +64,11 @@ export function addSource(
   // here would be a phantom nothing manages. Refused in the store, like `official` below,
   // because the mycelium mounts this function too.
   if (s.driver === 'local') throw new Error('a local spores directory is declared in mycelo.yaml, not added as a source')
+  // Stripped at write, not only on read: no driver path reads a location's userinfo, so a
+  // credential put there authenticates nothing and would sit stored in the clear forever.
   // official is never taken from the caller (design §11).
   const row = db.insert(source)
-    .values({ label: s.label, driver: s.driver, location: s.location, token: s.token || null, official: false, enabled: true })
+    .values({ label: s.label, driver: s.driver, location: redactCredentials(s.location), token: s.token || null, official: false, enabled: true })
     .returning()
     .get()
   return present(row)
@@ -84,7 +86,7 @@ export function updateSource(
   // Repointing the official row relabels an unreviewed sporangium as reviewed, and
   // inoculate keys its trust warning off `official` — strictly worse than the deletion
   // design §11 already forbids. Disabling and re-tokening it stay open.
-  if (patch.location !== undefined && !existing.official) values.location = patch.location
+  if (patch.location !== undefined && !existing.official) values.location = redactCredentials(patch.location)
   if (patch.enabled !== undefined) values.enabled = patch.enabled
   // The mask is what a form reads back, so it is not a value: writing it keeps what is
   // stored, and an explicit empty string is the only way to clear a token.

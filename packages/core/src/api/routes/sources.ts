@@ -52,6 +52,8 @@ export function registerSourceRoutes(
     // design §7: a local root's contents are the installed list, so there is nothing to
     // browse. An empty list would read as "this source offers nothing".
     if (source.driver === 'local') throw notFound('api.sourceLocalBrowse')
+    // Deliberately not gated on source.enabled, unlike inoculate: browsing a disabled source
+    // is how an operator looks before re-enabling it. It does send the stored token.
     // sourceLocation, not source.location: the DTO's userinfo is redacted (spec §10) and the
     // driver has to send it.
     return driverFor?.(source.id)
@@ -85,7 +87,13 @@ export function registerSourceRoutes(
 
   app.patch('/api/sources/:id', (request) => {
     const source = requireSource(request)
-    return updateSource(state.db, source.id, parseBody(patchSchema, request.body))
+    const patch = parseBody(patchSchema, request.body)
+    // updateSource is what actually freezes it, for the mycelium door too; this only stops
+    // the API answering 200 for a change it did not make (design §11).
+    if (source.official && patch.location !== undefined && patch.location !== source.location) {
+      throw conflict('api.sourceOfficialLocation')
+    }
+    return updateSource(state.db, source.id, patch)
   })
 
   app.delete('/api/sources/:id', (request, reply) => {
@@ -136,10 +144,9 @@ export function registerSourceRoutes(
         ...(body.strain === undefined ? {} : { strain: body.strain }),
       })
     } catch (e) {
-      // design §9 leaves discover() outside inoculate's own guards, so a throw is reachable —
-      // on the server's own managed root, never on client input, which is validated first.
-      // 500 rather than 400: re-prompting an operator who can do nothing is a false diagnosis.
-      // Spec §10: the fault carries absolute paths and belongs in the log, not in the answer.
+      // design §9 leaves discover() reachable, and only on the server's own managed root —
+      // so 400 would re-prompt an operator who can do nothing. Spec §10 keeps the fault,
+      // which carries absolute paths, in the log rather than in the answer.
       logger.error(`inoculating '${body.name}' threw`, { error: describeFault(e) })
       throw new ApiError(500, 'internal', 'api.inoculateFailed', { name: body.name })
     }

@@ -212,13 +212,21 @@ describe('/api/sources', () => {
     const { app, cookie } = booted
     const seeded = await official(booted)
     const evil = 'https://github.com/attacker/evil-spores'
-    const patched = (await app.inject({
+    const patched = await app.inject({
       method: 'PATCH', url: `/api/sources/${String(seeded.id)}`, headers: { cookie },
       payload: { location: evil, label: 'Relabelled', enabled: false, token: 'ghp_x' },
-    })).json<SporangiumSource>()
-    expect(patched.location).toBe(seeded.location)
+    })
+    expect(patched.statusCode).toBe(409)
+    expect(patched.json<ErrorBody>().error.message).toContain('repointed')
+    // The store is what freezes it — the 409 only stops the API answering 200 for a change
+    // it did not make — so the row is unchanged even though the patch named four fields.
+    expect(await official(booted)).toEqual(seeded)
     // §11 keeps it disable-able and re-tokenable: only the location is frozen.
-    expect(patched).toMatchObject({ label: 'Relabelled', enabled: false, token: TOKEN_MASK })
+    const disabled = (await app.inject({
+      method: 'PATCH', url: `/api/sources/${String(seeded.id)}`, headers: { cookie },
+      payload: { label: 'Relabelled', enabled: false, token: 'ghp_x' },
+    })).json<SporangiumSource>()
+    expect(disabled).toMatchObject({ label: 'Relabelled', enabled: false, token: TOKEN_MASK })
 
     // The control: the same field, on a third-party row, is written.
     const third = await addThirdParty(booted, 'movable')
@@ -239,20 +247,30 @@ describe('/api/sources', () => {
     expect((await sources(booted)).filter((s) => s.driver === 'local')).toHaveLength(1)
   })
 
-  it('masks a credential carried in a location userinfo, as it masks the token beside it', async () => {
+  it('strips a credential carried in a location userinfo before it is ever stored', async () => {
     booted = await bootAndLogin({ spores: twoPluginsTwoCommands })
     const { app, cookie } = booted
     const created = (await app.inject({
       method: 'POST', url: '/api/sources', headers: { cookie },
       payload: {
         label: 'private', driver: 'github',
-        location: 'https://user:ghp_INURL@github.com/o/r', token: 'ghp_INHEADER',
+        location: 'https://user:ghp_INURL@github.com/o/r', token: 'ghp_IN@HEADER',
       },
     })).json<SporangiumSource>()
     expect(created.location).toBe('https://github.com/o/r')
     expect(JSON.stringify(await sources(booted))).not.toContain('ghp_INURL')
-    // The positive beside the negative: the driver still gets the credential it has to send.
-    expect(sourceLocation(booted.served.state.db, created.id)).toBe('https://user:ghp_INURL@github.com/o/r')
+    // Stripped at write, not masked on read: nothing reads a location's userinfo, so keeping
+    // it would store a credential in the clear that authenticates nothing.
+    expect(sourceLocation(booted.served.state.db, created.id)).toBe('https://github.com/o/r')
+    // The control: the token beside it is stored, because a driver does send that one.
+    expect(sourceToken(booted.served.state.db, created.id)).toBe('ghp_IN@HEADER')
+
+    // The same on the write path a form uses.
+    await booted.app.inject({
+      method: 'PATCH', url: `/api/sources/${String(created.id)}`, headers: { cookie },
+      payload: { location: 'https://user:ghp_PATCHED@github.com/o/moved' },
+    })
+    expect(sourceLocation(booted.served.state.db, created.id)).toBe('https://github.com/o/moved')
   })
 
   it('never puts a local root\'s absolute path in a client-visible message', async () => {

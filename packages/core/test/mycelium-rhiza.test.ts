@@ -716,9 +716,12 @@ describe('sources.manage', () => {
     })
     expect(patched?.location).toBe(seeded?.location)
     expect(patched?.enabled).toBe(false)
-    // The control: a third-party row moves.
-    const third = await api.addSource({ label: 'x', driver: 'github', location: 'https://github.com/o/r' })
-    expect((await api.updateSource(third.id, { location: 'https://github.com/o/moved' }))?.location)
+    // No 409 through this door: updateSource answers the row it wrote, so the caller reads
+    // the unchanged location back.
+    // The control: a third-party row moves, with its userinfo stripped on the way in.
+    const third = await api.addSource({ label: 'x', driver: 'github', location: 'https://u:p@github.com/o/r' })
+    expect(third.location).toBe('https://github.com/o/r')
+    expect((await api.updateSource(third.id, { location: 'https://u:p@github.com/o/moved' }))?.location)
       .toBe('https://github.com/o/moved')
   })
 
