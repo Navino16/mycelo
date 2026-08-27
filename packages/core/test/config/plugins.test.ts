@@ -349,3 +349,34 @@ it('carries provenance onto a germinated and a dormant entry, each from its own 
   expect([broken?.state, broken?.source, broken?.strain]).toEqual(['dormant', 'Someone else', '2.3.4'])
   close()
 })
+
+// The other three germinated kinds. Both tests above use an enzyme, and dropping the spread
+// from any one of hyphae, rhizas or inhibitors left the whole suite green — while design
+// §14.2 step 9's own subject, `radarr`, is a rhiza.
+it('carries provenance onto a germinated hypha, rhiza and inhibitor, each from its own source', () => {
+  const { db, close } = fresh()
+  const kinds = [
+    ['signal', 'hypha', 'Sporangium A', '1.0.0'],
+    ['radarr', 'rhiza', 'Sporangium B', '0.2.0'],
+    ['group-gate', 'inhibitor', 'Sporangium C', '3.1.4'],
+  ] as const
+  const entries = kinds.map(([name, kind, label, strain]) => {
+    const s = addSource(db, { label, driver: 'github', location: `https://example/${name}` })
+    recordInstall(db, name, kind, true, { sourceId: s.id, strain })
+    return { name, manifest: { kind, name, septum: '^0.10' } }
+  })
+  const registry = {
+    ...emptyRegistry(),
+    hyphae: [entries[0]], rhizas: [entries[1]], inhibitors: [entries[2]],
+  } as unknown as Registry
+  const infos = listPlugins(registry, [], db)
+  expect(kinds.map(([name]) => {
+    const info = infos.find((p) => p.name === name)
+    return [info?.kind, info?.state, info?.source, info?.strain]
+  })).toEqual([
+    ['hypha', 'germinated', 'Sporangium A', '1.0.0'],
+    ['rhiza', 'germinated', 'Sporangium B', '0.2.0'],
+    ['inhibitor', 'germinated', 'Sporangium C', '3.1.4'],
+  ])
+  close()
+})

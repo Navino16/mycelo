@@ -2,23 +2,16 @@ import { resolve as resolvePath } from 'node:path'
 import { describe, expect, it } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import type { RolesManage } from '@mycelo/septum'
-import type { Registry } from '../../src/germination/registry.js'
 import { createMyceliumApi } from '../../src/mycelium-rhiza.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import type { Db } from '../../src/persistence/db.js'
 import { channelIdentity, principal, principalRole, role, roleCommand } from '../../src/persistence/schema.js'
 import { StartupError, bootstrapIdentity } from '../../src/identity/bootstrap.js'
 import { rejectsWith } from '../support/rejects.js'
+import { emptyRegistry } from '../support/registry.js'
 
 const noSend = async () => {}
 const SPORES = [resolvePath(import.meta.dirname, '../../../../fixtures')]
-
-function emptyRegistry(): Registry {
-  return {
-    hyphae: [], rhizas: [], enzymes: [], inhibitors: [], dormant: [],
-    routes: new Map(), order: [], brokenEnforcing: [], catalogs: new Map(),
-  }
-}
 
 function fresh(): Db {
   const { db } = openDatabase(':memory:')

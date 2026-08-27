@@ -291,9 +291,12 @@ describe('the managed root', () => {
 
   it('sweeps what a crashed install left in .staging', async () => {
     root('elsewhere')
-    const staging = join(dir, 'spores', '.staging', 'x-abc')
-    mkdirSync(staging, { recursive: true })
-    writeFileSync(join(staging, 'junk'), 'residue', 'utf8')
+    // Two of them: removeTree clears the parent, so a sweep of one child would pass with one.
+    for (const name of ['x-abc', 'x-def']) {
+      const staging = join(dir, 'spores', '.staging', name)
+      mkdirSync(staging, { recursive: true })
+      writeFileSync(join(staging, 'junk'), 'residue', 'utf8')
+    }
     const served = serve(config(['./elsewhere']))
     closeDb = served.closeDb
     await germinatePhase(served.state, createLogger())

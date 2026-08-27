@@ -2,7 +2,9 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 import tseslint from 'typescript-eslint'
 
 export default defineConfig(
-  globalIgnores(['**/dist/**', '**/node_modules/**']),
+  // .superpowers/ is gitignored scratch outside every tsconfig, so one .ts probe dropped
+  // there aborts `eslint .` — and therefore `bun run ci` — on an otherwise correct tree.
+  globalIgnores(['**/dist/**', '**/node_modules/**', '**/.superpowers/**']),
   tseslint.configs.recommendedTypeChecked,
   {
     // Each package's tsconfig.json excludes test files on purpose (see its own
