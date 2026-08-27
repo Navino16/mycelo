@@ -7,6 +7,9 @@ export interface InstalledPlugin {
   kind: string
   enabled: boolean
   installedAt: Date
+  /** Both null for a spore from a local root, which is neither versioned nor traceable (design §7.4). */
+  sourceId: number | null
+  strain: string | null
 }
 
 export function listInstalls(db: Db): readonly InstalledPlugin[] {

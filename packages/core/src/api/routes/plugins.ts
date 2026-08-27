@@ -4,7 +4,8 @@ import type { SporeKind } from '@mycelo/septum'
 import type { RuntimeState } from '../../boot/state.js'
 import { enablePlugin } from '../../config/lifecycle.js'
 import {
-  formSchemaOf, listPlugins, redactSecrets, rejectedSettings, rewriteSetting, secretKeysOf, undeclaredKeys,
+  formSchemaOf, listPlugins, provenanceByName, redactSecrets, rejectedSettings, rewriteSetting, secretKeysOf,
+  undeclaredKeys,
 } from '../../config/plugins.js'
 import { getInstall, listInstalls, setEnabled } from '../../config/store.js'
 import { badRequest, notFound } from '../errors.js'
@@ -20,6 +21,12 @@ export interface PluginDto {
   /** From the install row, which can disagree with `state` until the next germination. */
   enabled: boolean
   scopes: readonly string[]
+  /**
+   * The sporangium's label and the installed strain. Both absent for a spore from a local
+   * root, which is neither versioned nor traceable (design §7.4).
+   */
+  source?: string
+  strain?: string
 }
 
 /**
@@ -40,6 +47,7 @@ function groupByKind(plugins: readonly PluginDto[]): PluginGroups {
 
 function pluginsOf(state: RuntimeState): readonly PluginDto[] {
   const installs = new Map(listInstalls(state.db).map((i) => [i.name, i]))
+  const provenance = provenanceByName(state.db)
   if (state.germination.status !== 'germinated') {
     // Nothing germinated, so nothing is known about any individual plugin (spec §4.1).
     return [...installs.values()].map((install) => ({
@@ -51,6 +59,7 @@ function pluginsOf(state: RuntimeState): readonly PluginDto[] {
       state: 'unknown' as const,
       enabled: install.enabled,
       scopes: [],
+      ...(provenance.get(install.name) ?? {}),
     }))
   }
   const { registry } = state.germination.mycelium
@@ -66,6 +75,8 @@ function pluginsOf(state: RuntimeState): readonly PluginDto[] {
     ...(info.reason === undefined ? {} : { reason: info.reason }),
     enabled: installs.get(info.name)?.enabled ?? info.enabled,
     scopes: scopesOf.get(info.name) ?? [],
+    ...(info.source === undefined ? {} : { source: info.source }),
+    ...(info.strain === undefined ? {} : { strain: info.strain }),
   }))
 }
 

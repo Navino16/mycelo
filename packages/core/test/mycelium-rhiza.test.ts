@@ -23,6 +23,7 @@ import { migrateDatabase, openDatabase } from '../src/persistence/db.js'
 import type { Db } from '../src/persistence/db.js'
 import { principal } from '../src/persistence/schema.js'
 import { rejectsWith } from './support/rejects.js'
+import { emptyRegistry } from './support/registry.js'
 
 const stubTranslator = { translate: (_d: string, key: string) => key, availableLocales: () => ['en', 'fr'] }
 
@@ -38,10 +39,6 @@ function fresh(): Db {
   const { db } = openDatabase(':memory:')
   migrateDatabase(db)
   return db
-}
-
-function emptyRegistry(): Registry {
-  return { hyphae: [], rhizas: [], enzymes: [], inhibitors: [], dormant: [], routes: new Map(), order: [], brokenEnforcing: [], catalogs: new Map() }
 }
 
 const registry = {

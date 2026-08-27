@@ -1,12 +1,14 @@
 import { rmSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'bun:test'
+import { eq } from 'drizzle-orm'
 import { REDACTED } from '../../src/support/redaction.js'
 import { readSettings, writeSetting } from '../../src/config/store.js'
-import { pluginSetting } from '../../src/persistence/schema.js'
+import { pluginInstall, pluginSetting } from '../../src/persistence/schema.js'
+import { addSource } from '../../src/sporangium/sources.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
   bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configurable, configurableTwoFields,
-  cyclingPair, definedSchema, eitherOrSchema, mixedFieldSchema, noJsonSchema, vault,
+  cyclingPair, definedSchema, eitherOrSchema, mixedFieldSchema, noJsonSchema, twoPluginsTwoCommands, vault,
 } from './support.js'
 import type { LoggedIn } from './support.js'
 
@@ -62,6 +64,39 @@ describe('/api/plugins', () => {
     // Not vanished, and not miscategorised into a kind it never validated as.
     expect(broken).toMatchObject({ state: 'dormant' })
     expect(broken?.kind).toBeUndefined()
+  })
+
+  it('reports the sporangium label and the strain of an installed spore, and neither for a local one', async () => {
+    booted = await bootAndLogin({ spores: twoPluginsTwoCommands })
+    const { app, served, cookie } = booted
+    const sporangium = addSource(served.state.db, { label: 'Mycelo spores', driver: 'github', location: 'https://example/a' })
+    served.state.db.update(pluginInstall).set({ sourceId: sporangium.id, strain: '0.2.0' })
+      .where(eq(pluginInstall.name, 'greeter')).run()
+    const body = (await app.inject({ method: 'GET', url: '/api/plugins', headers: { cookie } })).json<PluginGroups>()
+    expect(body.enzyme.find((p) => p.name === 'greeter'))
+      .toMatchObject({ state: 'germinated', source: 'Mycelo spores', strain: '0.2.0' })
+    const counter = body.enzyme.find((p) => p.name === 'counter')
+    expect(counter?.state).toBe('germinated')
+    expect(counter?.source).toBeUndefined()
+    expect(counter?.strain).toBeUndefined()
+  })
+
+  // The `status !== 'germinated'` branch, which reads the install rows directly and so has
+  // its own copy of every field a UI renders.
+  it('carries provenance while degraded, where no plugin has a germination state', async () => {
+    booted = await bootAndLogin({ spores: cyclingPair })
+    const { app, served, cookie } = booted
+    expect(served.state.germination.status).toBe('degraded')
+    const sporangium = addSource(served.state.db, { label: 'Someone else', driver: 'github', location: 'https://example/b' })
+    served.state.db.update(pluginInstall).set({ sourceId: sporangium.id, strain: '1.2.3' })
+      .where(eq(pluginInstall.name, 'alpha')).run()
+    const body = (await app.inject({ method: 'GET', url: '/api/plugins', headers: { cookie } })).json<PluginGroups>()
+    expect(body.rhiza.find((p) => p.name === 'alpha'))
+      .toMatchObject({ state: 'unknown', source: 'Someone else', strain: '1.2.3' })
+    const beta = body.rhiza.find((p) => p.name === 'beta')
+    expect(beta?.state).toBe('unknown')
+    expect(beta?.source).toBeUndefined()
+    expect(beta?.strain).toBeUndefined()
   })
 
   it('redacts a secret on read and keeps it secret on write', async () => {
