@@ -4,6 +4,7 @@ import { redactCredentials } from '../support/redaction.js'
 import { readCapped } from './bounded.js'
 import { MAX_BUNDLE_BYTES, SPORE_NAME, STRAIN_SHAPE } from './driver.js'
 import type { SporangiumDriver, SporeBundle, SporeDetail, SporeOffer } from './driver.js'
+import { demandsOf } from '../germination/requirements.js'
 
 // GitHub does not cap `per_page`, so a hard page cap turns an unbounded sporangium into a
 // refusal instead of a silently truncated list.
@@ -129,6 +130,7 @@ export function githubDriver(
         kind: manifest.kind,
         description: manifest.description ?? '',
         septum: manifest.septum,
+        demands: demandsOf(manifest),
       } satisfies SporeDetail
     },
 

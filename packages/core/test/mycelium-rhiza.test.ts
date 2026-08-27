@@ -764,7 +764,10 @@ describe('sources.manage', () => {
     const driverFor = (): SporangiumDriver => ({
       list: () => Promise.resolve([{ name: 'radarr', strain: '0.2.0' }]),
       strains: () => Promise.resolve(['0.2.0']),
-      detail: () => Promise.resolve({ name: 'radarr', kind: 'rhiza' as const, description: '', septum: '^0.10' }),
+      detail: () => Promise.resolve({
+        name: 'radarr', kind: 'rhiza' as const, description: '', septum: '^0.10',
+        demands: { requires: [], scopes: [], externals: [], commands: [] },
+      }),
       fetch: (_name, strain) => Promise.resolve({ tarball, strain }),
     })
     try {

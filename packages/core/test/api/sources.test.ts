@@ -74,6 +74,7 @@ async function fakeSporangium(offers: Record<string, readonly string[]>): Promis
     strains: (name) => Promise.resolve(strainsOf(name)),
     detail: (name, strain) => Promise.resolve({
       name, kind: 'enzyme' as const, description: `${name} at ${strain}`, septum: '^0.10',
+      demands: { requires: [], scopes: [], externals: [], commands: [] },
     }),
     fetch: (name, strain) => {
       const tarball = tarballs.get(`${name}@${strain}`)
@@ -355,7 +356,10 @@ describe('browsing a sporangium', () => {
       driverFor: () => ({
         list: () => Promise.resolve([]),
         strains: (name) => { reached += 1; return Promise.resolve(name === 'radarr' ? ['0.2.0'] : []) },
-        detail: (name, strain) => Promise.resolve({ name, kind: 'enzyme' as const, description: '', septum: '^0.10' + strain.slice(0, 0) }),
+        detail: (name, strain) => Promise.resolve({
+          name, kind: 'enzyme' as const, description: '', septum: '^0.10' + strain.slice(0, 0),
+          demands: { requires: [], scopes: [], externals: [], commands: [] },
+        }),
         fetch: () => Promise.reject(new Error('unused')),
       }),
     })

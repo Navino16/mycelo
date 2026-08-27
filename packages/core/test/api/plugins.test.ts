@@ -449,7 +449,10 @@ describe('a spore installed into the managed root', () => {
     const driver = {
       list: () => Promise.resolve([{ name: 'keyring', strain: '0.2.0' }]),
       strains: () => Promise.resolve(['0.2.0']),
-      detail: () => Promise.resolve({ name: 'keyring', kind: 'enzyme' as const, description: '', septum: '^0.10' }),
+      detail: () => Promise.resolve({
+        name: 'keyring', kind: 'enzyme' as const, description: '', septum: '^0.10',
+        demands: { requires: [], scopes: [], externals: [], commands: [] },
+      }),
       fetch: (_name: string, strain: string) => Promise.resolve({ tarball, strain }),
     }
     const result = await inoculate({

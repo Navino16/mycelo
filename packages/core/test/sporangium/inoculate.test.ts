@@ -183,7 +183,10 @@ function stubDriver(tarball: Uint8Array, strains: readonly string[] = ['0.2.0', 
   return {
     list: () => Promise.resolve([{ name: 'radarr', strain: strains[0]! }]),
     strains: () => Promise.resolve(strains),
-    detail: () => Promise.resolve({ name: 'radarr', kind: 'rhiza' as const, description: '', septum: '^0.10' }),
+    detail: () => Promise.resolve({
+    name: 'radarr', kind: 'rhiza' as const, description: '', septum: '^0.10',
+    demands: { requires: [], scopes: [], externals: [], commands: [] },
+  }),
     fetch: (_name, strain) => Promise.resolve({ tarball, strain }),
   }
 }
