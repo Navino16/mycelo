@@ -15,7 +15,7 @@
   registry, and a flag an operator could set would be a one-field bypass of the trust model.
 - `septumIncompatibility(range, version?)`, the one implementation of the range check: the core's
   germination, `enablePlugin` and `inoculate` all call it, and so do the four conformance kits, so
-  the two cannot drift at the septum release where the check matters. That name alone is exported,
+  the runtime and the kit cannot drift at the septum release where the check matters. That name alone is exported,
   deliberately — the range predicate and the matcher behind it are internal, and a public export is
   frozen by the tag whether anything uses it or not.
 - `sources.manage`, the sixteenth `MyceliumScope`, and the `SourcesManage` interface it mounts:
@@ -26,9 +26,9 @@
   publication, and that warning cannot be suppressed by the caller.
 
 ### Changed
-- **`septum:` must now be a range septum's own matcher can parse.** An unparseable range — `*`,
-  `latest`, or any typo — matches *every* version, which made the core's compatibility check
-  silently inert for that spore instead of failing loudly. `parseManifest` now rejects it with
+- **`septum:` must now be a range septum's own matcher can parse.** A range that cannot be parsed —
+  `*`, `latest`, or a typo the matcher does not recognise — matched *every* version, which made the
+  core's compatibility check silently inert for that spore instead of failing loudly. `parseManifest` now rejects it with
   `path: 'septum'`.
 
   This is **non-breaking for every manifest that exists**: all twenty in the Mycelo project declare
@@ -44,10 +44,15 @@
   node-semver subset with no new dependency, pinned against `Bun.semver` by a differential test
   over several thousand (version, range) pairs.
 
-  **It is not byte-identical to what 0.10.1 used.** The two agree on every well-formed range this
-  contract documents; they differ on malformed input, where `Bun.semver` interprets a typo into
-  *something* and the new matcher refuses it. A range that parses behaves as node-semver says it
-  does. Anything genuinely ambiguous is a refusal, never a silent reinterpretation.
+  **It is not byte-identical to what 0.10.1 used**, though nothing this contract documents moves.
+  On every range node-semver itself accepts, the new matcher agrees with node-semver **exactly** —
+  0 divergences over 142 585 evaluated pairs, cross-checked against both `Bun.semver` and
+  node-semver 7. Every difference is on malformed input, and it runs both ways: septum now refuses
+  some of what `Bun.semver` read as *something* (`1.2.3.4`, `^0.10.`, `>=x`, a bare `||`), and it
+  keeps accepting the typo forms it has always accepted — a doubled or mixed prefix such as
+  `^^0.10`, a comma separator, a wildcard that is not the last component, a partial carrying a
+  prerelease. Each of those is read as a **bounded** range, so none of them can make the
+  compatibility check inert, which is the property this release exists to protect.
 - **All four conformance kits now apply the septum-range check the runtime applies.** A manifest
   declaring a range that excludes the running septum was certified as conforming while every core
   running that septum made the spore dormant, refused to enable it and refused to install it — the

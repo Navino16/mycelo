@@ -95,12 +95,18 @@ that key. Three interactions are worth knowing before writing one:
 Every manifest carries `kind`, `name` (lowercase, digits and dashes) and `septum`, the
 contract range it targets. `septum` must be a range septum's own matcher understands — a caret
 (`^0.10`), a comparator (`>=0.10.0`), an `x` range (`0.10.x`), a pair of comparators
-(`>=0.9 <0.12`), a hyphen range (`1.2.3 - 2.3.4`) or a `||` union. `*`, `latest` and anything that
-fails to parse are **rejected**, because such a range matches every version there will ever be and
-would make the core's compatibility check silently inert for that spore. The matcher is a subset
-of node-semver, not a wrapper around a runtime's: it must work on Node as well as Bun. It is
-deliberately stricter than `Bun.semver` on malformed input — where Bun reads a typo as *something*,
-septum refuses it — so a range that parses here behaves as node-semver says it does.
+(`>=0.9 <0.12`), a hyphen range (`1.2.3 - 2.3.4`) or a `||` union. `*`, `latest` and anything the
+matcher cannot parse are **rejected**: a wildcard because it matches every version there will ever
+be, and an unparseable range because it cannot be shown not to. Either would make the core's
+compatibility check silently inert for that spore. The matcher is a subset of
+node-semver, not a wrapper around a runtime's: it must work on Node as well as Bun. **On every range
+node-semver itself accepts, septum agrees with node-semver exactly.** The two part company only on
+malformed input, in both directions: septum refuses some of it outright (`1.2.3.4`, `^0.10.`, `>=x`,
+a bare `||`), and accepts a short list of long-standing typo forms — a doubled or mixed prefix
+(`^^0.10`, `^~1.2`), a comma separator (`>=0.9,<0.12`), a wildcard that is not the last component
+(`1.x.2`), a partial carrying a prerelease (`>1-0`) — reading each as a **bounded** range. Bounded is
+the property that matters: a range septum accepts can never admit every version, so it can never make
+the compatibility check inert.
 `description`, `externals` and `requires` are optional everywhere.
 Each kind then adds its own:
 
