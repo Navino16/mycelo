@@ -704,20 +704,28 @@ describe('sources.manage', () => {
     expect(await api.deleteSource(official?.id ?? -1)).toBe(false)
   })
 
-  it('never repoints the official sporangium through the mount either', async () => {
-    // The same hole as PATCH /api/sources/:id: the guard is in updateSource, so both doors
-    // close at once (design §11).
+  it('rejects repointing the official sporangium through the mount, rather than answering success', async () => {
+    // The same guard as PATCH /api/sources/:id: it lives in updateSource, so both doors close
+    // at once (design §11). Rejecting, not ignoring: a silent no-op through this door is
+    // indistinguishable from the designed one the token mask relies on.
     const db = fresh()
     seedOfficialSource(db)
     const api = sourcesApi(db)
     const seeded = (await api.listSources())[0]
-    const patched = await api.updateSource(seeded?.id ?? -1, {
-      location: 'https://github.com/attacker/evil-spores', enabled: false,
+    await rejectsWith(
+      api.updateSource(seeded?.id ?? -1, {
+        location: 'https://github.com/attacker/evil-spores', enabled: false,
+      }),
+      /cannot be repointed/,
+    )
+    // Atomic: `enabled` travelled in the refused patch and did not land either.
+    expect((await api.listSources())[0]).toEqual(seeded)
+    // Resending the row's own location is not a repointing, and the rest of the patch lands —
+    // the idempotent PATCH the API route already answers 200 for.
+    const same = await api.updateSource(seeded?.id ?? -1, {
+      location: seeded?.location ?? '', label: 'Renamed', enabled: false,
     })
-    expect(patched?.location).toBe(seeded?.location)
-    expect(patched?.enabled).toBe(false)
-    // No 409 through this door: updateSource answers the row it wrote, so the caller reads
-    // the unchanged location back.
+    expect(same).toMatchObject({ label: 'Renamed', enabled: false, location: seeded?.location })
     // The control: a third-party row moves, with its userinfo stripped on the way in. Read
     // raw, never off the DTO — present() redacts too, so a DTO field cannot tell the two apart.
     const third = await api.addSource({ label: 'x', driver: 'github', location: 'https://u:p@github.com/o/r' })

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { MAX_BUNDLE_BYTES } from '../../src/sporangium/driver.js'
 import { githubDriver, parseTag } from '../../src/sporangium/github.js'
 
 const TAGS = [
@@ -255,6 +256,40 @@ describe('githubDriver.detail', () => {
   })
 })
 
+describe('githubDriver rate limit', () => {
+  function limited(headers: Record<string, string>, status = 403): typeof fetch {
+    return (() => Promise.resolve(new Response('forbidden', { status, headers }))) as unknown as typeof fetch
+  }
+
+  test('an exhausted quota says so, names the reset and names the repair', () => {
+    const reset = Math.floor(Date.UTC(2026, 7, 27, 12, 0, 0) / 1000)
+    const driver = githubDriver('https://github.com/o/r', null, limited({
+      'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(reset),
+    }))
+    expect(driver.list()).rejects.toThrow(/rate limit is exhausted/)
+    expect(driver.list()).rejects.toThrow(/2026-08-27T12:00:00\.000Z/)
+    expect(driver.list()).rejects.toThrow(/60 to 5000/)
+  })
+
+  test('a 403 with quota left is left as a plain 403, not diagnosed as a rate limit', () => {
+    // The negative control: a token without the scope answers 403 too, and telling that
+    // operator to set a token is the wrong repair.
+    const driver = githubDriver('https://github.com/o/r', null, limited({ 'x-ratelimit-remaining': '57' }))
+    expect(driver.list()).rejects.toThrow(/GitHub answered 403/)
+    expect(driver.list()).rejects.toThrow(/^(?!.*rate limit)/s)
+  })
+
+  test('an exhausted quota with no reset header still says it is exhausted', () => {
+    const driver = githubDriver('https://github.com/o/r', null, limited({ 'x-ratelimit-remaining': '0' }))
+    expect(driver.list()).rejects.toThrow(/rate limit is exhausted; a token/)
+  })
+
+  test('a 404 carrying the exhausted headers is not diagnosed as a rate limit', () => {
+    const driver = githubDriver('https://github.com/o/r', null, limited({ 'x-ratelimit-remaining': '0' }, 404))
+    expect(driver.list()).rejects.toThrow(/^(?!.*rate limit).*GitHub answered 404/s)
+  })
+})
+
 describe('githubDriver.fetch', () => {
   test('downloads the asset named for the spore and the strain', async () => {
     const bytes = new Uint8Array([1, 2, 3])
@@ -291,6 +326,42 @@ describe('githubDriver.fetch', () => {
     }) as typeof fetch
     const driver = githubDriver('https://github.com/o/r', null, failing)
     expect(driver.fetch('radarr', '0.2.0')).rejects.toThrow(/503/)
+  })
+})
+
+describe('githubDriver download cap', () => {
+  function serving(body: Uint8Array, headers: Record<string, string> = {}): typeof fetch {
+    return ((input: string | URL | Request) => {
+      const url = urlOf(input)
+      if (url.includes('/releases/tags/')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          assets: [{ name: 'radarr-0.2.0.tgz', browser_download_url: 'https://dl/radarr' }],
+        }), { status: 200 }))
+      }
+      return Promise.resolve(new Response(body, { status: 200, headers }))
+    }) as typeof fetch
+  }
+
+  test('refuses an asset declaring more than the cap, naming it, without buffering it', async () => {
+    const driver = githubDriver('https://github.com/o/r', null, serving(
+      new Uint8Array([1, 2, 3]), { 'content-length': String(MAX_BUNDLE_BYTES + 1) },
+    ))
+    expect(driver.fetch('radarr', '0.2.0')).rejects.toThrow(new RegExp(String(MAX_BUNDLE_BYTES)))
+  })
+
+  test('refuses an asset over the cap that declared no content-length', async () => {
+    // A sporangium is not obliged to send the header and can lie in it, so the buffered
+    // length is what actually bounds the allocation.
+    const driver = githubDriver('https://github.com/o/r', null, serving(new Uint8Array(MAX_BUNDLE_BYTES + 1)))
+    expect(driver.fetch('radarr', '0.2.0')).rejects.toThrow(new RegExp(String(MAX_BUNDLE_BYTES)))
+  })
+
+  test('accepts an asset under the cap, header or no header', async () => {
+    const bytes = new Uint8Array([1, 2, 3])
+    const withHeader = githubDriver('https://github.com/o/r', null, serving(bytes, { 'content-length': '3' }))
+    expect([...(await withHeader.fetch('radarr', '0.2.0')).tarball]).toEqual([1, 2, 3])
+    const without = githubDriver('https://github.com/o/r', null, serving(bytes))
+    expect([...(await without.fetch('radarr', '0.2.0')).tarball]).toEqual([1, 2, 3])
   })
 })
 

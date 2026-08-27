@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
+import { gzipSync } from 'node:zlib'
+import { MAX_UNPACKED_BYTES } from '../../src/sporangium/driver.js'
 import { extractTarball } from '../../src/sporangium/extract.js'
 
 async function tarOf(cwd: string, ...members: string[]): Promise<Uint8Array> {
@@ -51,12 +53,44 @@ describe('extractTarball', () => {
 
   test('names the missing binary when tar is absent', async () => {
     // design §9.1: tar is a runtime requirement of the host, and its absence must be legible.
+    // A well-formed archive, or decompression refuses it before tar is ever spawned.
+    const src = mkdtempSync(join(tmpdir(), 'src-'))
+    mkdirSync(join(src, 'radarr'))
+    writeFileSync(join(src, 'radarr', 'spore.yaml'), 'name: radarr\n')
     const dest = mkdtempSync(join(tmpdir(), 'dest-'))
-    expect(extractTarball(new Uint8Array([0]), dest, 'definitely-not-tar')).rejects.toThrow(/definitely-not-tar/)
+    expect(extractTarball(await tarOf(src, 'radarr'), dest, 'definitely-not-tar'))
+      .rejects.toThrow(/definitely-not-tar/)
   })
 
-  test('reports the exit code and stderr for an archive that is not a tarball at all', async () => {
+  test('reports the exit code and stderr for gzip that is not a tarball at all', async () => {
     const dest = mkdtempSync(join(tmpdir(), 'dest-'))
-    expect(extractTarball(new TextEncoder().encode('not a tarball'), dest)).rejects.toThrow(/'tar' refused the archive/)
+    const gzipped = gzipSync(new TextEncoder().encode('not a tarball'))
+    expect(extractTarball(new Uint8Array(gzipped), dest)).rejects.toThrow(/'tar' refused the archive/)
+  })
+
+  test('refuses bytes that are not gzip at all, naming decompression', async () => {
+    const dest = mkdtempSync(join(tmpdir(), 'dest-'))
+    expect(extractTarball(new TextEncoder().encode('not gzip'), dest)).rejects.toThrow(/cannot decompress/)
+  })
+
+  test('refuses a gzip bomb naming the cap, and writes no unpacked tree', async () => {
+    // An uncurated sporangium's asset is attacker-influenced and lands beside the database:
+    // 51 KB on the wire expanding to 50 MiB would otherwise be written in full.
+    const dest = mkdtempSync(join(tmpdir(), 'dest-'))
+    const bomb = new Uint8Array(gzipSync(Buffer.alloc(MAX_UNPACKED_BYTES + 1024, 0)))
+    expect(bomb.byteLength).toBeLessThan(1024 * 1024)
+    expect(extractTarball(bomb, dest)).rejects.toThrow(new RegExp(String(MAX_UNPACKED_BYTES)))
+    expect(readdirSync(dest)).toEqual([])
+  })
+
+  // The positive control for the cap: an archive under it still unpacks, so the refusal above
+  // is the bound firing rather than decompression being broken outright.
+  test('unpacks an archive whose expansion is under the cap', async () => {
+    const src = mkdtempSync(join(tmpdir(), 'src-'))
+    mkdirSync(join(src, 'radarr'))
+    writeFileSync(join(src, 'radarr', 'big.bin'), Buffer.alloc(2 * 1024 * 1024, 7))
+    const dest = mkdtempSync(join(tmpdir(), 'dest-'))
+    await extractTarball(await tarOf(src, 'radarr'), dest)
+    expect(readdirSync(join(dest, 'radarr'))).toEqual(['big.bin'])
   })
 })

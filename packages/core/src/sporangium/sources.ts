@@ -87,9 +87,12 @@ export function updateSource(
   if (existing === undefined) return null
   const values: Partial<Row> = {}
   if (patch.label !== undefined) values.label = patch.label
-  // Repointing the official row relabels an unreviewed sporangium as reviewed, and
-  // inoculate keys its trust warning off `official` — strictly worse than the deletion
-  // design §11 already forbids. Disabling and re-tokening it stay open.
+  // Repointing the official row relabels an unreviewed sporangium as reviewed (design §11).
+  // Thrown, not ignored: a silent no-op reads exactly like the designed one below. Conditioned
+  // on a real change, so resending the stored location still succeeds.
+  if (patch.location !== undefined && existing.official && patch.location !== existing.location) {
+    throw new Error('the official sporangium cannot be repointed at another location')
+  }
   if (patch.location !== undefined && !existing.official) values.location = redactCredentials(patch.location)
   if (patch.enabled !== undefined) values.enabled = patch.enabled
   // The mask is what a form reads back, so it is not a value: writing it keeps what is

@@ -10,6 +10,12 @@ export const SPORE_NAME = /^[a-z][a-z0-9-]*$/
 // is written to disk as part of the install record.
 export const STRAIN_SHAPE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/
 
+// A released bundle is 1.5 KB to 85 KB today (phase 8 half A), so these are generous by three
+// orders. An uncurated sporangium's asset is attacker-influenced and lands beside the database:
+// unbounded, a huge asset OOMs the process and a gzip bomb fills the volume the database is on.
+export const MAX_BUNDLE_BYTES = 32 * 1024 * 1024
+export const MAX_UNPACKED_BYTES = 64 * 1024 * 1024
+
 export interface SporeOffer {
   /** The manifest name: what `inoculate` takes and what the tag carries. */
   name: string

@@ -12,7 +12,7 @@ import type { Db } from '../persistence/db.js'
 import { describeThrown } from '../support/thrown.js'
 import { SPORE_NAME, STRAIN_SHAPE } from './driver.js'
 import type { DriverFactory } from './driver.js'
-import { extractTarball } from './extract.js'
+import { BUNDLE_ARCHIVE, extractTarball } from './extract.js'
 import { githubDriver } from './github.js'
 import { getSource, sourceLocation, sourceToken } from './sources.js'
 
@@ -106,7 +106,7 @@ function manifestAt(root: string, directory: string): ReturnType<typeof readMani
 
 /** Null when the unpacked tree is installable as `name`; a sentence naming the problem otherwise. */
 export function treeProblem(dir: string, name: string): string | null {
-  const entries = readdirSync(dir, { withFileTypes: true }).filter((e) => e.name !== '.bundle.tgz')
+  const entries = readdirSync(dir, { withFileTypes: true }).filter((e) => e.name !== BUNDLE_ARCHIVE)
   if (entries.length === 0) return 'the archive is empty'
   const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name)
   const files = entries.filter((e) => !e.isDirectory()).map((e) => e.name)
