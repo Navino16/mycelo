@@ -133,6 +133,27 @@ function tildeRange(p: Partial): readonly Comparator[] {
 // `^~1.2` and `~^1.2` behave as `~1.2`. Measured on Bun 1.4.0; reproduced rather than refused.
 const PREFIX = /^([~^]+)\s*/
 
+/** The version one increment above a partial: `1.2` -> `1.3.0`, `1` -> `2.0.0`. */
+function nextAfter(p: Partial): Version {
+  return p.minor === null ? version(p.major + 1, 0, 0) : version(p.major, p.minor + 1, 0)
+}
+
+/**
+ * An operator against a partial version. Zero-filling every operator is wrong for three of the
+ * five: `>0.10` means "after the whole 0.10 line", not `>0.10.0`, and admitting 0.10.2 there is
+ * the fail-open direction. `>=` and `<` are the two that do zero-fill.
+ */
+function partialBound(op: Comparator['op'], p: Partial): readonly Comparator[] {
+  const filled = version(p.major, p.minor ?? 0, p.patch ?? 0, p.pre)
+  switch (op) {
+    case '>': return [{ op: '>=', version: nextAfter(p) }]
+    case '<=': return [{ op: '<', version: nextAfter(p) }]
+    case '=': return partialRange(p)
+    case '>=': return [{ op: '>=', version: filled }]
+    case '<': return [{ op: '<', version: filled }]
+  }
+}
+
 function comparatorsFor(token: string): readonly Comparator[] | null | 'invalid' {
   const prefixed = PREFIX.exec(token)
   if (prefixed !== null) {
@@ -148,10 +169,7 @@ function comparatorsFor(token: string): readonly Comparator[] | null | 'invalid'
     // rather than guessing, since no documented range form writes one.
     if (partial === null) return 'invalid'
     const op = operator[1] as Comparator['op']
-    if (partial.minor === null || partial.patch === null) {
-      // A partial bound: `>=0.9` is `>=0.9.0`, `<0.12` is `<0.12.0`.
-      return [{ op, version: version(partial.major, partial.minor ?? 0, partial.patch ?? 0, partial.pre) }]
-    }
+    if (partial.minor === null || partial.patch === null) return partialBound(op, partial)
     return [{ op, version: version(partial.major, partial.minor, partial.patch, partial.pre) }]
   }
   if (WILDCARD.test(token)) return null

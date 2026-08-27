@@ -20,6 +20,10 @@ const WELL_FORMED = [
   // An empty alternative in a `||` list contributes nothing rather than widening to everything,
   // which is the difference between `^0.10 ||` meaning `^0.10` and meaning `*`.
   '^0.10 ||', '|| ^0.10', '^0.10||', '^0.10 || ', '^0.10 || ^0.11',
+  // An operator against a partial version. Zero-filling all five is wrong for three of them, and
+  // wrong fail-open for `>`: `>0.10` means after the whole 0.10 line, not after 0.10.0.
+  '>0.10', '>1.2', '>1', '>0', '<=0.10', '<=1.2', '<=1', '=0.10', '=1.2', '=1',
+  '>=0.10', '<0.10', '>0.10.0', '<=0.10.0', '=0.10.0', '>0.x', '<=1.x', '>0.10 <2',
 ]
 
 const VERSIONS = [
@@ -42,6 +46,22 @@ describe('satisfies agrees with Bun.semver on every well-formed pair', () => {
     expect(disagreements).toEqual([])
     // The corpus must stay large enough to be worth running: a truncated one would pass too.
     expect(WELL_FORMED.length * VERSIONS.length).toBeGreaterThan(2000)
+  })
+
+  it('reads an operator against a partial version as node-semver does', () => {
+    // `>0.10` admitting 0.10.2 is the fail-open direction and was unpinned in both directions:
+    // no corpus range was an operator plus a partial, so the correct semantics also survived.
+    expect(satisfies('0.10.2', '>0.10')).toBe(false)
+    expect(satisfies('0.11.0', '>0.10')).toBe(true)
+    expect(satisfies('1.2.3', '>1')).toBe(false)
+    expect(satisfies('2.0.0', '>1')).toBe(true)
+    expect(satisfies('0.10.9', '<=0.10')).toBe(true)
+    expect(satisfies('0.11.0', '<=0.10')).toBe(false)
+    expect(satisfies('0.10.9', '=0.10')).toBe(true)
+    expect(satisfies('0.11.0', '=0.10')).toBe(false)
+    // The two the README documents, which zero-fill and must keep doing so.
+    expect(satisfies('0.10.0', '>=0.10')).toBe(true)
+    expect(satisfies('0.10.0', '<0.10')).toBe(false)
   })
 
   it('covers the three verdicts this contract actually turns on', () => {
@@ -91,7 +111,10 @@ describe('isParseableRange reaches the verdict the Bun-based definition reached'
   it('refuses a malformed range, where Bun would interpret some of them', () => {
     // The divergence is fail-closed and deliberate: Bun reads `1.2.3.4` and `^0.10.` as
     // something, and a typo in a manifest is refused here rather than silently interpreted.
-    for (const range of ['not a range', '1.2.3.4', '1.2.-3', '0..10', '^0.10.', '<', '>=', '^', '~', 'a.b.c', '||']) {
+    for (const range of ['not a range', '1.2.3.4', '1.2.-3', '0..10', '^0.10.', '<', '>=', '^', '~', 'a.b.c', '||',
+      // An operator against a bare wildcard is the whole-range wildcard with an operator bolted
+      // on. Bun reads it as matching everything; either way the verdict is a refusal.
+      '>x', '>=x', '<x', '<=x', '=x', '^x', '~x', '>*']) {
       expect(isParseableRange(range)).toBe(false)
     }
   })
