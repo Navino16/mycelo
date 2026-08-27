@@ -361,9 +361,11 @@ it("wires ctx.rhiza('mycelium') to the real, scope-gated API during an enzyme's 
   const admin = registry.enzymes.find((e) => e.name === 'admin')
   const observed = (admin?.instance as unknown as { observed: Record<string, unknown> }).observed
   // Hyphae connect before any enzyme starts (design §2.1), so 'channel' is already
-  // germinated when 'admin' calls this from its own start().
+  // germinated when 'admin' calls this from its own start() — while 'admin' itself is not in
+  // the registry yet and sees itself pending (spec §5).
   expect(observed.plugins).toEqual([
     { name: 'channel', kind: 'hypha', commands: [], state: 'germinated', enabled: true },
+    { name: 'admin', kind: 'enzyme', commands: [], state: 'pending', enabled: true },
   ])
 })
 

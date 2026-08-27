@@ -70,9 +70,13 @@ export function listPlugins(registry: Registry, sporesDirs: readonly string[], d
     .flatMap((install): PluginInfo[] => {
       const base = { name: install.name, kind: install.kind as SporeKind, commands: [], ...from(install.name) }
       if (!install.enabled) return [{ ...base, state: 'disabled' as const, enabled: false }]
+      // Enabled, on disk, in neither the germinated nor the dormant set: it is waiting for
+      // the next germination. Returning [] here dropped it from every list (spec §5).
+      if (findSpore(sporesDirs, install.name) !== undefined) {
+        return [{ ...base, state: 'pending' as const, enabled: true }]
+      }
       // syncInstalls keeps the row of a spore whose directory has gone, so the operator
       // can recover it — which requires being able to see that it is still there.
-      if (findSpore(sporesDirs, install.name) !== undefined) return []
       return [{
         ...base,
         state: 'dormant' as const,

@@ -558,14 +558,16 @@ describe('an install with no spore on disk', () => {
     })
   })
 
-  // The other half of the same line, deferred to phase 6: a plugin enabled since startup
-  // is on disk and will germinate at the next restart, so it is staleness, not a hole.
-  it('stays absent while the spore is on disk but has not germinated yet', () => {
+  // Was 'stays absent', a known limitation deferred to phase 6: an enabled install on disk
+  // and not yet germinated was in neither set, so it was dropped rather than mislabelled.
+  it('is reported pending while the spore is on disk but has not germinated yet', () => {
     const db = fresh()
     recordInstall(db, 'ping', 'enzyme')
     setEnabled(db, 'ping', true)
     const api = createMyceliumApi(emptyRegistry(), ['plugins.read'], noSend, db, SPORES) as PluginsRead
-    expect(api.listPlugins().map((p) => p.name)).not.toContain('ping')
+    expect(api.listPlugins()).toContainEqual({
+      name: 'ping', kind: 'enzyme', commands: [], state: 'pending', enabled: true,
+    })
   })
 })
 

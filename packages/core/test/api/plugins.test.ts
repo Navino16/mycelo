@@ -519,4 +519,29 @@ describe('a spore installed into the managed root', () => {
     const enabled = await app.inject({ method: 'POST', url: '/api/plugins/keyring/enable', headers: { cookie } })
     expect(enabled.statusCode).toBe(200)
   })
+
+  // spec §5: before this, an enabled install awaiting germination was dropped from the list
+  // entirely, so the screen an operator lands on after enabling did not show the plugin.
+  it('reports an enabled install awaiting germination as pending, having reported it disabled', async () => {
+    booted = await bootAndLogin({ spores: configurable })
+    await inoculateKeyring(booted)
+    const { app, cookie } = booted
+    const listed = async (): Promise<{ state: string, enabled: boolean } | undefined> => {
+      const groups = (await app.inject({
+        method: 'GET', url: '/api/plugins', headers: { cookie },
+      })).json<Record<string, { name: string, state: string, enabled: boolean }[]>>()
+      return Object.values(groups).flat().find((p) => p.name === 'keyring')
+    }
+
+    expect(await listed()).toMatchObject({ state: 'disabled', enabled: false })
+
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/keyring/settings', headers: { cookie },
+      payload: { token: 's3cret' },
+    })
+    const enabled = await app.inject({ method: 'POST', url: '/api/plugins/keyring/enable', headers: { cookie } })
+    expect(enabled.statusCode).toBe(200)
+
+    expect(await listed()).toMatchObject({ state: 'pending', enabled: true })
+  })
 })

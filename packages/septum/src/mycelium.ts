@@ -36,9 +36,12 @@ export interface PluginInfo {
   commands: readonly string[]
   /**
    * 'germinated' and 'dormant' are what germination reached; 'disabled' is an install
-   * row the operator switched off, which germination skips without loading it.
+   * row the operator switched off, which germination skips without loading it; 'pending'
+   * is enabled and on disk but not in the registry yet — a plugin awaiting the restart that
+   * an enable() asked for, and also one still starting, which is how a spore reading this
+   * from its own start() sees itself.
    */
-  state: 'germinated' | 'dormant' | 'disabled'
+  state: 'germinated' | 'dormant' | 'disabled' | 'pending'
   /** Present only when dormant. */
   reason?: string
   /**

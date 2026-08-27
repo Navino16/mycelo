@@ -16,7 +16,7 @@ export interface PluginDto {
   /** Absent only for a `registry.dormant` entry whose manifest never parsed (spec §8). */
   kind?: SporeKind
   commands: readonly string[]
-  state: 'germinated' | 'dormant' | 'disabled' | 'unknown'
+  state: 'germinated' | 'dormant' | 'disabled' | 'pending' | 'unknown'
   reason?: string
   /** From the install row, which can disagree with `state` until the next germination. */
   enabled: boolean
