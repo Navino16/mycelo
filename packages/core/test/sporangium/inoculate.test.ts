@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { eq } from 'drizzle-orm'
+import type { Logger } from '@mycelo/septum'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
@@ -12,7 +13,7 @@ import { parseTag } from '../../src/sporangium/github.js'
 import { createStagingDir, inoculate, managedRoot, STAGING_DIR, sweepStaging, treeProblem } from '../../src/sporangium/inoculate.js'
 import { addSource, deleteSource, installsFromSource, listSources, seedOfficialSource, updateSource } from '../../src/sporangium/sources.js'
 import { freshDb } from '../support/db.js'
-import { silentLogger } from '../support/logger.js'
+import { recordingLogger, silentLogger } from '../support/logger.js'
 
 function tree(entries: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), 'tree-'))
@@ -195,8 +196,11 @@ function stubDriver(tarball: Uint8Array, strains: readonly string[] = ['0.2.0', 
   }
 }
 
-function ctxOf(db: Db, driver: SporangiumDriver, root: string, sporesDirs: readonly string[] = []) {
-  return { db, sporesDirs, managedRoot: root, logger: silentLogger(), driverFor: () => driver }
+function ctxOf(
+  db: Db, driver: SporangiumDriver, root: string,
+  sporesDirs: readonly string[] = [], logger: Logger = silentLogger(),
+) {
+  return { db, sporesDirs, managedRoot: root, logger, driverFor: () => driver }
 }
 
 function managedDir(): string {
@@ -246,27 +250,50 @@ describe('inoculate', () => {
     expect(row?.kind).toBe('rhiza')
   })
 
-  test('refuses a second install, naming the directory that holds it', async () => {
+  test('refuses a second install, naming the managed root and logging the path', async () => {
     const { db } = freshDb()
     const id = officialId(db)
     const root = managedDir()
+    const { logger, lines } = recordingLogger()
     const tarball = await bundleOf('radarr', { 'spore.yaml': MANIFEST, 'index.js': MODULE })
     expect((await inoculate(ctxOf(db, stubDriver(tarball), root), { sourceId: id, name: 'radarr' })).ok).toBe(true)
-    const second = await inoculate(ctxOf(db, stubDriver(tarball), root), { sourceId: id, name: 'radarr' })
+    const second = await inoculate(ctxOf(db, stubDriver(tarball), root, [], logger), { sourceId: id, name: 'radarr' })
     expect(second.ok).toBe(false)
-    expect(why(second)).toContain(join(root, 'radarr'))
+    expect(why(second)).toContain('the managed root')
+    // The two halves of the split: no filesystem layout to the caller, the path to the log.
+    expect(why(second)).not.toContain(root)
+    expect(lines.join('\n')).toContain(join(root, 'radarr'))
   })
 
-  test('refuses a name an operator-configured root already holds, naming that root', async () => {
+  test('refuses a name an operator-configured root already holds, distinguishing it from the managed root', async () => {
     const { db } = freshDb()
     const id = officialId(db)
     const held = mkdtempSync(join(tmpdir(), 'operator-'))
     mkdirSync(join(held, 'radarr'))
     writeFileSync(join(held, 'radarr', 'spore.yaml'), MANIFEST)
+    const { logger, lines } = recordingLogger()
     const tarball = await bundleOf('radarr', { 'spore.yaml': MANIFEST, 'index.js': MODULE })
-    const result = await inoculate(ctxOf(db, stubDriver(tarball), managedDir(), [held]), { sourceId: id, name: 'radarr' })
+    const result = await inoculate(ctxOf(db, stubDriver(tarball), managedDir(), [held], logger), { sourceId: id, name: 'radarr' })
     expect(result.ok).toBe(false)
-    expect(why(result)).toContain(join(held, 'radarr'))
+    expect(why(result)).toContain('a configured spores directory')
+    expect(why(result)).not.toContain('the managed root')
+    expect(why(result)).not.toContain(held)
+    expect(lines.join('\n')).toContain(join(held, 'radarr'))
+  })
+
+  test('a configured root nested inside the managed root is still reported as configured', async () => {
+    // The boundary between an exact parent test and a prefix test: a prefix would call this
+    // the managed root, which is the one place the operator would not look.
+    const { db } = freshDb()
+    const id = officialId(db)
+    const root = managedDir()
+    const nested = join(root, 'extra')
+    mkdirSync(join(nested, 'radarr'), { recursive: true })
+    writeFileSync(join(nested, 'radarr', 'spore.yaml'), MANIFEST)
+    const tarball = await bundleOf('radarr', { 'spore.yaml': MANIFEST, 'index.js': MODULE })
+    const result = await inoculate(ctxOf(db, stubDriver(tarball), root, [nested]), { sourceId: id, name: 'radarr' })
+    expect(why(result)).toContain('a configured spores directory')
+    expect(why(result)).not.toContain('the managed root')
   })
 
   test('refuses a strain the source does not offer, naming the ones it does', async () => {

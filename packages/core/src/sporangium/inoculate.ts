@@ -34,10 +34,8 @@ export function managedRoot(dbFile: string): string {
 }
 
 /**
- * Staging sits two levels down inside the managed root: `discover` skips no dot-directory,
- * it only requires a `spore.yaml`, so a one-level `.staging-xxxx/` holding one would itself
- * be discovered as a spore with no install row. Nothing an archive contains can reach an
- * immediate child of the root from here.
+ * Two levels down: `discover` skips no dot-directory, so a one-level `.staging-xxxx/`
+ * holding a `spore.yaml` would itself be discovered as a spore with no install row.
  */
 export const STAGING_DIR = '.staging'
 
@@ -222,10 +220,15 @@ export async function inoculate(
     return { ok: false, reason: `'${request.name}' has no strain ${String(request.strain)}; it offers ${strains.join(', ')}` }
   }
 
-  // Before downloading, so the operator learns which root holds it and no tarball has to
-  // be cleaned up (design §9 step 3).
+  // Before downloading, so no tarball has to be cleaned up (design §9 step 3). The path is
+  // the operator's, through the log; a refusal reaches an API client, which gets the kind
+  // of root instead (spec §10).
   const held = discover(roots).find((l) => l.directory === request.name)
-  if (held !== undefined) return { ok: false, reason: `'${request.name}' is already installed at '${held.path}'` }
+  if (held !== undefined) {
+    const where = dirname(held.path) === root ? 'the managed root' : 'a configured spores directory'
+    logger.warn(`'${request.name}' is already installed at '${held.path}'`)
+    return { ok: false, reason: `'${request.name}' is already installed in ${where}` }
+  }
 
   let tarball: Uint8Array
   try {
