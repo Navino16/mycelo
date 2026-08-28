@@ -249,8 +249,8 @@ export interface CommandInfo {
 }
 
 /**
- * Where a caller would type the command. Supplied to available() so its answer matches what
- * dispatch would do rather than only what authorization allows.
+ * Where a caller would type the command. Supplied to available() so the channel's declared
+ * capabilities and any context rule gate the answer, not authorization alone.
  */
 export interface CommandScope {
   /** The channel whose declared capabilities gate the answer. */
@@ -268,7 +268,8 @@ export interface CommandsRead {
    * Commands this principal is *authorized* to invoke, sorted by `qualified`, described in
    * this locale. Without `where`, channel capabilities and context rules are applied at
    * dispatch and not here, so a listed command can still be refused on the channel it is
-   * asked on. With `where`, both are applied and the answer matches dispatch.
+   * asked on. With `where`, both are applied. Not a third gate: the answer is drawn from
+   * germination's route map, so a command whose enzyme failed to start is still listed.
    * The principal is a parameter because a mycelium rhiza is mounted once per plugin,
    * not once per invocation — so a spore holding any principal's id learns that principal's
    * authorized command set without holding `roles.read` (design §6).

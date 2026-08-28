@@ -219,6 +219,43 @@ Added:
 The conformance kit now rejects a `configSchema.toJsonSchema` that is present but not callable,
 across `hyphaChecks`, `rhizaChecks`, `enzymeChecks` and `inhibitorChecks`.
 
+## 0.5.0
+
+**Breaking.** `InhibitorContext.requireCapability(channel, capability)` is a new required member. It
+throws when the named channel cannot enforce a rule the inhibitor depends on — asking a channel with
+no `group_membership` to police group members, for instance — which makes the inhibitor dormant, and
+for an `enforcing` one means all traffic is then refused. That is the point: a security rule must
+never be silently inert. Migration: an inhibitor *consumes* its context, so plugin code is
+unaffected; what breaks is every hand-written `InhibitorContext` stub, which must add the method.
+
+**Breaking.** `enzymeChecks` narrows `context()` down to `EnzymeStartContext` before calling
+`start()`, instead of handing it the fuller handler context. `EnzymeContext` extends
+`EnzymeStartContext`, so passing the fuller one typechecked and hid that the runtime's `start()`
+carries no `reply`, no `principal` and no `capabilities`. **Authors: an enzyme reaching for
+`ctx.reply` in `start()` now fails the kit**, exactly as it would fail in the bot. Pass the new
+`EnzymeHarness.startContext?()` to stub that moment yourself.
+
+Added:
+
+- Five interfaces, one per mycelium scope that had none — `PrincipalsRead`, `PrincipalsManage`,
+  `RolesRead`, `RolesAssign`, `RolesManage` — and `RoleInfo`, the shape `listRoles()` answers with.
+  The scope *names* are unchanged: `MYCELIUM_SCOPES` already enumerated them in 0.4.0. What arrives
+  here is the typed surface each one mounts, so a plugin can typecheck against exactly the methods
+  its declared scopes grant.
+- `HyphaHarness.membershipGroupId`. Supplied, `hyphaChecks` calls `listGroupMembers` with it and
+  fails a result that is not an array. Opt-in because the kit never calls `connect()`, so a hypha
+  needing its connection first would otherwise fail on a correct implementation. The core reads
+  anything but an array as "membership unavailable", which makes an `enforcing` inhibitor refuse
+  every message on the channel.
+
+Changed:
+
+- `RhizaContext.emit` is documented as reserved: no subscriber exists yet, so the core discards what
+  it emits.
+- `InhibitorContext.groupMembers` no longer claims to consult a rhiza. It answers `null` when the
+  channel cannot report members; an inhibitor wanting a fallback source fetches its own through
+  `rhiza()`.
+
 ## 0.4.0
 
 **Breaking.** `Hypha.start(ctx)` is replaced by `connect(ctx)` followed by `listen()`. Migration:
