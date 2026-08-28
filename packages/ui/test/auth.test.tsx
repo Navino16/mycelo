@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
-import { AuthGate } from '../src/auth.tsx'
+import { AuthGate, useMe } from '../src/auth.tsx'
 import { I18nProvider } from '../src/i18n.tsx'
 
 const realFetch = globalThis.fetch
@@ -8,6 +8,11 @@ afterEach(() => { globalThis.fetch = realFetch })
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+}
+
+function WhoAmI(): React.JSX.Element {
+  const { me } = useMe()
+  return <div>signed in as {me?.username}</div>
 }
 
 function renderGate(): void {
@@ -49,5 +54,20 @@ describe('AuthGate', () => {
     renderGate()
 
     await screen.findByText('protected content')
+  })
+
+  // useMe() is the Produces block's own promise: a consumer inside the gate must see the
+  // parsed MeDto, not merely a truthy object — the username is the field task 7's shell needs.
+  it('exposes the fetched principal through useMe()', async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(jsonResponse(200, { id: 'p1', username: 'owner', locale: 'en', roles: ['owner'] })),
+    )
+    render(
+      <I18nProvider>
+        <AuthGate><WhoAmI /></AuthGate>
+      </I18nProvider>,
+    )
+
+    await screen.findByText('signed in as owner')
   })
 })

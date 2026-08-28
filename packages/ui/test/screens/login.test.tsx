@@ -44,6 +44,7 @@ describe('the login screen', () => {
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).not.toContain('too many attempts')
     expect(alert.textContent).not.toContain('refused')
+    expect(alert.textContent).toContain('Something went wrong')
   })
 
   it('calls onDone once the credentials are accepted', async () => {

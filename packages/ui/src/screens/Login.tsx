@@ -8,7 +8,7 @@ export function Login({ onDone }: { onDone: () => void }): React.JSX.Element {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  async function submit(event: React.FormEvent): Promise<void> {
+  async function submit(event: React.SubmitEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     try {
       await api.send('POST', '/api/login', { username, password })

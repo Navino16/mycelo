@@ -10,7 +10,7 @@ export function Setup({ onDone }: { onDone: () => void }): React.JSX.Element {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  async function submit(event: React.FormEvent): Promise<void> {
+  async function submit(event: React.SubmitEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault()
     if (password.length < MIN_PASSWORD) { setError(t('setup.passwordRule')); return }
     setError(null)
