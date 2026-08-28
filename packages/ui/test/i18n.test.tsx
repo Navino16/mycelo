@@ -48,6 +48,16 @@ describe('the chrome speaks its own language', () => {
     expect(screen.getByTestId('nav').textContent).toBe('Vue d’ensemble')
   })
 
+  // The select's own value-switching worked while its French <option> rendered the six
+  // literal characters "Fran\u00e7ais" (fix round 1's regression): asserts the rendered
+  // text itself, not just that choosing it changes the locale elsewhere.
+  it("renders the French option's own text correctly, not the escape literally", () => {
+    const { container } = render(<I18nProvider><LanguageSwitch /></I18nProvider>)
+    const option = container.querySelector('option[value="fr"]')
+
+    expect(option?.textContent).toBe('Français')
+  })
+
   describe('the locale change reaches the api client', () => {
     const realFetch = globalThis.fetch
     afterEach(() => { globalThis.fetch = realFetch })
