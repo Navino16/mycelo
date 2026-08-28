@@ -59,6 +59,22 @@ describe('the api client', () => {
     expect(seen).toEqual(['login', 'setup'])
   })
 
+  // routes/auth.ts:101 answers a wrong password with a 401. Routing that to login remounts the
+  // screen the operator is already on and clears the message telling them what went wrong.
+  it('does not route a 401 from the login route itself, but still rejects', async () => {
+    const seen: string[] = []
+    onUnauthenticated((kind) => seen.push(kind))
+
+    respondWith(401, refusal('unauthenticated', 'that username and password do not match'))
+    const failure = await api.send('POST', '/api/login', { username: 'a', password: 'b' })
+      .then(() => null, (e: unknown) => e)
+
+    expect(failure).toBeInstanceOf(ApiError)
+    expect((failure as ApiError).status).toBe(401)
+    expect((failure as ApiError).message).toBe('that username and password do not match')
+    expect(seen).toEqual([])
+  })
+
   // A 503 the setup lock did not raise is an ordinary refusal: sending the operator to the
   // wizard would hide it behind a screen that answers nothing.
   it('does not route a 503 that is not setup-required', async () => {

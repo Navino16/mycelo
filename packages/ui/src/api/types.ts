@@ -135,7 +135,10 @@ export interface RoleDto {
   patterns: readonly string[]
 }
 
-/** `GET /api/sources`. `token` is the literal '••••' when one is set, never the value. */
+/**
+ * `GET /api/sources`, and what `POST /api/sources` and `PATCH /api/sources/:id` answer too.
+ * `token` is the literal '••••' when one is set, never the value.
+ */
 export interface SourceDto {
   id: number
   label: string
@@ -183,7 +186,10 @@ export interface MeDto extends PersonDto {
   locale: string
 }
 
-/** Every mutating route's answer. `restartRequired` is absent from the auth routes only. */
+/**
+ * The `{ ok: true }` answer of the auth, people, roles and plugin routes. `restartRequired`
+ * is set by the plugin routes only; the source routes answer their own shapes instead.
+ */
 export interface MutationResult {
   ok: true
   restartRequired?: boolean

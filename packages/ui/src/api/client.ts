@@ -21,6 +21,8 @@ export class ApiError extends Error {
 
 type Unauthenticated = (kind: 'login' | 'setup') => void
 
+const LOGIN_PATH = '/api/login'
+
 let locale: string | undefined
 let notify: Unauthenticated | undefined
 
@@ -51,7 +53,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (!response.ok) {
     const envelope = (payload as Envelope | undefined)?.error
     // The two states phase 6 made public by construction; the router turns them into screens.
-    if (response.status === 401) notify?.('login')
+    // /api/login is exempt: "you need to authenticate" carries nothing for the request that is
+    // the authentication attempt, and the remount would clear the form's own error.
+    if (response.status === 401 && path !== LOGIN_PATH) notify?.('login')
     if (response.status === 503 && envelope?.code === 'setup-required') notify?.('setup')
     throw new ApiError(
       response.status, envelope?.code, envelope?.message ?? response.statusText, payload, envelope?.detail,

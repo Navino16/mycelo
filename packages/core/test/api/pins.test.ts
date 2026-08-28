@@ -84,9 +84,12 @@ describe('the ui redeclares two shapes whose drift would be silent', () => {
     expect(ui).toEqual(core)
   })
 
-  // Its absence would make the critical banner render nothing, silently.
-  it('carries enforcingBlocked', () => {
-    expect(read('supervision/health.ts')).toContain('enforcingBlocked')
-    expect(uiTypes).toContain('enforcingBlocked')
+  // Its absence would make the critical banner render nothing, silently. Anchored on the
+  // declaration line, not the word: a comment line begins with `*` or `/`, so it cannot match,
+  // and both files already name the field in prose.
+  it('declares enforcingBlocked on both sides', () => {
+    const declaration = /^\s*enforcingBlocked: readonly string\[\]/m
+    expect(read('supervision/health.ts')).toMatch(declaration)
+    expect(uiTypes).toMatch(declaration)
   })
 })
