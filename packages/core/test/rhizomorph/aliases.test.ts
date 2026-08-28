@@ -43,6 +43,19 @@ describe('the alias store', () => {
     expect([...listAliases(db)]).toEqual([])
   })
 
+  // 'Aide!' above fails at its first character, so the pattern's ^ alone refuses it and its $
+  // is never exercised. An alias whose suffix is what makes it untypable is the discriminating
+  // case: without the end anchor it is stored, and names a route no caller can reach.
+  it('refuses an alias whose suffix is what a caller could not type', () => {
+    const db = fresh()
+
+    expect(() => { setAlias(db, 'help', 'help', 'aide!') })
+      .toThrow("alias 'aide!' is not a name a caller could type")
+    expect(() => { setAlias(db, 'help', 'help', 'mon alias') })
+      .toThrow("alias 'mon alias' is not a name a caller could type")
+    expect([...listAliases(db)]).toEqual([])
+  })
+
   it('refuses an alias another command already holds, naming that command', () => {
     const db = fresh()
     setAlias(db, 'help', 'help', 'aide')

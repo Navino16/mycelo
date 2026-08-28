@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'bun:test'
 import { bootAndLogin, closeBooted, writeSpore } from './support.js'
 import type { LoggedIn, SporeWriter } from './support.js'
+import { sql } from 'drizzle-orm'
 import { listAliases } from '../../src/rhizomorph/aliases.js'
 
 // Two respond-only enzymes both declaring `help`: the smallest real command collision. Neither
@@ -52,6 +53,22 @@ describe('the alias routes', () => {
       .toEqual({ ok: true, restartRequired: true })
     // Asserted on the table, not through a DTO that could transform it (phase 8B's lesson).
     expect([...listAliases(served.state.db)]).toEqual([['greeter.hello', 'salut']])
+  })
+
+  // Only AliasRefused is the operator's mistake. Dropping the table makes setAlias throw a
+  // SQLite fault nothing about the request caused; everything the route checks before it —
+  // the install row, the manifest on disk — still answers.
+  it('answers 500 when the store faults, rather than blaming the caller', async () => {
+    booted = await bootAndLogin({ spores: greeter })
+    const { app, cookie, served } = booted
+    served.state.db.run(sql`DROP TABLE command_alias`)
+
+    const answer = await app.inject({
+      method: 'PUT', url: '/api/plugins/greeter/commands/hello/alias', headers: { cookie },
+      payload: { alias: 'salut' },
+    })
+
+    expect(answer.statusCode).toBe(500)
   })
 
   it('refuses an alias no caller could type, and stores nothing', async () => {

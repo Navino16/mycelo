@@ -9,6 +9,7 @@ import { germinatePhase } from '../../src/boot/germinate.js'
 import { serve } from '../../src/boot/serve.js'
 import type { Served } from '../../src/boot/serve.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
+import type { Db } from '../../src/persistence/db.js'
 import { role } from '../../src/persistence/schema.js'
 import { createLogger } from '../../src/support/logger.js'
 
@@ -425,6 +426,8 @@ export interface BootAndLoginOptions {
   seedRole?: string
   /** Keeps the browse and inoculate routes off the network. */
   driverFor?: DriverFactory
+  /** Runs against the migrated database before serve() opens it, for a row boot must find. */
+  beforeServe?: (db: Db) => void
 }
 
 /**
@@ -468,12 +471,18 @@ export async function bootAndLogin(options: BootAndLoginOptions = {}): Promise<L
     options.spores(sporesDir)
   }
   const seedRole = options.seedRole
-  const beforeServe = seedRole === undefined ? undefined : (dbFile: string): void => {
-    const { db, close } = openDatabase(dbFile)
-    migrateDatabase(db)
-    db.insert(role).values({ id: crypto.randomUUID(), name: seedRole }).run()
-    close()
-  }
+  const seed = options.beforeServe
+  const beforeServe = seedRole === undefined && seed === undefined
+    ? undefined
+    : (dbFile: string): void => {
+      const { db, close } = openDatabase(dbFile)
+      migrateDatabase(db)
+      if (seedRole !== undefined) {
+        db.insert(role).values({ id: crypto.randomUUID(), name: seedRole }).run()
+      }
+      seed?.(db)
+      close()
+    }
   const booted = boot(dir, options.config ?? '', false, sporesDir, beforeServe, undefined, options.driverFor)
   await germinatePhase(booted.served.state, createLogger())
   const cookie = await setup(booted.app)
