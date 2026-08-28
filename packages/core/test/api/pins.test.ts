@@ -63,3 +63,30 @@ describe('the api lists nothing else pins', () => {
     ])
   })
 })
+
+// The UI redeclares these shapes rather than importing them (spec §2), so nothing but this
+// pins the two whose drift would be silent.
+describe('the ui redeclares two shapes whose drift would be silent', () => {
+  const uiTypes = readFileSync(
+    join(import.meta.dirname, '..', '..', '..', 'ui', 'src', 'api', 'types.ts'), 'utf8',
+  )
+
+  // 'pending' arrived in 0.11.0. A UI missing it renders an enabled-not-yet-germinated
+  // plugin as nothing at all, which is the defect that member exists to fix.
+  it('carries every PluginDto state, including pending', () => {
+    const core = matches(
+      /state: ([^\n]*)\n/.exec(read('api/routes/plugins.ts'))?.[1] ?? '', /'([a-z]+)'/g,
+    )
+    const ui = matches(
+      /export type PluginState =([^\n]*)\n/.exec(uiTypes)?.[1] ?? '', /'([a-z]+)'/g,
+    )
+    expect(core).toEqual(['germinated', 'dormant', 'disabled', 'pending', 'unknown'])
+    expect(ui).toEqual(core)
+  })
+
+  // Its absence would make the critical banner render nothing, silently.
+  it('carries enforcingBlocked', () => {
+    expect(read('supervision/health.ts')).toContain('enforcingBlocked')
+    expect(uiTypes).toContain('enforcingBlocked')
+  })
+})
