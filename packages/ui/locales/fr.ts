@@ -1,0 +1,40 @@
+import type { StringKey } from './en.ts'
+
+// Every accent is a \uXXXX escape, not a literal byte: this catalogue is the one file
+// where a mangled character survives review, and an escape cannot be mangled by an
+// editor or a terminal.
+export const fr: Record<StringKey, string> = {
+  'app.name': 'Mycelo',
+  'nav.overview': 'Vue d\u2019ensemble',
+  'nav.plugins': 'Plugins',
+  'nav.sources': 'Sources',
+  'nav.roles': 'R\u00f4les',
+  'nav.people': 'Personnes',
+  'nav.graph': 'R\u00e9seau',
+  'nav.settings': 'Param\u00e8tres',
+  'kind.hypha': 'Hyphes',
+  'kind.hypha.subtitle': 'canaux',
+  'kind.rhiza': 'Rhizes',
+  'kind.rhiza.subtitle': 'syst\u00e8mes connect\u00e9s',
+  'kind.enzyme': 'Enzymes',
+  'kind.enzyme.subtitle': 'commandes',
+  'kind.inhibitor': 'Inhibiteurs',
+  'kind.inhibitor.subtitle': 'filtres',
+  'kind.unknown': 'Non reconnu',
+  'kind.unknown.subtitle': 'manifeste illisible',
+  'state.germinated': 'Germ\u00e9',
+  'state.dormant': 'Dormant',
+  'state.disabled': 'D\u00e9sactiv\u00e9',
+  'state.pending': 'En attente de red\u00e9marrage',
+  'state.unknown': 'Non reconnu',
+  'action.save': 'Enregistrer',
+  'action.cancel': 'Annuler',
+  'action.retry': 'R\u00e9essayer',
+  'action.install': 'Installer',
+  'action.enable': 'Activer',
+  'action.disable': 'D\u00e9sactiver',
+  'theme.toggle': 'Changer de th\u00e8me',
+  'lang.switch': 'Langue',
+  'error.generic': 'Une erreur est survenue',
+  'error.offline': 'Le substrat ne r\u00e9pond pas',
+}
