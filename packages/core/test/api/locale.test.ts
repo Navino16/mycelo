@@ -12,7 +12,7 @@ afterEach(async () => {
 })
 
 describe('the locale override', () => {
-  it('wins over the principal saved locale, which is the whole point', async () => {
+  it('wins when there is no saved locale to compete with', async () => {
     booted = await bootAndLogin()
     const { app, cookie } = booted
     // The session principal has no /lang choice here, so the control below is what
@@ -63,6 +63,9 @@ describe('the locale override', () => {
 
   // spec §11: /healthz is what a deploy script polls, and it must not depend on what that
   // script happens to send.
+  // Presently unfalsifiable: the handler never reads request.locale, and OPEN_PATHS returns
+  // before principalId is set, so no override can reach it either way. A later phase that
+  // localizes /healthz gets no warning from this test.
   it('does not reach /healthz, which keeps defaultLocale outright', async () => {
     booted = await bootAndLogin({ config: 'defaultLocale: en\n' })
     const { app } = booted
