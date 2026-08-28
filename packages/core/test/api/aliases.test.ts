@@ -1,3 +1,5 @@
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'bun:test'
 import { bootAndLogin, closeBooted, writeSpore } from './support.js'
 import type { LoggedIn, SporeWriter } from './support.js'
@@ -128,6 +130,32 @@ describe('the alias routes', () => {
 
     expect(first.json<{ cleared: boolean }>().cleared).toBe(true)
     expect(second.json<{ cleared: boolean }>().cleared).toBe(false)
+  })
+
+  // An alias holds its word in a globally unique column, so a manifest that stopped parsing must
+  // not make it unremovable — nothing else could then take that word back (review, finding 8).
+  it('clears an alias even after the spore\'s manifest stops parsing', async () => {
+    booted = await bootAndLogin({ spores: greeter })
+    const { app, cookie, served, dir } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/greeter/commands/hello/alias', headers: { cookie },
+      payload: { alias: 'salut' },
+    })
+    writeFileSync(join(dir, 'local', 'greeter', 'spore.yaml'), 'kind: enzyme\nname:\n  - broken\n', 'utf8')
+    // The control: the write path does refuse, because it must know the command exists.
+    const refusedWrite = await app.inject({
+      method: 'PUT', url: '/api/plugins/greeter/commands/hello/alias', headers: { cookie },
+      payload: { alias: 'autre' },
+    })
+    expect(refusedWrite.statusCode).toBe(400)
+
+    const cleared = await app.inject({
+      method: 'DELETE', url: '/api/plugins/greeter/commands/hello/alias', headers: { cookie },
+    })
+
+    expect(cleared.statusCode).toBe(200)
+    expect(cleared.json<{ cleared: boolean }>().cleared).toBe(true)
+    expect([...listAliases(served.state.db)]).toEqual([])
   })
 
   it('is refused without a session', async () => {

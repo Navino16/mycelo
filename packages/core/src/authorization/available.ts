@@ -11,8 +11,10 @@ import { authorize } from './check.js'
  * is an accident of the spores directory. The domain passed to translate() is the command's
  * own plugin, not the caller's.
  *
- * With `where`, the answer also matches what dispatch would do: the same two gates the bus
- * applies at bus.ts:268 and bus.ts:277. Without it, authorization alone (spec §7).
+ * With `where`, the two gates the bus applies at dispatch are applied here too (bus.ts:268 and
+ * bus.ts:277). Not the third: `registry.routes` here is germination's map, while the bus routes
+ * from the one boot/start.ts rebuilds from the enzymes that actually started — so a command whose
+ * enzyme's start() threw is still listed. Without `where`, authorization alone (spec §7).
  */
 export function availableCommands(
   registry: Registry,

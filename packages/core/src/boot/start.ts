@@ -20,7 +20,6 @@ export interface Mycelium {
   connectedHyphae: readonly GerminatedHypha[]
 }
 
-/** The three refusal callbacks below each sliced this out of `qualified` themselves. */
 export function germinationBanner(registry: Registry): string {
   const spores = [...registry.hyphae, ...registry.enzymes, ...registry.rhizas, ...registry.inhibitors]
   return `germinated ${String(spores.length)} spores (${spores.map((s) => s.name).join(', ')})`

@@ -14,7 +14,7 @@ import type { SporeDemands } from '../../germination/requirements.js'
 import { isFailure } from '../../germination/manifest.js'
 import { badRequest, notFound } from '../errors.js'
 import { parseBody } from '../parse.js'
-import { clearAlias, setAlias } from '../../rhizomorph/aliases.js'
+import { AliasRefused, clearAlias, setAlias } from '../../rhizomorph/aliases.js'
 import { describeThrown } from '../../support/thrown.js'
 
 export interface PluginDto {
@@ -152,14 +152,18 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     try {
       setAlias(state.db, name, command, alias)
     } catch (e) {
+      // instanceof on the core's own class: a SQL fault is a 500, not the operator's mistake.
+      if (!(e instanceof AliasRefused)) throw e
       throw badRequest('api.aliasRefused', { plugin: name, command }, describeThrown(e))
     }
     return { ok: true, restartRequired: state.germination.status === 'germinated' }
   })
 
+  // requireInstalled, not requireDeclaredCommand: an alias holds its word in a globally unique
+  // column, so a manifest that stopped parsing must not make it unremovable.
   app.delete('/api/plugins/:name/commands/:command/alias', (request) => {
     const { name, command } = request.params as { name: string, command: string }
-    requireDeclaredCommand(state, name, command)
+    requireInstalled(state, name)
     // `cleared` distinguishes a removal from a no-op: an operator deleting an alias that was
     // never set must not be told one was removed.
     return {

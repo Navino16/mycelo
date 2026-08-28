@@ -7,9 +7,10 @@
   is filtered on authorization alone, which is what every release before this one did and what the
   method's own doc comment warned about: a listed command could still be refused on the channel it
   was asked on. With it, the two gates the bus applies at dispatch — the channel's declared
-  capabilities and any context rule confining the command to a DM or a group — are applied here too,
-  so the answer matches what dispatch would do. Optional, so every existing caller and every
-  implementation compiles unchanged.
+  capabilities and any context rule confining the command to a DM or a group — are applied here too.
+  Not a third gate: the answer is drawn from germination's route map, so a command whose enzyme
+  failed to start is still listed. Optional, so every existing caller and every implementation
+  compiles unchanged.
 
 ### Changed
 - **`PluginInfo.state` gains a fourth member, `'pending'`**: an install that is enabled and present

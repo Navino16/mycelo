@@ -249,10 +249,6 @@ export interface CommandInfo {
 }
 
 /**
- * The core filters and renders, because it holds the pattern matcher and every catalogue;
- * a spore can only render its own domain and those its manifest requires (design §6).
- */
-/**
  * Where a caller would type the command. Supplied to available() so its answer matches what
  * dispatch would do rather than only what authorization allows.
  */
@@ -263,6 +259,10 @@ export interface CommandScope {
   kind?: ConversationKind
 }
 
+/**
+ * The core filters and renders, because it holds the pattern matcher and every catalogue;
+ * a spore can only render its own domain and those its manifest requires (design §6).
+ */
 export interface CommandsRead {
   /**
    * Commands this principal is *authorized* to invoke, sorted by `qualified`, described in

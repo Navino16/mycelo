@@ -45,8 +45,8 @@ export function listPlugins(registry: Registry, sporesDirs: readonly string[], d
     ...registry.enzymes.map((e) => ({
       name: e.name,
       kind: e.manifest.kind,
-      // The names a caller types, so this list and /api/commands cannot disagree about the
-      // same command once an alias is set (spec §3.5).
+      // The names a caller types (spec §3.5). Read live, while /api/commands routes from the map
+      // germination built — so between an alias write and the restart it answers, the two disagree.
       commands: e.manifest.commands.map((c) => aliases.get(`${e.name}.${c.name}`) ?? c.name),
       state: 'germinated' as const,
       enabled: true,

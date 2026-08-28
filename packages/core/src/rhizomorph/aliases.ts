@@ -9,6 +9,14 @@ export function listAliases(db: Db): ReadonlyMap<string, string> {
     .map((row) => [`${row.pluginName}.${row.command}`, row.alias]))
 }
 
+/** The core's own class, so the route can tell a refusal from a fault it must not relabel. */
+export class AliasRefused extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'AliasRefused'
+  }
+}
+
 /**
  * Whether `plugin.command` names a command is not checked here: no table holds a command, and
  * only a manifest on disk can answer it (spec §3.4). The unique index would refuse a duplicate
@@ -16,11 +24,11 @@ export function listAliases(db: Db): ReadonlyMap<string, string> {
  */
 export function setAlias(db: Db, plugin: string, command: string, alias: string): void {
   if (!COMMAND_NAME.test(alias)) {
-    throw new Error(`alias '${alias}' is not a name a caller could type`)
+    throw new AliasRefused(`alias '${alias}' is not a name a caller could type`)
   }
   const held = db.select().from(commandAlias).where(eq(commandAlias.alias, alias)).get()
   if (held !== undefined && (held.pluginName !== plugin || held.command !== command)) {
-    throw new Error(`alias '${alias}' already renames '${held.pluginName}.${held.command}'`)
+    throw new AliasRefused(`alias '${alias}' already renames '${held.pluginName}.${held.command}'`)
   }
   db.insert(commandAlias)
     .values({ pluginName: plugin, command, alias })
