@@ -12,6 +12,9 @@ export default defineConfig(
     // comment), so projectService's directory walk never finds a project for them.
     // Route them to tsconfig.spec.json, the one config that does include tests.
     files: ['**/*.test.ts', 'packages/**/test/**/*.ts'],
+    // packages/ui's tests are covered by its own dedicated block below, not this one:
+    // tsconfig.spec.json excludes packages/ui/**, so pointing them here would be a dangling project.
+    ignores: ['packages/ui/**'],
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: { project: './tsconfig.spec.json', tsconfigRootDir: import.meta.dirname },

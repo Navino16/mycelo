@@ -1,6 +1,6 @@
 import { GlobalRegistrator } from '@happy-dom/global-registrator'
 
-// The preload is repository-wide (bunfig.toml), not scoped to packages/ui: without disabling
-// same-origin policy, happy-dom's global fetch treats every other package's real-server
-// integration tests (a different localhost port) as cross-origin and rejects them.
+// Per-file registration was measured to fail: @testing-library/dom's CJS `screen` singleton
+// observably evaluates before that ordering takes effect under Bun (task-1-report.md, finding 3).
+// disableSameOriginPolicy: packages/core's real-server tests fetch other localhost ports.
 GlobalRegistrator.register({ settings: { fetch: { disableSameOriginPolicy: true } } })

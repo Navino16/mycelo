@@ -14,7 +14,7 @@ describe('the ui package is wired into the gate', () => {
   // tsconfig.spec.json excludes packages/ui, so without this call nothing typechecks the SPA
   // and `bun run typecheck` passes by not looking (spec §2, point 1).
   it('the root typecheck script runs the ui package own typecheck', () => {
-    expect(rootPackageJson().scripts['typecheck']).toContain('packages/ui')
+    expect(rootPackageJson().scripts['typecheck']).toContain('bun run --cwd packages/ui typecheck')
   })
 
   it('tsconfig.spec.json excludes the ui package, which its include would otherwise swallow', () => {

@@ -20,8 +20,8 @@ import { registerRoleRoutes } from './routes/roles.js'
 import { registerSourceRoutes } from './routes/sources.js'
 import { describeFault } from '../support/thrown.js'
 
-// Both roots, tried in order: a real build the day phase 9 produces one, the committed
-// sentinel until then. dist/ is gitignored, so public/ is the only one in the tree today.
+// Both roots, tried in order: dist/ if the SPA has been built (gitignored, so absent on
+// a fresh checkout), then public/'s committed sentinel, which is what a fresh checkout serves.
 const UI_ROOTS = [
   fileURLToPath(new URL('../../../ui/dist', import.meta.url)),
   fileURLToPath(new URL('../../../ui/public', import.meta.url)),
