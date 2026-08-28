@@ -32,6 +32,16 @@ export const en = {
   'lang.switch': 'Language',
   'error.generic': 'Something went wrong',
   'error.offline': 'The substrate is not answering',
+  'setup.title': 'Create the owner account',
+  'setup.lead': 'This substrate has no account yet. One owner, one login.',
+  'setup.username': 'Username',
+  'setup.password': 'Password',
+  'setup.passwordRule': 'At least 8 characters.',
+  'setup.submit': 'Create the account',
+  'setup.conflict': 'An account already exists. Sign in instead.',
+  'login.title': 'Sign in',
+  'login.submit': 'Sign in',
+  'login.failed': 'Those credentials were refused.',
 } as const
 
 export type StringKey = keyof typeof en
