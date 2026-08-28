@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import { CriticalBanner } from '../src/components/CriticalBanner.tsx'
-import { HealthContext, HealthProvider, useHealth } from '../src/health.tsx'
+import { HealthContext, HealthProvider, POLL_MS, useHealth } from '../src/health.tsx'
 import { I18nProvider } from '../src/i18n.tsx'
 import type { RuntimeHealth } from '../src/api/types.ts'
 
@@ -43,6 +43,15 @@ describe('the critical banner', () => {
     expect(screen.getByRole('alert').textContent).toContain('?')
   })
 
+  // Discriminates Array.isArray from a bare truthiness check: undefined and {} are both falsy-
+  // adjacent traps, but only a truthy non-array proves the guard checks the shape, not presence.
+  it('warns when enforcingBlocked is present but not an array', () => {
+    const malformed = { ...GERMINATED, enforcingBlocked: { oops: true } } as unknown as RuntimeHealth
+    withHealth(malformed)
+
+    expect(screen.getByRole('alert').textContent).toContain('?')
+  })
+
   it('says the substrate is not answering when the poll failed', () => {
     render(
       <I18nProvider>
@@ -79,29 +88,33 @@ describe('HealthProvider', () => {
     })
     const setIntervalSpy = spyOn(globalThis, 'setInterval')
 
-    render(
-      <I18nProvider>
-        <HealthProvider>
-          <Probe />
-          <Probe />
-        </HealthProvider>
-      </I18nProvider>,
-    )
+    // try/finally: a thrown assertion above must not leak this spy into every test that runs
+    // after it in the same process.
+    try {
+      render(
+        <I18nProvider>
+          <HealthProvider>
+            <Probe />
+            <Probe />
+          </HealthProvider>
+        </I18nProvider>,
+      )
 
-    await waitFor(() => { expect(screen.getAllByTestId('mode')[0]?.textContent).toBe('germinated') })
-    expect(screen.getAllByTestId('mode')[1]?.textContent).toBe('germinated')
-    // Two consumers, one fetch: a private poll per consumer would make this 2.
-    expect(calls).toBe(1)
+      await waitFor(() => { expect(screen.getAllByTestId('mode')[0]?.textContent).toBe('germinated') })
+      expect(screen.getAllByTestId('mode')[1]?.textContent).toBe('germinated')
+      // Two consumers, one fetch: a private poll per consumer would make this 2.
+      expect(calls).toBe(1)
 
-    // Filtered on the 15s interval, not a bare call count: testing-library's own `waitFor`
-    // falls back to polling with `setInterval` too, on the same spied global.
-    const pollCalls = setIntervalSpy.mock.calls.filter(([, ms]) => ms === 15_000)
-    expect(pollCalls).toHaveLength(1)
+      // Filtered on the 15s interval, not a bare call count: testing-library's own `waitFor`
+      // falls back to polling with `setInterval` too, on the same spied global.
+      const pollCalls = setIntervalSpy.mock.calls.filter(([, ms]) => ms === POLL_MS)
+      expect(pollCalls).toHaveLength(1)
 
-    const tick = pollCalls[0]?.[0] as () => void
-    tick()
-    await waitFor(() => { expect(calls).toBe(2) })
-
-    setIntervalSpy.mockRestore()
+      const tick = pollCalls[0]?.[0] as () => void
+      tick()
+      await waitFor(() => { expect(calls).toBe(2) })
+    } finally {
+      setIntervalSpy.mockRestore()
+    }
   })
 })

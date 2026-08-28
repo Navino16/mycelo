@@ -3,15 +3,19 @@ import type { ReactNode } from 'react'
 import { api } from './api/client.ts'
 import type { RuntimeHealth } from './api/types.ts'
 
-interface HealthState {
+// Exported, and named for what it is rather than 'HealthState': api/types.ts already exports a
+// HealthState (a rhiza's healthy/degraded/unreachable), and a same-named local type would collide
+// on any file importing both.
+export interface HealthContextValue {
   health: RuntimeHealth | null
   error: boolean
   refresh: () => Promise<void>
 }
 
-export const HealthContext = createContext<HealthState | null>(null)
+export const HealthContext = createContext<HealthContextValue | null>(null)
 
-const POLL_MS = 15_000
+// Exported so a test can assert against the real interval rather than a copied literal.
+export const POLL_MS = 15_000
 
 export function HealthProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const [health, setHealth] = useState<RuntimeHealth | null>(null)
@@ -33,7 +37,7 @@ export function HealthProvider({ children }: { children: ReactNode }): React.JSX
   return <HealthContext value={{ health, error, refresh }}>{children}</HealthContext>
 }
 
-export function useHealth(): HealthState {
+export function useHealth(): HealthContextValue {
   const ctx = use(HealthContext)
   if (ctx === null) throw new Error('useHealth outside HealthProvider')
   return ctx
