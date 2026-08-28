@@ -242,7 +242,7 @@ describe('githubDriver authorization header', () => {
 
 describe('githubDriver.detail', () => {
   test('reads kind, description and the declared range from spore.yaml at the tag', async () => {
-    const yaml = ['name: radarr', 'kind: rhiza', 'septum: "^0.10"', 'description: Radarr connector'].join('\n')
+    const yaml = ['name: radarr', 'kind: rhiza', 'septum: "^0.11"', 'description: Radarr connector'].join('\n')
     const driver = githubDriver('https://github.com/o/r', null, fakeFetch({
       '/contents/': { content: Buffer.from(yaml, 'utf8').toString('base64') },
     }))
@@ -250,7 +250,59 @@ describe('githubDriver.detail', () => {
       name: 'radarr',
       kind: 'rhiza',
       description: 'Radarr connector',
-      septum: '^0.10',
+      septum: '^0.11',
+      demands: { requires: [], scopes: [], externals: [], commands: [] },
+    })
+  })
+
+  // spec §4.1: the consent moment. detail() already parsed the whole manifest and dropped this.
+  test('reads what the spore is asking for: requirements, scopes, externals and capabilities', async () => {
+    const yaml = [
+      'name: watcher', 'kind: enzyme', 'septum: "^0.11"', 'description: Watches',
+      'externals: [signal-cli, tar]',
+      'requires:',
+      '  - rhiza: mycelium',
+      '    scopes: [plugins.read, commands.read]',
+      '  - rhiza: radarr@^2',
+      '    optional: true',
+      '  - any_of:',
+      '      - rhiza: plex',
+      '      - rhiza: jellyfin',
+      'commands:',
+      '  - name: watching',
+      '    description: command.watching.description',
+      '    code: handleWatching',
+      '    capabilities: [reactions]',
+      '  - name: plain',
+      '    description: command.plain.description',
+      '    respond: reply.plain',
+      '',
+    ].join('\n')
+    const driver = githubDriver('https://github.com/o/r', null, fakeFetch({
+      '/contents/': { content: Buffer.from(yaml, 'utf8').toString('base64') },
+    }))
+
+    expect(await driver.detail('watcher', '0.2.0')).toEqual({
+      name: 'watcher',
+      kind: 'enzyme',
+      description: 'Watches',
+      septum: '^0.11',
+      demands: {
+        externals: ['signal-cli', 'tar'],
+        // Three requirements, one of them an any_of collapsed into `targets`: a mapper that
+        // dropped the group, or flattened it into two single requirements, fails here.
+        requires: [
+          { targets: ['mycelium'], anyOf: false, optional: false, scopes: ['plugins.read', 'commands.read'] },
+          { targets: ['radarr@^2'], anyOf: false, optional: true, scopes: [] },
+          { targets: ['plex', 'jellyfin'], anyOf: true, optional: false, scopes: [] },
+        ],
+        scopes: ['plugins.read', 'commands.read'],
+        // Both commands, so a collapse to the first or to the capability-carrying one fails.
+        commands: [
+          { name: 'watching', capabilities: ['reactions'] },
+          { name: 'plain', capabilities: [] },
+        ],
+      },
     })
   })
 

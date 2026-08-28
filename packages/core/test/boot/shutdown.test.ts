@@ -45,7 +45,7 @@ function hypha(name: string, stop: () => Promise<void>): GerminatedHypha {
   }
   return {
     name,
-    manifest: { name, septum: '^0.10', kind: 'hypha', capabilities: [] },
+    manifest: { name, septum: '^0.11', kind: 'hypha', capabilities: [] },
     instance,
     config: undefined,
   }
@@ -64,7 +64,7 @@ function throwingHypha(name: string): GerminatedHypha {
 function stubInhibitor(name: string, stopped: string[]): GerminatedInhibitor {
   return {
     name, config: {}, resolved: new Set(), scopes: [],
-    manifest: { kind: 'inhibitor', name, septum: '^0.10', enforcing: false },
+    manifest: { kind: 'inhibitor', name, septum: '^0.11', enforcing: false },
     instance: { inspect: async () => ({ allow: true }), stop: async () => { stopped.push(name) } },
   } as unknown as GerminatedInhibitor
 }
@@ -78,7 +78,7 @@ function stubRhiza(name: string, stopped: string[]): GerminatedRhiza {
   }
   return {
     name,
-    manifest: { name, septum: '^0.10', kind: 'rhiza' },
+    manifest: { name, septum: '^0.11', kind: 'rhiza' },
     instance,
     config: undefined,
   }
@@ -92,7 +92,7 @@ function stubEnzyme(name: string, stopped: string[]): GerminatedEnzyme {
   return {
     name,
     manifest: {
-      name, septum: '^0.10', kind: 'enzyme',
+      name, septum: '^0.11', kind: 'enzyme',
       commands: [{ name: 'x', description: 'x', respond: 'x' }],
     },
     instance,

@@ -1,4 +1,5 @@
 import type { SporeKind } from '@mycelo/septum'
+import type { SporeDemands } from '../germination/requirements.js'
 
 // Mirrors septum's manifest nameSchema (packages/septum/src/manifest.ts), which is not exported.
 // An offer name becomes a directory name under the managed root, so it is validated wherever
@@ -23,12 +24,18 @@ export interface SporeOffer {
   strain: string
 }
 
+/**
+ * What the browse screen shows before an install. `SporeDemands` is the consent moment the
+ * brief calls out (spec §4.1): every field present and possibly empty, never absent.
+ */
 export interface SporeDetail {
   name: string
   kind: SporeKind
   description: string
   /** The range the spore declares, so the UI can warn before an install is attempted. */
   septum: string
+  /** Nested, not spread: PluginDto already has a `commands` of a different shape (spec §4.2). */
+  demands: SporeDemands
 }
 
 export interface SporeBundle {

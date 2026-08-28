@@ -1,5 +1,26 @@
 # @mycelo/septum
 
+## 0.11.0
+
+### Added
+- `CommandScope`, and a third optional parameter on `CommandsRead.available`. Without it the answer
+  is filtered on authorization alone, which is what every release before this one did and what the
+  method's own doc comment warned about: a listed command could still be refused on the channel it
+  was asked on. With it, the two gates the bus applies at dispatch — the channel's declared
+  capabilities and any context rule confining the command to a DM or a group — are applied here too.
+  Not a third gate: the answer is drawn from germination's route map, so a command whose enzyme
+  failed to start is still listed. Optional, so every existing caller and every implementation
+  compiles unchanged.
+
+### Changed
+- **`PluginInfo.state` gains a fourth member, `'pending'`**: an install that is enabled and present
+  on disk but not in the registry yet. That covers a plugin awaiting the restart an `enable()` asked
+  for, and also one still starting — which is how a spore reading `listPlugins()` from its own
+  `start()` now sees itself. Before this, such an install was **dropped from the answer entirely**
+  rather than mislabelled, so a UI landing on its plugin list straight after enabling did not show
+  the plugin. Breaking only for a consumer that switches exhaustively over the union; a producer
+  gains a member.
+
 ## 0.10.2
 
 ### Added
@@ -197,6 +218,43 @@ Added:
 
 The conformance kit now rejects a `configSchema.toJsonSchema` that is present but not callable,
 across `hyphaChecks`, `rhizaChecks`, `enzymeChecks` and `inhibitorChecks`.
+
+## 0.5.0
+
+**Breaking.** `InhibitorContext.requireCapability(channel, capability)` is a new required member. It
+throws when the named channel cannot enforce a rule the inhibitor depends on — asking a channel with
+no `group_membership` to police group members, for instance — which makes the inhibitor dormant, and
+for an `enforcing` one means all traffic is then refused. That is the point: a security rule must
+never be silently inert. Migration: an inhibitor *consumes* its context, so plugin code is
+unaffected; what breaks is every hand-written `InhibitorContext` stub, which must add the method.
+
+**Breaking.** `enzymeChecks` narrows `context()` down to `EnzymeStartContext` before calling
+`start()`, instead of handing it the fuller handler context. `EnzymeContext` extends
+`EnzymeStartContext`, so passing the fuller one typechecked and hid that the runtime's `start()`
+carries no `reply`, no `principal` and no `capabilities`. **Authors: an enzyme reaching for
+`ctx.reply` in `start()` now fails the kit**, exactly as it would fail in the bot. Pass the new
+`EnzymeHarness.startContext?()` to stub that moment yourself.
+
+Added:
+
+- Five interfaces, one per mycelium scope that had none — `PrincipalsRead`, `PrincipalsManage`,
+  `RolesRead`, `RolesAssign`, `RolesManage` — and `RoleInfo`, the shape `listRoles()` answers with.
+  The scope *names* are unchanged: `MYCELIUM_SCOPES` already enumerated them in 0.4.0. What arrives
+  here is the typed surface each one mounts, so a plugin can typecheck against exactly the methods
+  its declared scopes grant.
+- `HyphaHarness.membershipGroupId`. Supplied, `hyphaChecks` calls `listGroupMembers` with it and
+  fails a result that is not an array. Opt-in because the kit never calls `connect()`, so a hypha
+  needing its connection first would otherwise fail on a correct implementation. The core reads
+  anything but an array as "membership unavailable", which makes an `enforcing` inhibitor refuse
+  every message on the channel.
+
+Changed:
+
+- `RhizaContext.emit` is documented as reserved: no subscriber exists yet, so the core discards what
+  it emits.
+- `InhibitorContext.groupMembers` no longer claims to consult a rhiza. It answers `null` when the
+  channel cannot report members; an inhibitor wanting a fallback source fetches its own through
+  `rhiza()`.
 
 ## 0.4.0
 

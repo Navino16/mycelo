@@ -133,11 +133,12 @@ export interface BusOptions {
   /** Called when text carries no command, or names one nothing declares. */
   onUnrouted?: (message: IncomingMessage, command: string | null, locale: string) => Promise<void>
   /** Sent verbatim when authorization refuses. */
-  onDenied?: (message: IncomingMessage, qualified: string, locale: string) => Promise<void>
+  /** `qualified` for a log, `command` for the reply: under an alias they differ (spec §3.5). */
+  onDenied?: (message: IncomingMessage, qualified: string, command: string, locale: string) => Promise<void>
   /** Called when the emitting channel does not declare a capability the command requires. */
-  onUnsupported?: (message: IncomingMessage, qualified: string, capability: ChannelCapability, locale: string) => Promise<void>
+  onUnsupported?: (message: IncomingMessage, qualified: string, command: string, capability: ChannelCapability, locale: string) => Promise<void>
   /** Called when a context rule confines the command to the other conversation kind. */
-  onOutOfContext?: (message: IncomingMessage, qualified: string, where: ConversationKind, locale: string) => Promise<void>
+  onOutOfContext?: (message: IncomingMessage, qualified: string, command: string, where: ConversationKind, locale: string) => Promise<void>
   /** Defaults to the real mycelium-as-rhiza API, grounded in this bus's own registry (design §2.4). */
   mycelium?: (scopes: readonly MyceliumScope[]) => object
 }
@@ -257,7 +258,7 @@ export function createBus({
         // A respond: command is authorized too: it has no handler, but letting it
         // through unchecked would make respond: a way around authorization entirely.
         if (!authorize(route.qualified, patternsOf(db, principal.id))) {
-          await onDenied?.(message, route.qualified, locale)
+          await onDenied?.(message, route.qualified, route.command, locale)
           return
         }
 
@@ -268,7 +269,7 @@ export function createBus({
         const origin = capabilitiesOf(hyphaByName.get(message.channel))
         const missing = (spec.capabilities ?? []).find((capability) => !origin.has(capability))
         if (missing !== undefined) {
-          await onUnsupported?.(message, route.qualified, missing, locale)
+          await onUnsupported?.(message, route.qualified, route.command, missing, locale)
           return
         }
 
@@ -276,7 +277,7 @@ export function createBus({
         // one step that knows route.qualified (design note §2b).
         const where = contextRuleFor(db, route.qualified)
         if (where !== null && where !== conversationKind(message)) {
-          await onOutOfContext?.(message, route.qualified, where, locale)
+          await onOutOfContext?.(message, route.qualified, route.command, where, locale)
           return
         }
 

@@ -60,13 +60,13 @@ function setup(
   }
   const hyphae: GerminatedHypha[] = [{
     name: 'console',
-    manifest: { kind: 'hypha', name: 'console', septum: '^0.10', capabilities: ['reactions'] },
+    manifest: { kind: 'hypha', name: 'console', septum: '^0.11', capabilities: ['reactions'] },
     instance: hypha,
     config: {},
   }]
   const enzymes: GerminatedEnzyme[] = [{
     name: 'ping',
-    manifest: { kind: 'enzyme', name: 'ping', septum: '^0.10', commands },
+    manifest: { kind: 'enzyme', name: 'ping', septum: '^0.11', commands },
     instance,
     resolved: new Set(resolved),
     scopes: [],
@@ -74,7 +74,7 @@ function setup(
   }]
   const order = [...rhizas.map((r) => r.name), 'ping']
   return {
-    registry: { hyphae, enzymes, rhizas, inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order, brokenEnforcing: [], catalogs: new Map() },
+    registry: { hyphae, enzymes, rhizas, inhibitors: [], dormant: [], routes: buildRoutes(enzymes, new Map()), order, brokenEnforcing: [], catalogs: new Map() },
     sent,
   }
 }
@@ -82,7 +82,7 @@ function setup(
 const access = (resolved: string[]): SporeAccess => ({ resolved: new Set(resolved), scopes: [] })
 const stubRhiza = (name: string, api: unknown): GerminatedRhiza => ({
   name,
-  manifest: { kind: 'rhiza', name, septum: '^0.10' },
+  manifest: { kind: 'rhiza', name, septum: '^0.11' },
   instance: { api } as unknown as Rhiza,
   config: {},
 })
@@ -142,14 +142,14 @@ it('names the failed command, not just the channel, when a respond: send throws'
   }
   const hyphae: GerminatedHypha[] = [{
     name: 'console',
-    manifest: { kind: 'hypha', name: 'console', septum: '^0.10', capabilities: [] },
+    manifest: { kind: 'hypha', name: 'console', septum: '^0.11', capabilities: [] },
     instance: hypha,
     config: {},
   }]
   const enzymes: GerminatedEnzyme[] = [{
     name: 'ping',
     manifest: {
-      kind: 'enzyme', name: 'ping', septum: '^0.10',
+      kind: 'enzyme', name: 'ping', septum: '^0.11',
       commands: [{ name: 'links', description: 'x', respond: 'Radarr http://radarr:7878' }],
     },
     instance: null,
@@ -157,7 +157,7 @@ it('names the failed command, not just the channel, when a respond: send throws'
     scopes: [],
     config: {},
   }]
-  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'], brokenEnforcing: [], catalogs: new Map() }
+  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes, new Map()), order: ['ping'], brokenEnforcing: [], catalogs: new Map() }
   const errors: string[] = []
   const logger: Logger = {
     debug() {}, info() {}, warn() {},
@@ -254,7 +254,7 @@ describe("respond: resolves through the declaring spore's domain", () => {
     }
     const hyphae: GerminatedHypha[] = [{
       name: 'console',
-      manifest: { kind: 'hypha', name: 'console', septum: '^0.10', capabilities: [] },
+      manifest: { kind: 'hypha', name: 'console', septum: '^0.11', capabilities: [] },
       instance: hypha,
       config: {},
     }]
@@ -262,7 +262,7 @@ describe("respond: resolves through the declaring spore's domain", () => {
       {
         name: 'alpha',
         manifest: {
-          kind: 'enzyme', name: 'alpha', septum: '^0.10',
+          kind: 'enzyme', name: 'alpha', septum: '^0.11',
           commands: [{ name: 'hello-alpha', description: 'x', respond: 'greeting.text' }],
         },
         instance: null, resolved: new Set(), scopes: [], config: {},
@@ -270,7 +270,7 @@ describe("respond: resolves through the declaring spore's domain", () => {
       {
         name: 'beta',
         manifest: {
-          kind: 'enzyme', name: 'beta', septum: '^0.10',
+          kind: 'enzyme', name: 'beta', septum: '^0.11',
           commands: [{ name: 'hello-beta', description: 'x', respond: 'greeting.text' }],
         },
         instance: null, resolved: new Set(), scopes: [], config: {},
@@ -278,7 +278,7 @@ describe("respond: resolves through the declaring spore's domain", () => {
     ]
     const registry: Registry = {
       hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [],
-      routes: buildRoutes(enzymes), order: ['alpha', 'beta'], brokenEnforcing: [], catalogs: new Map(),
+      routes: buildRoutes(enzymes, new Map()), order: ['alpha', 'beta'], brokenEnforcing: [], catalogs: new Map(),
     }
     const bus = busFor(registry, {
       translator: createTranslator({
@@ -442,7 +442,7 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
   }
   const hyphae: GerminatedHypha[] = [{
     name: 'console',
-    manifest: { kind: 'hypha', name: 'console', septum: '^0.10', capabilities: [] },
+    manifest: { kind: 'hypha', name: 'console', septum: '^0.11', capabilities: [] },
     instance: hypha,
     config: {},
   }]
@@ -451,7 +451,7 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
     {
       name: 'alpha',
       manifest: {
-        kind: 'enzyme', name: 'alpha', septum: '^0.10',
+        kind: 'enzyme', name: 'alpha', septum: '^0.11',
         commands: [{ name: 'alpha', description: 'x', code: 'alpha' }],
       },
       instance: {
@@ -472,7 +472,7 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
     {
       name: 'beta',
       manifest: {
-        kind: 'enzyme', name: 'beta', septum: '^0.10',
+        kind: 'enzyme', name: 'beta', septum: '^0.11',
         commands: [{ name: 'beta', description: 'x', code: 'beta' }],
       },
       instance: {
@@ -493,7 +493,7 @@ it('confines each enzyme to its own resolved set and scopes, not a union across 
   ]
   const registry: Registry = {
     hyphae, enzymes, rhizas, inhibitors: [], dormant: [],
-    routes: buildRoutes(enzymes),
+    routes: buildRoutes(enzymes, new Map()),
     order: ['mock', 'other', 'alpha', 'beta'],
     brokenEnforcing: [],
     catalogs: new Map(),
@@ -539,14 +539,14 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
   }
   const hyphae: GerminatedHypha[] = [{
     name: 'console',
-    manifest: { kind: 'hypha', name: 'console', septum: '^0.10', capabilities: [] },
+    manifest: { kind: 'hypha', name: 'console', septum: '^0.11', capabilities: [] },
     instance: hypha,
     config: {},
   }]
   const enzymes: GerminatedEnzyme[] = [{
     name: 'ping',
     manifest: {
-      kind: 'enzyme', name: 'ping', septum: '^0.10',
+      kind: 'enzyme', name: 'ping', septum: '^0.11',
       commands: [{ name: 'ping', description: 'Health check', code: 'ping' }],
     },
     instance: { handlers: { ping: async () => { throw new Error('boom') } } },
@@ -554,7 +554,7 @@ it('contains a recovery send that also fails, with nowhere left to answer', asyn
     scopes: [],
     config: {},
   }]
-  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes), order: ['ping'], brokenEnforcing: [], catalogs: new Map() }
+  const registry: Registry = { hyphae, enzymes, rhizas: [], inhibitors: [], dormant: [], routes: buildRoutes(enzymes, new Map()), order: ['ping'], brokenEnforcing: [], catalogs: new Map() }
   // A bespoke logger, not createLogger(): distinguishes "contained by the specific
   // recovery-send try" from "contained by the outer catch-all" — both would make the
   // promise resolve, but only the former logs both failures under their own messages.
@@ -610,6 +610,8 @@ interface DeliverOptions {
 interface Harness {
   db: Db
   sent: string[]
+  /** What each refusal named to the caller, which under an alias is not the declared name. */
+  deniedAs: string[]
   seen: { principal?: Principal }
   deliver(text: string, externalId: string, options?: DeliverOptions): Promise<void>
 }
@@ -620,14 +622,16 @@ function harness(options: {
   defaultRole?: string
   db?: Db
   capabilities?: readonly ChannelCapability[]
+  aliases?: ReadonlyMap<string, string>
 }): Harness {
   const harnessDb = options.db ?? fresh()
   const sent: string[] = []
+  const deniedAs: string[] = []
   const seen: { principal?: Principal } = {}
   const hypha = {
     name: 'console',
     config: {},
-    manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.10', capabilities: options.capabilities ?? [] },
+    manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.11', capabilities: options.capabilities ?? [] },
     instance: {
       connect: () => Promise.resolve(),
       listen: () => {},
@@ -640,7 +644,7 @@ function harness(options: {
     config: {},
     resolved: new Set<string>(),
     scopes: [],
-    manifest: { kind: 'enzyme' as const, name: 'media', septum: '^0.10', commands: options.commands },
+    manifest: { kind: 'enzyme' as const, name: 'media', septum: '^0.11', commands: options.commands },
     instance: {
       handlers: {
         handleMovies: async (_invocation: unknown, ctx: { principal: Principal; reply: (c: { text: string }) => Promise<void> }) => {
@@ -652,7 +656,7 @@ function harness(options: {
   } as unknown as GerminatedEnzyme
   const registry: Registry = {
     hyphae: [hypha], enzymes: [enzyme], rhizas: [], inhibitors: [], dormant: [],
-    routes: buildRoutes([enzyme]), order: ['media'], brokenEnforcing: [], catalogs: new Map(),
+    routes: buildRoutes([enzyme], options.aliases ?? new Map()), order: ['media'], brokenEnforcing: [], catalogs: new Map(),
   }
   const logger = {
     info: () => {}, debug: () => {}, warn: () => {}, error: () => {},
@@ -669,21 +673,24 @@ function harness(options: {
       if (command !== null) sent.push(`unknown command '${command}'`)
       await Promise.resolve()
     },
-    onDenied: async (_msg, qualified) => {
+    onDenied: async (_msg, qualified, command) => {
       sent.push(`denied ${qualified}`)
+      // Kept apart from `sent` so the alias case can assert what the caller typed without
+      // rewriting every assertion above (spec §3.5).
+      deniedAs.push(command)
       await Promise.resolve()
     },
-    onUnsupported: async (_msg, qualified, capability) => {
+    onUnsupported: async (_msg, qualified, _command, capability) => {
       sent.push(`unsupported ${qualified} ${capability}`)
       await Promise.resolve()
     },
-    onOutOfContext: async (_msg, qualified, where) => {
+    onOutOfContext: async (_msg, qualified, _command, where) => {
       sent.push(`out-of-context ${qualified} ${where}`)
       await Promise.resolve()
     },
   })
   return {
-    db: harnessDb, sent, seen,
+    db: harnessDb, sent, seen, deniedAs,
     deliver: (text, externalId, deliverOptions = {}) => bus.deliver('console', {
       channel: 'console',
       conversationId: deliverOptions.conversationId ?? 'c1',
@@ -936,7 +943,7 @@ describe('the four refusal callbacks, threaded with the locale bus.ts resolved',
 
     const hypha = {
       name: 'console', config: {},
-      manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.10', capabilities: [] },
+      manifest: { kind: 'hypha' as const, name: 'console', septum: '^0.11', capabilities: [] },
       instance: {
         connect: () => Promise.resolve(), listen: () => {}, stop: () => Promise.resolve(),
         send: () => Promise.resolve(),
@@ -945,7 +952,7 @@ describe('the four refusal callbacks, threaded with the locale bus.ts resolved',
     const enzyme = {
       name: 'media', config: {}, resolved: new Set<string>(), scopes: [],
       manifest: {
-        kind: 'enzyme' as const, name: 'media', septum: '^0.10',
+        kind: 'enzyme' as const, name: 'media', septum: '^0.11',
         commands: [
           { name: 'movies', description: 'x', code: 'movies' },
           { name: 'react', description: 'x', code: 'react', capabilities: ['reactions'] },
@@ -956,7 +963,7 @@ describe('the four refusal callbacks, threaded with the locale bus.ts resolved',
     } as unknown as GerminatedEnzyme
     const registry: Registry = {
       hyphae: [hypha], enzymes: [enzyme], rhizas: [], inhibitors: [], dormant: [],
-      routes: buildRoutes([enzyme]), order: ['media'], brokenEnforcing: [], catalogs: new Map(),
+      routes: buildRoutes([enzyme], new Map()), order: ['media'], brokenEnforcing: [], catalogs: new Map(),
     }
 
     // Mirrors boot/start.ts's own four callbacks, so a passing test here proves bus.ts's
@@ -980,13 +987,13 @@ describe('the four refusal callbacks, threaded with the locale bus.ts resolved',
         if (command === null) return
         sent.push(stub.translate('core', 'command.unknown', locale, { command }))
       },
-      onDenied: async (_msg, qualified, locale) => {
+      onDenied: async (_msg, qualified, _command, locale) => {
         sent.push(stub.translate('core', 'command.denied', locale, { command: shortName(qualified) }))
       },
-      onUnsupported: async (_msg, qualified, capability, locale) => {
+      onUnsupported: async (_msg, qualified, _command, capability, locale) => {
         sent.push(stub.translate('core', 'command.unsupported', locale, { command: shortName(qualified), capability }))
       },
-      onOutOfContext: async (_msg, qualified, where, locale) => {
+      onOutOfContext: async (_msg, qualified, _command, where, locale) => {
         sent.push(stub.translate('core', `context.${where}`, locale, { command: shortName(qualified) }))
       },
     })
@@ -1065,5 +1072,31 @@ describe('per-message locale resolution', () => {
     setConversationLocale(db, 'console', 'c:1', 'en')
     expect(inConversation).toBe('ru')
     expect(fallback).toBe('en')
+  })
+})
+
+// spec §3.5: a refusal that named the declared command would tell an operator who typed
+// /aide that they may not use 'help'. Measured live before this test existed.
+describe('a refusal under an alias', () => {
+  it('names the command the caller typed, while the log keeps the qualified id', async () => {
+    const h = harness({
+      commands: [codeCommand],
+      aliases: new Map([['media.movies', 'films']]),
+    })
+
+    await h.deliver('/films Dune', 'bob')
+
+    expect(h.deniedAs).toEqual(['films'])
+    // The qualified id is unchanged, so a role pattern still grants the same command.
+    expect(h.sent).toEqual(['denied media.movies'])
+  })
+
+  it('still names the declared command when no alias is set', async () => {
+    const h = harness({ commands: [codeCommand] })
+
+    await h.deliver('/movies Dune', 'bob')
+
+    expect(h.deniedAs).toEqual(['movies'])
+    expect(h.sent).toEqual(['denied media.movies'])
   })
 })

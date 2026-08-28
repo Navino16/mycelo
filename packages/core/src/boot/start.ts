@@ -3,6 +3,7 @@ import { createAdmissionChain, createInhibitorContext } from '../admission/chain
 import type { AdmissionChain } from '../admission/chain.js'
 import { createMembershipCache } from '../admission/membership.js'
 import { buildRoutes } from '../germination/registry.js'
+import { listAliases } from '../rhizomorph/aliases.js'
 import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor, GerminatedRhiza, Registry } from '../germination/registry.js'
 import { createMyceliumApi } from '../mycelium-rhiza.js'
 import { allInhibitorChannels } from '../restrictions/rules.js'
@@ -17,11 +18,6 @@ export interface Mycelium {
   admission: AdmissionChain
   /** Every hypha whose connect() resolved, unlike registry.hyphae (listen() survivors only). */
   connectedHyphae: readonly GerminatedHypha[]
-}
-
-/** The three refusal callbacks below each sliced this out of `qualified` themselves. */
-function shortName(qualified: string): string {
-  return qualified.slice(qualified.indexOf('.') + 1)
 }
 
 export function germinationBanner(registry: Registry): string {
@@ -201,8 +197,9 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
     })
 
     // A failed start() must not leave the enzyme routable: routes are rebuilt from
-    // only the enzymes that started (safe — buildRoutes() already accepted the full
-    // set at germination, and removing entries cannot introduce a new collision).
+    // only the enzymes that started. Safe because germination already accepted the full
+    // set under the SAME alias map — removing entries cannot introduce a collision, but
+    // rebuilding under a different map could (spec §3.3).
     const routedRegistry: Registry = {
       ...registry,
       hyphae: connectedHyphae,
@@ -210,7 +207,7 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
       enzymes: startedEnzymes,
       inhibitors: startedInhibitors,
       brokenEnforcing,
-      routes: buildRoutes(startedEnzymes),
+      routes: buildRoutes(startedEnzymes, listAliases(db)),
     }
 
     const bus = createBus({
@@ -230,21 +227,23 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
           text: translator.translate('core', 'command.unknown', locale, { command }),
         })
       },
-      onDenied: async (message, qualified, locale) => {
+      // The reply names what the caller typed, which under an alias is not the declared
+      // name the qualified id carries (spec §3.5).
+      onDenied: async (message, _qualified, command, locale) => {
         await sendVia(hyphaByName, message.channel, message.conversationId, {
-          text: translator.translate('core', 'command.denied', locale, { command: shortName(qualified) }),
+          text: translator.translate('core', 'command.denied', locale, { command }),
         })
       },
-      onUnsupported: async (message, qualified, capability, locale) => {
+      onUnsupported: async (message, _qualified, command, capability, locale) => {
         await sendVia(hyphaByName, message.channel, message.conversationId, {
           text: translator.translate('core', 'command.unsupported', locale, {
-            command: shortName(qualified), capability, channel: message.channel,
+            command, capability, channel: message.channel,
           }),
         })
       },
-      onOutOfContext: async (message, qualified, where, locale) => {
+      onOutOfContext: async (message, _qualified, command, where, locale) => {
         await sendVia(hyphaByName, message.channel, message.conversationId, {
-          text: translator.translate('core', `context.${where}`, locale, { command: shortName(qualified) }),
+          text: translator.translate('core', `context.${where}`, locale, { command }),
         })
       },
     })

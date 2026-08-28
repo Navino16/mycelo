@@ -186,8 +186,8 @@ export function createMyceliumApi(
   }
   if (granted.has('commands.read')) {
     if (translator === undefined) throw new Error('commands.read was granted with no translator')
-    api.available = (principal, locale) =>
-      toPromise(() => availableCommands(registry, db, translator, principal, locale))
+    api.available = (principal, locale, where) =>
+      toPromise(() => availableCommands(registry, db, translator, principal, locale, where))
   }
   if (granted.has('locale.manage')) {
     // Fail fast rather than mounting a scope whose availableLocales() would answer [] —

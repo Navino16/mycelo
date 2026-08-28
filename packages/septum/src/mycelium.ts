@@ -36,9 +36,12 @@ export interface PluginInfo {
   commands: readonly string[]
   /**
    * 'germinated' and 'dormant' are what germination reached; 'disabled' is an install
-   * row the operator switched off, which germination skips without loading it.
+   * row the operator switched off, which germination skips without loading it; 'pending'
+   * is enabled and on disk but not in the registry yet — a plugin awaiting the restart that
+   * an enable() asked for, and also one still starting, which is how a spore reading this
+   * from its own start() sees itself.
    */
-  state: 'germinated' | 'dormant' | 'disabled'
+  state: 'germinated' | 'dormant' | 'disabled' | 'pending'
   /** Present only when dormant. */
   reason?: string
   /**
@@ -246,19 +249,36 @@ export interface CommandInfo {
 }
 
 /**
+ * Where a caller would type the command. Supplied to available() so the channel's declared
+ * capabilities and any context rule gate the answer, not authorization alone.
+ */
+export interface CommandScope {
+  /** The channel whose declared capabilities gate the answer. */
+  channel: string
+  /** Omitted leaves context rules unapplied, for a caller that knows no conversation. */
+  kind?: ConversationKind
+}
+
+/**
  * The core filters and renders, because it holds the pattern matcher and every catalogue;
  * a spore can only render its own domain and those its manifest requires (design §6).
  */
 export interface CommandsRead {
   /**
    * Commands this principal is *authorized* to invoke, sorted by `qualified`, described in
-   * this locale. Channel capabilities and context rules are applied at dispatch, not here —
-   * a listed command can still be refused on the channel it is asked on.
+   * this locale. Without `where`, channel capabilities and context rules are applied at
+   * dispatch and not here, so a listed command can still be refused on the channel it is
+   * asked on. With `where`, both are applied. Not a third gate: the answer is drawn from
+   * germination's route map, so a command whose enzyme failed to start is still listed.
    * The principal is a parameter because a mycelium rhiza is mounted once per plugin,
    * not once per invocation — so a spore holding any principal's id learns that principal's
    * authorized command set without holding `roles.read` (design §6).
    */
-  available(principal: Principal, locale: string): Promise<readonly CommandInfo[]>
+  available(
+    principal: Principal,
+    locale: string,
+    where?: CommandScope,
+  ): Promise<readonly CommandInfo[]>
 }
 
 export interface LocaleManage {

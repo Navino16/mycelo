@@ -41,7 +41,7 @@ function handwritten(): void {
   mkdirSync(join(dir, 'handwritten', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'handwritten', 'spore.yaml'),
-    'kind: enzyme\nname: handwritten\nseptum: "^0.10"\n'
+    'kind: enzyme\nname: handwritten\nseptum: "^0.11"\n'
       + 'commands:\n  - name: handwritten\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -77,7 +77,7 @@ function eitherOr(): void {
   mkdirSync(join(dir, 'eitheror', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'eitheror', 'spore.yaml'),
-    'kind: enzyme\nname: eitheror\nseptum: "^0.10"\n'
+    'kind: enzyme\nname: eitheror\nseptum: "^0.11"\n'
       + 'commands:\n  - name: eitheror\n    description: command.eitheror.description\n    code: handleIt\n',
     'utf8',
   )
@@ -122,7 +122,7 @@ function pathless(): void {
   mkdirSync(join(dir, 'pathless', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'pathless', 'spore.yaml'),
-    'kind: enzyme\nname: pathless\nseptum: "^0.10"\n'
+    'kind: enzyme\nname: pathless\nseptum: "^0.11"\n'
       + 'commands:\n  - name: pathless\n    description: command.pathless.description\n    code: handleIt\n',
     'utf8',
   )
@@ -175,7 +175,7 @@ function vault(): void {
   mkdirSync(join(dir, 'vault', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'vault', 'spore.yaml'),
-    'kind: enzyme\nname: vault\nseptum: "^0.10"\n'
+    'kind: enzyme\nname: vault\nseptum: "^0.11"\n'
       + 'commands:\n  - name: vault\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -198,7 +198,7 @@ function twin(): void {
   mkdirSync(join(dir, 'twin', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'twin', 'spore.yaml'),
-    'kind: enzyme\nname: twin\nseptum: "^0.10"\n'
+    'kind: enzyme\nname: twin\nseptum: "^0.11"\n'
       + 'commands:\n  - name: twin\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -278,7 +278,7 @@ it('a value written while the plugin throws at import is stored in the clear (kn
   mkdirSync(join(dir, 'boomvault', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'boomvault', 'spore.yaml'),
-    'kind: enzyme\nname: boomvault\nseptum: "^0.10"\n'
+    'kind: enzyme\nname: boomvault\nseptum: "^0.11"\n'
       + 'commands:\n  - name: boomvault\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -339,7 +339,7 @@ it('carries provenance onto a germinated and a dormant entry, each from its own 
   recordInstall(db, 'broken', 'rhiza', true, { sourceId: third.id, strain: '2.3.4' })
   const registry = {
     ...emptyRegistry(),
-    enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^0.10', commands: [] } }],
+    enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^0.11', commands: [] } }],
     dormant: [{ name: 'broken', reason: 'create() returned no api' }],
   } as unknown as Registry
   const infos = listPlugins(registry, [], db)
@@ -363,7 +363,7 @@ it('carries provenance onto a germinated hypha, rhiza and inhibitor, each from i
   const entries = kinds.map(([name, kind, label, strain]) => {
     const s = addSource(db, { label, driver: 'github', location: `https://example/${name}` })
     recordInstall(db, name, kind, true, { sourceId: s.id, strain })
-    return { name, manifest: { kind, name, septum: '^0.10' } }
+    return { name, manifest: { kind, name, septum: '^0.11' } }
   })
   const registry = {
     ...emptyRegistry(),

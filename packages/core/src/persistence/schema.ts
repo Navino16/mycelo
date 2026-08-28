@@ -136,6 +136,20 @@ export const inhibitorChannel = sqliteTable(
   (t) => [primaryKey({ columns: [t.pluginName, t.channel] })],
 )
 
+// The alias renames what a caller types; `qualified` stays plugin.command, so every stored
+// role pattern survives one (spec §3.1). unique(alias) catches two commands renamed to the
+// same word; an alias colliding with a name nobody renamed is buildRoutes' business.
+export const commandAlias = sqliteTable(
+  'command_alias',
+  {
+    pluginName: text('plugin_name').notNull()
+      .references(() => pluginInstall.name, { onDelete: 'cascade' }),
+    command: text('command').notNull(),
+    alias: text('alias').notNull().unique(),
+  },
+  (t) => [primaryKey({ columns: [t.pluginName, t.command] })],
+)
+
 // One credential per principal, because §5.4 makes a UI login another identity of the
 // same person rather than an account of its own.
 export const uiCredential = sqliteTable('ui_credential', {

@@ -14,7 +14,7 @@ function spore(name: string, yaml: string): void {
   writeFileSync(join(dir, name, 'spore.yaml'), yaml, 'utf8')
 }
 
-const VALID = 'kind: enzyme\nname: ping\nseptum: "^0.10"\ncommands:\n  - name: ping\n    description: Health check\n    respond: pong\n'
+const VALID = 'kind: enzyme\nname: ping\nseptum: "^0.11"\ncommands:\n  - name: ping\n    description: Health check\n    respond: pong\n'
 
 it('parses a valid manifest', () => {
   spore('ping', VALID)
@@ -31,7 +31,7 @@ it('reports invalid YAML as a failure, never a throw', () => {
 })
 
 it('reports a schema violation with the offending field', () => {
-  spore('nameless', 'kind: enzyme\nseptum: "^0.10"\ncommands: []\n')
+  spore('nameless', 'kind: enzyme\nseptum: "^0.11"\ncommands: []\n')
   const read = readManifest(discover([dir])[0]!)
   expect(isFailure(read)).toBe(true)
   // Zod's message text ("Invalid input: expected string, received undefined") is

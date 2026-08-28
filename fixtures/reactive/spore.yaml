@@ -1,5 +1,5 @@
 kind: hypha
 name: reactive
-septum: "^0.10"
+septum: "^0.11"
 description: Console-shaped channel that also declares reactions. Test fixture, never distributed.
 capabilities: [group_membership, reactions]

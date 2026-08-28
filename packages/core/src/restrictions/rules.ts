@@ -36,11 +36,21 @@ export function clearContextRule(db: Db, pattern: string): void {
  * The most specific matching rule wins: exact, then `plugin.*`, then `*`. A less specific
  * rule must not override the one the operator wrote for a single command.
  */
-export function contextRuleFor(db: Db, qualified: string): ConversationKind | null {
-  const dot = qualified.indexOf('.')
-  const plugin = dot === -1 ? qualified : qualified.slice(0, dot)
+/**
+ * The rule table read once, as a resolver. available() asks per command over 100+ commands,
+ * and contextRuleFor's per-call listContextRules() would be one full read each.
+ */
+export function contextRules(db: Db): (qualified: string) => ConversationKind | null {
   const rules = new Map(listContextRules(db).map((r) => [r.pattern, r.where]))
-  return rules.get(qualified) ?? rules.get(`${plugin}.*`) ?? rules.get('*') ?? null
+  return (qualified) => {
+    const dot = qualified.indexOf('.')
+    const plugin = dot === -1 ? qualified : qualified.slice(0, dot)
+    return rules.get(qualified) ?? rules.get(`${plugin}.*`) ?? rules.get('*') ?? null
+  }
+}
+
+export function contextRuleFor(db: Db, qualified: string): ConversationKind | null {
+  return contextRules(db)(qualified)
 }
 
 export function inhibitorChannels(db: Db, name: string): readonly string[] {

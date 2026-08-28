@@ -46,8 +46,11 @@ export interface Dormant {
 
 /** Which enzyme answers a command, and under which plugin it is authorized. */
 export interface CommandRoute {
+  /** What a caller types: the alias when one is set, the manifest name otherwise. */
   command: string
   plugin: string
+  /** As the manifest declares it, so a help surface can say what an alias renamed. */
+  declared: string
   /** `<plugin>.<command>` — the authorization identifier, not what a user types. */
   qualified: string
   spec: CommandSpec
@@ -84,21 +87,28 @@ export interface Registry {
 }
 
 /**
- * Indexes commands by short name. A collision halts germination (spec §8) — it cannot
- * be resolved here, only by an alias set in the UI, which phase 5 adds.
+ * Indexes commands by the name a caller types — the alias when `aliases` holds one for
+ * `plugin.command`, the manifest name otherwise. A collision still halts germination: an
+ * alias resolves one, it does not suppress the check (spec §3.3).
  */
-export function buildRoutes(enzymes: readonly GerminatedEnzyme[]): Map<string, CommandRoute> {
+export function buildRoutes(
+  enzymes: readonly GerminatedEnzyme[],
+  aliases: ReadonlyMap<string, string>,
+): Map<string, CommandRoute> {
   const routes = new Map<string, CommandRoute>()
   for (const enzyme of enzymes) {
     for (const spec of enzyme.manifest.commands) {
-      const existing = routes.get(spec.name)
+      const qualified = `${enzyme.name}.${spec.name}`
+      const command = aliases.get(qualified) ?? spec.name
+      const existing = routes.get(command)
       if (existing !== undefined) {
-        throw new CollisionError(spec.name, [existing.plugin, enzyme.name])
+        throw new CollisionError(command, [existing.plugin, enzyme.name])
       }
-      routes.set(spec.name, {
-        command: spec.name,
+      routes.set(command, {
+        command,
         plugin: enzyme.name,
-        qualified: `${enzyme.name}.${spec.name}`,
+        declared: spec.name,
+        qualified,
         spec,
         enzyme,
       })

@@ -15,7 +15,7 @@ function inhibitor(
 ): GerminatedInhibitor {
   return {
     name, config: {}, resolved: new Set(), scopes: [],
-    manifest: { kind: 'inhibitor', name, septum: '^0.10', enforcing },
+    manifest: { kind: 'inhibitor', name, septum: '^0.11', enforcing },
     instance: { inspect },
   } as unknown as GerminatedInhibitor
 }
@@ -166,7 +166,7 @@ describe('createAdmissionChain', () => {
   it("refuses a domain the inhibitor's requires never declared, from admit()'s own context", async () => {
     const broken = {
       name: 'gate', config: {}, resolved: new Set<string>(), scopes: [],
-      manifest: { kind: 'inhibitor', name: 'gate', septum: '^0.10', enforcing: true },
+      manifest: { kind: 'inhibitor', name: 'gate', septum: '^0.11', enforcing: true },
       instance: {
         inspect: (_msg: IncomingMessage, ctx: InhibitorContext) => {
           ctx.t({ domain: 'radarr', key: 'x' })
@@ -192,7 +192,7 @@ describe('createAdmissionChain', () => {
     const first = inhibitor('aaa', false, () => Promise.resolve({ allow: true }))
     const second = {
       name: 'zzz', config: {}, resolved: new Set<string>(), scopes: [],
-      manifest: { kind: 'inhibitor', name: 'zzz', septum: '^0.10', enforcing: false },
+      manifest: { kind: 'inhibitor', name: 'zzz', septum: '^0.11', enforcing: false },
       instance: {
         inspect: (_msg: IncomingMessage, ctx: InhibitorContext) => {
           ctx.t('greeting')
@@ -281,7 +281,7 @@ describe('inhibitor channel confinement', () => {
 describe('createInhibitorContext', () => {
   const rhizaNamed = (name: string, api: object): GerminatedRhiza => ({
     name, config: {},
-    manifest: { kind: 'rhiza', name, septum: '^0.10' },
+    manifest: { kind: 'rhiza', name, septum: '^0.11' },
     instance: { api },
   } as unknown as GerminatedRhiza)
 
@@ -295,7 +295,7 @@ describe('createInhibitorContext', () => {
       name: 'gate', config: {},
       resolved: new Set(options.resolved),
       scopes: options.scopes ?? [],
-      manifest: { kind: 'inhibitor', name: 'gate', septum: '^0.10', enforcing: true },
+      manifest: { kind: 'inhibitor', name: 'gate', septum: '^0.11', enforcing: true },
       instance: { inspect: () => Promise.resolve({ allow: true }) },
     } as unknown as GerminatedInhibitor
     return createInhibitorContext({

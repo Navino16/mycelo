@@ -6,6 +6,8 @@ import {
   mandatoryAndOptionalDependency, translatedCommand, twoPluginsTwoCommands,
 } from './support.js'
 import type { LoggedIn } from './support.js'
+import { recordInstall, setEnabled } from '../../src/config/store.js'
+import { setAlias } from '../../src/rhizomorph/aliases.js'
 
 let booted: LoggedIn | undefined
 
@@ -41,6 +43,30 @@ describe('/api/commands', () => {
     expect(body.greeter?.find((c) => c.command === 'hello')).toMatchObject({
       plugin: 'greeter', qualified: 'greeter.hello',
     })
+  })
+
+  // spec §3.5: the typed name and the declared one are different facts. Asserting only that
+  // 'salut' appears would pass on a DTO reporting it as the declared name too — assert the
+  // pairing, and the unrenamed sibling beside it.
+  it('reports the alias as the typed name and the manifest name as the declared one', async () => {
+    booted = await bootAndLogin({
+      spores: twoPluginsTwoCommands,
+      beforeServe: (db) => {
+        recordInstall(db, 'greeter', 'enzyme')
+        setEnabled(db, 'greeter', true)
+        setAlias(db, 'greeter', 'hello', 'salut')
+      },
+    })
+    const { app, cookie } = booted
+    const body = (
+      await app.inject({ method: 'GET', url: '/api/commands', headers: { cookie } })
+    ).json<CommandGroups>()
+
+    expect(body.greeter?.map((c) => c.command).sort()).toEqual(['farewell', 'salut'])
+    expect(body.greeter?.find((c) => c.qualified === 'greeter.hello'))
+      .toMatchObject({ command: 'salut', declared: 'hello' })
+    expect(body.greeter?.find((c) => c.qualified === 'greeter.farewell'))
+      .toMatchObject({ command: 'farewell', declared: 'farewell' })
   })
 
   it('renders the description through the declaring plugin\'s own catalogue, in the reader\'s locale', async () => {

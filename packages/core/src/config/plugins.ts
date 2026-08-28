@@ -8,6 +8,7 @@ import { REDACTED } from '../support/redaction.js'
 import { describeThrown } from '../support/thrown.js'
 import { formSchemaFor } from './jsonschema.js'
 import { enablePlugin, findSpore, loadSporeModule } from './lifecycle.js'
+import { listAliases } from '../rhizomorph/aliases.js'
 import { getInstall, listInstalls, writeSetting } from './store.js'
 
 export interface Provenance {
@@ -37,13 +38,16 @@ export function provenanceByName(db: Db): ReadonlyMap<string, Provenance> {
 export function listPlugins(registry: Registry, sporesDirs: readonly string[], db?: Db): readonly PluginInfo[] {
   const installs = db === undefined ? [] : listInstalls(db)
   const provenance = db === undefined ? new Map<string, Provenance>() : provenanceByName(db)
+  const aliases = db === undefined ? new Map<string, string>() : listAliases(db)
   const from = (name: string): Provenance => provenance.get(name) ?? {}
   const germinated: PluginInfo[] = [
     ...registry.hyphae.map((h) => ({ name: h.name, kind: h.manifest.kind, commands: [], state: 'germinated' as const, enabled: true, ...from(h.name) })),
     ...registry.enzymes.map((e) => ({
       name: e.name,
       kind: e.manifest.kind,
-      commands: e.manifest.commands.map((c) => c.name),
+      // The names a caller types (spec §3.5). Read live, while /api/commands routes from the map
+      // germination built — so between an alias write and the restart it answers, the two disagree.
+      commands: e.manifest.commands.map((c) => aliases.get(`${e.name}.${c.name}`) ?? c.name),
       state: 'germinated' as const,
       enabled: true,
       ...from(e.name),
@@ -70,9 +74,13 @@ export function listPlugins(registry: Registry, sporesDirs: readonly string[], d
     .flatMap((install): PluginInfo[] => {
       const base = { name: install.name, kind: install.kind as SporeKind, commands: [], ...from(install.name) }
       if (!install.enabled) return [{ ...base, state: 'disabled' as const, enabled: false }]
+      // Enabled, on disk, in neither the germinated nor the dormant set: it is waiting for
+      // the next germination. Returning [] here dropped it from every list (spec §5).
+      if (findSpore(sporesDirs, install.name) !== undefined) {
+        return [{ ...base, state: 'pending' as const, enabled: true }]
+      }
       // syncInstalls keeps the row of a spore whose directory has gone, so the operator
       // can recover it — which requires being able to see that it is still there.
-      if (findSpore(sporesDirs, install.name) !== undefined) return []
       return [{
         ...base,
         state: 'dormant' as const,
