@@ -42,6 +42,12 @@ export const en = {
   'login.title': 'Sign in',
   'login.submit': 'Sign in',
   'login.failed': 'Those credentials were refused.',
+  'health.blocked.title': 'The bot is answering nobody',
+  'health.blocked.body': 'A filter that refuses on failure did not start, so every message on every channel is refused: {names}',
+  'health.blocked.unknown': 'The substrate did not report whether traffic is blocked (?)',
+  'health.degraded.title': 'Germination failed',
+  'health.dormant': '{count} dormant',
+  'health.rhizaDegraded': '{count} degraded',
 } as const
 
 export type StringKey = keyof typeof en

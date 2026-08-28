@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router'
+import { CriticalBanner } from '../components/CriticalBanner.tsx'
 import { useT } from '../i18n.tsx'
 import { LanguageSwitch } from './LanguageSwitch.tsx'
 import { Nav } from './Nav.tsx'
@@ -17,6 +18,7 @@ export function Layout(): React.JSX.Element {
             <ThemeToggle />
           </div>
         </header>
+        <CriticalBanner />
         <main className="min-w-0 flex-1 p-4 pb-20 md:pb-4"><Outlet /></main>
       </div>
     </div>

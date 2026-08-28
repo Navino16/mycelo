@@ -47,4 +47,10 @@ export const fr: Record<StringKey, string> = {
   'login.title': 'Se connecter',
   'login.submit': 'Se connecter',
   'login.failed': 'Ces identifiants ont \u00e9t\u00e9 refus\u00e9s.',
+  'health.blocked.title': 'Le bot ne r\u00e9pond \u00e0 personne',
+  'health.blocked.body': 'Un filtre qui refuse en cas de panne n\u2019a pas d\u00e9marr\u00e9 : tous les messages de tous les canaux sont refus\u00e9s ({names})',
+  'health.blocked.unknown': 'Le substrat n\u2019a pas indiqu\u00e9 si le trafic est bloqu\u00e9 (?)',
+  'health.degraded.title': 'La germination a \u00e9chou\u00e9',
+  'health.dormant': '{count} dormant(s)',
+  'health.rhizaDegraded': '{count} d\u00e9grad\u00e9(s)',
 }
