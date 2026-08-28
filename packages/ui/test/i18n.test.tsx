@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
+import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { api } from '../src/api/client.ts'
 import { I18nProvider, useLocale, useT } from '../src/i18n.tsx'
+import { LanguageSwitch } from '../src/shell/LanguageSwitch.tsx'
 
 function Probe(): React.JSX.Element {
   const t = useT()
@@ -15,11 +16,6 @@ function Probe(): React.JSX.Element {
     </div>
   )
 }
-
-// I18nProvider persists the choice to localStorage (by design, for a returning operator),
-// and happy-dom is registered once for the whole process, so a test must clear it itself
-// or it inherits the previous test's locale.
-beforeEach(() => { globalThis.localStorage?.clear() })
 
 describe('the chrome speaks its own language', () => {
   // 'nav.plugins' was the brief's probe key, but it is the identical word 'Plugins' in
@@ -38,6 +34,18 @@ describe('the chrome speaks its own language', () => {
   it('carries a plain-language subtitle for every mycological term', () => {
     render(<I18nProvider><Probe /></I18nProvider>)
     expect(screen.getByTestId('sub').textContent).toBe('channels')
+  })
+
+  // Probe's own button proves the setter and the catalogues agree; this proves the shipped
+  // control actually calls it — an inverted ternary in LanguageSwitch.tsx left this suite
+  // green until this test existed.
+  it('changes the rendered chrome when the real language control is used', () => {
+    render(<I18nProvider><LanguageSwitch /><Probe /></I18nProvider>)
+    expect(screen.getByTestId('nav').textContent).toBe('Overview')
+
+    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'fr' } })
+
+    expect(screen.getByTestId('nav').textContent).toBe('Vue d’ensemble')
   })
 
   describe('the locale change reaches the api client', () => {

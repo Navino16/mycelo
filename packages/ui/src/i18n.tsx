@@ -20,7 +20,7 @@ const I18nContext = createContext<I18n | null>(null)
 function initialLocale(): Locale {
   const stored = globalThis.localStorage?.getItem('mycelo.locale')
   if (stored === 'en' || stored === 'fr') return stored
-  return globalThis.navigator?.language.startsWith('fr') === true ? 'fr' : 'en'
+  return globalThis.navigator?.language?.startsWith('fr') === true ? 'fr' : 'en'
 }
 
 export function I18nProvider({ children }: { children: ReactNode }): React.JSX.Element {
