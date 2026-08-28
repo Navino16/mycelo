@@ -1,5 +1,6 @@
 import { defineConfig, globalIgnores } from 'eslint/config'
 import tseslint from 'typescript-eslint'
+import reactHooks from 'eslint-plugin-react-hooks'
 
 export default defineConfig(
   // .superpowers/ is gitignored scratch outside every tsconfig, so one .ts probe dropped
@@ -23,7 +24,8 @@ export default defineConfig(
   },
   {
     files: ['packages/**/*.ts'],
-    ignores: ['**/*.test.ts', 'packages/**/test/**/*.ts'],
+    // packages/ui has its own dedicated block below, pointed at its own tsconfig.
+    ignores: ['**/*.test.ts', 'packages/**/test/**/*.ts', 'packages/ui/**'],
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
@@ -34,6 +36,21 @@ export default defineConfig(
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: { project: './tsconfig.spec.json', tsconfigRootDir: import.meta.dirname },
+    },
+  },
+  {
+    // The SPA has its own tsconfig with DOM libs and no Bun globals, so projectService must be
+    // pointed at it: without a matching block, `eslint .` exits 2 on the first .tsx (spec §2).
+    files: ['packages/ui/**/*.{ts,tsx}'],
+    // eslint-plugin-react-hooks@7's `configs['recommended-latest']` is eslintrc-shaped
+    // (`plugins` as a string array); the flat-config form lives under `configs.flat`.
+    extends: [reactHooks.configs.flat['recommended-latest']],
+    languageOptions: {
+      parser: tseslint.parser,
+      parserOptions: {
+        project: './packages/ui/tsconfig.json',
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
   },
   {
