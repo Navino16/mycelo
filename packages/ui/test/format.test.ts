@@ -33,10 +33,9 @@ describe('formatUptime', () => {
     expect(formatUptime(0, EN)).toBe('0s')
   })
 
-  // A test fixture or a malformed payload with no uptimeSeconds reaches here as NaN, and
-  // `NaN` in the sidebar foot is worse than a zero.
-  it('answers 0s for an uptime that is not a finite number', () => {
-    expect(formatUptime(Number.NaN, EN)).toBe('0s')
-    expect(formatUptime(Number.POSITIVE_INFINITY, EN)).toBe('0s')
+  // Clock skew, not a malformed payload: a non-finite uptime is refused by useUptimeLine,
+  // which renders nothing rather than letting this function invent a plausible '0s'.
+  it('clamps a negative uptime rather than counting backwards', () => {
+    expect(formatUptime(-5, EN)).toBe('0s')
   })
 })

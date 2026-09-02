@@ -19,6 +19,14 @@ it('renders the shell, which proves happy-dom is preloaded from bunfig.toml', as
 
   globalThis.fetch = mock((url: string) => {
     if (url === '/api/health') return health
+    // Layout's ChromeProvider reads this: a missing /api/substrate in production is a broken
+    // build, not a state to design for, so the fixture answers it rather than the shell coping.
+    if (url === '/api/substrate') {
+      return Promise.resolve(new Response(
+        JSON.stringify({ version: '0.9.3', startedAt: '2026-01-01T00:00:00.000Z', uptimeSeconds: 3_600 }),
+        { headers: { 'content-type': 'application/json' } },
+      ))
+    }
     return Promise.resolve(new Response('{}', { headers: { 'content-type': 'application/json' } }))
   }) as unknown as typeof fetch
 

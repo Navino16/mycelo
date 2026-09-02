@@ -1,8 +1,8 @@
 import { Boxes, KeyRound, LayoutDashboard, Network, Radio, Users } from 'lucide-react'
 import { NavLink } from 'react-router'
-import { releasedVersion, useChrome } from '../chrome.tsx'
+import { useChrome, useUptimeLine } from '../chrome.tsx'
 import { Dot } from '../components/Dot.tsx'
-import { formatUptime } from '../format.ts'
+import { TONE_CLASSES } from '../components/tone.ts'
 import { useT } from '../i18n.tsx'
 import type { ChromeCounts } from '../chrome.tsx'
 import type { Tone } from '../components/tone.ts'
@@ -12,7 +12,7 @@ interface Item {
   to: string
   key: StringKey
   Icon: typeof Boxes
-  count?: (counts: ChromeCounts) => number
+  count?: (counts: ChromeCounts) => number | undefined
   /** Amber when the count names a problem rather than a size (design's `Overview 5`). */
   problem?: boolean
   desktopOnly?: boolean
@@ -30,17 +30,11 @@ const ITEMS: readonly Item[] = [
 ]
 
 function Foot(): React.JSX.Element | null {
-  const t = useT()
-  const { substrate } = useChrome()
-  if (substrate === null) return null
-  const version = releasedVersion(substrate)
-  const uptime = formatUptime(substrate.uptimeSeconds, {
-    d: t('uptime.d'), h: t('uptime.h'), m: t('uptime.m'), s: t('uptime.s'),
-  })
+  const line = useUptimeLine()
+  if (line === null) return null
   return (
     <div className="hidden border-t border-line px-4 py-3 font-mono text-meta text-text/50 md:block">
-      {version !== null && <p>{t('chrome.version', { version })}</p>}
-      <p>{t('chrome.uptime', { uptime })}</p>
+      {line}
     </div>
   )
 }
@@ -49,9 +43,9 @@ export function Nav(): React.JSX.Element {
   const t = useT()
   const { counts, host } = useChrome()
   return (
-    // md:w-54 is the design's 216 px sidebar.
+    // md:w-54 is the design's 216 px sidebar; sticky so it stays in reach on a long page.
     <nav className="fixed inset-x-0 bottom-0 z-10 flex border-t border-line bg-surface
-                    md:static md:h-dvh md:w-54 md:shrink-0 md:flex-col md:border-r md:border-t-0">
+                    md:sticky md:top-0 md:h-dvh md:w-54 md:shrink-0 md:flex-col md:border-r md:border-t-0">
       <div className="hidden border-b border-line px-4 py-4 md:block">
         <p className="font-semibold">{t('app.name')}</p>
         <p className="font-mono text-meta text-text/60">{host}</p>
@@ -66,10 +60,12 @@ export function Nav(): React.JSX.Element {
               to={to}
               end={to === '/'}
               className={({ isActive }) => [
-                'flex flex-1 flex-col items-center gap-1 p-3 text-meta',
-                'md:flex-none md:flex-row md:gap-3 md:px-4 md:py-2 md:text-title',
+                'flex flex-1 flex-col items-center gap-1 border-t-2 border-transparent p-3 text-meta',
+                'md:flex-none md:flex-row md:gap-3 md:border-t-0 md:px-4 md:py-2 md:text-title',
                 desktopOnly === true ? 'hidden md:flex' : '',
-                isActive ? 'text-text md:bg-surface2' : 'text-text/70',
+                // The phone bar marks the active item with an accent rule and accent ink; the
+                // desktop sidebar has room for a filled row instead (1a).
+                isActive ? 'border-accent text-accent md:bg-surface2 md:text-text' : 'text-text/70',
               ].join(' ')}
             >
               {/* The dot is the desktop sidebar's marker and the icon the phone bar's:
@@ -78,7 +74,7 @@ export function Nav(): React.JSX.Element {
               <Icon size={18} className="md:hidden" />
               <span className="md:flex-1">{t(key)}</span>
               {n !== undefined && (
-                <span className={`hidden font-mono text-meta md:inline ${tone === 'warn' ? 'text-warn' : 'text-text/50'}`}>
+                <span className={`hidden font-mono text-meta md:inline ${tone === 'warn' ? TONE_CLASSES.warn.text : 'text-text/50'}`}>
                   {String(n)}
                 </span>
               )}

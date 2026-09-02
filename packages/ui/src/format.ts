@@ -4,7 +4,7 @@ const PAD = (n: number): string => String(n).padStart(2, '0')
 
 /** Two units at most (design's `14d 03h`); the second is padded so a monospace foot never reflows. */
 export function formatUptime(seconds: number, units: UptimeUnits): string {
-  const whole = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0
+  const whole = Math.max(0, Math.floor(seconds))
   const d = Math.floor(whole / 86_400)
   const h = Math.floor((whole % 86_400) / 3_600)
   const m = Math.floor((whole % 3_600) / 60)

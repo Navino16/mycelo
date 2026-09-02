@@ -92,29 +92,57 @@ describe('the sidebar counts', () => {
   })
 })
 
-const SUBSTRATE = { startedAt: '2026-01-01T00:00:00.000Z', uptimeSeconds: 14 * 86_400 + 3 * 3_600 }
+const SUBSTRATE = { version: '0.9.3', startedAt: '2026-01-01T00:00:00.000Z', uptimeSeconds: 14 * 86_400 + 3 * 3_600 }
 
 describe('the sidebar foot', () => {
-  // packages/core/package.json is version 0.0.0 until phase 9.8 cuts the real one, so the
-  // chrome would otherwise print `mycelo 0.0.0` on every deployment there has ever been.
-  it('shows the uptime alone while the version is the 0.0.0 placeholder', () => {
-    renderNav({ substrate: { ...SUBSTRATE, version: '0.0.0' } })
+  // The line's own content is pinned on useUptimeLine (test/shell/chrome.test.tsx); this is
+  // the claim that the foot consumes the hook rather than formatting a second time.
+  it('renders the chrome line the hook returns', () => {
+    renderNav({ substrate: SUBSTRATE })
 
-    expect(screen.getByText('up 14d 03h')).toBeDefined()
-    expect(screen.queryByText(/mycelo 0\.0\.0/)).toBeNull()
-    expect(screen.queryByText(/^mycelo/)).toBeNull()
+    expect(screen.getByText('mycelo 0.9.3 · up 14d 03h')).toBeDefined()
   })
 
-  it('names a real version beside the uptime', () => {
-    renderNav({ substrate: { ...SUBSTRATE, version: '0.9.3' } })
+  it('renders no foot at all when the hook has nothing to show', () => {
+    renderNav({ substrate: { ...SUBSTRATE, uptimeSeconds: Number.NaN } })
 
-    expect(screen.getByText('mycelo 0.9.3')).toBeDefined()
-    expect(screen.getByText('up 14d 03h')).toBeDefined()
+    expect(screen.queryByText(/up /)).toBeNull()
   })
 
   it('renders no foot before /api/substrate answers', () => {
     renderNav()
 
     expect(screen.queryByText(/^up /)).toBeNull()
+  })
+})
+
+describe('the phone bar', () => {
+  // 1a-overview-mobile-degraded.png marks the active item with an accent rule on its top edge
+  // and accent ink. Text opacity alone — which is all this carried — is not a state.
+  it('marks the active item with the accent rule and the accent ink', () => {
+    renderNav()
+    const active = screen.getByRole('link', { name: /^Overview/ })
+
+    expect(active.getAttribute('aria-current')).toBe('page')
+    expect(active.className).toContain('text-accent')
+    expect(active.className).toContain('border-accent')
+  })
+
+  it('leaves every inactive item without the accent', () => {
+    renderNav()
+    const inactive = screen.getByRole('link', { name: /^Plugins/ })
+
+    expect(inactive.getAttribute('aria-current')).toBeNull()
+    expect(inactive.className).not.toContain('text-accent')
+    expect(inactive.className).not.toContain('border-accent')
+  })
+
+  // The rule must not become a separator on the desktop sidebar, which fills the row instead.
+  it('drops the rule and fills the row instead above md', () => {
+    renderNav()
+    const active = screen.getByRole('link', { name: /^Overview/ })
+
+    expect(active.className).toContain('md:border-t-0')
+    expect(active.className).toContain('md:bg-surface2')
   })
 })

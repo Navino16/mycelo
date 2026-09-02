@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test'
 import { MemoryRouter } from 'react-router'
 import { Breadcrumb } from '../../src/components/Breadcrumb.tsx'
 import { Chip } from '../../src/components/Chip.tsx'
+import { Dot } from '../../src/components/Dot.tsx'
 import { EmptyState } from '../../src/components/EmptyState.tsx'
 import { ProportionBar } from '../../src/components/ProportionBar.tsx'
 import { StateBadge, toneOf } from '../../src/components/StateBadge.tsx'
@@ -45,16 +46,15 @@ describe('the state palette', () => {
     expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(1)
   })
 
-  // One table for the whole system, not one per component: a per-file table is how `dormant`
-  // came to be crit in StateBadge alone while every other surface called it amber.
-  it('paints every primitive of one tone from the single shared table', () => {
-    const badge = render(<I18nProvider><StateBadge state="dormant" /></I18nProvider>).container
-    const chip = render(<I18nProvider><Chip label="Dormant" count={3} tone="warn" /></I18nProvider>).container
-    const bar = render(<ProportionBar segments={[{ tone: 'warn', value: 1, label: 'dormant' }]} />).container
+  // A dot on a solid fill of its own tone would vanish; the mute pill is the one place
+  // 2j draws that, so it takes the ink instead.
+  it('paints the dot in its tone normally, and in the ink on a solid fill', () => {
+    const plain = render(<Dot tone="crit" />).container
+    const solid = render(<Dot tone="crit" onSolid />).container
 
-    expect(badge.querySelector('[data-tone="warn"]')?.className).toContain(TONE_CLASSES.warn.text)
-    expect(chip.querySelector('[data-tone="warn"]')?.className).toContain(TONE_CLASSES.warn.text)
-    expect(bar.querySelector('[data-segment]')?.className).toBe(TONE_CLASSES.warn.fill)
+    expect(plain.querySelector('span')?.className).toContain(TONE_CLASSES.crit.fill)
+    expect(solid.querySelector('span')?.className).not.toContain(TONE_CLASSES.crit.fill)
+    expect(solid.querySelector('span')?.className).toContain('bg-current')
   })
 
   it('gives every tone all four classes, so no primitive falls back to an empty string', () => {

@@ -66,14 +66,16 @@ export function HealthPill(): React.JSX.Element | null {
   if (health === null && !error) return null
   const { state, issues } = healthPillState(health, error)
   const tone = TONE[state]
-  const { text, bg } = TONE_CLASSES[tone]
+  const { text, bg, fill } = TONE_CLASSES[tone]
+  // 2j paints the mute pill as a solid crit fill with light ink; every other tone is a tint.
+  const paint = state === 'mute' ? `${fill} text-white` : `${text} ${bg}`
   return (
     <span
       role="status"
       data-tone={tone}
-      className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-meta-lg font-medium ${text} ${bg}`}
+      className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-meta-lg font-medium ${paint}`}
     >
-      <Dot tone={tone} />
+      <Dot tone={tone} onSolid={state === 'mute'} />
       {pillLabel(t, state, issues)}
     </span>
   )

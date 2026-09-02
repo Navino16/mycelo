@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { HealthContext } from '../../src/health.tsx'
+import { TONE_CLASSES } from '../../src/components/tone.ts'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { HealthPill, healthPillState } from '../../src/shell/HealthPill.tsx'
 import { Layout } from '../../src/shell/Layout.tsx'
@@ -89,11 +90,25 @@ describe('the pill', () => {
     expect(screen.getByText('Degraded · 1 issue')).toBeDefined()
   })
 
-  it('says Mute for a blocked enforcing inhibitor, and paints it crit', () => {
+  // 2j draws the mute pill as a solid crit fill with light ink, alone among the tones: every
+  // other state is a tint, so a tinted mute pill would read as one warning among several.
+  it('says Mute for a blocked enforcing inhibitor, and fills it solid crit', () => {
     pill({ ...OK, enforcingBlocked: ['gate'] })
+    const status = screen.getByRole('status')
 
-    expect(screen.getByRole('status').getAttribute('data-tone')).toBe('crit')
+    expect(status.getAttribute('data-tone')).toBe('crit')
     expect(screen.getByText('Mute')).toBeDefined()
+    expect(status.className).toContain(TONE_CLASSES.crit.fill)
+    expect(status.className).toContain('text-white')
+    expect(status.className).not.toContain(TONE_CLASSES.crit.bg)
+  })
+
+  it('keeps every other state a tint, not a fill', () => {
+    pill({ ...OK, dormant: [{ name: 'a', reason: 'x' }] })
+    const status = screen.getByRole('status')
+
+    expect(status.className).toContain(TONE_CLASSES.warn.bg)
+    expect(status.className).not.toContain('text-white')
   })
 
   // design note 2j: red is the mute bot's alone, so a failed poll is amber, not red.
