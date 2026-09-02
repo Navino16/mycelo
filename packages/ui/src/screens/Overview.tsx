@@ -9,8 +9,11 @@ export function Overview(): React.JSX.Element {
   // status is HealthStatus, not a bare string (api/types.ts): a 'degraded' or 'unreachable'
   // rhiza is a connector the operator needs to see, so both are grouped as one problem list.
   const degradedRhizas = health?.rhizas.filter((r) => r.status.state !== 'healthy') ?? []
-  const allWell = health !== null && health.dormant.length === 0 && degradedRhizas.length === 0
-    && health.enforcingBlocked.length === 0
+  // mode is the gate, not just the three arrays: germination.ts leaves dormant/enforcingBlocked/
+  // rhizas all [] on every failure mode, so without this "Everything is germinated." rendered
+  // directly above the crit-styled failure banner.
+  const allWell = health?.mode === 'germinated' && health.dormant.length === 0
+    && degradedRhizas.length === 0 && health.enforcingBlocked.length === 0
 
   return (
     <div className="space-y-6">

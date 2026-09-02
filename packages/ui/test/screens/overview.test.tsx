@@ -61,5 +61,9 @@ describe('the overview', () => {
 
     expect(screen.getByText('Germination failed')).toBeDefined()
     expect(screen.getByText('cycle: alpha -> beta -> alpha')).toBeDefined()
+    // germination.ts leaves dormant/enforcingBlocked/rhizas all [] on every failure mode, so
+    // this fixture is the one that actually distinguishes "gated on the three arrays" from
+    // "gated on mode" — the bug the fix round found.
+    expect(screen.queryByText('Everything is germinated.')).toBeNull()
   })
 })

@@ -25,6 +25,12 @@ function serve(body: unknown): void {
   })))
 }
 
+function serveError(): void {
+  globalThis.fetch = mock(() => Promise.resolve(new Response('{"error":{"message":"x"}}', {
+    status: 500, headers: { 'content-type': 'application/json' },
+  })))
+}
+
 describe('the plugins list', () => {
   it('names every plugin of a group, not just the first', async () => {
     serve(GROUPS)
@@ -79,6 +85,30 @@ describe('the plugins list', () => {
 
     const inhibitorSection = await screen.findByTestId('kind-section-inhibitor')
     expect(within(inhibitorSection).getByText('No plugin of this kind.')).toBeDefined()
+  })
+
+  // design §7.4: a plugin nobody installed through a source still says where it came from.
+  it('marks a plugin with no source as checked out locally', async () => {
+    serve(GROUPS)
+    render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
+
+    await waitFor(() => { expect(screen.getByText('signal')).toBeDefined() })
+    expect(screen.getAllByText('checked out locally').length).toBeGreaterThan(0)
+  })
+
+  it('says something went wrong when the fetch itself fails, rather than staying blank', async () => {
+    serveError()
+    render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
+
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Something went wrong')
+  })
+
+  it('renders the list on success, with no error banner', async () => {
+    serve(GROUPS)
+    render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
+
+    await waitFor(() => { expect(screen.getByText('signal')).toBeDefined() })
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
 
