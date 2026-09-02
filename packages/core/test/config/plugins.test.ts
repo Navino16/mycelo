@@ -350,6 +350,24 @@ it('carries provenance onto a germinated and a dormant entry, each from its own 
   close()
 })
 
+// A dormant spore whose manifest parsed once has its kind on the install row; without it the
+// UI files the two commonest dormancies under "manifest did not parse" (plan defect 29).
+it('gives a dormant entry the kind its install row recorded, and none when there is no row', () => {
+  const { db, close } = fresh()
+  recordInstall(db, 'plex', 'rhiza', true)
+  const registry = {
+    ...emptyRegistry(),
+    dormant: [
+      { name: 'plex', reason: 'configuration rejected: url: expected string' },
+      { name: 'garbled', reason: 'cannot read spore.yaml' },
+    ],
+  } as unknown as Registry
+  const infos = listPlugins(registry, [], db)
+  expect(infos.find((p) => p.name === 'plex')?.kind).toBe('rhiza')
+  expect(infos.find((p) => p.name === 'garbled')?.kind).toBeUndefined()
+  close()
+})
+
 // The other three germinated kinds. Both tests above use an enzyme, and dropping the spread
 // from any one of hyphae, rhizas or inhibitors left the whole suite green — while design
 // §14.2 step 9's own subject, `radarr`, is a rhiza.

@@ -55,11 +55,13 @@ export function listPlugins(registry: Registry, sporesDirs: readonly string[], d
     ...registry.rhizas.map((r) => ({ name: r.name, kind: r.manifest.kind, commands: [], state: 'germinated' as const, enabled: true, ...from(r.name) })),
     ...registry.inhibitors.map((i) => ({ name: i.name, kind: i.manifest.kind, commands: [], state: 'germinated' as const, enabled: true, ...from(i.name) })),
   ]
-  // Dormant carries no kind: a spore may fail before its manifest ever parses. `enabled`
-  // is what germination saw, like every other entry here — an operator's later toggle is
-  // only reflected by the next germination.
+  // A dormant spore has no manifest in the registry, but its install row recorded the kind
+  // the day the manifest first parsed; only a spore that never parsed has none (plan defect 29).
+  // `enabled` is what germination saw — an operator's later toggle waits for the next one.
+  const recordedKind = new Map(installs.map((i) => [i.name, i.kind as SporeKind]))
   const dormant: PluginInfo[] = registry.dormant.map((d) => ({
     name: d.name,
+    ...(recordedKind.has(d.name) ? { kind: recordedKind.get(d.name) } : {}),
     commands: [],
     state: 'dormant' as const,
     reason: d.reason,
