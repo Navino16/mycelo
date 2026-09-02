@@ -41,4 +41,10 @@ describe('what a role grants', () => {
     expect(coversPlugin(['.*'], 'admin')).toBe('none')
     expect(coversPlugin(['admin'], 'admin')).toBe('none')
   })
+
+  // Mirrors check.ts:7's dot === -1 guard: a dotless qualified name is its own plugin, not
+  // itself minus its last character.
+  it('grants a dotless qualified name through its own wildcard, without truncating it', () => {
+    expect(grants(['ping.*'], 'ping')).toBe(true)
+  })
 })

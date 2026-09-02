@@ -1,6 +1,7 @@
 /** Mirrors the core's authorize() (packages/core/src/authorization/check.ts): exactly these three forms. */
 export function grants(patterns: readonly string[], qualified: string): boolean {
-  const plugin = qualified.slice(0, qualified.indexOf('.'))
+  const dot = qualified.indexOf('.')
+  const plugin = dot === -1 ? qualified : qualified.slice(0, dot)
   return patterns.some((p) => p === '*' || p === `${plugin}.*` || p === qualified)
 }
 

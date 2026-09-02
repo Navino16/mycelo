@@ -1,5 +1,3 @@
-export const REDACTED = '••••'
-
 interface Props {
   id: string
   label: string

@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client.ts'
-import type { PluginGroups, SporeKind } from '../api/types.ts'
+import { ORDER } from '../api/types.ts'
+import type { PluginGroups } from '../api/types.ts'
 import { KindSection } from '../components/KindSection.tsx'
 import { useT } from '../i18n.tsx'
-
-const ORDER: readonly (SporeKind | 'unknown')[] = ['hypha', 'rhiza', 'enzyme', 'inhibitor', 'unknown']
 
 export function Plugins(): React.JSX.Element {
   const t = useT()

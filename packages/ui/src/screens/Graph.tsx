@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { api } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
+import { ORDER } from '../api/types.ts'
 import { StateBadge } from '../components/StateBadge.tsx'
 import { layout } from '../graphLayout.ts'
 import { useT } from '../i18n.tsx'
@@ -11,7 +12,6 @@ import type { StringKey } from '../../locales/en.ts'
 
 const RADIUS = 22
 const MARGIN = 40
-const ORDER: readonly (SporeKind | 'unknown')[] = ['hypha', 'rhiza', 'enzyme', 'inhibitor', 'unknown']
 
 function groupByKind(nodes: readonly PlacedNode[]): Record<SporeKind | 'unknown', PlacedNode[]> {
   const groups: Record<SporeKind | 'unknown', PlacedNode[]> = {

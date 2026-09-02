@@ -7,6 +7,9 @@
 export type SporeKind = 'hypha' | 'rhiza' | 'enzyme' | 'inhibitor'
 export type PluginState = 'germinated' | 'dormant' | 'disabled' | 'pending' | 'unknown'
 
+/** Display order for a plugin's kind, shared by Plugins.tsx and Graph.tsx. */
+export const ORDER: readonly (SporeKind | 'unknown')[] = ['hypha', 'rhiza', 'enzyme', 'inhibitor', 'unknown']
+
 /** `GET /api/plugins` — api/routes/plugins.ts. */
 export interface PluginDto {
   name: string
