@@ -66,4 +66,26 @@ describe('the overview', () => {
     // "gated on mode" — the bug the fix round found.
     expect(screen.queryByText('Everything is germinated.')).toBeNull()
   })
+
+  // The exact CI reproduction (run 33601721469): '/api/health' answering '{}' crashed this
+  // screen through React Router's error boundary. render() throws synchronously here if the
+  // component crashes, so no error-boundary wiring is needed for this test to catch it.
+  it('does not crash on a health payload it cannot read, and says so rather than claiming all is well', () => {
+    withHealth({} as unknown as RuntimeHealth)
+
+    expect(screen.getByText('The substrate answered a shape this screen does not understand (?)')).toBeDefined()
+    expect(screen.queryByText('Everything is germinated.')).toBeNull()
+  })
+
+  // health.ts never sends this shape today, but a bare '!== undefined' let 'failure: null'
+  // through to '.message' the same way the unguarded arrays let '{}' through to '.filter'.
+  it('does not crash on a null failure in degraded mode', () => {
+    withHealth({
+      mode: 'degraded', dormant: [], enforcingBlocked: [], rhizas: [],
+      failure: null as unknown as RuntimeHealth['failure'],
+    })
+
+    expect(screen.getByText('Overview')).toBeDefined()
+    expect(screen.queryByText('Germination failed')).toBeNull()
+  })
 })

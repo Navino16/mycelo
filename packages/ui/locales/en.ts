@@ -53,6 +53,7 @@ export const en = {
   'overview.plugins': 'Plugins',
   'overview.systems': 'Connected systems',
   'overview.people': 'People',
+  'overview.unreadable': 'The substrate answered a shape this screen does not understand (?)',
   'plugins.title': 'Plugins',
   'plugins.empty': 'No plugin of this kind.',
   'plugins.source.local': 'checked out locally',

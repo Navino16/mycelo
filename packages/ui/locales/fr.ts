@@ -58,6 +58,7 @@ export const fr: Record<StringKey, string> = {
   'overview.plugins': 'Plugins',
   'overview.systems': 'Syst\u00e8mes connect\u00e9s',
   'overview.people': 'Personnes',
+  'overview.unreadable': 'Le substrat a r\u00e9pondu dans une forme que cet \u00e9cran ne comprend pas (?)',
   'plugins.title': 'Plugins',
   'plugins.empty': 'Aucun plugin de ce type.',
   'plugins.source.local': 'copie locale',
