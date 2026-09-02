@@ -48,6 +48,14 @@ export const en = {
   'health.degraded.title': 'Germination failed',
   'health.dormant': '{count} dormant',
   'health.rhizaDegraded': '{count} degraded',
+  'overview.title': 'Overview',
+  'overview.allWell': 'Everything is germinated.',
+  'overview.plugins': 'Plugins',
+  'overview.systems': 'Connected systems',
+  'overview.people': 'People',
+  'plugins.title': 'Plugins',
+  'plugins.empty': 'No plugin of this kind.',
+  'plugins.source.local': 'checked out locally',
 } as const
 
 export type StringKey = keyof typeof en

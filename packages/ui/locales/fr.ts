@@ -53,4 +53,12 @@ export const fr: Record<StringKey, string> = {
   'health.degraded.title': 'La germination a \u00e9chou\u00e9',
   'health.dormant': '{count} dormant(s)',
   'health.rhizaDegraded': '{count} d\u00e9grad\u00e9(s)',
+  'overview.title': 'Vue d\u2019ensemble',
+  'overview.allWell': 'Tout a germ\u00e9.',
+  'overview.plugins': 'Plugins',
+  'overview.systems': 'Syst\u00e8mes connect\u00e9s',
+  'overview.people': 'Personnes',
+  'plugins.title': 'Plugins',
+  'plugins.empty': 'Aucun plugin de ce type.',
+  'plugins.source.local': 'copie locale',
 }
