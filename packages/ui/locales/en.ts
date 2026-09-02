@@ -90,6 +90,22 @@ export const en = {
   'detail.mounted': 'Granted at germination',
   'detail.declared': 'Declared in its manifest',
   'detail.commands': 'Commands',
+  'sources.title': 'Sources',
+  'sources.official': 'Official',
+  'sources.thirdParty': 'Third-party',
+  'sources.disabled': 'Disabled',
+  'sources.add': 'Add a source',
+  'sources.label': 'Name',
+  'sources.location': 'Location',
+  'sources.token': 'Token',
+  'sources.tokenKept': 'Leave as •••• to keep the stored token.',
+  'sources.unreachable': 'This source is not answering. Installing is affected; nothing running is.',
+  'browse.title': 'Available in {source}',
+  'browse.empty': 'This source offers nothing.',
+  'spore.install': 'Install',
+  'spore.installed': 'Installed as {strain}',
+  'spore.trust': 'This is not the official registry: its plugins are not code-reviewed before publication.',
+  'spore.septum': 'Wants plugin contract {range}',
 } as const
 
 export type StringKey = keyof typeof en
