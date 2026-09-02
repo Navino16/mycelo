@@ -63,6 +63,12 @@ export function markReviewed(db: Db, id: string): void {
   db.update(principal).set({ reviewedAt: new Date() }).where(eq(principal.id, id)).run()
 }
 
+/** No septum counterpart: `Principal` carries no reviewed flag, so this stays local to the HTTP layer. */
+export function isReviewed(db: Db, id: string): boolean {
+  const row = db.select({ reviewedAt: principal.reviewedAt }).from(principal).where(eq(principal.id, id)).get()
+  return row?.reviewedAt != null
+}
+
 export function setDisplayName(db: Db, id: string, displayName: string): void {
   requirePrincipal(db, id)
   db.update(principal).set({ displayName }).where(eq(principal.id, id)).run()

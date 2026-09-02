@@ -1,11 +1,22 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
+import type { Principal } from '@mycelo/septum'
 import type { RuntimeState } from '../../boot/state.js'
 import { isRefusal } from '../../authorization/refusal.js'
 import { assignRole, revokeRole } from '../../authorization/roles.js'
-import { loadPrincipal, markReviewed, requirePrincipal, searchPrincipals, setDisplayName } from '../../identity/people.js'
+import {
+  isReviewed, loadPrincipal, markReviewed, requirePrincipal, searchPrincipals, setDisplayName,
+} from '../../identity/people.js'
+import type { Db } from '../../persistence/db.js'
 import { notFound } from '../errors.js'
 import { parseBody, parseQuery } from '../parse.js'
+
+/** Additive to septum's `Principal`, HTTP-only: the UI needs to know whether a person was reviewed. */
+interface PersonDto extends Principal { reviewed: boolean }
+
+function toDto(db: Db, person: Principal): PersonDto {
+  return { ...person, reviewed: isReviewed(db, person.id) }
+}
 
 const PER_PAGE_CAP = 200
 
@@ -38,19 +49,20 @@ export function registerPeopleRoutes(app: FastifyInstance, state: RuntimeState):
     // Clamped, and the response says which perPage was applied: silently serving fewer
     // rows than asked reads as "that is all there is" (spec §8).
     const perPage = Math.min(q.perPage, PER_PAGE_CAP)
-    return searchPrincipals(state.db, {
+    const result = searchPrincipals(state.db, {
       page: q.page,
       perPage,
       ...(q.q === undefined ? {} : { search: q.q }),
       ...(q.reviewed === undefined ? {} : { reviewed: q.reviewed === 'true' }),
     })
+    return { ...result, items: result.items.map((p) => toDto(state.db, p)) }
   })
 
   app.get('/api/people/:id', (request) => {
     const { id } = request.params as { id: string }
     const person = loadPrincipal(state.db, id)
     if (person === null) throw notFound('api.personNotFound', { id })
-    return person
+    return toDto(state.db, person)
   })
 
   app.patch('/api/people/:id', (request) => {
@@ -66,7 +78,8 @@ export function registerPeopleRoutes(app: FastifyInstance, state: RuntimeState):
       if (isRefusal(e, 'principal-unknown')) throw notFound('api.personNotFound', { id })
       throw e
     }
-    return loadPrincipal(state.db, id)
+    const updated = loadPrincipal(state.db, id)
+    return updated === null ? null : toDto(state.db, updated)
   })
 
   app.post('/api/people/:id/roles', (request) => {

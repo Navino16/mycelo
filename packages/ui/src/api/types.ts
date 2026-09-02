@@ -111,14 +111,15 @@ export interface IdentityDto { channel: string, externalId: string, displayName?
 
 /**
  * `GET /api/people`, `/api/people/:id` and `PATCH /api/people/:id` all answer septum's
- * `Principal`. It carries no reviewed flag and no creation date, even though PATCH accepts
- * `reviewed: true` — so no screen can show whether a person has been reviewed.
+ * `Principal` plus `reviewed`, an HTTP-only addition (routes/people.ts) with no septum
+ * counterpart. There is no way to un-review: `PATCH` only ever accepts `reviewed: true`.
  */
 export interface PersonDto {
   id: string
   displayName?: string
   roles: readonly string[]
   identities: readonly IdentityDto[]
+  reviewed: boolean
 }
 
 export interface PageDto<T> {
@@ -180,8 +181,11 @@ export interface InoculateOutcome {
 /** `GET /api/setup`, the one route reachable before an account exists. */
 export interface SetupState { required: boolean }
 
-/** `GET /api/me` — a Principal plus what only the UI credential knows. */
-export interface MeDto extends PersonDto {
+/**
+ * `GET /api/me` — a Principal plus what only the UI credential knows. `auth.ts:119` spreads the
+ * bare `Principal` with no `toDto`, so `reviewed` is not part of this answer.
+ */
+export interface MeDto extends Omit<PersonDto, 'reviewed'> {
   username: string | null
   locale: string
 }

@@ -1,6 +1,8 @@
 import type { RouteObject } from 'react-router'
 import { BrowseSource } from './screens/BrowseSource.tsx'
 import { Overview } from './screens/Overview.tsx'
+import { People } from './screens/People.tsx'
+import { PersonDetail } from './screens/PersonDetail.tsx'
 import { PluginDetail } from './screens/PluginDetail.tsx'
 import { PluginSettings } from './screens/PluginSettings.tsx'
 import { Plugins } from './screens/Plugins.tsx'
@@ -29,6 +31,8 @@ export const routes: RouteObject[] = [
       { path: 'sources/:id/spores/:name', element: <SporeDetail /> },
       { path: 'roles', element: <Roles /> },
       { path: 'roles/:name', element: <RoleEditor /> },
+      { path: 'people', element: <People /> },
+      { path: 'people/:id', element: <PersonDetail /> },
     ],
   },
 ]
