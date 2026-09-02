@@ -61,6 +61,23 @@ describe('the plugin detail screen', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  // Discriminates the `source !== undefined` ternary's branches: a locally checked-out
+  // plugin (no source) and a spore installed from a source must read as different things.
+  it('names the local checkout when the plugin carries no source', async () => {
+    serve(DETAIL)
+    renderDetail()
+
+    await waitFor(() => { expect(screen.getByText('checked out locally')).toBeDefined() })
+  })
+
+  it('names the source a spore was installed from, not the local-checkout label', async () => {
+    serve({ ...DETAIL, source: 'github:example/mirror' })
+    renderDetail()
+
+    await waitFor(() => { expect(screen.getByText('github:example/mirror')).toBeDefined() })
+    expect(screen.queryByText('checked out locally')).toBeNull()
+  })
+
   it('shows what was declared and what germination granted, side by side', async () => {
     serve(DETAIL)
     renderDetail()

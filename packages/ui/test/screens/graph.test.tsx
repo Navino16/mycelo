@@ -103,6 +103,25 @@ describe('the anastomosis graph', () => {
     }
   })
 
+  // Discriminates `edge.optional ? '6 4' : undefined`: only an optional edge draws dashed.
+  it('draws an optional edge dashed and a required one solid', async () => {
+    serve({
+      ...GRAPH,
+      edges: [
+        { from: 'upcoming', to: 'radarr', optional: false },
+        { from: 'orphan', to: 'radarr', optional: true },
+      ],
+    })
+    renderGraph()
+
+    await waitFor(() => { expect(screen.getAllByText('signal').length).toBeGreaterThan(0) })
+    const lines = document.querySelectorAll('line')
+    const dashed = [...lines].filter((l) => l.getAttribute('stroke-dasharray') === '6 4')
+    const solid = [...lines].filter((l) => l.getAttribute('stroke-dasharray') === null)
+    expect(dashed).toHaveLength(1)
+    expect(solid).toHaveLength(1)
+  })
+
   it('does not throw when an edge names a node absent from the response', async () => {
     serve({ ...GRAPH, edges: [...GRAPH.edges, { from: 'upcoming', to: 'ghost', optional: false }] })
     renderGraph()

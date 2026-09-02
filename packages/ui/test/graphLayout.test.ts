@@ -28,6 +28,15 @@ describe('the graph layout', () => {
     expect(new Set(sameDepth.map((n) => n.x)).size).toBe(sameDepth.length)
   })
 
+  // Discriminates the column-width constant from the row-height one: both spread nodes into
+  // distinct positions, so only a fixed value catches x and y being swapped or aliased.
+  it('spaces same-depth nodes by the column width and depth by the row height', () => {
+    const placed = new Map(layout(GRAPH).map((n) => [n.name, n]))
+    const sameDepth = layout(GRAPH).filter((n) => n.depth === 0).sort((a, b) => a.x - b.x)
+    expect(sameDepth[1]?.x).toBe(200)
+    expect(placed.get('upcoming')?.y).toBe(90)
+  })
+
   // A cycle is what germination refuses, but a degraded substrate can still be asked for
   // its graph — the layout must terminate rather than recurse forever.
   it('terminates on a cycle', () => {

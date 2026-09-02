@@ -43,6 +43,13 @@ describe('what a plugin is asking for', () => {
     expect(text).toContain('reactions')
   })
 
+  // Discriminates the `r.optional &&` guard: a required dependency (radarr, optional: false
+  // in the fixture) must not be marked optional too.
+  it('does not mark a required dependency as optional', () => {
+    render(<I18nProvider><DemandsList demands={DEMANDS} /></I18nProvider>)
+    expect(screen.queryByText('(optional)')).toBeNull()
+  })
+
   it('falls back to the raw scope name when no sentence exists for it', () => {
     render(
       <I18nProvider>

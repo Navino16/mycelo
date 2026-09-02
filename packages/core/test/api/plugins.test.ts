@@ -293,6 +293,9 @@ describe('/api/plugins', () => {
       method: 'GET', url: '/api/plugins/freeform/schema', headers: { cookie },
     })).json<{ available: boolean }>()
     expect(schema.available).toBe(false)
+    // Discriminates the early `if (!form.available) return form` return: the discriminated
+    // union promises exactly {available: false, reason}, no stray `secrets` key.
+    expect(Object.keys(schema as object).sort()).toEqual(['available', 'reason'])
     const response = await app.inject({
       method: 'PUT', url: '/api/plugins/freeform/settings', headers: { cookie },
       payload: { anything: 'goes', andAnother: 2 },

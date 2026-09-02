@@ -172,6 +172,32 @@ describe('the generated settings form', () => {
     expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ url: 'http://y' })
   })
 
+  // Discriminates equalValues' object-deep-equal branch from a bare `===`: a nested object
+  // field the operator never touched must not be resent just because RJSF gave it a new
+  // object reference on every render.
+  it('omits an untouched nested-object field from the PUT body', async () => {
+    const nestedSchema: FormSchema = {
+      available: true,
+      secrets: [],
+      schema: {
+        type: 'object',
+        properties: {
+          url: { type: 'string', title: 'URL' },
+          meta: { type: 'object', properties: { tag: { type: 'string', title: 'Tag' } } },
+        },
+      },
+    }
+    const { calls } = mockVault({ schema: nestedSchema, settings: { url: 'http://x', meta: { tag: 'a' } } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    fireEvent.change(screen.getByLabelText('URL'), { target: { value: 'http://y' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
+    expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ url: 'http://y' })
+  })
+
   it('renders the field message from a 400 beside the field, not the generic error', async () => {
     mockVault({
       settings: { url: 'http://x', token: '••••' },
@@ -194,6 +220,33 @@ describe('the generated settings form', () => {
     expect(screen.queryByText('Something went wrong')).toBeNull()
   })
 
+  // Discriminates the `typeof m === 'string'` filter: a malformed issue with no message
+  // must not surface the literal word "undefined" beside a field the operator can read.
+  it('does not render "undefined" for a malformed issue with no message', async () => {
+    mockVault({
+      settings: { url: 'http://x', token: '••••' },
+      putResult: {
+        status: 400,
+        body: {
+          error: {
+            message: 'refused',
+            detail: [{ key: 'url', issues: [{ path: ['url'], message: 'must start with http://' }, { path: ['url'] }] }],
+          },
+        },
+      },
+    })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    // Exact string match (not a substring regex): a stray '; ' from an unfiltered undefined
+    // entry would break this exact equality without ever spelling the word "undefined".
+    await waitFor(() => {
+      expect(screen.queryAllByText('must start with http://').length).toBeGreaterThan(0)
+    })
+  })
+
   it('offers the enable action after a successful save, for a disabled plugin', async () => {
     mockVault({ detail: DISABLED, settings: { url: 'http://x', token: '••••' } })
     renderSettings()
@@ -204,6 +257,22 @@ describe('the generated settings form', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => { expect(screen.getByRole('button', { name: 'Enable' })).toBeDefined() })
+  })
+
+  // Discriminates the `!enabledNow` guard from bare `saved && disabled`: once enabling
+  // succeeds, the Enable button must not still sit beside "Plugin enabled".
+  it('hides the enable button once enabling has succeeded', async () => {
+    mockVault({ detail: DISABLED, settings: { url: 'http://x', token: '••••' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Enable' })).toBeDefined() })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enable' }))
+
+    await waitFor(() => { expect(screen.getByText('Enabled. It takes effect after a restart.')).toBeDefined() })
+    expect(screen.queryByRole('button', { name: 'Enable' })).toBeNull()
   })
 
   it('never offers the enable action for an already germinated plugin', async () => {

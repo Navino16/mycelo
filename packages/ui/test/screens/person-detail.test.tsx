@@ -151,6 +151,19 @@ describe('a person', () => {
     await waitFor(() => { expect(screen.getByText('family')).toBeDefined() })
   })
 
+  // Discriminates the `roleToAdd === ''` guard: submitting the picker at its default, empty
+  // option must not send a role-less POST.
+  it('does not send a role when the picker is submitted at its blank default', async () => {
+    const { calls } = mockApi()
+    renderDetail()
+
+    await waitFor(() => { expect(screen.getByText('Zelda')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: 'Add a role' }))
+
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(calls.some((c) => c.method === 'POST')).toBe(false)
+  })
+
   it('removes a held role', async () => {
     const { calls } = mockApi()
     renderDetail()

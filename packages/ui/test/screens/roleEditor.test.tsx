@@ -211,6 +211,20 @@ describe('the role editor screen', () => {
     expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ patterns: ['radarr.*'] })
   })
 
+  // Discriminates dropping the plugin's own prior patterns from replacing them: select-all
+  // must not leave a stale 'radarr.add' alongside the new 'radarr.*' it subsumes.
+  it('select-all replaces any pattern already held for that plugin, not just adds to it', async () => {
+    const { calls } = mockApi({ role: { name: 'family', builtin: false, patterns: ['radarr.add'] } })
+    renderEditor()
+
+    await waitFor(() => { expect(screen.getByText('radarr')).toBeDefined() })
+    fireEvent.click(screen.getByText('Select all'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save this role' }))
+
+    await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
+    expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ patterns: ['radarr.*'] })
+  })
+
   // The decision on unticking under a wildcard: refuse to guess which commands to keep.
   // Removing the wildcard clears the plugin back to zero, never to "every command but one".
   it('removing a held wildcard clears that plugin to nothing, rather than expanding it', async () => {

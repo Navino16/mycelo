@@ -42,6 +42,19 @@ describe('the plugins list', () => {
     expect(screen.getAllByText('Germinated')).toHaveLength(2)
   })
 
+  // Discriminates ORDER's own sequence (api/types.ts): sections must render hyphae before
+  // rhizae, not merely all of them.
+  it('renders the kind sections in hypha, rhiza, enzyme, inhibitor order', async () => {
+    serve(GROUPS)
+    render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
+
+    await waitFor(() => { expect(screen.getByText('Hyphae')).toBeDefined() })
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
+    expect(headings.findIndex((h) => h?.includes('Hyphae'))).toBeLessThan(
+      headings.findIndex((h) => h?.includes('Rhizae')),
+    )
+  })
+
   // brief §6: the subtitle is what makes the vocabulary learnable.
   it('carries the plain-language subtitle beside each mycological header', async () => {
     serve(GROUPS)

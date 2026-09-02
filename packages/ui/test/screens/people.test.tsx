@@ -136,6 +136,15 @@ describe('the people list', () => {
     })
   })
 
+  // Discriminates the Math.max(1, ...) floor: zero results is still "page 1 of 1", not "of 0".
+  it('shows one page, not zero, when the search matches nobody', async () => {
+    mockApi({ people: [] })
+    renderPeople()
+
+    expect(await screen.findByText('Page 1 / 1')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Next' })).toHaveProperty('disabled', true)
+  })
+
   it('bulk-assigns a role and reports how many of how many succeeded, not a plain success', async () => {
     const people = build(3)
     const { calls } = mockApi({

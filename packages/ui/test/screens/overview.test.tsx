@@ -121,6 +121,18 @@ describe('the overview', () => {
     expect(screen.queryByText('Everything is germinated.')).toBeNull()
   })
 
+  // Discriminates allWell's own '!unreadable' term from the mode check alone: mode is
+  // 'germinated' but rhizas is missing, so the unreadable alert and "all well" must not
+  // both claim the operator's attention at once.
+  it('does not say all is well on a germinated-but-unreadable shape', async () => {
+    await withHealth(
+      { mode: 'germinated', dormant: [], enforcingBlocked: [] } as unknown as RuntimeHealth,
+    )
+
+    expect(screen.getByText('The substrate answered a shape this screen does not understand (?)')).toBeDefined()
+    expect(screen.queryByText('Everything is germinated.')).toBeNull()
+  })
+
   // health.ts never sends this shape today, but a bare '!== undefined' let 'failure: null'
   // through to '.message' the same way the unguarded arrays let '{}' through to '.filter'.
   it('does not crash on a null failure in degraded mode', async () => {
@@ -166,6 +178,20 @@ describe('the guided path out of an empty substrate', () => {
     expect(screen.queryByText('Add a source')).toBeNull()
     expect(screen.getByText('Install a channel')).toBeDefined()
     expect(screen.getByText('Create a role')).toBeDefined()
+  })
+
+  // Discriminates counting non-builtin roles from counting builtin ones: two builtin roles and
+  // no custom one must still read as "no role created yet", not as two roles done.
+  it('still asks for a role when only builtin roles exist', async () => {
+    await withHealth(GERMINATED, {
+      sources: COMPLETE_SOURCES,
+      plugins: COMPLETE_PLUGINS,
+      roles: [{ name: 'owner', builtin: true, patterns: ['*'] }, { name: 'admin', builtin: true, patterns: [] }],
+    })
+
+    expect(await screen.findByText('Create a role')).toBeDefined()
+    expect(screen.queryByText('Add a source')).toBeNull()
+    expect(screen.queryByText('Install a channel')).toBeNull()
   })
 
   it('says nothing is outstanding and shows the ordinary tiles once all three exist', async () => {

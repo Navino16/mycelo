@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import { CriticalBanner } from '../src/components/CriticalBanner.tsx'
 import { HealthContext, HealthProvider, POLL_MS, useHealth } from '../src/health.tsx'
@@ -133,5 +133,32 @@ describe('HealthProvider', () => {
     } finally {
       setIntervalSpy.mockRestore()
     }
+  })
+
+  // A poll that fails must not leave the "substrate not answering" state stuck once a later
+  // poll succeeds — discriminates the success branch actually clearing `error`.
+  it('clears the error once a later poll succeeds', async () => {
+    let succeed = false
+    globalThis.fetch = mock(() => succeed
+      ? Promise.resolve(jsonResponse({ mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [] }))
+      : Promise.reject(new Error('down')))
+
+    function ErrorProbe(): React.JSX.Element {
+      const { error, refresh } = useHealth()
+      return <button type="button" onClick={() => { void refresh() }}>{error ? 'down' : 'up'}</button>
+    }
+
+    render(
+      <I18nProvider>
+        <HealthProvider><ErrorProbe /></HealthProvider>
+      </I18nProvider>,
+    )
+
+    await waitFor(() => { expect(screen.getByRole('button').textContent).toBe('down') })
+
+    succeed = true
+    fireEvent.click(screen.getByRole('button'))
+
+    await waitFor(() => { expect(screen.getByRole('button').textContent).toBe('up') })
   })
 })

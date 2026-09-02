@@ -58,6 +58,18 @@ describe('the chrome speaks its own language', () => {
     expect(option?.textContent).toBe('Français')
   })
 
+  // Discriminates `stored === 'en' || stored === 'fr'` from a bare `=== 'en'`: a stored
+  // French preference must survive a reload, not just an in-session switch.
+  it('opens in French when localStorage remembers a French preference', () => {
+    globalThis.localStorage?.setItem('mycelo.locale', 'fr')
+    try {
+      render(<I18nProvider><Probe /></I18nProvider>)
+      expect(screen.getByTestId('locale').textContent).toBe('fr')
+    } finally {
+      globalThis.localStorage?.removeItem('mycelo.locale')
+    }
+  })
+
   describe('the locale change reaches the api client', () => {
     const realFetch = globalThis.fetch
     afterEach(() => { globalThis.fetch = realFetch })

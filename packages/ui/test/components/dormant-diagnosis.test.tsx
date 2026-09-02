@@ -24,6 +24,15 @@ describe('the dormant diagnosis', () => {
     expect(link.getAttribute('href')).toBe('/plugins/radarr/settings')
   })
 
+  // config/lifecycle.ts:105 produces this exact reason for a schema-rejected config that is
+  // merely incomplete, distinct from 'configuration rejected' — both must reach dormant.config.
+  it('diagnoses an incomplete configuration the same as a rejected one', () => {
+    renderDiagnosis('configuration is incomplete: token: field required')
+    expect(screen.getByText('Its configuration was refused')).toBeDefined()
+    const link = screen.getByRole('link', { name: 'Fix its settings' })
+    expect(link.getAttribute('href')).toBe('/plugins/radarr/settings')
+  })
+
   it('diagnoses a septum version incompatibility', () => {
     renderDiagnosis("spore 'radarr' declares septum '^0.10', which excludes the septum actually running (0.11.0)")
     expect(screen.getByText('It does not accept this version of the plugin contract')).toBeDefined()

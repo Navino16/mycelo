@@ -61,6 +61,21 @@ describe('the locale override', () => {
     expect(bogus.body).toBe(plain.body)
   })
 
+  // Discriminates the `available.includes(asked)` guard from a bare pass-through: unlike
+  // /api/commands, /api/me echoes request.locale verbatim (routes/auth.ts:119), so a bogus
+  // header leaking through would put 'zz' where the UI's Locale type promises 'en' | 'fr'.
+  it('does not let a bogus header leak into the locale a route echoes back', async () => {
+    booted = await bootAndLogin()
+    const { app, cookie } = booted
+
+    const me = (await app.inject({
+      method: 'GET', url: '/api/me', headers: { cookie, 'x-mycelo-locale': 'zz' },
+    })).json<{ locale: string }>()
+
+    expect(me.locale).not.toBe('zz')
+    expect(['en', 'fr']).toContain(me.locale)
+  })
+
   // spec §11: /healthz is what a deploy script polls, and it must not depend on what that
   // script happens to send.
   // Presently unfalsifiable: the handler never reads request.locale, and OPEN_PATHS returns
