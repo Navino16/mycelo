@@ -34,4 +34,14 @@ describe('the ui package is wired into the gate', () => {
   it('eslint has a block matching tsx, so the first component does not abort the lint', () => {
     expect(readFileSync(join(ROOT, 'eslint.config.js'), 'utf8')).toContain('packages/ui/**/*.{ts,tsx}')
   })
+
+  // Deleting the build step leaves the suite green (whole-branch fix brief, item 4).
+  it('the root ci script builds the ui package', () => {
+    expect(rootPackageJson().scripts['ci']).toContain('bun run --cwd packages/ui build')
+  })
+
+  it('the vendored rjsf-shadcn CSS has no self-referential custom properties', () => {
+    const css = readFileSync(join(ROOT, 'packages/ui/src/rjsf-shadcn.css'), 'utf8')
+    expect(css).not.toMatch(/--font-(sans|serif|mono):var\(--font-\1\)/)
+  })
 })
