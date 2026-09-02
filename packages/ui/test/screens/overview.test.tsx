@@ -135,15 +135,28 @@ describe('the overview', () => {
 })
 
 describe('the guided path out of an empty substrate', () => {
-  it('renders the three steps and hides the tiles when nothing is configured yet', async () => {
+  it('renders the three steps alongside the health body when nothing is configured yet', async () => {
     await withHealth(GERMINATED, { sources: [], plugins: { ...COMPLETE_PLUGINS, hypha: [] }, roles: [] })
 
     await waitFor(() => { expect(screen.getAllByRole('link')).toHaveLength(3) })
     expect(screen.getByText('Add a source')).toBeDefined()
     expect(screen.getByText('Install a channel')).toBeDefined()
     expect(screen.getByText('Create a role')).toBeDefined()
-    // The tiles this screen otherwise renders are gone while a step is outstanding.
-    expect(screen.queryByText('Everything is germinated.')).toBeNull()
+    // With nothing dormant and germination healthy, the ordinary tiles render too.
+    expect(screen.getByText('Everything is germinated.')).toBeDefined()
+  })
+
+  // brief item 2: a fresh substrate stays in the guided state exactly while its first spores
+  // are installed and go dormant — the operator must see both, not one hiding the other.
+  it('renders the guided start above the dormant reason, not instead of it', async () => {
+    await withHealth(
+      { ...GERMINATED, dormant: [{ name: 'radarr', reason: 'apiKey: missing required field' }] },
+      { sources: [], plugins: { ...COMPLETE_PLUGINS, hypha: [] }, roles: [] },
+    )
+
+    expect(await screen.findByText('Three moves to a working substrate')).toBeDefined()
+    expect(screen.getByText('radarr')).toBeDefined()
+    expect(screen.getByText('apiKey: missing required field')).toBeDefined()
   })
 
   it('renders exactly the two remaining steps once one of them is done', async () => {
