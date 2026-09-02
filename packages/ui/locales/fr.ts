@@ -111,4 +111,6 @@ export const fr: Record<StringKey, string> = {
   'spore.installed': 'Install\u00e9 en {strain}',
   'spore.trust': 'Ce n\u2019est pas le registre officiel : ses plugins ne sont pas relus avant publication.',
   'spore.septum': 'Demande le contrat de plugin {range}',
+  'pluginSettings.unavailable': 'Ce plugin n\u2019a rien \u00e0 configurer ici.',
+  'pluginSettings.enabled': 'Activ\u00e9. Cela prend effet apr\u00e8s un red\u00e9marrage.',
 }

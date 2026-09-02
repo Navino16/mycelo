@@ -106,6 +106,8 @@ export const en = {
   'spore.installed': 'Installed as {strain}',
   'spore.trust': 'This is not the official registry: its plugins are not code-reviewed before publication.',
   'spore.septum': 'Wants plugin contract {range}',
+  'pluginSettings.unavailable': 'This plugin has nothing to configure here.',
+  'pluginSettings.enabled': 'Enabled. It takes effect after a restart.',
 } as const
 
 export type StringKey = keyof typeof en

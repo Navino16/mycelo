@@ -176,7 +176,11 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
   app.get('/api/plugins/:name/schema', async (request) => {
     const { name } = request.params as { name: string }
     requireInstalled(state, name)
-    return await formSchemaOf(state.db, state.config.discoveryDirs, name)
+    const form = await formSchemaOf(state.db, state.config.discoveryDirs, name)
+    if (!form.available) return form
+    // A never-yet-filled credential is in neither the schema nor the redacted settings,
+    // so without this the form renders it as an ordinary text input.
+    return { ...form, secrets: await secretKeysOf(state.db, state.config.discoveryDirs, name) }
   })
 
   app.get('/api/plugins/:name/settings', (request) => {

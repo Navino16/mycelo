@@ -2,6 +2,7 @@ import type { RouteObject } from 'react-router'
 import { BrowseSource } from './screens/BrowseSource.tsx'
 import { Overview } from './screens/Overview.tsx'
 import { PluginDetail } from './screens/PluginDetail.tsx'
+import { PluginSettings } from './screens/PluginSettings.tsx'
 import { Plugins } from './screens/Plugins.tsx'
 import { SporeDetail } from './screens/SporeDetail.tsx'
 import { Sources } from './screens/Sources.tsx'
@@ -20,6 +21,7 @@ export const routes: RouteObject[] = [
       { index: true, element: <Overview /> },
       { path: 'plugins', element: <Plugins /> },
       { path: 'plugins/:name', element: <PluginDetail /> },
+      { path: 'plugins/:name/settings', element: <PluginSettings /> },
       { path: 'sources', element: <Sources /> },
       { path: 'sources/:id', element: <BrowseSource /> },
       { path: 'sources/:id/spores/:name', element: <SporeDetail /> },
