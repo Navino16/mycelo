@@ -60,6 +60,22 @@ describe('the spore detail screen', () => {
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Something went wrong')
   })
 
+  // The alert is the union of two independent flags; a mutant collapsing it to one flag alone
+  // must be caught from each side.
+  it('says something went wrong when only the source fetch fails', async () => {
+    serve(THIRD_PARTY, { sourceFail: true })
+    renderDetail()
+
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Something went wrong')
+  })
+
+  it('says something went wrong when only the strains fetch fails', async () => {
+    serve(THIRD_PARTY, { strainsFail: true })
+    renderDetail()
+
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Something went wrong')
+  })
+
   it('renders the spore on success, with no error banner', async () => {
     serve(THIRD_PARTY)
     renderDetail()

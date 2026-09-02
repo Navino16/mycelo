@@ -10,15 +10,17 @@ export function BrowseSource(): React.JSX.Element {
   const { id = '' } = useParams()
   const [source, setSource] = useState<SourceDto | null>(null)
   const [offers, setOffers] = useState<readonly SporeOffer[] | null>(null)
-  const [error, setError] = useState(false)
+  const [sourceError, setSourceError] = useState(false)
+  const [offersError, setOffersError] = useState(false)
 
   useEffect(() => {
-    // A source's own row cannot fail to be read (it never touches the network); the listing
-    // below is what a bad location or token actually breaks (design §8).
-    api.get<SourceDto>(`/api/sources/${id}`).then(setSource, () => undefined)
+    api.get<SourceDto>(`/api/sources/${id}`).then(
+      (v) => { setSource(v); setSourceError(false) },
+      () => { setSourceError(true) },
+    )
     api.get<readonly SporeOffer[]>(`/api/sources/${id}/spores`).then(
-      (v) => { setOffers(v); setError(false) },
-      () => { setError(true) },
+      (v) => { setOffers(v); setOffersError(false) },
+      () => { setOffersError(true) },
     )
   }, [id])
 
@@ -27,8 +29,11 @@ export function BrowseSource(): React.JSX.Element {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-medium">{t('browse.title', { source: source?.label ?? '' })}</h1>
-      {error && <p role="alert" className="text-sm text-crit">{t('sources.unreachable')}</p>}
-      {!error && offers !== null && (
+      {/* Priority, not both: a missing source (a stale bookmark, deleted elsewhere) is a
+          different fault than a live one that cannot be reached, and only one alert renders. */}
+      {sourceError && <p role="alert" className="text-sm text-crit">{t('error.generic')}</p>}
+      {!sourceError && offersError && <p role="alert" className="text-sm text-crit">{t('sources.unreachable')}</p>}
+      {!sourceError && !offersError && offers !== null && (
         list.length === 0
           ? <p className="text-sm text-text/60">{t('browse.empty')}</p>
           : (

@@ -46,6 +46,11 @@ function serveUnreachable(source: SourceDto): void {
   }) as unknown as typeof fetch
 }
 
+/** requireSource (sources.ts) 404s both /:id and /:id/spores for an unknown id alike. */
+function serveMissingSource(): void {
+  globalThis.fetch = mock(() => Promise.resolve(json({ error: { message: 'not found' } }, 404)))
+}
+
 function renderBrowse(): void {
   render(
     <I18nProvider>
@@ -63,6 +68,17 @@ describe('browsing a source', () => {
 
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toBe('This source is not answering. Installing is affected; nothing running is.')
+  })
+
+  // Reachable from a stale bookmark or a source deleted elsewhere: requireSource 404s both
+  // endpoints, and the source's own fetch must not be swallowed into a blank, alert-less screen.
+  it('shows a generic alert when the source itself cannot be found, rather than staying blank', async () => {
+    serveMissingSource()
+    renderBrowse()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('Something went wrong')
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
   })
 
   it('lists the offers on success, with no error banner', async () => {
