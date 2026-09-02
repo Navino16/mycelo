@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { AuthGate, useMe } from '../src/auth.tsx'
 import { I18nProvider } from '../src/i18n.tsx'
@@ -69,5 +69,30 @@ describe('AuthGate', () => {
     )
 
     await screen.findByText('signed in as owner')
+  })
+
+  // POST /api/setup already sets the session cookie (routes/auth.ts:92): the wizard must not
+  // hand a freshly-created owner a login form (brief item 5).
+  it('renders the children directly after setup completes, with no login screen in between', async () => {
+    globalThis.fetch = mock(() =>
+      Promise.resolve(jsonResponse(503, { error: { code: 'setup-required', message: 'x' } })),
+    )
+    renderGate()
+
+    await screen.findByText('Create the owner account')
+
+    globalThis.fetch = mock((url: string) => {
+      if (url === '/api/me') {
+        return Promise.resolve(jsonResponse(200, { id: 'p1', username: 'owner', locale: 'en', roles: ['owner'] }))
+      }
+      return Promise.resolve(jsonResponse(200, {}))
+    }) as unknown as typeof fetch
+
+    fireEvent.change(screen.getByLabelText(/user/i), { target: { value: 'owner' } })
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'a-long-enough-one' } })
+    fireEvent.click(screen.getByRole('button', { name: /create/i }))
+
+    await screen.findByText('protected content')
+    expect(screen.queryByRole('heading', { name: 'Sign in' })).toBeNull()
   })
 })

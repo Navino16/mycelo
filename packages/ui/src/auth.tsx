@@ -30,9 +30,9 @@ export function AuthGate({ children }: { children: ReactNode }): React.JSX.Eleme
   }, [refresh])
 
   if (gate === 'checking') return null
-  if (gate === 'setup') return <Setup onDone={() => { setGate('login') }} />
-  // refresh, not a plain 'open': a login answers 200 with no body, so the session's
-  // principal is only known once /api/me is fetched with the new cookie.
+  // refresh, not a plain 'open' or 'login': POST /api/setup already sets the session cookie
+  // (routes/auth.ts:92), same as login, so the principal is only known once /api/me refetches.
+  if (gate === 'setup') return <Setup onDone={refresh} />
   if (gate === 'login') return <Login onDone={refresh} />
   return <MeContext value={{ me, refresh }}>{children}</MeContext>
 }
