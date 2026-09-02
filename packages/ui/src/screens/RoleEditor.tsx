@@ -3,7 +3,7 @@ import { useParams } from 'react-router'
 import { api, ApiError } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
 import { coversPlugin, grants, wildcardsIn } from '../patterns.ts'
-import { useT } from '../i18n.tsx'
+import { useLocale, useT } from '../i18n.tsx'
 import type { CommandDto, CommandGroups, RoleDto } from '../api/types.ts'
 
 interface GroupProps {
@@ -88,6 +88,7 @@ function isCommandGroups(value: unknown): value is CommandGroups {
 
 export function RoleEditor(): React.JSX.Element {
   const t = useT()
+  const { locale } = useLocale()
   const { name = '' } = useParams()
   const [commands, setCommands] = useState<CommandGroups | null>(null)
   const [role, setRole] = useState<RoleDto | null>(null)
@@ -105,7 +106,7 @@ export function RoleEditor(): React.JSX.Element {
       setPatterns(readArray<string>(r.patterns) ?? [])
       setError(false)
     }, () => { setError(true) })
-  }, [name])
+  }, [name, locale])
 
   function toggle(qualified: string, granted: boolean): void {
     setPatterns((prev) => (granted ? [...prev, qualified] : prev.filter((p) => p !== qualified)))

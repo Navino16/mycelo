@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
-import { I18nProvider } from '../../src/i18n.tsx'
+import { I18nProvider, useLocale } from '../../src/i18n.tsx'
 import { PluginGroup, RoleEditor } from '../../src/screens/RoleEditor.tsx'
 import type { CommandDto, CommandGroups, RoleDto } from '../../src/api/types.ts'
 
@@ -91,7 +91,7 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 }
 
-interface Call { method: string, url: string, body: unknown }
+interface Call { method: string, url: string, body: unknown, locale: string | null }
 
 const ORDINARY: RoleDto = { name: 'family', builtin: false, patterns: ['radarr.add'] }
 const BUILTIN: RoleDto = { name: 'owner', builtin: true, patterns: ['*'] }
@@ -107,7 +107,7 @@ function mockApi(
   globalThis.fetch = mock((url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
-    calls.push({ method, url, body })
+    calls.push({ method, url, body, locale: new Headers(init?.headers).get('x-mycelo-locale') })
 
     if (method === 'GET' && url === '/api/commands') return Promise.resolve(json(commands))
     if (method === 'GET' && url === `/api/roles/${role.name}`) return Promise.resolve(json(role))
@@ -121,6 +121,13 @@ function mockApi(
     return Promise.resolve(json({ error: { message: 'unhandled in test' } }, 404))
   }) as unknown as typeof fetch
   return { calls }
+}
+
+// Command descriptions come translated from the core, so a locale switch must refetch them —
+// after the header moved, or the second request repeats the first language (spec §11, defect 31).
+function LocaleSwitch(): React.JSX.Element {
+  const { setLocale } = useLocale()
+  return <button onClick={() => { setLocale('fr') }}>to-fr</button>
 }
 
 function renderEditor(name = 'family'): void {
@@ -279,4 +286,23 @@ describe('the role editor at real scale', () => {
 
     for (const box of screen.getAllByTestId(/^plex\./)) expect((box as HTMLInputElement).checked).toBe(false)
   })
+
+  it('refetches the commands, with the new header, when the locale changes in session', async () => {
+    const { calls } = mockApi()
+    render(
+      <I18nProvider>
+        <LocaleSwitch />
+        <MemoryRouter initialEntries={['/roles/family']}>
+          <Routes><Route path="/roles/:name" element={<RoleEditor />} /></Routes>
+        </MemoryRouter>
+      </I18nProvider>,
+    )
+    await waitFor(() => { expect(calls.filter((c) => c.url === '/api/commands')).toHaveLength(1) })
+
+    fireEvent.click(screen.getByText('to-fr'))
+
+    await waitFor(() => { expect(calls.filter((c) => c.url === '/api/commands')).toHaveLength(2) })
+    expect(calls.filter((c) => c.url === '/api/commands').map((c) => c.locale)).toEqual(['en', 'fr'])
+  })
+
 })

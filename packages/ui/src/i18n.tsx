@@ -40,7 +40,11 @@ export function I18nProvider({ children }: { children: ReactNode }): React.JSX.E
     return Object.entries(params).reduce((s, [k, v]) => s.replaceAll(`{${k}}`, String(v)), raw)
   }
 
-  return <I18nContext value={{ locale, setLocale: setLocaleState, t }}>{children}</I18nContext>
+  // Header first, state second: a screen whose fetch effect depends on the locale runs that
+  // effect before this provider's own, and would otherwise resend the old language (defect 31).
+  const setLocale = (next: Locale): void => { setLocaleHeader(next); setLocaleState(next) }
+
+  return <I18nContext value={{ locale, setLocale, t }}>{children}</I18nContext>
 }
 
 function useI18n(): I18n {
