@@ -11,7 +11,7 @@
     "lint": "eslint .",
     "typecheck": "tsc -b && tsc -p tsconfig.spec.json && bun run --cwd packages/ui typecheck",
     "test": "bun test",
-    "ci": "bun run lint && bun run typecheck && bun run test",
+    "ci": "bun run lint && bun run typecheck && bun run test && bun run --cwd packages/ui build",
     "build": "tsc -b",
     "start": "bun packages/core/src/index.ts"
   },
