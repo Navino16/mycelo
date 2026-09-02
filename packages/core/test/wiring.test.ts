@@ -44,4 +44,15 @@ describe('the ui package is wired into the gate', () => {
     const css = readFileSync(join(ROOT, 'packages/ui/src/rjsf-shadcn.css'), 'utf8')
     expect(css).not.toMatch(/--font-(sans|serif|mono):var\(--font-\1\)/)
   })
+
+  // The vendored file is a whole Tailwind build; imported after index.css, its utilities layer
+  // re-declares .hidden/.fixed/.flex-col after our md: variants and wins every tie (plan defect 27).
+  it('main.tsx imports the vendored rjsf-shadcn CSS before index.css', () => {
+    const main = readFileSync(join(ROOT, 'packages/ui/src/main.tsx'), 'utf8')
+    const vendored = main.indexOf("import './rjsf-shadcn.css'")
+    const own = main.indexOf("import './index.css'")
+    expect(vendored).toBeGreaterThan(-1)
+    expect(own).toBeGreaterThan(-1)
+    expect(vendored).toBeLessThan(own)
+  })
 })
