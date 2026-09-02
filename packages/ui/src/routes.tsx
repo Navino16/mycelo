@@ -1,5 +1,6 @@
 import type { RouteObject } from 'react-router'
 import { Overview } from './screens/Overview.tsx'
+import { PluginDetail } from './screens/PluginDetail.tsx'
 import { Plugins } from './screens/Plugins.tsx'
 import { Layout } from './shell/Layout.tsx'
 import { RouteError } from './shell/RouteError.tsx'
@@ -15,6 +16,7 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <Overview /> },
       { path: 'plugins', element: <Plugins /> },
+      { path: 'plugins/:name', element: <PluginDetail /> },
     ],
   },
 ]
