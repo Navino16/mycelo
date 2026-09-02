@@ -1,6 +1,5 @@
 import { Outlet } from 'react-router'
 import { ChromeProvider } from '../chrome.tsx'
-import { CriticalBanner } from '../components/CriticalBanner.tsx'
 import { HealthPill } from './HealthPill.tsx'
 import { LanguageSwitch } from './LanguageSwitch.tsx'
 import { Nav } from './Nav.tsx'
@@ -18,7 +17,6 @@ function Shell(): React.JSX.Element {
           <LanguageSwitch />
           <ThemeToggle />
         </header>
-        <CriticalBanner />
         <main className="min-w-0 flex-1 p-4 pb-20 md:pb-4"><Outlet /></main>
       </div>
     </div>

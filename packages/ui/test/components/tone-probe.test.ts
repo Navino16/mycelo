@@ -12,12 +12,10 @@ const TONE_LITERAL = /\btext-(?:ok|warn|crit|idle)\b|\bbg-(?:ok|warn|crit|idle)(
 const TABLE = 'components/tone.ts'
 
 /**
- * Files that spell a tone themselves, each with the reason it is not yet routed through the
- * table. Both are due for deletion or rework by a later task, which is when they go.
+ * Files that spell a tone themselves, with the reason each is not yet routed through the
+ * table. Each is due for rework by a later task, which is when its entry goes.
  */
 const ALLOWED: Readonly<Record<string, string>> = {
-  // Task 16 deletes it and turns it into the mute body takeover.
-  'components/CriticalBanner.tsx': 'task 16 replaces this component wholesale',
   // The dormant diagnosis panel predates the tone table; its screen is task 17's.
   'components/DormantDiagnosis.tsx': 'task 17 owns the dormant diagnosis surface',
 }
