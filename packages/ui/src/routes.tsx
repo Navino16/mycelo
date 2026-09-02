@@ -1,5 +1,6 @@
 import type { RouteObject } from 'react-router'
 import { BrowseSource } from './screens/BrowseSource.tsx'
+import { Graph } from './screens/Graph.tsx'
 import { Overview } from './screens/Overview.tsx'
 import { People } from './screens/People.tsx'
 import { PersonDetail } from './screens/PersonDetail.tsx'
@@ -33,6 +34,7 @@ export const routes: RouteObject[] = [
       { path: 'roles/:name', element: <RoleEditor /> },
       { path: 'people', element: <People /> },
       { path: 'people/:id', element: <PersonDetail /> },
+      { path: 'graph', element: <Graph /> },
     ],
   },
 ]

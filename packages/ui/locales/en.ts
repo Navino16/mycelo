@@ -58,6 +58,8 @@ export const en = {
   'plugins.title': 'Plugins',
   'plugins.empty': 'No plugin of this kind.',
   'plugins.source.local': 'checked out locally',
+  'graph.title': 'Network',
+  'graph.empty': 'Nothing has germinated, so there is nothing to draw. The banner above says why.',
   'scope.principals.read': 'See everyone the bot knows',
   'scope.principals.manage': 'Rename people and mark them reviewed',
   'scope.roles.read': 'See the roles and who holds them',

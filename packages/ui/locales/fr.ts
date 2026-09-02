@@ -63,6 +63,8 @@ export const fr: Record<StringKey, string> = {
   'plugins.title': 'Plugins',
   'plugins.empty': 'Aucun plugin de ce type.',
   'plugins.source.local': 'copie locale',
+  'graph.title': 'R\u00e9seau',
+  'graph.empty': 'Rien n\u2019a germ\u00e9, il n\u2019y a donc rien \u00e0 dessiner. Le bandeau ci-dessus dit pourquoi.',
   'scope.principals.read': 'Voir toutes les personnes connues du bot',
   'scope.principals.manage': 'Renommer les personnes et les marquer comme v\u00e9rifi\u00e9es',
   'scope.roles.read': 'Voir les r\u00f4les et qui les d\u00e9tient',
