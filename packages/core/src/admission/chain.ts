@@ -61,16 +61,24 @@ export function createAdmissionChain(options: {
   channelScopes: () => ReadonlyMap<string, readonly string[]>
   translator: Translator
   defaultLocale: string
+  /**
+   * Where the mute counter lives. Defaults to a fresh cell for a caller with no
+   * process-lifetime state of its own (tests); a real boot passes RuntimeState.refusals,
+   * so the count survives the chain being rebuilt on every germination retry.
+   */
+  refusals?: { blocked: number }
 }): AdmissionChain {
-  const { inhibitors, brokenEnforcing, membership, logger, rhiza, channelScopes, translator, defaultLocale } = options
+  const {
+    inhibitors, brokenEnforcing, membership, logger, rhiza, channelScopes, translator, defaultLocale,
+  } = options
   const ordered = [...inhibitors].sort((a, b) => a.name.localeCompare(b.name))
   // Same attribution start() gets (boot/start.ts), so an inhibitor's records name it in
   // both moments rather than only during startup.
   const loggerFor = new Map(inhibitors.map((i) => [i.name, logger.child({ inhibitor: i.name })]))
-  let blocked = 0
+  const refusals = options.refusals ?? { blocked: 0 }
 
   return {
-    blockedSinceBoot: () => blocked,
+    blockedSinceBoot: () => refusals.blocked,
     async admit(message) {
       const scopes = channelScopes()
       const appliesHere = (name: string): boolean => {
@@ -81,7 +89,7 @@ export function createAdmissionChain(options: {
       // meant to guard — otherwise the confinement is worse than not having it.
       const broken = brokenEnforcing.find(appliesHere)
       if (broken !== undefined) {
-        blocked += 1
+        refusals.blocked += 1
         return { allow: false, reason: `inhibitor '${broken}' never started: all traffic is refused` }
       }
       for (const inhibitor of ordered) {

@@ -329,9 +329,19 @@ describe('GET /api/people?role=', () => {
     const { app, served, cookie } = booted
     person(served.state.db, 'role-anais2', 'Anaïs')
     person(served.state.db, 'role-theo2', 'Théo')
+    // Matches q=Th too, but holds a different role: without this, q=Th alone already
+    // narrows to the answer role= is meant to produce, and the test cannot fail.
+    person(served.state.db, 'role-thomas2', 'Thomas')
     createRole(served.state.db, 'family2', ['ping.*'])
+    createRole(served.state.db, 'guest2', ['ping.*'])
     assignRole(served.state.db, 'role-anais2', 'family2')
     assignRole(served.state.db, 'role-theo2', 'family2')
+    assignRole(served.state.db, 'role-thomas2', 'guest2')
+
+    const byQAlone = (await app.inject({
+      method: 'GET', url: '/api/people?q=Th', headers: { cookie },
+    })).json<{ total: number }>()
+    expect(byQAlone.total).toBe(2)
 
     const body = (await app.inject({
       method: 'GET', url: '/api/people?role=family2&q=Th', headers: { cookie },

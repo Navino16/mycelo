@@ -296,6 +296,31 @@ describe('the mute counter', () => {
     expect(verdict.allow).toBe(false)
     expect(admission.blockedSinceBoot()).toBe(0)
   })
+
+  // The retry shape: startMycelium rebuilds the chain on every germination retry, so the
+  // count must live in the cell RuntimeState hands in, not in the chain's own closure.
+  it('accumulates across two chains sharing the same refusals cell', async () => {
+    const noopLogger: Logger = { info() {}, debug() {}, warn() {}, error() {}, child: () => noopLogger }
+    const refusals = { blocked: 0 }
+    const build = (): ReturnType<typeof createAdmissionChain> => createAdmissionChain({
+      inhibitors: [], brokenEnforcing: ['gate'], logger: noopLogger,
+      membership: { members: () => Promise.resolve(null), requireCapability: () => {} },
+      rhiza: () => <T,>() => ({}) as T,
+      channelScopes: () => new Map(),
+      translator: stubTranslator,
+      defaultLocale: 'en',
+      refusals,
+    })
+
+    const chainA = build()
+    await chainA.admit(messageOn('signal'))
+    await chainA.admit(messageOn('discord'))
+    const chainB = build()
+    await chainB.admit(messageOn('signal'))
+
+    expect(chainA.blockedSinceBoot()).toBe(3)
+    expect(chainB.blockedSinceBoot()).toBe(3)
+  })
 })
 
 // This is the phase's authorization boundary for inhibitors, and it had no test of its

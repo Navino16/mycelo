@@ -181,6 +181,7 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
       brokenEnforcing,
       membership,
       logger,
+      refusals: state.refusals,
       channelScopes: () => allInhibitorChannels(db),
       rhiza: (inhibitor) => {
         const ctx = createInhibitorContext({
