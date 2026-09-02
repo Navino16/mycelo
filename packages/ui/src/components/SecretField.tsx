@@ -3,7 +3,7 @@ export const REDACTED = '••••'
 interface Props {
   id: string
   label: string
-  value: string
+  value: string | undefined
   onChange: (next: string) => void
 }
 
@@ -14,7 +14,7 @@ export function SecretField({ id, label, value, onChange }: Props): React.JSX.El
       <input
         id={id}
         type="password"
-        value={value}
+        value={value ?? ''}
         autoComplete="off"
         onChange={(e) => { onChange(e.target.value) }}
         className="w-full rounded-md border border-line bg-surface px-3 py-2 font-mono"

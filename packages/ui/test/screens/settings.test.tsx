@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, mock } from 'bun:test'
+import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { SecretField } from '../../src/components/SecretField.tsx'
@@ -215,6 +215,29 @@ describe('the generated settings form', () => {
 
     await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
     expect(screen.queryByRole('button', { name: 'Enable' })).toBeNull()
+  })
+
+  // brief item 8: RJSF passes formData through as `value`, which is undefined for a key
+  // absent from the stored settings — the headline case of task 10. <input value={undefined}>
+  // mounts uncontrolled; typing into it then adds the key to formData, which is the
+  // uncontrolled-to-controlled transition React warns about.
+  it('masks a never-filled secret with an empty value and no React controlled-input warning', async () => {
+    const errorSpy = spyOn(console, 'error')
+    try {
+      mockVault({ settings: { url: 'http://x' } })
+      renderSettings()
+
+      await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+      const tokenInput = screen.getByLabelText<HTMLInputElement>('Token')
+      expect(tokenInput.type).toBe('password')
+      expect(tokenInput.value).toBe('')
+
+      fireEvent.change(tokenInput, { target: { value: 'a-real-key' } })
+
+      expect(errorSpy.mock.calls.some((c) => String(c[0]).includes('uncontrolled'))).toBe(false)
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 
   it('renders the refusal naming the missing field when enabling fails', async () => {
