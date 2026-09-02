@@ -153,4 +153,24 @@ describe('the sources list', () => {
     await waitFor(() => { expect(calls.some((c) => c.method === 'PATCH')).toBe(true) })
     expect(calls.find((c) => c.method === 'PATCH')?.body).toMatchObject({ token: 'brand-new-token' })
   })
+
+  // brief item 6: a typed PAT must not stay legible in the DOM, and must be re-synced to
+  // the mask the PATCH answers with rather than echoing back what was typed.
+  it('masks the token field and re-syncs it to the stored mask after saving', async () => {
+    globalThis.fetch = mock((url: string, init?: RequestInit) => {
+      const method = init?.method ?? 'GET'
+      if (method === 'GET' && url === '/api/sources') return Promise.resolve(json([THIRD_PARTY]))
+      if (method === 'PATCH') return Promise.resolve(json({ ...THIRD_PARTY, token: '••••' }))
+      return Promise.resolve(json({ error: { message: 'unhandled in test' } }, 404))
+    }) as unknown as typeof fetch
+    renderSources()
+
+    const row = await screen.findByTestId('source-2')
+    const tokenInput = within(row).getByLabelText(/Token/)
+    fireEvent.change(tokenInput, { target: { value: 'brand-new-token' } })
+    fireEvent.click(within(row).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => { expect((tokenInput as HTMLInputElement).value).toBe('••••') })
+    expect(tokenInput).toHaveProperty('type', 'password')
+  })
 })

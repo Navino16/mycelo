@@ -27,6 +27,7 @@ function SourceRow(
       // to it, so the stored credential survives untouched.
       const updated = await api.send<SourceDto>('PATCH', `/api/sources/${source.id}`, { label, location, token })
       onSaved(updated)
+      setToken(updated.token ?? '')
       setError(null)
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t('error.generic'))
@@ -59,6 +60,8 @@ function SourceRow(
         <label className="block space-y-1 text-sm">
           <span className="text-xs text-text/60">{t('sources.token')}</span>
           <input
+            type="password"
+            autoComplete="off"
             value={token}
             onChange={(e) => { setToken(e.target.value) }}
             className="w-full rounded-md border border-line bg-surface px-2 py-1"
@@ -144,6 +147,8 @@ export function Sources(): React.JSX.Element {
         <label className="block space-y-1 text-sm">
           <span className="text-xs text-text/60">{t('sources.token')}</span>
           <input
+            type="password"
+            autoComplete="off"
             value={token}
             onChange={(e) => { setToken(e.target.value) }}
             className="w-full rounded-md border border-line bg-surface px-2 py-1"
