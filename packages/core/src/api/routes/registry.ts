@@ -43,6 +43,10 @@ export interface GraphNode {
   reason?: string
 }
 
+// germinate.ts refuses a spore named 'core', so this name is free. Emitted always: it is the
+// substrate, and 2k's five-column reading hangs off it (inventory §4).
+const CORE_NODE = 'core'
+
 export interface GraphEdge {
   from: string
   to: string
@@ -63,8 +67,11 @@ export interface GraphDto {
 function edgesOf(spore: GerminatedEnzyme | GerminatedInhibitor): readonly GraphEdge[] {
   const optionalOf = new Map<string, boolean>()
   const mark = (to: string, optional: boolean): void => {
-    if (to === 'mycelium' || !spore.resolved.has(to)) return
-    optionalOf.set(to, (optionalOf.get(to) ?? true) && optional)
+    if (!spore.resolved.has(to)) return
+    // 'mycelium' IS the core (anastomoses.ts puts it in `resolved`); the design's centre
+    // column is that node, so it becomes an edge here rather than being dropped.
+    const target = to === 'mycelium' ? CORE_NODE : to
+    optionalOf.set(target, (optionalOf.get(target) ?? true) && optional)
   }
   for (const requirement of spore.manifest.requires ?? []) {
     if ('any_of' in requirement) {
@@ -81,6 +88,7 @@ function edgesOf(spore: GerminatedEnzyme | GerminatedInhibitor): readonly GraphE
 // manifest's first parse, so only a never-parsed spore stays kind-less (plan defect 29).
 function nodesOf(registry: Registry, recordedKind: ReadonlyMap<string, SporeKind>): readonly GraphNode[] {
   return [
+    { name: CORE_NODE, state: 'germinated' },
     ...registry.hyphae.map((s): GraphNode => ({ name: s.name, kind: s.manifest.kind, state: 'germinated' })),
     ...registry.rhizas.map((s): GraphNode => ({ name: s.name, kind: s.manifest.kind, state: 'germinated' })),
     ...registry.enzymes.map((s): GraphNode => ({ name: s.name, kind: s.manifest.kind, state: 'germinated' })),

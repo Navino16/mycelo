@@ -25,6 +25,7 @@ const peopleQuerySchema = z.object({
   perPage: z.coerce.number().int().min(1).default(50),
   q: z.string().optional(),
   reviewed: z.enum(['true', 'false']).optional(),
+  role: z.string().min(1).optional(),
 })
 
 const patchSchema = z.object({
@@ -54,6 +55,7 @@ export function registerPeopleRoutes(app: FastifyInstance, state: RuntimeState):
       perPage,
       ...(q.q === undefined ? {} : { search: q.q }),
       ...(q.reviewed === undefined ? {} : { reviewed: q.reviewed === 'true' }),
+      ...(q.role === undefined ? {} : { role: q.role }),
     })
     return { ...result, items: result.items.map((p) => toDto(state.db, p)) }
   })

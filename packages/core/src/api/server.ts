@@ -18,6 +18,7 @@ import { registerPluginRoutes } from './routes/plugins.js'
 import { registerRegistryRoutes } from './routes/registry.js'
 import { registerRoleRoutes } from './routes/roles.js'
 import { registerSourceRoutes } from './routes/sources.js'
+import { registerSubstrateRoutes } from './routes/substrate.js'
 import { describeFault } from '../support/thrown.js'
 
 // Both roots, tried in order: dist/ if the SPA has been built (gitignored, so absent on
@@ -101,6 +102,7 @@ export function createServer(options: ServerOptions): FastifyInstance {
     registerAuthRoutes(app, options.state)
     registerHealthRoutes(app, options.state)
     registerConfigRoutes(app, options.state)
+    registerSubstrateRoutes(app, options.state)
     registerPeopleRoutes(app, options.state)
     registerPluginRoutes(app, options.state)
     registerRoleRoutes(app, options.state)

@@ -276,6 +276,28 @@ describe('inhibitor channel confinement', () => {
   })
 })
 
+describe('the mute counter', () => {
+  it('counts every message refused by a broken enforcing inhibitor, not just the first', async () => {
+    const { admission } = chain([], ['gate'])
+
+    await admission.admit(messageOn('signal'))
+    await admission.admit(messageOn('signal'))
+    await admission.admit(messageOn('discord'))
+
+    expect(admission.blockedSinceBoot()).toBe(3)
+  })
+
+  it('does not count an ordinary refusal by a working inhibitor', async () => {
+    const denier = inhibitor('denier', false, () => Promise.resolve({ allow: false, reason: 'no' }))
+    const { admission } = chain([denier])
+
+    const verdict = await admission.admit(message)
+
+    expect(verdict.allow).toBe(false)
+    expect(admission.blockedSinceBoot()).toBe(0)
+  })
+})
+
 // This is the phase's authorization boundary for inhibitors, and it had no test of its
 // own: chain.test.ts stubbed rhiza() out and the only fixture exercising it starts empty.
 describe('createInhibitorContext', () => {

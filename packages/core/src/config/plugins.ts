@@ -1,5 +1,7 @@
 import { and, eq } from 'drizzle-orm'
-import type { FormSchema, PluginInfo, SporeKind } from '@mycelo/septum'
+import type { FormSchema, Manifest, PluginInfo, SporeKind } from '@mycelo/septum'
+import { discover } from '../germination/discover.js'
+import { isFailure, readManifest } from '../germination/manifest.js'
 import type { Registry } from '../germination/registry.js'
 import type { Db } from '../persistence/db.js'
 import { pluginSetting } from '../persistence/schema.js'
@@ -91,6 +93,37 @@ export function listPlugins(registry: Registry, sporesDirs: readonly string[], d
       }]
     })
   return [...germinated, ...dormant, ...rest]
+}
+
+export interface PluginFacts {
+  description?: string
+  /** Declared names, before any alias. */
+  commands: readonly string[]
+}
+
+/**
+ * Description and declared commands per plugin name (inventory §3 rows 4 and 11). One
+ * directory walk, never one per plugin: findSpore() re-walks every time.
+ */
+export function manifestFactsByName(
+  registry: Registry, sporesDirs: readonly string[],
+): ReadonlyMap<string, PluginFacts> {
+  const facts = new Map<string, PluginFacts>()
+  const put = (manifest: Manifest): void => {
+    if (facts.has(manifest.name)) return
+    facts.set(manifest.name, {
+      ...(manifest.description === undefined ? {} : { description: manifest.description }),
+      commands: manifest.kind === 'enzyme' ? manifest.commands.map((c) => c.name) : [],
+    })
+  }
+  for (const spore of [...registry.hyphae, ...registry.rhizas, ...registry.enzymes, ...registry.inhibitors]) {
+    put(spore.manifest)
+  }
+  for (const location of discover(sporesDirs)) {
+    const read = readManifest(location)
+    if (!isFailure(read)) put(read.manifest)
+  }
+  return facts
 }
 
 // The published contract says enable() rejects; enablePlugin() returns a refusal object,

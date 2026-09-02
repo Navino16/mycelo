@@ -6,7 +6,7 @@ import { I18nProvider } from '../src/i18n.tsx'
 import type { RuntimeHealth } from '../src/api/types.ts'
 
 const GERMINATED: RuntimeHealth = {
-  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [],
+  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0,
 }
 
 function withHealth(health: RuntimeHealth | null): void {
@@ -67,7 +67,7 @@ describe('the critical banner', () => {
   // enforcingBlocked stays [] in that mode, so the banner must fire on 'degraded' too.
   it('names the germination failure when the bot is degraded', () => {
     withHealth({
-      mode: 'degraded', dormant: [], enforcingBlocked: [], rhizas: [],
+      mode: 'degraded', dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0,
       failure: { kind: 'cycle', message: 'cycle: alpha -> beta -> alpha', spores: ['alpha', 'beta'] },
     })
 
@@ -75,7 +75,7 @@ describe('the critical banner', () => {
   })
 
   it('falls back to a catalogue sentence when degraded with no failure message', () => {
-    withHealth({ mode: 'degraded', dormant: [], enforcingBlocked: [], rhizas: [] })
+    withHealth({ mode: 'degraded', dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0 })
 
     expect(screen.getByRole('alert').textContent).toContain('?')
   })

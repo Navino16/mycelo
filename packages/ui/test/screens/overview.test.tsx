@@ -9,7 +9,9 @@ import type { PluginGroups, RoleDto, RuntimeHealth, SourceDto } from '../../src/
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
 
-const GERMINATED: RuntimeHealth = { mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [] }
+const GERMINATED: RuntimeHealth = {
+  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0,
+}
 
 /** A setup with a source, a channel and a custom role — nothing left for GuidedStart to name. */
 const COMPLETE_SOURCES: readonly SourceDto[] = [
@@ -100,6 +102,7 @@ describe('the overview', () => {
       dormant: [],
       enforcingBlocked: [],
       rhizas: [],
+      blockedSinceBoot: 0,
       failure: { kind: 'cycle', message: 'cycle: alpha -> beta -> alpha', spores: ['alpha', 'beta'] },
     })
 
@@ -137,7 +140,7 @@ describe('the overview', () => {
   // through to '.message' the same way the unguarded arrays let '{}' through to '.filter'.
   it('does not crash on a null failure in degraded mode', async () => {
     await withHealth({
-      mode: 'degraded', dormant: [], enforcingBlocked: [], rhizas: [],
+      mode: 'degraded', dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0,
       failure: null as unknown as RuntimeHealth['failure'],
     })
 

@@ -15,12 +15,18 @@ export interface PluginDto {
   name: string
   /** Absent for a dormant entry whose manifest never parsed. */
   kind?: SporeKind
+  /**
+   * Declared command names. Non-empty for a dormant, disabled or pending enzyme too, unlike
+   * septum's PluginInfo.commands (inventory §3 row 11).
+   */
   commands: readonly string[]
   state: PluginState
   reason?: string
   enabled: boolean
   source?: string
   strain?: string
+  /** The manifest's own one-line description. Absent when the manifest declares none. */
+  description?: string
 }
 
 export interface RequirementDto {
@@ -79,6 +85,8 @@ export interface RuntimeHealth {
   /** Any one entry means the bot refuses all traffic on every channel (design §7). */
   enforcingBlocked: readonly string[]
   rhizas: readonly RhizaHealth[]
+  /** Messages refused since boot by a broken enforcing inhibitor. 0 while not germinated. */
+  blockedSinceBoot: number
 }
 
 /** `GET /api/commands` — api/routes/registry.ts. `description` is already rendered. */
@@ -108,6 +116,16 @@ export interface ConfigDto {
   prefix: string
   defaultLocale: string
   defaultRole?: string
+}
+
+/** `GET /api/substrate` — api/routes/substrate.ts. */
+export interface SubstrateDto {
+  /** packages/core/package.json's version, verbatim. '0.0.0' until the core is released. */
+  version: string
+  /** A serialized Date: when this process's RuntimeState was created. */
+  startedAt: string
+  /** Whole seconds since startedAt, computed at request time. */
+  uptimeSeconds: number
 }
 
 export interface IdentityDto { channel: string, externalId: string, displayName?: string }

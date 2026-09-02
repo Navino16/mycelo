@@ -41,6 +41,8 @@ export function createInhibitorContext(options: {
 
 export interface AdmissionChain {
   admit(message: IncomingMessage): Promise<Verdict>
+  /** Messages refused since boot by a broken enforcing inhibitor (inventory §3 row 7). */
+  blockedSinceBoot(): number
 }
 
 /**
@@ -65,8 +67,10 @@ export function createAdmissionChain(options: {
   // Same attribution start() gets (boot/start.ts), so an inhibitor's records name it in
   // both moments rather than only during startup.
   const loggerFor = new Map(inhibitors.map((i) => [i.name, logger.child({ inhibitor: i.name })]))
+  let blocked = 0
 
   return {
+    blockedSinceBoot: () => blocked,
     async admit(message) {
       const scopes = channelScopes()
       const appliesHere = (name: string): boolean => {
@@ -77,6 +81,7 @@ export function createAdmissionChain(options: {
       // meant to guard — otherwise the confinement is worse than not having it.
       const broken = brokenEnforcing.find(appliesHere)
       if (broken !== undefined) {
+        blocked += 1
         return { allow: false, reason: `inhibitor '${broken}' never started: all traffic is refused` }
       }
       for (const inhibitor of ordered) {

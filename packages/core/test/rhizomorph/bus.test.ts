@@ -28,7 +28,7 @@ const SPORES = [resolvePath(import.meta.dirname, '../../../../fixtures')]
 const db = (() => { const { db: opened } = openDatabase(':memory:'); migrateDatabase(opened); return opened })()
 // This file's pre-existing tests are not about admission: an admit-all chain lets them
 // exercise routing exactly as before phase 4 wired the gate in front of it.
-const admitAll: AdmissionChain = { admit: () => Promise.resolve({ allow: true }) }
+const admitAll: AdmissionChain = { admit: () => Promise.resolve({ allow: true }), blockedSinceBoot: () => 0 }
 // Same reasoning for authorization: every pre-existing test sends as 'local', so
 // granting it '*' up front reproduces the pre-phase-4 always-dispatches behaviour.
 const localPrincipal = resolvePrincipal(db, { channel: 'console', externalId: 'local' })
@@ -668,7 +668,7 @@ function harness(options: {
     ...(options.defaultRole === undefined ? {} : { defaultRole: options.defaultRole }),
     translator: createTranslator({ catalogs: new Map(), defaultLocale: 'en', logger: createLogger() }),
     defaultLocale: 'en',
-    admission: { admit: options.admit ?? (() => Promise.resolve({ allow: true })) },
+    admission: { admit: options.admit ?? (() => Promise.resolve({ allow: true })), blockedSinceBoot: () => 0 },
     onUnrouted: async (msg, command) => {
       if (command !== null) sent.push(`unknown command '${command}'`)
       await Promise.resolve()

@@ -22,6 +22,8 @@ export interface RuntimeHealth {
   /** Kept apart from `dormant`: any one of these refuses all traffic (design §7). */
   enforcingBlocked: readonly string[]
   rhizas: readonly RhizaHealth[]
+  /** Messages refused since boot while enforcingBlocked was non-empty (inventory §3 row 7). */
+  blockedSinceBoot: number
 }
 
 export async function aggregateRuntimeHealth(germination: Germination): Promise<RuntimeHealth> {
@@ -29,14 +31,15 @@ export async function aggregateRuntimeHealth(germination: Germination): Promise<
     return {
       mode: 'degraded',
       ...(germination.status === 'degraded' ? { failure: germination.failure } : {}),
-      dormant: [], enforcingBlocked: [], rhizas: [],
+      dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0,
     }
   }
-  const { registry } = germination.mycelium
+  const { registry, admission } = germination.mycelium
   return {
     mode: 'germinated',
     dormant: registry.dormant.map((d) => ({ name: d.name, reason: d.reason })),
     enforcingBlocked: registry.brokenEnforcing,
     rhizas: await aggregateHealth(registry),
+    blockedSinceBoot: admission.blockedSinceBoot(),
   }
 }

@@ -665,3 +665,66 @@ describe('GET /api/plugins/:name, declared against mounted', () => {
     expect(entries.every((e) => !('demands' in e))).toBe(true)
   })
 })
+
+describe('the plugin description and a dormant plugin\'s commands', () => {
+  it('carries the manifest description on a germinated plugin', async () => {
+    booted = await bootAndLogin({
+      spores: (dir) => {
+        writeSpore(dir, 'greeter', {
+          'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^0.11"\n'
+            + 'description: Greets a new sender\n'
+            + 'commands:\n  - name: hello\n    description: command.hello.description\n    respond: hello.text\n',
+          'translations/en.yaml': 'command:\n  hello:\n    description: Say hello\nhello:\n  text: Hi\n',
+        })
+      },
+    })
+    const { app, cookie } = booted
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/plugins', headers: { cookie },
+    })).json<{ enzyme: { name: string, description?: string }[] }>()
+
+    expect(body.enzyme.find((p) => p.name === 'greeter')?.description).toBe('Greets a new sender')
+  })
+
+  // inventory §3 row 11: listPlugins gives every non-germinated entry commands: [], so the
+  // dead-command list 1c shows has no source until the route reads the manifest itself.
+  it('lists the declared commands of a dormant plugin, which never germinated', async () => {
+    booted = await bootAndLogin({
+      spores: (dir) => {
+        writeSpore(dir, 'orphan', {
+          'spore.yaml': 'kind: enzyme\nname: orphan\nseptum: "^0.11"\n'
+            + 'description: Needs a rhiza nobody installed\n'
+            + 'commands:\n'
+            + '  - name: first\n    description: command.first.description\n    respond: first.text\n'
+            + '  - name: second\n    description: command.second.description\n    respond: second.text\n'
+            + 'requires:\n  - rhiza: nowhere\n',
+          'translations/en.yaml': 'command:\n  first:\n    description: One\n  second:\n    description: Two\n'
+            + 'first:\n  text: a\nsecond:\n  text: b\n',
+        })
+      },
+    })
+    const { app, cookie } = booted
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/plugins', headers: { cookie },
+    })).json<{ enzyme: { name: string, state: string, commands: string[], description?: string }[] }>()
+    const orphan = body.enzyme.find((p) => p.name === 'orphan')
+
+    expect(orphan?.state).toBe('dormant')
+    // Both, not the first: a `.commands[0]`-shaped implementation passes a one-command fixture.
+    expect(orphan?.commands).toEqual(['first', 'second'])
+    expect(orphan?.description).toBe('Needs a rhiza nobody installed')
+  })
+
+  it('leaves commands empty for a plugin kind that declares none', async () => {
+    booted = await bootAndLogin({ spores: cyclingPair })
+    const { app, cookie } = booted
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/plugins', headers: { cookie },
+    })).json<{ rhiza: { name: string, commands: string[] }[] }>()
+
+    expect(body.rhiza.every((p) => p.commands.length === 0)).toBe(true)
+  })
+})

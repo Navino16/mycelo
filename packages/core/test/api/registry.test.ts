@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'bun:test'
 import type { CommandGroups, GraphDto } from '../../src/api/routes/registry.js'
 import {
   bootAndLogin, brokenManifest, capabilityCommand, closeBooted, cyclingPair,
-  mandatoryAndOptionalDependency, translatedCommand, twoPluginsTwoCommands, configurable } from './support.js'
+  mandatoryAndOptionalDependency, translatedCommand, twoPluginsTwoCommands, configurable, writeSpore } from './support.js'
 import type { LoggedIn } from './support.js'
 import { recordInstall, setEnabled } from '../../src/config/store.js'
 import { setAlias } from '../../src/rhizomorph/aliases.js'
@@ -153,5 +153,41 @@ describe('/api/graph', () => {
     // merge must answer mandatory (false) — an "AND" over both, not whichever was read last.
     expect(byTarget.get('coreconn')).toBe(false)
     expect(byTarget.get('sideconn')).toBe(true)
+  })
+})
+
+describe('the synthetic core node', () => {
+  it('emits a germinated core node even when nothing requires the mycelium', async () => {
+    booted = await bootAndLogin({ spores: twoPluginsTwoCommands })
+    const { app, cookie } = booted
+
+    const graph = (await app.inject({
+      method: 'GET', url: '/api/graph', headers: { cookie },
+    })).json<{ nodes: { name: string, state: string }[], edges: { from: string, to: string }[] }>()
+
+    expect(graph.nodes.find((n) => n.name === 'core')).toEqual({ name: 'core', state: 'germinated' })
+    expect(graph.edges.filter((e) => e.to === 'core')).toEqual([])
+  })
+
+  it('routes a rhiza: mycelium requirement to the core node instead of dropping it', async () => {
+    booted = await bootAndLogin({
+      spores: (dir) => {
+        writeSpore(dir, 'reader', {
+          'spore.yaml': 'kind: enzyme\nname: reader\nseptum: "^0.11"\n'
+            + 'commands:\n  - name: who\n    description: command.who.description\n    respond: who.text\n'
+            + 'requires:\n  - rhiza: mycelium\n    scopes: [principals.read]\n',
+          'translations/en.yaml': 'command:\n  who:\n    description: Who\nwho:\n  text: ok\n',
+        })
+      },
+    })
+    const { app, cookie } = booted
+
+    const graph = (await app.inject({
+      method: 'GET', url: '/api/graph', headers: { cookie },
+    })).json<{ edges: { from: string, to: string, optional: boolean }[] }>()
+
+    expect(graph.edges).toContainEqual({ from: 'reader', to: 'core', optional: false })
+    // The old name must not survive alongside the new one, or the client draws both.
+    expect(graph.edges.some((e) => e.to === 'mycelium')).toBe(false)
   })
 })

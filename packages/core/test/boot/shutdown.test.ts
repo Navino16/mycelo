@@ -32,7 +32,7 @@ function myceliumWith(overrides: {
     registry,
     connectedHyphae: overrides.connectedHyphae ?? hyphae,
     bus: { deliver: async () => {} },
-    admission: { admit: async () => ({ allow: true }) },
+    admission: { admit: async () => ({ allow: true }), blockedSinceBoot: () => 0 },
   }
 }
 
