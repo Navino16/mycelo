@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import type { SporeKind } from '@mycelo/septum'
 import type { RuntimeState } from '../../boot/state.js'
+import { listInstalls } from '../../config/store.js'
 import { targetName } from '../../germination/anastomoses.js'
 import type { GerminatedEnzyme, GerminatedInhibitor, Registry } from '../../germination/registry.js'
 
@@ -76,13 +77,20 @@ function edgesOf(spore: GerminatedEnzyme | GerminatedInhibitor): readonly GraphE
   return [...optionalOf].map(([to, optional]) => ({ from: spore.name, to, optional }))
 }
 
-function nodesOf(registry: Registry): readonly GraphNode[] {
+// A dormant spore has no manifest in the registry; its install row recorded the kind at the
+// manifest's first parse, so only a never-parsed spore stays kind-less (plan defect 29).
+function nodesOf(registry: Registry, recordedKind: ReadonlyMap<string, SporeKind>): readonly GraphNode[] {
   return [
     ...registry.hyphae.map((s): GraphNode => ({ name: s.name, kind: s.manifest.kind, state: 'germinated' })),
     ...registry.rhizas.map((s): GraphNode => ({ name: s.name, kind: s.manifest.kind, state: 'germinated' })),
     ...registry.enzymes.map((s): GraphNode => ({ name: s.name, kind: s.manifest.kind, state: 'germinated' })),
     ...registry.inhibitors.map((s): GraphNode => ({ name: s.name, kind: s.manifest.kind, state: 'germinated' })),
-    ...registry.dormant.map((d): GraphNode => ({ name: d.name, state: 'dormant', reason: d.reason })),
+    ...registry.dormant.map((d): GraphNode => ({
+      name: d.name,
+      ...(recordedKind.has(d.name) ? { kind: recordedKind.get(d.name) } : {}),
+      state: 'dormant',
+      reason: d.reason,
+    })),
   ]
 }
 
@@ -107,6 +115,7 @@ export function registerRegistryRoutes(app: FastifyInstance, state: RuntimeState
     if (state.germination.status !== 'germinated') return { nodes: [], edges: [] }
     const { registry } = state.germination.mycelium
     const edges = [...registry.enzymes, ...registry.inhibitors].flatMap(edgesOf)
-    return { nodes: nodesOf(registry), edges }
+    const recordedKind = new Map(listInstalls(state.db).map((i) => [i.name, i.kind as SporeKind]))
+    return { nodes: nodesOf(registry, recordedKind), edges }
   })
 }

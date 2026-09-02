@@ -85,6 +85,22 @@ describe('the anastomosis graph', () => {
     expect(screen.getAllByText('radarr2 is not installed').length).toBeGreaterThan(0)
   })
 
+  // A Zod refusal runs to hundreds of characters; drawn whole at the node it overlaps its
+  // neighbours (plan defect 30). The SVG shows a bounded prefix, the full text sits in <title>
+  // and on the mobile card.
+  it('bounds a long dormant reason in the SVG and keeps the full text in a title', async () => {
+    const reason = 'configuration rejected: ' + Array.from({ length: 4 }, () => 'url: Invalid input: expected string, received undefined').join('; ')
+    serve({ ...GRAPH, nodes: [...GRAPH.nodes.filter((n) => n.name !== 'orphan'), { name: 'orphan', state: 'dormant', reason }] })
+    renderGraph()
+
+    await waitFor(() => { expect(screen.getAllByText('orphan').length).toBeGreaterThan(0) })
+    const drawn = screen.getByTestId('graph-desktop').querySelector('text.fill-crit')
+    expect(drawn?.textContent?.length).toBeLessThanOrEqual(60)
+    expect(drawn?.textContent?.endsWith('…')).toBe(true)
+    expect(screen.getByTestId('graph-desktop').querySelector('title')?.textContent).toBe(reason)
+    expect(within(screen.getByTestId('graph-mobile')).getByText(reason)).toBeDefined()
+  })
+
   // A component test cannot see a viewport: assert both renderings exist and each carries
   // every node, rather than relying on which one a real browser would hide.
   it('places every node in both the desktop graph and the mobile card list', async () => {

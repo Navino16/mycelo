@@ -11,7 +11,10 @@ import type { PlacedNode } from '../graphLayout.ts'
 import type { StringKey } from '../../locales/en.ts'
 
 const RADIUS = 22
-const MARGIN = 40
+// Wide enough that the leftmost label (a fifteen-character name) is not clipped by the viewBox.
+const MARGIN = 80
+// A Zod refusal runs to hundreds of characters; the node shows a prefix, <title> the whole (defect 30).
+const REASON_CHARS = 48
 
 function groupByKind(nodes: readonly PlacedNode[]): Record<SporeKind | 'unknown', PlacedNode[]> {
   const groups: Record<SporeKind | 'unknown', PlacedNode[]> = {
@@ -44,9 +47,12 @@ function GraphMark(
         {node.name}
       </text>
       {node.reason !== undefined && (
-        <text textAnchor="middle" dy={RADIUS + 30} className="fill-crit text-[10px]">
-          {node.reason}
-        </text>
+        <>
+          <title>{node.reason}</title>
+          <text textAnchor="middle" dy={RADIUS + 30} className="fill-crit text-[10px]">
+            {node.reason.length > REASON_CHARS ? `${node.reason.slice(0, REASON_CHARS - 1)}…` : node.reason}
+          </text>
+        </>
       )}
     </g>
   )

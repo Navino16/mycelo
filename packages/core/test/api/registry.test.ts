@@ -3,8 +3,7 @@ import { afterEach, describe, expect, it } from 'bun:test'
 import type { CommandGroups, GraphDto } from '../../src/api/routes/registry.js'
 import {
   bootAndLogin, brokenManifest, capabilityCommand, closeBooted, cyclingPair,
-  mandatoryAndOptionalDependency, translatedCommand, twoPluginsTwoCommands,
-} from './support.js'
+  mandatoryAndOptionalDependency, translatedCommand, twoPluginsTwoCommands, configurable } from './support.js'
 import type { LoggedIn } from './support.js'
 import { recordInstall, setEnabled } from '../../src/config/store.js'
 import { setAlias } from '../../src/rhizomorph/aliases.js'
@@ -127,6 +126,17 @@ describe('/api/graph', () => {
     expect(broken).toMatchObject({ state: 'dormant' })
     expect(broken?.kind).toBeUndefined()
     expect(broken?.reason).toBeDefined()
+  })
+
+  // needs-config parses and then refuses its empty configuration: the commonest dormancy of a
+  // fresh substrate, which the UI must file under its kind, not under "manifest did not parse".
+  it('gives a dormant node whose manifest parsed the kind its install row recorded', async () => {
+    booted = await bootAndLogin({ spores: configurable })
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/graph', headers: { cookie } })).json<GraphDto>()
+    const node = body.nodes.find((n) => n.name === 'needs-config')
+    expect(node).toMatchObject({ kind: 'enzyme', state: 'dormant' })
+    expect(node?.reason).toContain('configuration')
   })
 
   it('tells a mandatory dependency edge from an optional one, and dedupes a target reached twice', async () => {
