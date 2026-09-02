@@ -17,6 +17,9 @@ function renderAt(path: string): void {
   globalThis.fetch = mock((url: string) => {
     if (url === '/api/me') return Promise.resolve(jsonResponse({ id: 'p1', username: 'owner', locale: 'en', roles: ['owner'] }))
     if (url === '/api/health') return Promise.resolve(jsonResponse({ mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [] }))
+    // Layout's ChromeProvider reads this: a missing /api/substrate in production is a broken
+    // build, not a state to design for, so the fixture answers it rather than the shell tolerating it.
+    if (url === '/api/substrate') return Promise.resolve(jsonResponse({ version: '0.9.3', startedAt: '2026-01-01T00:00:00.000Z', uptimeSeconds: 3_600 }))
     if (url.startsWith('/api/plugins/radarr')) return Promise.resolve(jsonResponse({ name: 'radarr', kind: 'rhiza', commands: [], state: 'germinated', enabled: true }))
     return Promise.resolve(jsonResponse({}))
   }) as unknown as typeof fetch

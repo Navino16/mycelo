@@ -16,6 +16,19 @@
   --color-crit-bg: oklch(0.68 0.19 25 / 0.16);
   --color-idle: oklch(0.63 0.018 250);
   --color-idle-bg: oklch(0.63 0.018 250 / 0.14);
+  --color-surface2: oklch(0.245 0.009 85);
+  --text-meta: 0.6875rem;
+  --text-meta--line-height: 1rem;
+  --text-meta-lg: 0.75rem;
+  --text-meta-lg--line-height: 1.125rem;
+  --text-body: 0.8125rem;
+  --text-body--line-height: 1.25rem;
+  --text-title: 0.875rem;
+  --text-title--line-height: 1.25rem;
+  --text-page: 1.0625rem;
+  --text-page--line-height: 1.5rem;
+  --text-hero: 1.75rem;
+  --text-hero--line-height: 2rem;
   --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
@@ -36,6 +49,7 @@ html:not(.dark) {
   --color-crit-bg: oklch(0.50 0.19 25 / 0.10);
   --color-idle: oklch(0.52 0.02 250);
   --color-idle-bg: oklch(0.52 0.02 250 / 0.10);
+  --color-surface2: oklch(0.945 0.006 85);
 }
 
 body {
