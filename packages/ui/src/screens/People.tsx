@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { api } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
@@ -19,6 +19,7 @@ export function People(): React.JSX.Element {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [roleToAssign, setRoleToAssign] = useState('')
   const [assignMessage, setAssignMessage] = useState<string | null>(null)
+  const requestGeneration = useRef(0)
 
   // Page reset lives in these two event handlers, not in an effect keyed on [q, reviewedOnly]:
   // a filter change reads as a new search, and setState-in-an-effect is the pattern
@@ -34,12 +35,15 @@ export function People(): React.JSX.Element {
   }
 
   useEffect(() => {
+    // A generation counter, not an AbortController: client.ts's api.get takes no signal, and a
+    // stale response arriving after a newer request must not overwrite what it fetched.
+    const generation = ++requestGeneration.current
     const params = new URLSearchParams({ page: String(page) })
     if (q !== '') params.set('q', q)
     if (reviewedOnly) params.set('reviewed', 'false')
     api.get<PageDto<PersonDto>>(`/api/people?${params.toString()}`).then(
-      (d) => { setData(d); setError(false) },
-      () => { setError(true) },
+      (d) => { if (generation === requestGeneration.current) { setData(d); setError(false) } },
+      () => { if (generation === requestGeneration.current) setError(true) },
     )
   }, [page, q, reviewedOnly])
 

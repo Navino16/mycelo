@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter } from 'react-router'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { People } from '../../src/screens/People.tsx'
-import type { PersonDto, RoleDto } from '../../src/api/types.ts'
+import type { PageDto, PersonDto, RoleDto } from '../../src/api/types.ts'
 
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
@@ -159,23 +159,81 @@ describe('the people list', () => {
 })
 
 describe('the people list at scale', () => {
-  it('paginates 80 rows across two pages, deriving pages from the response, not a guess', async () => {
-    const people = build(80)
+  it('paginates 120 rows across three pages, deriving total and pages from the response, not a guess', async () => {
+    const people = build(120)
     mockApi({ people, perPage: 50 })
     renderPeople()
 
     await waitFor(() => { expect(screen.getByText('Person 1')).toBeDefined() })
     expect(screen.getByText('Person 50')).toBeDefined()
     expect(screen.queryByText('Person 51')).toBeNull()
-    expect(screen.getByText('Page 1 / 2')).toBeDefined()
+    expect(screen.getByText('120 people')).toBeDefined()
+    expect(screen.getByText('Page 1 / 3')).toBeDefined()
     expect(screen.getByRole('button', { name: 'Previous' })).toHaveProperty('disabled', true)
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
 
     await waitFor(() => { expect(screen.getByText('Person 51')).toBeDefined() })
-    expect(screen.getByText('Person 80')).toBeDefined()
+    expect(screen.getByText('Person 100')).toBeDefined()
     expect(screen.queryByText('Person 1')).toBeNull()
-    expect(screen.getByText('Page 2 / 2')).toBeDefined()
+    expect(screen.getByText('Page 2 / 3')).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+
+    // The last page holds the remainder: 120 - 2*50 = 20 rows, not a full 50.
+    await waitFor(() => { expect(screen.getByText('Person 101')).toBeDefined() })
+    expect(screen.getByText('Person 120')).toBeDefined()
+    expect(screen.queryByText('Person 51')).toBeNull()
+    expect(screen.getByText('Page 3 / 3')).toBeDefined()
     expect(screen.getByRole('button', { name: 'Next' })).toHaveProperty('disabled', true)
+  })
+})
+
+describe('the people list against an out-of-order response', () => {
+  /** A fetch mock whose promises are resolved by the test, in whatever order it chooses. */
+  function deferredMock(): { calls: Call[], respond: (matches: (url: string) => boolean, body: unknown) => void } {
+    const calls: Call[] = []
+    const pending: { url: string, resolve: (r: Response) => void }[] = []
+    globalThis.fetch = mock((url: string, init?: RequestInit) => {
+      calls.push({ method: init?.method ?? 'GET', url, body: undefined })
+      return new Promise<Response>((resolve) => { pending.push({ url, resolve }) })
+    }) as unknown as typeof fetch
+    function respond(matches: (url: string) => boolean, body: unknown): void {
+      const index = pending.findIndex((p) => matches(p.url))
+      if (index === -1) throw new Error(`no pending request matches; saw ${JSON.stringify(pending.map((p) => p.url))}`)
+      const [entry] = pending.splice(index, 1)
+      entry?.resolve(json(body))
+    }
+    return { calls, respond }
+  }
+
+  function pageBody(page: number, name: string): PageDto<PersonDto> {
+    return { items: [{ id: name, displayName: name, roles: [], identities: [], reviewed: false }], page, perPage: 50, total: 150 }
+  }
+
+  it('shows the last-requested page, not whichever response happens to arrive last', async () => {
+    const { calls, respond } = deferredMock()
+    renderPeople()
+
+    await waitFor(() => { expect(calls.some((c) => c.url === '/api/people?page=1')).toBe(true) })
+    respond((u) => u === '/api/people?page=1', pageBody(1, 'Page1 Person'))
+    await waitFor(() => { expect(screen.getByText('Page1 Person')).toBeDefined() })
+
+    // Two requests in flight at once: page 2 (older, requested first) and page 3 (newer).
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() => { expect(calls.some((c) => c.url === '/api/people?page=2')).toBe(true) })
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() => { expect(calls.some((c) => c.url === '/api/people?page=3')).toBe(true) })
+
+    // The newer request settles first; the older, slower one settles after.
+    respond((u) => u === '/api/people?page=3', pageBody(3, 'Page3 Person'))
+    await waitFor(() => { expect(screen.getByText('Page3 Person')).toBeDefined() })
+
+    respond((u) => u === '/api/people?page=2', pageBody(2, 'Page2 Person'))
+    // The stale response gets a chance to (wrongly) apply before the assertion below.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
+
+    expect(screen.getByText('Page3 Person')).toBeDefined()
+    expect(screen.queryByText('Page2 Person')).toBeNull()
   })
 })
