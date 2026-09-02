@@ -5,11 +5,9 @@ import type { StringKey } from '../../locales/en.ts'
 interface Diagnosis { title: StringKey, action?: { to: string, label: StringKey } }
 
 /**
- * One `reason` string per cause; the order matters, the first match wins. Matched against the
- * literal messages germination/germinate.ts and germination/anastomoses.ts actually produce —
- * "already claimed by" is the real per-plugin duplicate-name reason (anastomoses.ts); the
- * command-collision message ("declared by") halts the whole germination instead of a single
- * plugin's `reason`, so it is kept here only for a future core that surfaces it per plugin.
+ * One `reason` string per cause; the first match wins. The per-plugin duplicate-name reason is
+ * "already claimed by" (anastomoses.ts) — a command collision aborts the whole germination
+ * instead of reaching a single plugin's `reason`, so that message never appears here.
  */
 function diagnose(name: string, reason: string): Diagnosis {
   if (/configuration rejected|configuration is incomplete/i.test(reason)) {
@@ -17,7 +15,7 @@ function diagnose(name: string, reason: string): Diagnosis {
   }
   if (/septum|range|version/i.test(reason)) return { title: 'dormant.version' }
   if (/not installed|requires|any_of|dependency/i.test(reason)) return { title: 'dormant.dependency' }
-  if (/already claimed|declared by/i.test(reason)) {
+  if (/already claimed/i.test(reason)) {
     return { title: 'dormant.collision', action: { to: '/plugins', label: 'dormant.setAlias' } }
   }
   return { title: 'dormant.other' }

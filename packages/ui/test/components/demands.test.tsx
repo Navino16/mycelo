@@ -62,4 +62,16 @@ describe('what a plugin is asking for', () => {
     )
     expect(screen.getByText('Asks for nothing.')).toBeDefined()
   })
+
+  // A field that crossed the API boundary malformed must not throw into the route error
+  // boundary; the well-formed sections beside it still render.
+  it('does not throw on a malformed nested field, and still renders the other sections', () => {
+    render(
+      <I18nProvider>
+        <DemandsList demands={{ ...DEMANDS, requires: null as unknown as SporeDemands['requires'] }} />
+      </I18nProvider>,
+    )
+    expect(screen.getByText(/assign roles to people/i)).toBeDefined()
+    expect(screen.getByText('signal-cli')).toBeDefined()
+  })
 })

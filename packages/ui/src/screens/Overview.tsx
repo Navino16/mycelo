@@ -1,13 +1,8 @@
 import { Link } from 'react-router'
+import { readArray } from '../api/read.ts'
 import { useHealth } from '../health.tsx'
 import { useT } from '../i18n.tsx'
 import type { RhizaHealth } from '../api/types.ts'
-
-// Present-but-unreadable is not healthy: task 6's rule for CriticalBanner's enforcingBlocked
-// (Array.isArray, not a bare read), applied to every array this screen reads.
-function readArray<T>(value: unknown): readonly T[] | undefined {
-  return Array.isArray(value) ? value as readonly T[] : undefined
-}
 
 export function Overview(): React.JSX.Element {
   const t = useT()

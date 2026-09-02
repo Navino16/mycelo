@@ -1,17 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router'
 import { api } from '../api/client.ts'
+import { readArray } from '../api/read.ts'
 import type { PluginDetailDto } from '../api/types.ts'
 import { DemandsList } from '../components/DemandsList.tsx'
 import { DormantDiagnosis } from '../components/DormantDiagnosis.tsx'
 import { StateBadge } from '../components/StateBadge.tsx'
 import { useT } from '../i18n.tsx'
-
-// Task 7's guard rule (health?.rhizas.filter was a real production bug): a bare `.map()` on
-// an optional array trusts the API shape past what the fetch actually returned.
-function readArray<T>(value: unknown): readonly T[] | undefined {
-  return Array.isArray(value) ? value as readonly T[] : undefined
-}
 
 export function PluginDetail(): React.JSX.Element {
   const t = useT()
