@@ -52,6 +52,7 @@ export const fr: Record<StringKey, string> = {
   'health.blocked.body': 'Un filtre qui refuse en cas de panne n\u2019a pas d\u00e9marr\u00e9 : tous les messages de tous les canaux sont refus\u00e9s ({names})',
   'health.blocked.unknown': 'Le substrat n\u2019a pas indiqu\u00e9 si le trafic est bloqu\u00e9 (?)',
   'health.degraded.title': 'La germination a \u00e9chou\u00e9',
+  'health.degraded.unknown': 'Le substrat n\u2019a pas indiqu\u00e9 pourquoi la germination a \u00e9chou\u00e9 (?)',
   'health.dormant': '{count} dormant(s)',
   'health.rhizaDegraded': '{count} d\u00e9grad\u00e9(s)',
   'overview.title': 'Vue d\u2019ensemble',

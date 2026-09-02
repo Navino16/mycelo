@@ -47,6 +47,7 @@ export const en = {
   'health.blocked.body': 'A filter that refuses on failure did not start, so every message on every channel is refused: {names}',
   'health.blocked.unknown': 'The substrate did not report whether traffic is blocked (?)',
   'health.degraded.title': 'Germination failed',
+  'health.degraded.unknown': 'The substrate did not report why germination failed (?)',
   'health.dormant': '{count} dormant',
   'health.rhizaDegraded': '{count} degraded',
   'overview.title': 'Overview',

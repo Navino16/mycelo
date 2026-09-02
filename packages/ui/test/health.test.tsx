@@ -62,6 +62,23 @@ describe('the critical banner', () => {
     )
     expect(screen.getByRole('alert')).toBeDefined()
   })
+
+  // brief item 3: /api/graph answers empty whenever germination is not 'germinated', and
+  // enforcingBlocked stays [] in that mode, so the banner must fire on 'degraded' too.
+  it('names the germination failure when the bot is degraded', () => {
+    withHealth({
+      mode: 'degraded', dormant: [], enforcingBlocked: [], rhizas: [],
+      failure: { kind: 'cycle', message: 'cycle: alpha -> beta -> alpha', spores: ['alpha', 'beta'] },
+    })
+
+    expect(screen.getByRole('alert').textContent).toContain('cycle: alpha -> beta -> alpha')
+  })
+
+  it('falls back to a catalogue sentence when degraded with no failure message', () => {
+    withHealth({ mode: 'degraded', dormant: [], enforcingBlocked: [], rhizas: [] })
+
+    expect(screen.getByRole('alert').textContent).toContain('?')
+  })
 })
 
 function jsonResponse(body: unknown): Response {

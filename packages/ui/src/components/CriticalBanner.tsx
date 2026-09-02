@@ -14,14 +14,23 @@ export function CriticalBanner(): React.JSX.Element | null {
   if (!Array.isArray(health.enforcingBlocked)) {
     return <Banner title={t('health.blocked.title')} body={t('health.blocked.unknown')} />
   }
-  if (health.enforcingBlocked.length === 0) return null
+  if (health.enforcingBlocked.length > 0) {
+    return (
+      <Banner
+        title={t('health.blocked.title')}
+        body={t('health.blocked.body', { names: health.enforcingBlocked.join(', ') })}
+      />
+    )
+  }
 
-  return (
-    <Banner
-      title={t('health.blocked.title')}
-      body={t('health.blocked.body', { names: health.enforcingBlocked.join(', ') })}
-    />
-  )
+  // /api/graph answers empty whenever germination is not 'germinated' (brief item 3): the
+  // banner must fire here too, or "the banner above says why" points at nothing.
+  if (health.mode === 'degraded') {
+    const body = health.failure != null ? health.failure.message : t('health.degraded.unknown')
+    return <Banner title={t('health.degraded.title')} body={body} />
+  }
+
+  return null
 }
 
 function Banner({ title, body }: { title: string, body: string }): React.JSX.Element {
