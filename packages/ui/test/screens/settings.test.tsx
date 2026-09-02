@@ -217,10 +217,8 @@ describe('the generated settings form', () => {
     expect(screen.queryByRole('button', { name: 'Enable' })).toBeNull()
   })
 
-  // brief item 8: RJSF passes formData through as `value`, which is undefined for a key
-  // absent from the stored settings — the headline case of task 10. <input value={undefined}>
-  // mounts uncontrolled; typing into it then adds the key to formData, which is the
-  // uncontrolled-to-controlled transition React warns about.
+  // RJSF passes formData through as `value`, undefined for a never-stored key; typing then
+  // makes it defined, the uncontrolled-to-controlled transition React warns about (plan defect 1).
   it('masks a never-filled secret with an empty value and no React controlled-input warning', async () => {
     const errorSpy = spyOn(console, 'error')
     try {
