@@ -137,6 +137,18 @@ describe('the generated settings form', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  // available: false is a state, not a fetch failure: no form, no button, no alert —
+  // only the sentence and the plugin's own raw reason.
+  it('renders the unavailable sentence and the raw reason, with no form and no alert', async () => {
+    mockVault({ schema: { available: false, reason: 'no toJsonSchema' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByText('no toJsonSchema')).toBeDefined() })
+    expect(screen.getByText('This plugin has nothing to configure here.')).toBeDefined()
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   // The integration, not the widget alone: a key named in `secrets` must reach RJSF's
   // uiSchema and come out as a password input; an ordinary key must not.
   it('renders a declared secret through the uiSchema, and a plain key as an ordinary input', async () => {

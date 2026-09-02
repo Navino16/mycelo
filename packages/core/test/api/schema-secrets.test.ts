@@ -25,10 +25,9 @@ describe('the form schema names the secret keys', () => {
     expect(body.secrets).toEqual(['token'])
   })
 
-  // fixtures/gate declares a ConfigSchema but no toJsonSchema(), so it is available: false
-  // and never reaches the `secrets` branch at all — not a negative control for this. Its
-  // support.ts sibling `configurable` ('needs-config') has both a real JSON Schema and no
-  // `secrets` field, which is the actual case this test needs.
+  // fixtures/gate is available: false (no toJsonSchema()), so it never reaches the
+  // `secrets` branch; support.ts's `configurable` ('needs-config') has a real schema and
+  // declares no secrets, which is the actual negative control.
   it('answers an empty list for a plugin declaring none, never an absent one', async () => {
     booted = await bootAndLogin({ spores: configurable })
     const { app, cookie } = booted
