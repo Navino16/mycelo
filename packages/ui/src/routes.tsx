@@ -4,6 +4,8 @@ import { Overview } from './screens/Overview.tsx'
 import { PluginDetail } from './screens/PluginDetail.tsx'
 import { PluginSettings } from './screens/PluginSettings.tsx'
 import { Plugins } from './screens/Plugins.tsx'
+import { RoleEditor } from './screens/RoleEditor.tsx'
+import { Roles } from './screens/Roles.tsx'
 import { SporeDetail } from './screens/SporeDetail.tsx'
 import { Sources } from './screens/Sources.tsx'
 import { Layout } from './shell/Layout.tsx'
@@ -25,6 +27,8 @@ export const routes: RouteObject[] = [
       { path: 'sources', element: <Sources /> },
       { path: 'sources/:id', element: <BrowseSource /> },
       { path: 'sources/:id/spores/:name', element: <SporeDetail /> },
+      { path: 'roles', element: <Roles /> },
+      { path: 'roles/:name', element: <RoleEditor /> },
     ],
   },
 ]

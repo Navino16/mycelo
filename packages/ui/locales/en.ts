@@ -28,6 +28,7 @@ export const en = {
   'action.install': 'Install',
   'action.enable': 'Enable',
   'action.disable': 'Disable',
+  'action.delete': 'Delete',
   'theme.toggle': 'Switch theme',
   'lang.switch': 'Language',
   'error.generic': 'Something went wrong',
@@ -108,6 +109,18 @@ export const en = {
   'spore.septum': 'Wants plugin contract {range}',
   'pluginSettings.unavailable': 'This plugin has nothing to configure here.',
   'pluginSettings.enabled': 'Enabled. It takes effect after a restart.',
+  'roles.title': 'Roles',
+  'roles.default': 'Default role',
+  'roles.defaultLead': 'What an unknown sender gets on first contact.',
+  'roles.builtin': 'Built in',
+  'roles.create': 'New role',
+  'role.counter': '{granted} / {total}',
+  'role.wildcard': 'Granted by a wildcard, so it covers commands that are not installed yet.',
+  'role.selectAll': 'Select all',
+  'role.save': 'Save this role',
+  'role.builtinReadOnly': 'Built-in roles cannot be edited.',
+  'role.removeWildcard': 'Remove {pattern}',
+  'role.wildcardsHeld': 'Wildcards held',
 } as const
 
 export type StringKey = keyof typeof en
