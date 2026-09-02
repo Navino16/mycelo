@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router'
 import { generateForm } from '@rjsf/shadcn'
-import validator from '@rjsf/validator-ajv8'
+import { customizeValidator } from '@rjsf/validator-ajv8'
+import Ajv2020 from 'ajv/dist/2020'
 import type { ErrorSchema, UiSchema } from '@rjsf/utils'
 import type { IChangeEvent } from '@rjsf/core'
 import { api, ApiError } from '../api/client.ts'
@@ -9,6 +10,10 @@ import { readArray } from '../api/read.ts'
 import type { FormSchema, PluginDetailDto } from '../api/types.ts'
 import { SecretField } from '../components/SecretField.tsx'
 import { useT } from '../i18n.tsx'
+
+// The core emits z.toJSONSchema output, which declares draft 2020-12; the default Ajv is draft-07
+// and refuses the whole form (plan defect 28).
+const validator = customizeValidator({ AjvClass: Ajv2020 })
 
 type Settings = Record<string, unknown>
 

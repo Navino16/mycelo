@@ -160,6 +160,22 @@ describe('the generated settings form', () => {
     expect(screen.getByLabelText<HTMLInputElement>('Token').type).toBe('password')
   })
 
+  // The core emits z.toJSONSchema output, which declares draft 2020-12; a draft-07 Ajv refuses
+  // the whole form with "no schema with key or ref" and nothing is ever PUT (plan defect 28).
+  it('saves a schema declaring draft 2020-12, the draft the core actually emits', async () => {
+    const draft2020: FormSchema = {
+      ...SCHEMA,
+      schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', ...SCHEMA.schema as object },
+    }
+    const { calls } = mockVault({ schema: draft2020, settings: { url: 'http://x', token: '••••' } })
+    renderSettings()
+    const url = await screen.findByLabelText('URL')
+    fireEvent.change(url, { target: { value: 'http://y' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
+    expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ url: 'http://y' })
+  })
+
   it('sends only the field the operator changed, leaving a stored secret at its mask', async () => {
     const { calls } = mockVault({ settings: { url: 'http://x', token: '••••' } })
     renderSettings()
