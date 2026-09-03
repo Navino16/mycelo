@@ -63,9 +63,11 @@ describe('the dormant diagnosis', () => {
     expect(screen.getByText('Something it depends on is missing')).toBeDefined()
   })
 
-  // A mycelium scope refusal names no plugin to fix either.
+  // anastomoses.ts:124-128's own sentence, in the shape an empty SCOPE_PHASE produces. A
+  // scope refusal names no plugin to fix either, and it carries no version word — the fixture
+  // that claimed one was invented (review M3).
   it('diagnoses a missing mycelium scope as a dependency', () => {
-    renderDiagnosis("requires mycelium scope 'sources.manage', which no core version grants")
+    renderDiagnosis("requires mycelium scope 'sources.manage', which this core does not mount")
     expect(screen.getByText('Something it depends on is missing')).toBeDefined()
   })
 

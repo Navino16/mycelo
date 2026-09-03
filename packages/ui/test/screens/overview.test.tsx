@@ -1008,6 +1008,16 @@ describe('the guided path out of an empty substrate', () => {
     expect(screen.queryByText(/Every plugin germinated/)).toBeNull()
   })
 
+  // review M5: `stats?.total === 0` is false while /api/plugins has not answered, so the
+  // all-clear rendered on the strength of /api/health alone — including on a substrate whose
+  // plugin total never lands.
+  it('withholds the all-clear until the plugin total is known', async () => {
+    await withHealth(GERMINATED, { ...COMPLETE, refuse: ['/api/plugins'] })
+
+    expect(screen.queryByText('Everything is germinated.')).toBeNull()
+    expect(screen.queryByText(/Every plugin germinated/)).toBeNull()
+  })
+
   it('says nothing is outstanding and shows the ordinary tiles once all three exist', async () => {
     await withHealth(GERMINATED, COMPLETE)
 
@@ -1078,11 +1088,12 @@ describe('the guided path out of an empty substrate', () => {
 
   // Decision: an unreadable count is reported through its own alert, matching every other
   // screen's fetch-error shape — never a silent "all done" over a count nobody confirmed.
+  // This test used to assert the all-clear rendered here, against its own sentence (M5).
   it('reports a fetch failure of the counts through its own alert, and keeps the tiles', async () => {
     await withHealth(GERMINATED, 'fail')
 
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Something went wrong')
-    expect(screen.getByText('Everything is germinated.')).toBeDefined()
+    expect(screen.queryByText('Everything is germinated.')).toBeNull()
     expect(screen.getByText('People')).toBeDefined()
     expect(screen.getByText('Commands')).toBeDefined()
   })

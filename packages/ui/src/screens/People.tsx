@@ -11,7 +11,8 @@ import { TONE_CLASSES } from '../components/tone.ts'
 import { plural, useT } from '../i18n.tsx'
 import type { PageDto, PersonDto, RoleDto } from '../api/types.ts'
 
-const DEBOUNCE_MS = 300
+/** Exported so a test measures the real delay rather than a copied literal. */
+export const DEBOUNCE_MS = 300
 const SIZES: readonly number[] = [25, 50, 100]
 
 /** The route caps perPage at 200, so a substrate with more never-reviewed selects the first 200. */
@@ -43,9 +44,14 @@ export function People(): React.JSX.Element {
   // filter change reads as a new search, and setState-in-an-effect is the pattern
   // react-hooks/set-state-in-effect exists to catch.
   useEffect(() => {
+    // The guard and `q` in the deps together (review I3): without them the mount runs the
+    // effect with nothing typed into it, and its timer commits setPage(1) 300 ms into
+    // whatever the operator is doing by then. Terminating — the re-run the timer's own
+    // setQ triggers returns before scheduling another.
+    if (qInput === q) return
     const id = setTimeout(() => { setQ(qInput); setPage(1) }, DEBOUNCE_MS)
     return () => { clearTimeout(id) }
-  }, [qInput])
+  }, [qInput, q])
 
   useEffect(() => {
     // A generation counter, not an AbortController: client.ts's api.get takes no signal, and a
@@ -166,8 +172,9 @@ export function People(): React.JSX.Element {
 
   return (
     // The docked bar sits at bottom-16 and covered the whole paging footer on a phone
-    // (ruling F13): 13rem clears its measured height plus that offset.
-    <div className={`space-y-4${armed > 0 ? ' pb-52 md:pb-0' : ''}`}>
+    // (ruling F13). 8rem here, on top of the 5rem Layout's own <main> already reserves,
+    // clears the bar's measured 143 px above that offset.
+    <div className={`space-y-4${armed > 0 ? ' pb-32 md:pb-0' : ''}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-page font-semibold">{t('people.title')}</h1>

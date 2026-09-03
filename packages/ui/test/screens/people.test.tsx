@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter } from 'react-router'
 import { I18nProvider } from '../../src/i18n.tsx'
-import { People } from '../../src/screens/People.tsx'
+import { DEBOUNCE_MS, People } from '../../src/screens/People.tsx'
 import type { PageDto, PersonDto, RoleDto } from '../../src/api/types.ts'
 
 const realFetch = globalThis.fetch
@@ -267,6 +267,20 @@ describe('the people list footer', () => {
     expect(screen.getByRole('button', { name: 'Next' })).toHaveProperty('disabled', true)
   })
 
+  // review I3: the debounce effect ran on mount, with nothing typed into it, and its timer
+  // committed setPage(1) 300 ms into whatever the operator was doing by then.
+  it('does not reset the page from a debounce nobody typed into', async () => {
+    mockApi()
+    renderPeople()
+
+    expect(await screen.findByText('Person 1')).toBeDefined()
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+    await waitFor(() => { expect(screen.getByText('Page 2 / 6')).toBeDefined() })
+
+    await act(() => new Promise((done) => { setTimeout(done, DEBOUNCE_MS + 100) }))
+    expect(screen.getByText('Page 2 / 6')).toBeDefined()
+  })
+
   it('re-pages from the first row when the per-page size changes', async () => {
     const { calls } = mockApi()
     renderPeople()
@@ -446,22 +460,23 @@ describe('the people list against an out-of-order response', () => {
 describe('the people list under the docked bulk bar', () => {
   // Measured at 390x844: the fixed bar sits at bottom-16 and covered the whole paging footer,
   // so `Showing 1-25 of 121`, `Per page` and Previous/Next were unreachable while a selection
-  // was live. Invisible in a DOM-only test, hence the class-pair assertion.
+  // was live. Invisible in a DOM-only test, hence the class-pair assertion. The number counts
+  // the bar's 143 px above its bottom-16 offset, minus <main>'s own pb-20 (review M4).
   it('reserves room under the bar while a selection is live, and none once it is not', async () => {
     mockApi()
     const { container } = render(<I18nProvider><MemoryRouter><People /></MemoryRouter></I18nProvider>)
 
     await screen.findByText('Person 1')
     const page = container.firstElementChild
-    expect(page?.className).not.toContain('pb-52')
+    expect(page?.className).not.toContain('pb-32')
 
     selectRow('Person 1')
 
-    expect(page?.className).toContain('pb-52')
+    expect(page?.className).toContain('pb-32')
     expect(page?.className).toContain('md:pb-0')
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
 
-    expect(page?.className).not.toContain('pb-52')
+    expect(page?.className).not.toContain('pb-32')
   })
 })

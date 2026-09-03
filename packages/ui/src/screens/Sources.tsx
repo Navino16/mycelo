@@ -97,9 +97,10 @@ function SourceRow(
       data-testid={`source-${String(source.id)}`}
       className="grid items-baseline gap-x-3 gap-y-1 p-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_8rem_7rem_4rem]"
     >
-      {/* A `local` driver refuses both browse routes by design (drivers/local.ts): its spores
-          are already installed, so the row names it rather than linking into a route that
-          can only fail — the first row an operator meets on a scratch install. */}
+      {/* A `local` driver refuses both browse routes by design (the core's
+          api/routes/sources.ts, driverOf): its spores are already installed, so the row names
+          it rather than linking into a route that can only fail — the first row an operator
+          meets on a scratch install. */}
       {browsable
         ? (
             <Link to={`/sources/${String(source.id)}`} className="truncate font-mono font-medium">
