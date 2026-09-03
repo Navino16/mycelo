@@ -289,7 +289,7 @@ export function PluginSettings(): React.JSX.Element {
         )}
       </header>
 
-      {error && <p role="alert" className={`text-body ${TONE_CLASSES.crit.text}`}>{t('error.generic')}</p>}
+      {error && <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.generic')}</p>}
 
       {schema !== null && !schema.available && (
         <EmptyState
@@ -381,7 +381,7 @@ export function PluginSettings(): React.JSX.Element {
                 )}
                 {enabledNow && <p className="text-body">{t('pluginSettings.enabled')}</p>}
                 {enableError !== null && (
-                  <p role="alert" className={`text-body ${TONE_CLASSES.crit.text}`}>{enableError}</p>
+                  <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{enableError}</p>
                 )}
               </section>
             )}
@@ -398,7 +398,7 @@ export function PluginSettings(): React.JSX.Element {
         <p className="text-body">{t('pluginSettings.enabled')}</p>
       )}
       {schema !== null && !schema.available && enableError !== null && (
-        <p role="alert" className={`text-body ${TONE_CLASSES.crit.text}`}>{enableError}</p>
+        <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{enableError}</p>
       )}
     </div>
   )

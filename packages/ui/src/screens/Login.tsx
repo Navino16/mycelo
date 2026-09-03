@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api, ApiError } from '../api/client.ts'
+import { TONE_CLASSES } from '../components/tone.ts'
 import { useT } from '../i18n.tsx'
 
 export function Login({ onDone }: { onDone: () => void }): React.JSX.Element {
@@ -43,7 +44,9 @@ export function Login({ onDone }: { onDone: () => void }): React.JSX.Element {
           autoComplete="current-password"
         />
       </label>
-      {error !== null && <p role="alert" className="text-sm text-crit">{error}</p>}
+      {error !== null && (
+        <p role="alert" className={`text-sm ${TONE_CLASSES.crit.text}`}>{error}</p>
+      )}
       <button type="submit" className="w-full rounded-md bg-accent px-3 py-2 text-accent-ink">
         {t('login.submit')}
       </button>

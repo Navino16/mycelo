@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
+import { TONE_CLASSES } from '../../src/components/tone.ts'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { SecretField } from '../../src/components/SecretField.tsx'
 import { PluginSettings } from '../../src/screens/PluginSettings.tsx'
@@ -164,6 +165,17 @@ describe('the generated settings form', () => {
     renderSettings()
 
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Something went wrong')
+  })
+
+  // R1's boundary: crit belongs to the mute bot, an inline field error and a destructive
+  // action. A load failure is none of the three, and PluginDetail one tab away paints it amber.
+  it('paints the load failure amber, never the mute red', async () => {
+    globalThis.fetch = mock(() => Promise.resolve(json({ error: { message: 'x' } }, 500)))
+    renderSettings()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.className).toContain(TONE_CLASSES.warn.text)
+    expect(alert.className).not.toContain(TONE_CLASSES.crit.text)
   })
 
   it('renders the form on success, with no error banner', async () => {
@@ -417,6 +429,43 @@ describe('the generated settings form', () => {
     fireEvent.click(screen.getByRole('switch'))
 
     await waitFor(() => { expect(screen.getByText('configuration is incomplete: token: field required')).toBeDefined() })
+  })
+
+  // The other half of R1's boundary: enabling a plugin is not a destructive action, so its
+  // refusal is amber like every other action failure on the branch.
+  it('paints the enable refusal amber, never the mute red', async () => {
+    mockVault({
+      detail: DISABLED,
+      settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' },
+      enableResult: { status: 400, body: { error: { message: 'refused', detail: 'it said no' } } },
+    })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    fireEvent.click(screen.getByRole('switch'))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.className).toContain(TONE_CLASSES.warn.text)
+    expect(alert.className).not.toContain(TONE_CLASSES.crit.text)
+  })
+
+  // The boundary in the other direction: 2c draws the server's save rejection in crit, and
+  // that is the designer's own exception — it must not be swept amber with the rest.
+  it('keeps the save rejection crit, which is the designer\'s own exception', async () => {
+    mockVault({
+      settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' },
+      putResult: {
+        status: 400,
+        body: { error: { message: 'refused', detail: [{ key: 'url', issues: [{ message: 'not a URL' }] }] } },
+      },
+    })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    const summary = await screen.findByText('Saved, but rejected by vault')
+    expect(summary.closest('[role="alert"]')?.className).toContain(TONE_CLASSES.crit.border)
   })
 })
 
