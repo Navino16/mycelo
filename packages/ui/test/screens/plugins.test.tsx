@@ -488,3 +488,22 @@ describe('the plugins list on a substrate with no plugins at all', () => {
     expect(screen.queryByRole('button', { name: /Dormant/ })).toBeNull()
   })
 })
+
+describe('a dormant row carrying a real refusal', () => {
+  const LONG = 'configuration rejected: socket: Invalid input: expected string, received undefined; '
+    + 'account: Invalid input: expected string, received undefined'
+
+  // Measured at 1440x900: five of nine rows wrapped to four right-aligned lines and stood
+  // ~110px against the render's 51px. The name and the description both truncate; the reason
+  // did not, and 1b's own model is a short note with the full text on the diagnosis card.
+  it('clamps the reason to one line, like the name and the description beside it', async () => {
+    serve({
+      ...EMPTY_GROUPS,
+      rhiza: [{ name: 'plex', kind: 'rhiza', commands: [], state: 'dormant', enabled: true, reason: LONG }],
+    })
+    renderPlugins()
+
+    const reason = await screen.findByText(LONG)
+    expect(reason.className).toContain('truncate')
+  })
+})

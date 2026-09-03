@@ -14,7 +14,7 @@ import { ProportionBar } from '../components/ProportionBar.tsx'
 import { Tile } from '../components/Tile.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { useHealth } from '../health.tsx'
-import { useT } from '../i18n.tsx'
+import { plural, useT } from '../i18n.tsx'
 import { flatPlugins } from '../plugins.ts'
 import { allCommands } from '../rights.ts'
 import { healthPillState } from '../shell/HealthPill.tsx'
@@ -224,8 +224,10 @@ export function Overview(): React.JSX.Element {
                   <p className="text-body text-text/70">{t('mute.collapsed')}</p>
                   <p className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-meta-lg text-text/60">
                     <span>{t('mute.germinated', { germinated: stats.germinated, total: stats.total })}</span>
-                    <span>{t('mute.dormant', { count: stats.dormant })}</span>
-                    <span>{t('mute.systemsDown', { count: degradedRhizas.length })}</span>
+                    <span>{plural(t, 'mute.dormant', stats.dormant, { count: stats.dormant })}</span>
+                    <span>
+                      {plural(t, 'mute.systemsDown', degradedRhizas.length, { count: degradedRhizas.length })}
+                    </span>
                   </p>
                 </div>
               )}
@@ -238,9 +240,86 @@ export function Overview(): React.JSX.Element {
                   and the operator must see both (whole-branch fix brief, item 2). */}
               {guided !== undefined && <GuidedStart counts={guided} />}
 
-              <div className="grid gap-3 lg:grid-cols-[2fr_1fr]">
-                <HealthCard stats={stats} systemsDown={degradedRhizas.length} />
-                <div className="grid grid-cols-2 gap-3">
+              {/* One container for the whole health body: the phone order is the DOM order,
+                  and the desktop frame's side-by-side comes from explicit grid placement, so
+                  the four calm counters render last and still sit beside the card (ruling F12). */}
+              <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[2fr_1fr] lg:items-start">
+                <div className="lg:col-start-1 lg:row-start-1">
+                  <HealthCard stats={stats} systemsDown={degradedRhizas.length} />
+                </div>
+
+                {/* != null, not !== undefined: a malformed 'failure: null' is not a shape health.ts
+                    (packages/core/src/supervision/health.ts:29) can send today, but '.message' on a
+                    bare null would crash the same way rhizas.filter did — cheap to close while here. */}
+                {health?.mode === 'degraded' && health.failure != null && (
+                  <div
+                    data-testid="germination-failure"
+                    className={`rounded-lg border p-3 lg:col-span-2 ${TONE_CLASSES.warn.border} ${TONE_CLASSES.warn.bg}`}
+                  >
+                    <p className={`font-medium ${TONE_CLASSES.warn.text}`}>{t('health.degraded.title')}</p>
+                    <p className="font-mono text-body">{health.failure.message}</p>
+                  </div>
+                )}
+
+                {rows.length > 0 && (
+                  <section className="space-y-3 lg:col-span-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-baseline gap-3">
+                        <h2 className="text-title font-medium">
+                          {`${t('overview.attention')} · ${String(rows.length)}`}
+                        </h2>
+                        <p className="font-mono text-meta text-text/60">
+                          {t('overview.checked', { seconds: age })}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Chip
+                          label={t('filter.all')}
+                          active={filter === 'all'}
+                          onClick={() => { setChosen('all') }}
+                        />
+                        <Chip
+                          label={t('filter.dormant')}
+                          count={rows.filter((r) => r.state === 'dormant').length}
+                          tone="warn"
+                          active={filter === 'dormant'}
+                          onClick={() => { setChosen('dormant') }}
+                        />
+                        <Chip
+                          label={t('filter.unreachable')}
+                          count={rows.filter((r) => r.state !== 'dormant').length}
+                          tone="warn"
+                          active={filter === 'unreachable'}
+                          onClick={() => { setChosen('unreachable') }}
+                        />
+                      </div>
+                    </div>
+                    <AttentionTable rows={shown} />
+                  </section>
+                )}
+
+                {allWell && !empty && (
+                  <div className="lg:col-span-2">
+                    <EmptyState
+                      title={t('overview.allWell')}
+                      body={t('overview.allWellLead')}
+                      action={(
+                        <button
+                          type="button"
+                          onClick={() => { void refresh() }}
+                          className="rounded-md border border-line px-3 py-1.5 text-body"
+                        >
+                          {t('overview.recheck')}
+                        </button>
+                      )}
+                    />
+                  </div>
+                )}
+
+                <div
+                  data-testid="overview-tiles"
+                  className="grid grid-cols-2 gap-3 lg:col-start-2 lg:row-start-1"
+                >
                   <Tile
                     label={t('tile.people')}
                     value={body?.people === undefined ? undefined : String(body.people)}
@@ -268,72 +347,6 @@ export function Overview(): React.JSX.Element {
                   />
                 </div>
               </div>
-
-              {/* != null, not !== undefined: a malformed 'failure: null' is not a shape health.ts
-                  (packages/core/src/supervision/health.ts:29) can send today, but '.message' on a
-                  bare null would crash the same way rhizas.filter did — cheap to close while here. */}
-              {health?.mode === 'degraded' && health.failure != null && (
-                <div
-                  data-testid="germination-failure"
-                  className={`rounded-lg border p-3 ${TONE_CLASSES.warn.border} ${TONE_CLASSES.warn.bg}`}
-                >
-                  <p className={`font-medium ${TONE_CLASSES.warn.text}`}>{t('health.degraded.title')}</p>
-                  <p className="font-mono text-body">{health.failure.message}</p>
-                </div>
-              )}
-
-              {rows.length > 0 && (
-                <section className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-baseline gap-3">
-                      <h2 className="text-title font-medium">
-                        {`${t('overview.attention')} · ${String(rows.length)}`}
-                      </h2>
-                      <p className="font-mono text-meta text-text/60">
-                        {t('overview.checked', { seconds: age })}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Chip
-                        label={t('filter.all')}
-                        active={filter === 'all'}
-                        onClick={() => { setChosen('all') }}
-                      />
-                      <Chip
-                        label={t('filter.dormant')}
-                        count={rows.filter((r) => r.state === 'dormant').length}
-                        tone="warn"
-                        active={filter === 'dormant'}
-                        onClick={() => { setChosen('dormant') }}
-                      />
-                      <Chip
-                        label={t('filter.unreachable')}
-                        count={rows.filter((r) => r.state !== 'dormant').length}
-                        tone="warn"
-                        active={filter === 'unreachable'}
-                        onClick={() => { setChosen('unreachable') }}
-                      />
-                    </div>
-                  </div>
-                  <AttentionTable rows={shown} />
-                </section>
-              )}
-
-              {allWell && !empty && (
-                <EmptyState
-                  title={t('overview.allWell')}
-                  body={t('overview.allWellLead')}
-                  action={(
-                    <button
-                      type="button"
-                      onClick={() => { void refresh() }}
-                      className="rounded-md border border-line px-3 py-1.5 text-body"
-                    >
-                      {t('overview.recheck')}
-                    </button>
-                  )}
-                />
-              )}
             </>
           )}
     </div>
@@ -409,13 +422,21 @@ function HealthCard(
       )}
       <ProportionBar segments={segments} />
       <div className="flex flex-wrap gap-x-6 gap-y-2">
+        {/* 1a-mobile reads each count as one inline `28 germinated` pair; the desktop frame
+            stacks the label over a hero number. */}
         {legend.map((entry) => (
-          <div key={entry.label} data-legend={entry.label} className="min-w-24">
-            <span className="flex items-center gap-2 text-meta-lg text-text/70">
+          <div
+            key={entry.label}
+            data-legend={entry.label}
+            className="flex items-baseline gap-2 md:block md:min-w-24"
+          >
+            <span className="order-2 flex items-center gap-2 text-meta-lg text-text/70 md:order-none">
               <Dot tone={entry.tone} />
               {entry.label}
             </span>
-            <span className={`text-hero font-medium ${TONE_CLASSES[entry.tone].text}`}>
+            <span
+              className={`order-1 text-title font-medium md:order-none md:text-hero ${TONE_CLASSES[entry.tone].text}`}
+            >
               {String(entry.value)}
             </span>
           </div>

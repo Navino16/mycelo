@@ -493,10 +493,33 @@ describe('the mute takeover', () => {
     expect(screen.getByText('Everything below is secondary while the bot is mute.')).toBeDefined()
     expect(screen.getByText('2 / 5 germinated')).toBeDefined()
     expect(screen.getByText('2 dormant')).toBeDefined()
-    expect(screen.getByText('1 systems down')).toBeDefined()
+    expect(screen.getByText('1 system down')).toBeDefined()
     // Numbers, not the body: the R2 pin still holds around them.
     expect(screen.queryByText('People')).toBeNull()
     expect(screen.queryByText('of 5 plugins germinated')).toBeNull()
+  })
+
+  // ruling C12's own class, missed on two keys: the mute takeover is the most-read frame of a
+  // broken substrate, and it rendered '1 systems down' there.
+  it('says one dormant plugin and one system down in the singular', async () => {
+    await withHealth({
+      ...GERMINATED,
+      enforcingBlocked: ['group-gate'],
+      dormant: [{ name: 'radarr', reason: 'configuration rejected: api_key: field required' }],
+      rhizas: [{ rhiza: 'jellyfin', status: { state: 'unreachable', checkedAt: 'x' } }],
+    }, {
+      ...BUSY,
+      plugins: {
+        ...COMPLETE_PLUGINS,
+        rhiza: [{
+          name: 'radarr', kind: 'rhiza', commands: [], state: 'dormant', enabled: true,
+          reason: 'configuration rejected: api_key: field required',
+        }],
+      },
+    })
+
+    expect(screen.getByText('1 dormant')).toBeDefined()
+    expect(screen.getByText('1 system down')).toBeDefined()
   })
 
   it('shows no collapsed card while the bot is answering', async () => {
@@ -1062,5 +1085,44 @@ describe('the guided path out of an empty substrate', () => {
     expect(screen.getByText('Everything is germinated.')).toBeDefined()
     expect(screen.getByText('People')).toBeDefined()
     expect(screen.getByText('Commands')).toBeDefined()
+  })
+})
+
+/** True when `first` comes before `second` in document order. */
+function precedes(first: Element, second: Element): boolean {
+  // 4 is Node.DOCUMENT_POSITION_FOLLOWING.
+  return (first.compareDocumentPosition(second) & 4) !== 0
+}
+
+describe('the overview stacking order on a phone', () => {
+  // 1a-overview-mobile-degraded.png orders the page title -> health card -> Needs attention
+  // -> the four tiles. The built screen put the tiles third, so a 390px operator scrolled
+  // past People/Commands/Roles/Sources to reach `plex · Dormant` (ruling F12).
+  it('puts the attention table above the four calm counters', async () => {
+    await withHealth(ONE_DORMANT, BUSY)
+    const attention = sectionOf(/^Needs attention/)
+    const tiles = screen.getByTestId('overview-tiles')
+
+    expect(precedes(attention, tiles)).toBe(true)
+  })
+
+  // The desktop frame sets the tiles beside the health card, so the phone order must not
+  // become the desktop one: explicit grid placement is what keeps both.
+  it('still seats the tiles beside the health card on a wide screen', async () => {
+    await withHealth(ONE_DORMANT, BUSY)
+    const tiles = screen.getByTestId('overview-tiles')
+
+    expect(tiles.className).toContain('lg:col-start-2')
+    expect(tiles.className).toContain('lg:row-start-1')
+  })
+
+  // 1a-overview-mobile draws the four health counts as inline `28 germinated` pairs; the
+  // desktop frame stacks the label over a hero number.
+  it('renders each health count inline on a phone and stacked above md', async () => {
+    await withHealth(ONE_DORMANT, BUSY)
+    const entry = within(sectionOf('Substrate health')).getByText('Germinated').closest('div')
+
+    expect(entry?.className).toContain('flex')
+    expect(entry?.className).toContain('md:block')
   })
 })

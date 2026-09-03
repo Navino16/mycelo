@@ -103,6 +103,10 @@ function Plurals(): React.JSX.Element {
       <span data-testid="two">{plural(t, 'person.identityCount', 2, { count: 2 })}</span>
       {/* English is identical on both halves of this pair, so only French can fail it. */}
       <span data-testid="kind">{plural(t, 'kind.meta', 1, { count: 3, dormant: 1 })}</span>
+      {/* Both halves of the mute takeover's own numbers, in the locale that measured
+          '1 systemes hors service' on screen. */}
+      <span data-testid="down">{plural(t, 'mute.systemsDown', 1, { count: 1 })}</span>
+      <span data-testid="mute-dormant">{plural(t, 'mute.dormant', 1, { count: 1 })}</span>
       <button onClick={() => { setLocale(locale === 'en' ? 'fr' : 'en') }}>switch</button>
     </div>
   )
@@ -128,5 +132,7 @@ describe('the plural helper', () => {
     expect(screen.getByTestId('kind').textContent).toBe('3 \u00b7 1 dormant')
     expect(screen.getByTestId('one').textContent).toBe('1 identit\u00e9')
     expect(screen.getByTestId('two').textContent).toBe('2 identit\u00e9s')
+    expect(screen.getByTestId('down').textContent).toBe('1 syst\u00e8me hors service')
+    expect(screen.getByTestId('mute-dormant').textContent).toBe('1 dormant')
   })
 })

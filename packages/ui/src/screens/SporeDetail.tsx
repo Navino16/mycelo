@@ -4,6 +4,7 @@ import { api } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { Chip } from '../components/Chip.tsx'
+import { EmptyState } from '../components/EmptyState.tsx'
 import { ScopeTable } from '../components/ScopeTable.tsx'
 import { Sheet } from '../components/Sheet.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
@@ -188,6 +189,7 @@ export function SporeDetail(): React.JSX.Element {
   if (spore === null || source === null) return <div />
 
   const scopes = readArray<string>(spore.demands.scopes) ?? []
+  const requires = readArray<RequirementDto>(spore.demands.requires) ?? []
   const declaredCommands = readArray<CommandCapabilityDto>(spore.demands.commands) ?? []
   const highRisk = highRiskScopes(scopes)
   // `undefined` is "known and not installed"; `null` is "the join said nothing", and the
@@ -271,22 +273,29 @@ export function SporeDetail(): React.JSX.Element {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-start">
         <div className="space-y-4">
           {highRisk.length > 0 && <ConsentAlert scopes={highRisk} />}
-          <section className="rounded-xl border border-line bg-surface">
-            <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line p-4">
-              <h2 className="text-title font-semibold">{t('spore.scopes', { count: scopes.length })}</h2>
-              <span className="text-meta-lg text-text/60">{t('spore.grantedAtInstall')}</span>
-            </div>
-            <ScopeTable scopes={scopes} />
-          </section>
+          {/* ruling I5: a heading over an empty <ul> is the headed empty container I5 removed
+              from six other screens. Reachable on the official registry's own `links`. */}
+          {scopes.length === 0
+            ? <EmptyState title={t('spore.noScopesTitle')} body={t('spore.noScopes')} />
+            : (
+                <section className="rounded-xl border border-line bg-surface">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line p-4">
+                    <h2 className="text-title font-semibold">{t('spore.scopes', { count: scopes.length })}</h2>
+                    <span className="text-meta-lg text-text/60">{t('spore.grantedAtInstall')}</span>
+                  </div>
+                  <ScopeTable scopes={scopes} />
+                </section>
+              )}
         </div>
         <div className="space-y-4">
-          <section className="space-y-2 rounded-xl border border-line bg-surface p-4">
-            <h2 className="text-title font-semibold">{t('spore.requirements')}</h2>
-            <Requirements
-              requires={readArray<RequirementDto>(spore.demands.requires) ?? []}
-              installed={installed}
-            />
-          </section>
+          {requires.length === 0
+            ? <EmptyState title={t('spore.noRequirementsTitle')} body={t('spore.noRequirements')} />
+            : (
+                <section className="space-y-2 rounded-xl border border-line bg-surface p-4">
+                  <h2 className="text-title font-semibold">{t('spore.requirements')}</h2>
+                  <Requirements requires={requires} installed={installed} />
+                </section>
+              )}
           {declaredCommands.length > 0 && <CommandsAdded declared={declaredCommands} groups={commands} />}
         </div>
       </div>

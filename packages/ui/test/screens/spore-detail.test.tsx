@@ -489,3 +489,55 @@ describe('installing it', () => {
     expect(alert.textContent).toBe("'enzyme-welcome' is already installed")
   })
 })
+
+/** The official registry's `links`: no scope, no requirement — the reachable zero case. */
+const NO_DEMANDS: SporeStrainsDto = {
+  strains: ['0.3.0'],
+  detail: {
+    name: 'enzyme-links',
+    kind: 'enzyme',
+    description: 'Keeps a list of links',
+    septum: '^0.11',
+    demands: { requires: [], scopes: [], externals: [], commands: [{ name: 'links', capabilities: [] }] },
+  },
+}
+
+describe('a spore that asks for nothing', () => {
+  // ruling I5: every empty list renders an EmptyState. Both sections emitted an empty <ul>
+  // under a heading, which is exactly the headed empty container I5 removed elsewhere.
+  it('replaces the scope card with an empty state rather than a heading over nothing', async () => {
+    serve({ spore: NO_DEMANDS })
+    renderDetail('enzyme-links')
+
+    expect(await screen.findByText('Asks the core for nothing')).toBeDefined()
+    expect(screen.queryByTestId('scope-table')).toBeNull()
+    expect(screen.queryByText('Requested scopes · 0')).toBeNull()
+  })
+
+  // Found by mutating the section above: the button's own zero branch was pinned by nothing.
+  it('offers a plain Install, never a grant of no scopes', async () => {
+    serve({ spore: NO_DEMANDS })
+    renderDetail('enzyme-links')
+
+    expect(await screen.findByRole('button', { name: 'Install' })).toBeDefined()
+    expect(screen.queryByRole('button', { name: /grant 0 scopes/ })).toBeNull()
+  })
+
+  it('replaces the requirements card with an empty state too', async () => {
+    serve({ spore: NO_DEMANDS })
+    renderDetail('enzyme-links')
+
+    expect(await screen.findByText('Depends on nothing')).toBeDefined()
+    expect(screen.queryByTestId('requirements')).toBeNull()
+    expect(screen.queryByText('Requirements')).toBeNull()
+  })
+
+  it('keeps both cards for a spore that does ask for something', async () => {
+    serve()
+    renderDetail()
+
+    expect(await screen.findByTestId('scope-table')).toBeDefined()
+    expect(screen.getByText('Requirements')).toBeDefined()
+    expect(screen.queryByText('Asks the core for nothing')).toBeNull()
+  })
+})

@@ -32,9 +32,13 @@ export function PluginRow({ plugin }: { plugin: PluginDto }): React.JSX.Element 
       </span>
       <span className="font-mono text-meta-lg text-text/60">{plugin.strain ?? ''}</span>
       <span className="justify-self-start"><StateBadge state={plugin.state} /></span>
-      {/* R7: the cause sits on the row, never behind a hover. */}
+      {/* R7: the cause sits on the row, never behind a hover — clamped like the two columns
+          beside it, since a real Zod refusal runs to 200 characters and 1b's model is a note
+          with the full text on the diagnosis card the name links to. */}
       {plugin.reason !== undefined && (
-        <span className={`text-body md:text-right ${TONE_CLASSES[tone].text}`}>{plugin.reason}</span>
+        <span className={`truncate text-body md:text-right ${TONE_CLASSES[tone].text}`}>
+          {plugin.reason}
+        </span>
       )}
     </li>
   )
