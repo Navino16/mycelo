@@ -192,6 +192,28 @@ describe('the generated settings form', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
+  // The omission convention on the tab strip: the command list lives in the refused DTO, so
+  // the Commands tab keeps its label and prints no number — `Commands 0` claims a fact.
+  it('withholds the command count when the plugin route is refused', async () => {
+    globalThis.fetch = mock((url: string) => {
+      if (url === '/api/plugins/vault') return Promise.resolve(json({ error: { message: 'x' } }, 500))
+      return Promise.resolve(json(url.endsWith('/schema') ? SCHEMA : { url: 'http://x' }))
+    }) as unknown as typeof fetch
+    renderSettings()
+
+    await screen.findByLabelText('URL')
+    const tab = document.querySelector('[data-tab="commands"]')
+    expect(tab?.textContent).toBe('Commands')
+  })
+
+  it('renders the command count from the detail DTO when it answers', async () => {
+    mockVault({ detail: { ...GERMINATED, commands: ['vault', 'vault-list'] } })
+    renderSettings()
+
+    await screen.findByLabelText('URL')
+    expect(document.querySelector('[data-tab="commands"]')?.textContent).toBe('Commands2')
+  })
+
   it('renders the form on success, with no error banner', async () => {
     mockVault({ settings: { url: 'http://x', token: '••••' } })
     renderSettings()

@@ -930,10 +930,11 @@ describe('the guided path out of an empty substrate', () => {
   // number would be — never a 0, which would read as a substrate with no source at all.
   it('withholds a tile number for the one route that was refused, keeping the tile', async () => {
     await withHealth(GERMINATED, { ...BUSY, refuse: ['/api/sources'] })
+    const tile = screen.getByText('Sources').closest('div')
 
-    expect(screen.getByText('Sources')).toBeDefined()
     expect(screen.getByText('128')).toBeDefined()
-    expect(screen.queryByText('—')).toBeNull()
+    // The label alone: not `—`, and not the `0` a `?? 0` fallback would put there.
+    expect(tile?.textContent).toBe('Sources')
   })
 
   // Discriminates the plugin slot from the rest: the corpus and the health card go, the four

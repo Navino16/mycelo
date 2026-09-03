@@ -282,7 +282,7 @@ export function PluginSettings(): React.JSX.Element {
     {
       id: 'commands',
       label: t('detail.tabCommands'),
-      count: commands.length,
+      count: detail === null ? undefined : commands.length,
       to: `/plugins/${name}?panel=commands`,
     },
   ]
