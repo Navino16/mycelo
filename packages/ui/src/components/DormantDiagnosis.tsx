@@ -9,13 +9,18 @@ export interface Diagnosis { title: StringKey, action?: { to: string, label: Str
  * One `reason` string per cause; the first match wins. A command collision aborts the whole
  * germination, so "already claimed by" (anastomoses.ts) never reaches one plugin's `reason`.
  * Exported: the Overview's attention rows take their action from the same classifier.
+ *
+ * Classification is on the **prefix** (ruling F14): the core states the outermost cause first
+ * and quotes the inner one verbatim after it, so a dependency reason contains its dependency's
+ * own `configuration rejected:` text and an unanchored config test claims every one of them.
  */
 export function diagnose(name: string, reason: string): Diagnosis {
-  if (/configuration rejected|configuration is incomplete/i.test(reason)) {
+  if (/^requires /i.test(reason)) return { title: 'dormant.dependency' }
+  if (/^configuration (rejected|is incomplete)/i.test(reason)) {
     return { title: 'dormant.config', action: { to: `/plugins/${name}/settings`, label: 'dormant.fixConfig' } }
   }
   if (/septum|range|version/i.test(reason)) return { title: 'dormant.version' }
-  if (/not installed|requires|any_of|dependency/i.test(reason)) return { title: 'dormant.dependency' }
+  if (/not installed|any_of|dependency/i.test(reason)) return { title: 'dormant.dependency' }
   if (/already claimed/i.test(reason)) {
     return { title: 'dormant.collision', action: { to: '/plugins', label: 'dormant.setAlias' } }
   }

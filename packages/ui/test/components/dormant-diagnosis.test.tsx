@@ -44,6 +44,31 @@ describe('the dormant diagnosis', () => {
     expect(screen.getByText('Something it depends on is missing')).toBeDefined()
   })
 
+  // germinate.ts:113-114 quote the dependency's own refusal verbatim after the outer cause, so
+  // the nested text contains 'configuration rejected'. Classification is on the prefix (ruling
+  // F14): every shipped fixture used a short unnested reason, which is why no gate caught it.
+  it('diagnoses a dependency whose own refusal was a configuration one as a dependency', () => {
+    renderDiagnosis(
+      "requires one of rhiza 'jellyfin', 'plex'; 'plex' was chosen and is dormant: "
+      + 'configuration rejected: url: Invalid input: expected string, received undefined',
+    )
+    expect(screen.getByText('Something it depends on is missing')).toBeDefined()
+    expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  it('diagnoses a single dormant dependency the same way, whatever its nested cause', () => {
+    renderDiagnosis(
+      "requires rhiza 'radarr', which is dormant: configuration is incomplete: api_key: field required",
+    )
+    expect(screen.getByText('Something it depends on is missing')).toBeDefined()
+  })
+
+  // A mycelium scope refusal names no plugin to fix either.
+  it('diagnoses a missing mycelium scope as a dependency', () => {
+    renderDiagnosis("requires mycelium scope 'sources.manage', which no core version grants")
+    expect(screen.getByText('Something it depends on is missing')).toBeDefined()
+  })
+
   it('diagnoses a duplicate spore name', () => {
     renderDiagnosis("name 'help' is already claimed by the spore at 'spores/help' (duplicate at 'spores/help2')")
     expect(screen.getByText('Two plugins declare the same command')).toBeDefined()
