@@ -33,6 +33,7 @@ export const en = {
   'kind.metaAllWell': '{count} · all germinated',
   'state.germinated': 'Germinated',
   'state.dormant': 'Dormant',
+  'state.degraded': 'Degraded',
   'state.unreachable': 'Unreachable',
   'state.disabled': 'Disabled',
   'state.pending': 'Awaiting restart',

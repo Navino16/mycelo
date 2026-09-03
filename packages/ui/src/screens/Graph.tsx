@@ -8,7 +8,7 @@ import { Dot } from '../components/Dot.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
 import { StateBadge } from '../components/StateBadge.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
-import { BOX_H, BOX_W, isBroken, layout } from '../graphLayout.ts'
+import { BOX_H, BOX_W, isBroken, isFailing, layout } from '../graphLayout.ts'
 import { useT } from '../i18n.tsx'
 import type { GraphDto, GraphEdge, GraphNode, SporeKind } from '../api/types.ts'
 import type { PlacedNode } from '../graphLayout.ts'
@@ -45,9 +45,9 @@ function groupByKind(nodes: readonly PlacedNode[]): Record<SporeKind | 'unknown'
 function GraphMark(
   { node, onOpen }: { node: PlacedNode, onOpen: (name: string) => void },
 ): React.JSX.Element {
-  // R1: dormancy is amber on every surface, the graph included.
-  const ink = node.state === 'dormant' ? 'var(--color-warn)' : 'var(--color-ok)'
-  const tint = node.state === 'dormant' ? 'var(--color-warn-bg)' : 'var(--color-ok-bg)'
+  // R1: a failure is amber on every surface, the graph included.
+  const ink = isFailing(node) ? 'var(--color-warn)' : 'var(--color-ok)'
+  const tint = isFailing(node) ? 'var(--color-warn-bg)' : 'var(--color-ok-bg)'
   return (
     <g
       transform={`translate(${node.x + MARGIN}, ${node.y + MARGIN})`}
@@ -108,13 +108,13 @@ export function Graph(): React.JSX.Element {
 
   const placed = layout({ nodes, edges })
   const byName = new Map(placed.map((n) => [n.name, n]))
-  const dormant = new Set(placed.filter((n) => n.state === 'dormant').map((n) => n.name))
+  const failing = new Set(placed.filter(isFailing).map((n) => n.name))
   const shownEdges = onlyFailures
-    ? edges.filter((e) => dormant.has(e.from) || dormant.has(e.to))
+    ? edges.filter((e) => failing.has(e.from) || failing.has(e.to))
     : edges
   // A break is only readable with both its ends on screen, so the intact end stays.
   const shownNodes = onlyFailures
-    ? placed.filter((n) => dormant.has(n.name)
+    ? placed.filter((n) => failing.has(n.name)
       || shownEdges.some((e) => e.from === n.name || e.to === n.name))
     : placed
 

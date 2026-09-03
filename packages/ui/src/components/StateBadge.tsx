@@ -5,20 +5,25 @@ import type { Tone } from './tone.ts'
 import type { PluginState } from '../api/types.ts'
 import type { StringKey } from '../../locales/en.ts'
 
+/** A plugin state, plus the two runtime health states only the graph and the Overview carry. */
+export type BadgeState = PluginState | 'degraded' | 'unreachable'
+
 // design note 2j: crit belongs to the mute bot alone, so a dormant plugin is amber. `pending`
 // and `unknown` are the SPA's own states, which no artboard draws (inventory §1.5).
-const TONE: Record<PluginState, Tone> = {
+const TONE: Record<BadgeState, Tone> = {
   germinated: 'ok',
   dormant: 'warn',
   // A disabled plugin is a choice, not a fault — phase 5's reason for not calling it dormant.
   disabled: 'idle',
   pending: 'warn',
   unknown: 'idle',
+  degraded: 'warn',
+  unreachable: 'warn',
 }
 
-export function toneOf(state: PluginState): Tone { return TONE[state] }
+export function toneOf(state: BadgeState): Tone { return TONE[state] }
 
-export function StateBadge({ state }: { state: PluginState }): React.JSX.Element {
+export function StateBadge({ state }: { state: BadgeState }): React.JSX.Element {
   const t = useT()
   const tone = TONE[state]
   const { text, bg } = TONE_CLASSES[tone]

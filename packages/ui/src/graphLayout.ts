@@ -24,9 +24,17 @@ export function columnOf(node: GraphNode): number {
   return column === -1 ? COLUMNS.length - 1 : column
 }
 
-/** R4: an edge is broken when either end is dormant. Optional is a separate, quieter treatment. */
+/**
+ * R4: an edge is broken when either end is not germinated — dormant, or a system that
+ * germinated and then stopped answering (ruling F11). Optional is a separate, quieter
+ * treatment. An end the response never sent is unknown, not broken; the screen drops it.
+ */
+export function isFailing(node: GraphNode | undefined): boolean {
+  return node !== undefined && node.state !== 'germinated'
+}
+
 export function isBroken(edge: GraphEdge, byName: ReadonlyMap<string, GraphNode>): boolean {
-  return byName.get(edge.from)?.state === 'dormant' || byName.get(edge.to)?.state === 'dormant'
+  return isFailing(byName.get(edge.from)) || isFailing(byName.get(edge.to))
 }
 
 export function layout(graph: GraphDto): readonly PlacedNode[] {

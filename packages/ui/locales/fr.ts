@@ -38,6 +38,7 @@ export const fr: Record<StringKey, string> = {
   'kind.metaAllWell': '{count} \u00b7 tous germ\u00e9s',
   'state.germinated': 'Germ\u00e9',
   'state.dormant': 'Dormant',
+  'state.degraded': 'D\u00e9grad\u00e9',
   'state.unreachable': 'Injoignable',
   'state.disabled': 'D\u00e9sactiv\u00e9',
   'state.pending': 'En attente de red\u00e9marrage',

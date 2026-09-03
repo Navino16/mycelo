@@ -289,6 +289,54 @@ describe('the anastomosis graph', () => {
     expect(screen.getByText('5 plugins · 4 links · 2 broken')).toBeDefined()
   })
 
+  // ruling F11: `radarr · Degraded · HTTP 401` on the Overview and a plain intact edge here,
+  // measured in the same second. The graph was the one claiming everything was fine.
+  it('dashes the edge into a degraded system and counts it as broken', async () => {
+    serve({
+      nodes: [
+        { name: 'radarr', kind: 'rhiza', state: 'degraded', reason: 'HTTP 401' },
+        { name: 'upcoming', kind: 'enzyme', state: 'germinated' },
+      ],
+      edges: [{ from: 'upcoming', to: 'radarr', optional: false }],
+    })
+    renderGraph()
+
+    await waitFor(() => { expect(screen.getAllByText('radarr').length).toBeGreaterThan(0) })
+    expect(edge('upcoming', 'radarr')?.getAttribute('stroke-dasharray')).toBe('6 4')
+    expect(screen.getByText('2 plugins · 1 links · 1 broken')).toBeDefined()
+    expect(screen.getAllByText('HTTP 401').length).toBeGreaterThan(0)
+  })
+
+  it('keeps a degraded system under Only failures, with the dependent that reads from it', async () => {
+    serve({
+      nodes: [
+        { name: 'signal', kind: 'hypha', state: 'germinated' },
+        { name: 'radarr', kind: 'rhiza', state: 'degraded', reason: 'HTTP 401' },
+        { name: 'upcoming', kind: 'enzyme', state: 'germinated' },
+      ],
+      edges: [{ from: 'upcoming', to: 'radarr', optional: false }],
+    })
+    renderGraph()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Only failures' }))
+    const desktop = screen.getByTestId('graph-desktop')
+
+    expect(within(desktop).getByText('radarr')).toBeDefined()
+    expect(within(desktop).getByText('upcoming')).toBeDefined()
+    expect(within(desktop).queryByText('signal')).toBeNull()
+  })
+
+  it('names the state of a degraded node on the phone card, not only its colour', async () => {
+    serve({
+      nodes: [{ name: 'radarr', kind: 'rhiza', state: 'degraded', reason: 'HTTP 401' }],
+      edges: [],
+    })
+    renderGraph()
+
+    const mobile = await screen.findByTestId('graph-mobile')
+    expect(within(mobile).getByText('Degraded')).toBeDefined()
+  })
+
   it('does not throw when an edge names a node absent from the response', async () => {
     serve({ ...GRAPH, edges: [...GRAPH.edges, { from: 'upcoming', to: 'ghost', optional: false }] })
     renderGraph()

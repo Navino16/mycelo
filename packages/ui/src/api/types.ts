@@ -104,7 +104,11 @@ export type CommandGroups = Record<string, readonly CommandDto[]>
 export interface GraphNode {
   name: string
   kind?: SporeKind
-  state: 'germinated' | 'dormant'
+  /**
+   * Germination's verdict, except for a rhiza that germinated and then stopped answering: the
+   * route carries its live health state, the same one /api/health reports (ruling F11).
+   */
+  state: 'germinated' | 'dormant' | 'degraded' | 'unreachable'
   reason?: string
 }
 

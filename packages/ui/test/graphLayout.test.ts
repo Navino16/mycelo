@@ -103,4 +103,24 @@ describe('the edge semantics', () => {
   it('is not broken between two germinated nodes', () => {
     expect(isBroken({ from: 'enzyme', to: 'fine', optional: false }, byName)).toBe(false)
   })
+
+  // ruling F11: the graph drew `radarr · degraded · HTTP 401` as a plain intact edge while
+  // the Overview called the same plugin down in the same second. Every state but germinated
+  // is a break, so a state added later cannot silently read as healthy.
+  it('is broken when an end is degraded or unreachable, not only dormant', () => {
+    const runtime = new Map<string, GraphNode>([
+      ['enzyme', node('enzyme', 'enzyme')],
+      ['degraded', node('degraded', 'rhiza', 'degraded')],
+      ['silent', node('silent', 'rhiza', 'unreachable')],
+    ])
+
+    expect(isBroken({ from: 'enzyme', to: 'degraded', optional: false }, runtime)).toBe(true)
+    expect(isBroken({ from: 'enzyme', to: 'silent', optional: false }, runtime)).toBe(true)
+  })
+
+  // An edge naming a node the response never sent is dropped by the screen, so an unknown
+  // end must not read as a break on its own.
+  it('is not broken merely because an end is unknown', () => {
+    expect(isBroken({ from: 'enzyme', to: 'ghost', optional: false }, byName)).toBe(false)
+  })
 })
