@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'bun:test'
 import { MemoryRouter } from 'react-router'
+import { Avatar, initialsOf } from '../../src/components/Avatar.tsx'
 import { Breadcrumb } from '../../src/components/Breadcrumb.tsx'
 import { Chip } from '../../src/components/Chip.tsx'
 import { Dot } from '../../src/components/Dot.tsx'
@@ -203,5 +204,37 @@ describe('the tab strip', () => {
     renderTabs()
 
     expect(screen.getByText('12').className).toContain('font-mono')
+  })
+})
+
+describe('a person avatar', () => {
+  it('takes one initial from the first word and one from the last', () => {
+    expect(initialsOf({ displayName: 'Marion Barbier', id: 'x' })).toBe('MB')
+    expect(initialsOf({ displayName: 'Jean Marc Dupont', id: 'x' })).toBe('JD')
+  })
+
+  it('keeps an accented initial rather than stripping it', () => {
+    expect(initialsOf({ displayName: '\u00c9lodie Sanchez', id: 'x' })).toBe('\u00c9S')
+  })
+
+  it('takes two letters of a one-word name, so an initial is never alone', () => {
+    expect(initialsOf({ displayName: 'Zelda', id: 'x' })).toBe('ZE')
+  })
+
+  // The id is the fallback the design never draws: a person who has written but named nothing.
+  it('falls back to the id when the display name is absent or blank', () => {
+    expect(initialsOf({ id: 'person-42' })).toBe('PE')
+    expect(initialsOf({ displayName: '   ', id: 'person-42' })).toBe('PE')
+  })
+
+  it('answers a single letter for a one-character id rather than padding it', () => {
+    expect(initialsOf({ id: 'a' })).toBe('A')
+  })
+
+  it('renders the initials, hidden from the reading order beside the name', () => {
+    render(<Avatar person={{ id: 'p1', displayName: 'Marion Barbier', roles: [], identities: [], reviewed: false }} />)
+
+    const node = screen.getByText('MB')
+    expect(node.getAttribute('aria-hidden')).toBe('true')
   })
 })
