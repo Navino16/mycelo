@@ -3,6 +3,7 @@ import { useParams } from 'react-router'
 import { api, ApiError } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
+import { Checkbox } from '../components/Checkbox.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { coversPlugin, grants, wildcardsIn } from '../patterns.ts'
 import { plural, useLocale, useT } from '../i18n.tsx'
@@ -73,9 +74,8 @@ export function PluginGroup(
   return (
     <section className="rounded-lg border border-line">
       <div className="flex items-center gap-3 p-3">
-        <input
+        <Checkbox
           ref={box}
-          type="checkbox"
           aria-label={t('role.groupToggle', { plugin })}
           checked={full}
           disabled={readOnly || onSetPlugin === undefined}
@@ -112,8 +112,7 @@ export function PluginGroup(
         <ul className="divide-y divide-line-soft border-t border-line-soft">
           {shown.map((c) => (
             <li key={c.qualified} className="flex items-start gap-3 p-3">
-              <input
-                type="checkbox"
+              <Checkbox
                 id={c.qualified}
                 data-testid={c.qualified}
                 disabled={readOnly}
@@ -161,6 +160,7 @@ export function RoleEditor(): React.JSX.Element {
   const [pick, setPick] = useState('')
   const [error, setError] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [acknowledged, setAcknowledged] = useState(false)
 
   // allSettled, not all: a refused /api/commands costs the per-command editor, never the
   // role's own name, its holder count or the `*` alert.
@@ -220,10 +220,15 @@ export function RoleEditor(): React.JSX.Element {
     try {
       await api.send('PUT', `/api/roles/${name}/commands`, { patterns })
       setSaved(patterns)
+      setAcknowledged(true)
     } catch (e) {
       setSaveError(e instanceof ApiError ? e.message : t('error.generic'))
     }
   }
+
+  // Derived rather than cleared in each of the four mutators (ruling 21 concern 2): a mutator
+  // added later would otherwise leave 'Saved.' standing over an edited form.
+  const dirty = patterns.length !== saved.length || patterns.some((p) => !saved.includes(p))
 
   const groups = isCommandGroups(commands) ? Object.entries(commands) : []
   const wildcards = wildcardsIn(patterns)
@@ -279,7 +284,7 @@ export function RoleEditor(): React.JSX.Element {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setPatterns(saved); setSaveError(null) }}
+                  onClick={() => { setPatterns(saved); setSaveError(null); setAcknowledged(false) }}
                   className="rounded-md border border-line px-3 py-2 text-body"
                 >
                   {t('role.cancel')}
@@ -291,6 +296,7 @@ export function RoleEditor(): React.JSX.Element {
       </div>
 
       {error && <p role="alert" className={`text-body ${warn.text}`}>{t('error.generic')}</p>}
+      {acknowledged && !dirty && <p role="status" className="text-body">{t('role.saved')}</p>}
 
       {role !== null && (
         <>

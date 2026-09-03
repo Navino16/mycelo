@@ -4,6 +4,7 @@ import { api } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
 import { Avatar } from '../components/Avatar.tsx'
 import { BulkBar } from '../components/BulkBar.tsx'
+import { Checkbox } from '../components/Checkbox.tsx'
 import { Chip } from '../components/Chip.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
@@ -260,8 +261,7 @@ export function People(): React.JSX.Element {
                   data-testid={`person-${person.id}`}
                   className={`grid items-center gap-x-3 gap-y-1 p-3 ${COLUMNS}`}
                 >
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     aria-label={label}
                     checked={selected.has(person.id)}
                     onChange={(e) => { toggleSelect(person.id, e.target.checked) }}

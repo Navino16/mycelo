@@ -314,6 +314,36 @@ describe('the role editor screen', () => {
     expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ patterns: ['radarr.add'] })
   })
 
+  // Ruling 21 concern 2 settled this class for the generated form — "a save with no feedback
+  // is a regression the design does not draw only because 2c is the pre-save frame" — and the
+  // rule was not carried here: the PUT persisted and the screen said nothing at all.
+  it('acknowledges a save that persisted', async () => {
+    mockApi({ role: { name: 'family', builtin: false, patterns: [] } })
+    renderEditor()
+
+    fireEvent.click(await screen.findByText('radarr'))
+    fireEvent.click(screen.getByTestId('radarr.add'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save this role' }))
+
+    expect(await screen.findByRole('status')).toHaveProperty('textContent', 'Saved.')
+  })
+
+  it('says nothing before a save, and withdraws the acknowledgement once edited again', async () => {
+    mockApi({ role: { name: 'family', builtin: false, patterns: [] } })
+    renderEditor()
+
+    fireEvent.click(await screen.findByText('radarr'))
+    expect(screen.queryByRole('status')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('radarr.add'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save this role' }))
+    expect(await screen.findByRole('status')).toBeDefined()
+
+    fireEvent.click(screen.getByTestId('radarr.remove'))
+
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
   it('renders the save refusal in its own alert', async () => {
     mockApi({ role: { name: 'family', builtin: false, patterns: [] }, putStatus: 409, putBody: { error: { message: 'a duplicate pattern was refused' } } })
     renderEditor()

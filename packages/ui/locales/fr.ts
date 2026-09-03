@@ -298,6 +298,7 @@ export const fr: Record<StringKey, string> = {
   'role.wildcard': 'Accord\u00e9 par un joker : couvre aussi des commandes pas encore install\u00e9es.',
   'role.save': 'Enregistrer ce r\u00f4le',
   'role.cancel': 'Annuler',
+  'role.saved': 'Enregistr\u00e9.',
   'role.builtinReadOnly': 'Les r\u00f4les int\u00e9gr\u00e9s ne peuvent pas \u00eatre modifi\u00e9s.',
   'role.removeWildcard': 'Retirer {pattern}',
   'role.wildcardsHeld': 'Jokers d\u00e9tenus',

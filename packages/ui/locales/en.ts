@@ -293,6 +293,7 @@ export const en = {
   'role.wildcard': 'Granted by a wildcard, so it covers commands that are not installed yet.',
   'role.save': 'Save this role',
   'role.cancel': 'Cancel',
+  'role.saved': 'Saved.',
   'role.builtinReadOnly': 'Built-in roles cannot be edited.',
   'role.removeWildcard': 'Remove {pattern}',
   'role.wildcardsHeld': 'Wildcards held',
