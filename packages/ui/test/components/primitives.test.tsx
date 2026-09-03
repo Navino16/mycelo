@@ -7,6 +7,7 @@ import { Dot } from '../../src/components/Dot.tsx'
 import { EmptyState } from '../../src/components/EmptyState.tsx'
 import { ProportionBar } from '../../src/components/ProportionBar.tsx'
 import { StateBadge, toneOf } from '../../src/components/StateBadge.tsx'
+import { Tabs } from '../../src/components/Tabs.tsx'
 import { Tile } from '../../src/components/Tile.tsx'
 import { TONE_CLASSES } from '../../src/components/tone.ts'
 import { I18nProvider } from '../../src/i18n.tsx'
@@ -156,5 +157,51 @@ describe('the empty state', () => {
     render(<EmptyState title="Nothing here" body="Yet." />)
 
     expect(screen.queryByRole('button')).toBeNull()
+  })
+})
+
+describe('the tab strip', () => {
+  const TABS = [
+    { id: 'diagnosis', label: 'Diagnosis' },
+    { id: 'configuration', label: 'Configuration', to: '/plugins/radarr/settings' },
+    { id: 'commands', label: 'Commands', count: 12 },
+  ]
+
+  function renderTabs(onSelect: (id: string) => void = () => undefined): void {
+    render(
+      <MemoryRouter><Tabs tabs={TABS} active="diagnosis" onSelect={onSelect} /></MemoryRouter>,
+    )
+  }
+
+  it('reports the tab that was chosen, not merely that something was clicked', () => {
+    const chosen: string[] = []
+    renderTabs((id) => { chosen.push(id) })
+
+    fireEvent.click(screen.getByRole('button', { name: /Commands/ }))
+
+    expect(chosen).toEqual(['commands'])
+  })
+
+  // 1c's Configuration tab is a route of its own, so it must be a link a browser can open in
+  // a new window — a button calling onSelect would navigate nowhere.
+  it('renders a tab carrying a route as a link to it', () => {
+    renderTabs()
+
+    expect(screen.getByRole('link', { name: 'Configuration' }).getAttribute('href'))
+      .toBe('/plugins/radarr/settings')
+    expect(screen.queryByRole('button', { name: 'Configuration' })).toBeNull()
+  })
+
+  it('marks the active tab as the current one, and no other', () => {
+    renderTabs()
+
+    expect(screen.getByRole('button', { name: 'Diagnosis' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: /Commands/ }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('carries a tab count beside its label, in its own node', () => {
+    renderTabs()
+
+    expect(screen.getByText('12').className).toContain('font-mono')
   })
 })

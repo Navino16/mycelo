@@ -15,10 +15,7 @@ const TABLE = 'components/tone.ts'
  * Files that spell a tone themselves, with the reason each is not yet routed through the
  * table. Each is due for rework by a later task, which is when its entry goes.
  */
-const ALLOWED: Readonly<Record<string, string>> = {
-  // The dormant diagnosis panel predates the tone table; its screen is task 17's.
-  'components/DormantDiagnosis.tsx': 'task 17 owns the dormant diagnosis surface',
-}
+const ALLOWED: Readonly<Record<string, string>> = {}
 
 const SRC = new URL('../../src/', import.meta.url).pathname
 

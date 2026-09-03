@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { PluginDetail } from '../../src/screens/PluginDetail.tsx'
-import type { PluginDetailDto } from '../../src/api/types.ts'
+import type { PluginDetailDto, RuntimeHealth } from '../../src/api/types.ts'
 
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
@@ -23,6 +24,16 @@ const DETAIL: PluginDetailDto = {
   mounted: ['health.read'],
 }
 
+const GERMINATED: RuntimeHealth = {
+  mode: 'germinated',
+  dormant: [],
+  enforcingBlocked: [],
+  rhizas: [],
+  blockedSinceBoot: 0,
+}
+
+const DEGRADED: RuntimeHealth = { ...GERMINATED, mode: 'degraded' }
+
 function serve(body: unknown): void {
   globalThis.fetch = mock(() => Promise.resolve(new Response(JSON.stringify(body), {
     headers: { 'content-type': 'application/json' },
@@ -35,12 +46,16 @@ function serveError(): void {
   })))
 }
 
-function renderDetail(): void {
+// The screen reads the runtime's mode to decide whether a germination retry is even offered,
+// so it needs a HealthContext; useHealth throws without one.
+function renderDetail(health: RuntimeHealth | null = GERMINATED): void {
   render(
     <I18nProvider>
-      <MemoryRouter initialEntries={['/plugins/radarr']}>
-        <Routes><Route path="/plugins/:name" element={<PluginDetail />} /></Routes>
-      </MemoryRouter>
+      <HealthContext value={{ health, error: false, refresh: () => Promise.resolve() }}>
+        <MemoryRouter initialEntries={['/plugins/radarr']}>
+          <Routes><Route path="/plugins/:name" element={<PluginDetail />} /></Routes>
+        </MemoryRouter>
+      </HealthContext>
     </I18nProvider>,
   )
 }
@@ -78,15 +93,19 @@ describe('the plugin detail screen', () => {
     expect(screen.queryByText('checked out locally')).toBeNull()
   })
 
-  it('shows what was declared and what germination granted, side by side', async () => {
+  // The two live on different tabs since 1c, so this walks to each in turn: 'health.read'
+  // appears once as a sentence (declared) and once as a raw scope (mounted).
+  it('shows what germination granted, and what the manifest declared', async () => {
     serve(DETAIL)
     renderDetail()
 
-    await waitFor(() => { expect(screen.getByText('Declared in its manifest')).toBeDefined() })
-    expect(screen.getByText('Granted at germination')).toBeDefined()
-    // 'health.read' appears once as a sentence (declared) and once as a raw scope (mounted).
-    expect(screen.getByText('See the health of connected systems')).toBeDefined()
+    await waitFor(() => { expect(screen.getByText('Granted at germination')).toBeDefined() })
     expect(screen.getByText('health.read')).toBeDefined()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Requirements' }))
+
+    expect(screen.getByText('Declared in its manifest')).toBeDefined()
+    expect(screen.getByText('See the health of connected systems')).toBeDefined()
   })
 
   it('shows the dormant diagnosis for a dormant plugin, with the raw reason', async () => {
@@ -108,5 +127,158 @@ describe('the plugin detail screen', () => {
 
     await waitFor(() => { expect(screen.getByText('radarr')).toBeDefined() })
     expect(screen.queryByText('Granted at germination')).toBeNull()
+  })
+})
+
+const DORMANT: PluginDetailDto = {
+  name: 'radarr',
+  kind: 'enzyme',
+  commands: ['radarr.search', 'radarr.add', 'radarr.queue'],
+  state: 'dormant',
+  enabled: true,
+  strain: '3.1.0',
+  description: 'Search and add films from a conversation',
+  reason: "requires rhiza 'plex', which is not installed",
+  demands: {
+    requires: [{ targets: ['plex'], anyOf: false, optional: false, scopes: [] }],
+    scopes: ['health.read'],
+    externals: [],
+    commands: [],
+  },
+}
+
+describe('the dormant plugin detail, as 1c draws it', () => {
+  // R1: crit belongs to the mute bot alone (design note 2j), and this header badge is the
+  // second surface that painted a dormant plugin red.
+  it('badges the header amber, never the mute colour', async () => {
+    serve(DORMANT)
+    renderDetail()
+
+    const badge = await screen.findByText('Dormant')
+    expect(badge.getAttribute('data-tone')).toBe('warn')
+  })
+
+  // R3, design note 1c: "Dormant never appears without a literal cause line next to it."
+  it('names the literal cause wherever the word Dormant appears', async () => {
+    serve(DORMANT)
+    renderDetail()
+
+    expect(await screen.findByText('Dormant')).toBeDefined()
+    expect(screen.getByText("requires rhiza 'plex', which is not installed")).toBeDefined()
+  })
+
+  it('trails back to the plugins list through the plugin kind', async () => {
+    serve(DORMANT)
+    renderDetail()
+
+    const trail = await screen.findByRole('navigation', { name: 'breadcrumb' })
+    expect(trail.textContent).toContain('Enzymes · commands')
+    expect(screen.getByRole('link', { name: 'Plugins' }).getAttribute('href')).toBe('/plugins')
+  })
+
+  // Each chip is a different field of the payload, so a header that lost one of them is red
+  // rather than green on "some chip rendered".
+  it('carries the kind, the strain, the enabled state and the command count as chips', async () => {
+    serve(DORMANT)
+    renderDetail()
+
+    expect(await screen.findByText('enzyme · commands')).toBeDefined()
+    expect(screen.getByText('strain 3.1.0')).toBeDefined()
+    expect(screen.getByText('enabled')).toBeDefined()
+    expect(screen.getByText('3 commands')).toBeDefined()
+    expect(screen.getByText('Search and add films from a conversation')).toBeDefined()
+  })
+
+  it('says a disabled plugin is disabled, not enabled', async () => {
+    serve({ ...DORMANT, enabled: false, state: 'disabled' })
+    renderDetail()
+
+    expect(await screen.findByText('disabled')).toBeDefined()
+    expect(screen.queryByText('enabled')).toBeNull()
+  })
+
+  // task 14 fills `commands` for a dormant enzyme; before it the list was empty and this
+  // section could not exist.
+  it('lists the commands that answer nothing while it sleeps', async () => {
+    serve(DORMANT)
+    renderDetail()
+
+    expect(await screen.findByText('What is unavailable while it sleeps')).toBeDefined()
+    expect(screen.getByText('All 3 commands answer nothing. Callers see silence, not an error.')).toBeDefined()
+    expect(screen.getByText('radarr.queue')).toBeDefined()
+  })
+
+  it('does not say "all 1 commands" for a plugin declaring one', async () => {
+    serve({ ...DORMANT, commands: ['radarr.search'] })
+    renderDetail()
+
+    expect(await screen.findByText('Its one command answers nothing. Callers see silence, not an error.'))
+      .toBeDefined()
+  })
+
+  it('states that the germination log does not exist, rather than leaving the space blank', async () => {
+    serve(DORMANT)
+    renderDetail()
+
+    expect(await screen.findByText('Germination log unavailable')).toBeDefined()
+  })
+
+  it('sends the Configuration tab to the settings route instead of switching a panel', async () => {
+    serve(DORMANT)
+    renderDetail()
+
+    const link = await screen.findByRole('link', { name: 'Configuration' })
+    expect(link.getAttribute('href')).toBe('/plugins/radarr/settings')
+  })
+
+  it('shows the commands under their own tab, and drops the diagnosis while there', async () => {
+    serve(DORMANT)
+    renderDetail()
+
+    await waitFor(() => { expect(screen.getByText('Dormant')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: /^Commands/ }))
+
+    expect(screen.getByText('radarr.add')).toBeDefined()
+    expect(screen.queryByText('Something it depends on is missing')).toBeNull()
+  })
+
+  // api/routes/health.ts refuses the retry outside degraded mode, so a button offered there
+  // can only produce a refusal the operator did not ask for.
+  it('offers no germination retry while the runtime is germinated', async () => {
+    serve(DORMANT)
+    renderDetail(GERMINATED)
+
+    await waitFor(() => { expect(screen.getByText('Dormant')).toBeDefined() })
+    expect(screen.queryByRole('button', { name: 'Retry germination' })).toBeNull()
+  })
+
+  it('retries germination while the runtime is degraded, through the route that allows it', async () => {
+    const calls: string[] = []
+    globalThis.fetch = mock((url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      return Promise.resolve(new Response(JSON.stringify(DORMANT), {
+        headers: { 'content-type': 'application/json' },
+      }))
+    }) as unknown as typeof fetch
+    renderDetail(DEGRADED)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry germination' }))
+
+    await waitFor(() => { expect(calls).toContain('POST /api/germination/retry') })
+  })
+
+  it('disables the plugin through its own route', async () => {
+    const calls: string[] = []
+    globalThis.fetch = mock((url: string, init?: RequestInit) => {
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      return Promise.resolve(new Response(JSON.stringify(DORMANT), {
+        headers: { 'content-type': 'application/json' },
+      }))
+    }) as unknown as typeof fetch
+    renderDetail()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Disable' }))
+
+    await waitFor(() => { expect(calls).toContain('POST /api/plugins/radarr/disable') })
   })
 })

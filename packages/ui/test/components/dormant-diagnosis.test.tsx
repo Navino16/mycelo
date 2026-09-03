@@ -1,11 +1,12 @@
 import { render, screen } from '@testing-library/react'
+import type { RenderResult } from '@testing-library/react'
 import { describe, expect, it } from 'bun:test'
 import { MemoryRouter } from 'react-router'
 import { DormantDiagnosis } from '../../src/components/DormantDiagnosis.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 
-function renderDiagnosis(reason: string): void {
-  render(
+function renderDiagnosis(reason: string): RenderResult {
+  return render(
     <I18nProvider>
       <MemoryRouter><DormantDiagnosis name="radarr" reason={reason} /></MemoryRouter>
     </I18nProvider>,
@@ -59,5 +60,34 @@ describe('the dormant diagnosis', () => {
   it('always shows the raw reason beneath the diagnosis, whatever it matched', () => {
     renderDiagnosis('create() returned undefined, expected an object')
     expect(screen.getByText('create() returned undefined, expected an object')).toBeDefined()
+  })
+})
+
+describe('the dormant diagnosis is not the mute colour', () => {
+  // design note 2j: red across the whole UI means the mute bot, and this card painted itself
+  // crit — the R1 violation. Both halves are the assertion: `border-warn` alone stays green
+  // for a card carrying both.
+  it('paints the diagnosis amber', () => {
+    const { container } = renderDiagnosis('configuration rejected: apiKey: missing required field')
+    const card = container.querySelector('[data-diagnosis]')
+
+    expect(card?.className).toContain('border-warn')
+    expect(card?.className).not.toContain('border-crit')
+  })
+
+  it('paints its title amber, not crit', () => {
+    renderDiagnosis('configuration rejected: apiKey: missing required field')
+    const title = screen.getByText('Its configuration was refused')
+
+    expect(title.className).toContain('text-warn')
+    expect(title.className).not.toContain('text-crit')
+  })
+
+  // design note 1c: "Dormant never appears without a literal cause line next to it." (R3)
+  it('renders the literal reason beside the classified title, never the title alone', () => {
+    renderDiagnosis('configuration rejected: apiKey: missing required field')
+
+    expect(screen.getByText('Its configuration was refused')).toBeDefined()
+    expect(screen.getByText('configuration rejected: apiKey: missing required field')).toBeDefined()
   })
 })
