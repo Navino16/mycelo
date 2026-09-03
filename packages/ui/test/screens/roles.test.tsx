@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter } from 'react-router'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { Roles } from '../../src/screens/Roles.tsx'
-import type { ConfigDto, RoleDto } from '../../src/api/types.ts'
+import type { CommandDto, CommandGroups, ConfigDto, RoleDto } from '../../src/api/types.ts'
 
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
@@ -22,9 +22,32 @@ function json(body: unknown, status = 200): Response {
 
 interface Call { method: string, url: string, body: unknown }
 
+function command(plugin: string, name: string): CommandDto {
+  return {
+    plugin, command: name, declared: name, qualified: `${plugin}.${name}`,
+    description: `${plugin} ${name}`, capabilities: [],
+  }
+}
+
+/** Four commands over two plugins: 'radarr.*' grants two of them, 'help.help' exactly one. */
+const COMMANDS: CommandGroups = {
+  radarr: [command('radarr', 'search'), command('radarr', 'add')],
+  help: [command('help', 'help'), command('help', 'about')],
+}
+
 /** A stateful fake serving what Roles.tsx calls, tracking every call it saw. */
 function mockApi(
-  options: { roles?: readonly RoleDto[], config?: ConfigDto, postStatus?: number, postBody?: unknown, deleteStatus?: number, deleteBody?: unknown } = {},
+  options: {
+    roles?: readonly RoleDto[]
+    config?: ConfigDto
+    postStatus?: number
+    postBody?: unknown
+    deleteStatus?: number
+    deleteBody?: unknown
+    commands?: CommandGroups
+    holders?: Readonly<Record<string, number>>
+    people?: number
+  } = {},
 ): { calls: Call[] } {
   const calls: Call[] = []
   let roles = [...(options.roles ?? ROLES)]
@@ -37,6 +60,15 @@ function mockApi(
 
     if (method === 'GET' && url === '/api/roles') return Promise.resolve(json(roles))
     if (method === 'GET' && url === '/api/config') return Promise.resolve(json(config))
+    if (method === 'GET' && url === '/api/commands') return Promise.resolve(json(options.commands ?? COMMANDS))
+    if (method === 'GET' && url === '/api/people?perPage=1') {
+      return Promise.resolve(json({ items: [], page: 1, perPage: 1, total: options.people ?? 0 }))
+    }
+    const holder = /^\/api\/people\?role=([^&]+)&perPage=1$/.exec(url)
+    if (method === 'GET' && holder !== null) {
+      const role = decodeURIComponent(holder[1] ?? '')
+      return Promise.resolve(json({ items: [], page: 1, perPage: 1, total: options.holders?.[role] ?? 0 }))
+    }
 
     if (method === 'POST' && url === '/api/roles') {
       if (options.postStatus !== undefined) {
@@ -65,6 +97,11 @@ function renderRoles(): void {
   render(<I18nProvider><MemoryRouter><Roles /></MemoryRouter></I18nProvider>)
 }
 
+/** The row for one role, so the default role's name in the accent card is never mistaken for it. */
+function row(name: string): HTMLElement {
+  return screen.getByTestId(`role-${name}`)
+}
+
 describe('the roles list', () => {
   it('says something went wrong when the fetch fails, rather than staying blank', async () => {
     globalThis.fetch = mock(() => Promise.resolve(json({ error: { message: 'x' } }, 500)))
@@ -77,9 +114,9 @@ describe('the roles list', () => {
     mockApi()
     renderRoles()
 
-    await waitFor(() => { expect(screen.getByText('owner')).toBeDefined() })
-    expect(screen.getByText('guest')).toBeDefined()
-    expect(screen.getByText('family')).toBeDefined()
+    expect(await screen.findByTestId('role-owner')).toBeDefined()
+    expect(row('guest')).toBeDefined()
+    expect(row('family')).toBeDefined()
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
@@ -88,28 +125,21 @@ describe('the roles list', () => {
     mockApi()
     renderRoles()
 
-    await waitFor(() => { expect(screen.getByText('guest')).toBeDefined() })
+    expect(await screen.findByTestId('role-guest')).toBeDefined()
     expect(screen.getByText('Default role')).toBeDefined()
     expect(screen.getByText('What an unknown sender gets on first contact.')).toBeDefined()
 
     // Marked on guest's own row, not on family's or owner's.
-    const familyRow = screen.getByText('family').closest('li')
-    expect(familyRow).not.toBeNull()
-    expect(familyRow?.textContent).not.toContain('Default role')
-    const ownerRow = screen.getByText('owner').closest('li')
-    expect(ownerRow?.textContent).not.toContain('Default role')
+    expect(row('family').textContent).not.toContain('Default role')
+    expect(row('owner').textContent).not.toContain('Default role')
   })
 
   it('marks a built-in role, and does not mark an ordinary one', async () => {
     mockApi()
     renderRoles()
 
-    await waitFor(() => { expect(screen.getByText('owner')).toBeDefined() })
-    const ownerRow = screen.getByText('owner').closest('li')
-    expect(ownerRow?.textContent).toContain('Built in')
-
-    const familyRow = screen.getByText('family').closest('li')
-    expect(familyRow?.textContent).not.toContain('Built in')
+    expect((await screen.findByTestId('role-owner')).textContent).toContain('Built in')
+    expect(row('family').textContent).not.toContain('Built in')
   })
 
   // Neither the default role nor a built-in one may be deleted from this screen; an
@@ -118,35 +148,27 @@ describe('the roles list', () => {
     mockApi()
     renderRoles()
 
-    await waitFor(() => { expect(screen.getByText('family')).toBeDefined() })
-
-    const familyRow = screen.getByText('family').closest('li')
-    expect(familyRow).not.toBeNull()
-    expect(familyRow !== null && within(familyRow).queryByRole('button', { name: 'Delete' })).not.toBeNull()
-
-    const guestRow = screen.getByText('guest').closest('li')
-    expect(guestRow !== null && within(guestRow).queryByRole('button', { name: 'Delete' })).toBeNull()
-
-    const ownerRow = screen.getByText('owner').closest('li')
-    expect(ownerRow !== null && within(ownerRow).queryByRole('button', { name: 'Delete' })).toBeNull()
+    expect(within(await screen.findByTestId('role-family')).queryByRole('button', { name: 'Delete' })).not.toBeNull()
+    expect(within(row('guest')).queryByRole('button', { name: 'Delete' })).toBeNull()
+    expect(within(row('owner')).queryByRole('button', { name: 'Delete' })).toBeNull()
   })
 
   it('deletes an ordinary role and removes it from the list', async () => {
     const { calls } = mockApi()
     renderRoles()
 
-    await waitFor(() => { expect(screen.getByText('family')).toBeDefined() })
+    expect(await screen.findByTestId('role-family')).toBeDefined()
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => { expect(calls.some((c) => c.method === 'DELETE')).toBe(true) })
-    await waitFor(() => { expect(screen.queryByText('family')).toBeNull() })
+    await waitFor(() => { expect(screen.queryByTestId('role-family')).toBeNull() })
   })
 
   it('renders the delete refusal in its own alert', async () => {
     mockApi({ deleteStatus: 400, deleteBody: { error: { message: 'a built-in role cannot be changed' } } })
     renderRoles()
 
-    await waitFor(() => { expect(screen.getByText('family')).toBeDefined() })
+    expect(await screen.findByTestId('role-family')).toBeDefined()
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
 
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'a built-in role cannot be changed')
@@ -156,24 +178,96 @@ describe('the roles list', () => {
     const { calls } = mockApi()
     renderRoles()
 
-    await waitFor(() => { expect(screen.getByText('owner')).toBeDefined() })
-    fireEvent.change(screen.getByLabelText('New role'), { target: { value: 'media' } })
+    expect(await screen.findByTestId('role-owner')).toBeDefined()
     fireEvent.click(screen.getByRole('button', { name: 'New role' }))
+    fireEvent.change(screen.getByLabelText('New role'), { target: { value: 'media' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => { expect(calls.some((c) => c.method === 'POST')).toBe(true) })
     expect(calls.find((c) => c.method === 'POST')?.body).toEqual({ name: 'media' })
-    await waitFor(() => { expect(screen.getByText('media')).toBeDefined() })
+    await waitFor(() => { expect(screen.getByTestId('role-media')).toBeDefined() })
   })
 
   it('renders the create refusal in its own alert: an existing name is refused', async () => {
     mockApi({ postStatus: 409, postBody: { error: { message: 'a role named guest already exists' } } })
     renderRoles()
 
-    await waitFor(() => { expect(screen.getByLabelText('New role')).toBeDefined() })
+    fireEvent.click(await screen.findByRole('button', { name: 'New role' }))
     fireEvent.change(screen.getByLabelText('New role'), { target: { value: 'guest' } })
-    fireEvent.click(screen.getByRole('button', { name: 'New role' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'a role named guest already exists')
+  })
+})
+
+describe('what each row states about a role', () => {
+  // task 14's ?role= filter, rendered. A count read off the unfiltered total would show the
+  // whole substrate's population beside every role, which is the failure this catches.
+  it('shows a different holder count per role, not the same total twice', async () => {
+    mockApi({ holders: { family: 9, guest: 98, owner: 1 }, people: 128 })
+    renderRoles()
+
+    expect(await screen.findByText('9 people')).toBeDefined()
+    expect(screen.getByText('98 people')).toBeDefined()
+    expect(within(row('family')).getByText('9 people')).toBeDefined()
+    expect(within(row('guest')).getByText('98 people')).toBeDefined()
+  })
+
+  it('says one person, not 1 people, for a role a single person holds', async () => {
+    mockApi({ holders: { owner: 1 }, people: 128 })
+    renderRoles()
+
+    expect(within(await screen.findByTestId('role-owner')).getByText('1 person')).toBeDefined()
+  })
+
+  // 'all 4 commands' is what a wildcard means; '1 of 4' is what an explicit pattern means.
+  // Reading one off the other is the join through patterns.ts this pins.
+  it('states the commands each role reaches, counted against the whole registry', async () => {
+    mockApi()
+    renderRoles()
+
+    expect(within(await screen.findByTestId('role-owner')).getByText('all 4 commands')).toBeDefined()
+    expect(within(row('guest')).getByText('1 of 4')).toBeDefined()
+    expect(within(row('family')).getByText('2 of 4')).toBeDefined()
+  })
+
+  it('lists the wildcards a role holds, and an em dash for a role holding none', async () => {
+    mockApi()
+    renderRoles()
+
+    expect(within(await screen.findByTestId('role-family')).getByText('radarr.*')).toBeDefined()
+    expect(within(row('owner')).getByText('*')).toBeDefined()
+    expect(within(row('guest')).getByText('—')).toBeDefined()
+  })
+
+  it('summarises the substrate above the table', async () => {
+    mockApi({ holders: { family: 9, guest: 98, owner: 1 }, people: 128 })
+    renderRoles()
+
+    expect(await screen.findByText('3 roles · 128 people · 4 commands')).toBeDefined()
+  })
+})
+
+describe('the default-role card', () => {
+  it('names the default role, what it reaches and who holds it, and states it is read-only', async () => {
+    mockApi({ holders: { guest: 98 }, people: 128 })
+    renderRoles()
+
+    expect(await screen.findByText('Default role · what unknown senders get')).toBeDefined()
+    expect(screen.getByText('1 of 4 commands · held by 98 of 128 people')).toBeDefined()
+    expect(screen.getByText('The default role is set in mycelo.yaml and cannot be changed from here.')).toBeDefined()
+    expect(screen.getByRole('link', { name: 'Edit guest' })).toBeDefined()
+  })
+
+  // A substrate whose mycelo.yaml names no default role has no card, and the table alone
+  // must still render: a card keyed on `undefined` would match every role or none.
+  it('renders no card when mycelo.yaml declares no default role', async () => {
+    mockApi({ config: { prefix: '/', defaultLocale: 'en' } })
+    renderRoles()
+
+    expect(await screen.findByTestId('role-guest')).toBeDefined()
+    expect(screen.queryByText('Default role · what unknown senders get')).toBeNull()
+    expect(screen.queryByText('Default role')).toBeNull()
   })
 })
 
@@ -189,11 +283,11 @@ describe('the roles list at scale', () => {
     mockApi({ roles, config: { prefix: '/', defaultLocale: 'en', defaultRole: 'role-3' } })
     renderRoles()
 
-    await waitFor(() => { expect(screen.getByText('owner')).toBeDefined() })
-    for (const role of roles) expect(screen.getByText(role.name)).toBeDefined()
+    expect(await screen.findByTestId('role-owner')).toBeDefined()
+    for (const role of roles) expect(row(role.name)).toBeDefined()
 
     // 9 roles total: 8 ordinary minus the one marked default, none for the built-in owner.
     expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(7)
-    expect(screen.getByText('role-3').closest('li')?.textContent).toContain('Default role')
+    expect(row('role-3').textContent).toContain('Default role')
   })
 })
