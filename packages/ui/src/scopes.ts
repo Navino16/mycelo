@@ -34,3 +34,44 @@ export const SCOPE_SENTENCE: Record<string, StringKey> = {
   'commands.read': 'scope.commands.read',
   'sources.manage': 'scope.sources.manage',
 } satisfies Record<MyceliumScope, StringKey>
+
+export type ScopeRisk = 'low' | 'high'
+
+/**
+ * High for any scope that can widen someone's rights or reach a credential; low otherwise.
+ * A UI judgement, not a core one — the manifest grades nothing (inventory §2 2b).
+ */
+export const SCOPE_RISK: Record<string, ScopeRisk> = {
+  'principals.read': 'low',
+  'principals.manage': 'high',
+  'roles.read': 'low',
+  'roles.assign': 'high',
+  'roles.manage': 'high',
+  'plugins.read': 'low',
+  // It can disable the enforcing inhibitor and mute the bot.
+  'plugins.toggle': 'high',
+  // It reaches every stored credential.
+  'plugins.configure': 'high',
+  'health.read': 'low',
+  'messages.send': 'low',
+  // It speaks on every channel at once.
+  'messages.broadcast': 'high',
+  'conversations.read': 'low',
+  'restrictions.manage': 'high',
+  'locale.manage': 'low',
+  'commands.read': 'low',
+  // It decides where code comes from.
+  'sources.manage': 'high',
+} satisfies Record<MyceliumScope, ScopeRisk>
+
+/**
+ * The declared order is kept: the consent alert names them as the manifest asks for them.
+ * A scope this file has not caught up with grades high — an ungraded one cannot be promised
+ * harmless.
+ */
+export function highRiskScopes(scopes: readonly string[]): readonly string[] {
+  return scopes.filter((scope) => (SCOPE_RISK[scope] ?? 'high') === 'high')
+}
+
+/** What `ScopeTable` and the consent alert paint a row with. */
+export function riskOf(scope: string): ScopeRisk { return SCOPE_RISK[scope] ?? 'high' }

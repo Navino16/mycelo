@@ -1,10 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { BrowseSource } from '../../src/screens/BrowseSource.tsx'
 import { TrustNotice } from '../../src/screens/SporeDetail.tsx'
-import type { SourceDto, SporeOffer } from '../../src/api/types.ts'
+import type { PluginDto, PluginGroups, SourceDto, SporeOffer } from '../../src/api/types.ts'
 
 describe('the trust notice', () => {
   it('warns for a third-party source', () => {
@@ -23,32 +23,42 @@ const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
 
 const SOURCE: SourceDto = {
-  id: 1, label: 'My mirror', driver: 'github', location: 'https://github.com/a/b', official: false, enabled: true,
+  id: 1, label: 'sporangium/core', driver: 'github', location: 'https://github.com/a/b', official: false, enabled: true,
 }
+
+function plugin(name: string, extra: Partial<PluginDto> = {}): PluginDto {
+  return { name, commands: [], state: 'germinated', enabled: true, ...extra }
+}
+
+const EMPTY_GROUPS: PluginGroups = { hypha: [], rhiza: [], enzyme: [], inhibitor: [], unknown: [] }
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 }
 
-function serve(source: SourceDto, offers: unknown): void {
-  globalThis.fetch = mock((url: string) => {
-    if (/\/spores$/.test(url)) return Promise.resolve(json(offers))
-    return Promise.resolve(json(source))
-  }) as unknown as typeof fetch
+interface Options {
+  offers?: unknown
+  plugins?: PluginGroups
+  offersFail?: boolean
+  pluginsFail?: boolean
+  missing?: boolean
 }
 
-function serveUnreachable(source: SourceDto): void {
+function serve(opts: Options = {}): void {
   globalThis.fetch = mock((url: string) => {
-    if (/\/spores$/.test(url)) {
-      return Promise.resolve(json({ error: { message: 'could not read it' } }, 400))
+    if (opts.missing === true) return Promise.resolve(json({ error: { message: 'not found' } }, 404))
+    if (url === '/api/plugins') {
+      return Promise.resolve(opts.pluginsFail === true
+        ? json({ error: { message: 'x' } }, 500)
+        : json(opts.plugins ?? EMPTY_GROUPS))
     }
-    return Promise.resolve(json(source))
+    if (/\/spores$/.test(url)) {
+      return Promise.resolve(opts.offersFail === true
+        ? json({ error: { message: 'could not read it' } }, 400)
+        : json(opts.offers ?? []))
+    }
+    return Promise.resolve(json(SOURCE))
   }) as unknown as typeof fetch
-}
-
-/** requireSource (sources.ts) 404s both /:id and /:id/spores for an unknown id alike. */
-function serveMissingSource(): void {
-  globalThis.fetch = mock(() => Promise.resolve(json({ error: { message: 'not found' } }, 404)))
 }
 
 function renderBrowse(): void {
@@ -61,9 +71,13 @@ function renderBrowse(): void {
   )
 }
 
+function offers(count: number): SporeOffer[] {
+  return Array.from({ length: count }, (_, i) => ({ name: `spore-${String(i + 1)}`, strain: '1.0.0' }))
+}
+
 describe('browsing a source', () => {
   it('reads as affecting installs only, not as the source being broken, when it cannot answer', async () => {
-    serveUnreachable(SOURCE)
+    serve({ offersFail: true })
     renderBrowse()
 
     const alert = await screen.findByRole('alert')
@@ -73,7 +87,7 @@ describe('browsing a source', () => {
   // Reachable from a stale bookmark or a source deleted elsewhere: requireSource 404s both
   // endpoints, and the source's own fetch must not be swallowed into a blank, alert-less screen.
   it('shows a generic alert when the source itself cannot be found, rather than staying blank', async () => {
-    serveMissingSource()
+    serve({ missing: true })
     renderBrowse()
 
     const alert = await screen.findByRole('alert')
@@ -82,8 +96,7 @@ describe('browsing a source', () => {
   })
 
   it('lists the offers on success, with no error banner', async () => {
-    const offers: SporeOffer[] = [{ name: 'radarr', strain: '1.2.0' }, { name: 'plex', strain: '2.0.0' }]
-    serve(SOURCE, offers)
+    serve({ offers: [{ name: 'radarr', strain: '1.2.0' }, { name: 'plex', strain: '2.0.0' }] })
     renderBrowse()
 
     await waitFor(() => { expect(screen.getByText('radarr')).toBeDefined() })
@@ -91,31 +104,135 @@ describe('browsing a source', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('names the source in the title', async () => {
-    serve(SOURCE, [])
+  it('leads with the trail back to the sources list and the source name', async () => {
+    serve({ offers: offers(3) })
     renderBrowse()
 
-    await waitFor(() => { expect(screen.getByText('Available in My mirror')).toBeDefined() })
+    const trail = await screen.findByRole('navigation', { name: 'breadcrumb' })
+    expect(trail.textContent).toContain('Sources')
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('sporangium/core')
+    expect(screen.getByText('3 spores')).toBeDefined()
   })
 
   it('says the source offers nothing rather than showing an empty list', async () => {
-    serve(SOURCE, [])
+    serve({ offers: [] })
     renderBrowse()
 
     await waitFor(() => { expect(screen.getByText('This source offers nothing.')).toBeDefined() })
+    expect(screen.queryByRole('list')).toBeNull()
+  })
+})
+
+describe('finding a spore in a source', () => {
+  it('filters the listing client-side on what is typed', async () => {
+    serve({ offers: [{ name: 'rhiza-radarr', strain: '1.0.0' }, { name: 'hypha-signal', strain: '2.0.0' }] })
+    renderBrowse()
+    await waitFor(() => { expect(screen.getByText('rhiza-radarr')).toBeDefined() })
+
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'signal' } })
+
+    expect(screen.getByText('hypha-signal')).toBeDefined()
+    expect(screen.queryByText('rhiza-radarr')).toBeNull()
   })
 
-  // brief §7: a real sporangium offers 20-40 spores, never three sample rows.
-  it('renders every offer at scale, none dropped or capped', async () => {
-    const offers: SporeOffer[] = Array.from({ length: 30 }, (_, i) => ({
-      name: `spore-${String(i + 1)}`, strain: '1.0.0',
-    }))
-    serve(SOURCE, offers)
+  it('says nothing matched rather than showing an empty list', async () => {
+    serve({ offers: [{ name: 'rhiza-radarr', strain: '1.0.0' }] })
+    renderBrowse()
+    await waitFor(() => { expect(screen.getByText('rhiza-radarr')).toBeDefined() })
+
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'nothing-like-this' } })
+
+    expect(screen.getByText('No spore in this source matches “nothing-like-this”')).toBeDefined()
+    expect(screen.queryByRole('list')).toBeNull()
+  })
+})
+
+// brief §7: a real sporangium offers 20-40 spores, and 61 is the artboard's own number.
+describe('reading a catalogue larger than one page', () => {
+  it('shows the first 25 and says how many there are in all', async () => {
+    serve({ offers: offers(61) })
     renderBrowse()
 
-    await waitFor(() => { expect(screen.getAllByRole('listitem')).toHaveLength(30) })
-    for (const offer of offers) {
-      expect(within(screen.getByRole('list')).getByText(offer.name)).toBeDefined()
-    }
+    await waitFor(() => { expect(screen.getAllByRole('listitem')).toHaveLength(25) })
+    expect(screen.getByText('Showing 1–25 of 61')).toBeDefined()
+  })
+
+  it('reveals the next 25 on demand, and stops offering more once everything is shown', async () => {
+    serve({ offers: offers(30) })
+    renderBrowse()
+    await waitFor(() => { expect(screen.getAllByRole('listitem')).toHaveLength(25) })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load 25 more' }))
+
+    expect(screen.getAllByRole('listitem')).toHaveLength(30)
+    expect(screen.getByText('Showing 1–30 of 30')).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Load 25 more' })).toBeNull()
+  })
+
+  it('offers no paging at all for a catalogue that fits on one page', async () => {
+    serve({ offers: offers(4) })
+    renderBrowse()
+
+    await waitFor(() => { expect(screen.getAllByRole('listitem')).toHaveLength(4) })
+    expect(screen.queryByRole('button', { name: 'Load 25 more' })).toBeNull()
+    expect(screen.queryByText(/Showing/)).toBeNull()
+  })
+
+  // A search must narrow the whole catalogue, not only the slice already revealed.
+  it('searches the whole catalogue, not just the page on screen', async () => {
+    serve({ offers: [...offers(40), { name: 'the-last-one', strain: '1.0.0' }] })
+    renderBrowse()
+    await waitFor(() => { expect(screen.getAllByRole('listitem')).toHaveLength(25) })
+
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'the-last-one' } })
+
+    expect(screen.getByText('the-last-one')).toBeDefined()
+  })
+})
+
+describe('what is already installed here', () => {
+  const CATALOGUE: SporeOffer[] = [
+    { name: 'rhiza-radarr', strain: '2.1.0' },
+    { name: 'rhiza-tautulli', strain: '1.2.0' },
+    { name: 'enzyme-radarr-search', strain: '3.1.0' },
+  ]
+  const HERE: PluginGroups = {
+    ...EMPTY_GROUPS,
+    rhiza: [plugin('rhiza-radarr', { kind: 'rhiza', strain: '1.8.4' })],
+    enzyme: [plugin('enzyme-radarr-search', { kind: 'enzyme', strain: '3.1.0', state: 'dormant' })],
+  }
+
+  it('marks each offer against what is installed here', async () => {
+    serve({ offers: CATALOGUE, plugins: HERE })
+    renderBrowse()
+
+    await waitFor(() => { expect(screen.getByTestId('offer-rhiza-radarr')).toBeDefined() })
+    expect(within(screen.getByTestId('offer-rhiza-radarr')).getByText('update · installed 1.8.4')).toBeDefined()
+    expect(within(screen.getByTestId('offer-rhiza-tautulli')).getByText('not installed')).toBeDefined()
+    expect(within(screen.getByTestId('offer-enzyme-radarr-search')).getByText('installed · dormant')).toBeDefined()
+  })
+
+  // The discriminating half: a compare that answers "update" whenever a name is known would
+  // pass the row above and lie about the one already at the newest strain.
+  it('calls an offer already installed at its newest strain installed, not an update', async () => {
+    serve({
+      offers: [{ name: 'rhiza-radarr', strain: '1.8.4' }],
+      plugins: { ...EMPTY_GROUPS, rhiza: [plugin('rhiza-radarr', { kind: 'rhiza', strain: '1.8.4' })] },
+    })
+    renderBrowse()
+
+    const row = await screen.findByTestId('offer-rhiza-radarr')
+    expect(within(row).getByText('installed · germinated')).toBeDefined()
+    expect(within(row).queryByText(/update/)).toBeNull()
+  })
+
+  // The join is decoration: a refused /api/plugins must cost the note, not the listing.
+  it('still lists the offers when the installed-plugins join is refused', async () => {
+    serve({ offers: CATALOGUE, pluginsFail: true })
+    renderBrowse()
+
+    await waitFor(() => { expect(screen.getAllByRole('listitem')).toHaveLength(3) })
+    expect(screen.queryByText('not installed')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
