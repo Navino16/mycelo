@@ -294,7 +294,9 @@ export function PluginSettings(): React.JSX.Element {
       <header className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-mono text-page">{name}</h1>
-          {detail !== null && <StateBadge state={detail.state} />}
+          {/* The enable route answers { ok, restartRequired }: folded in, or the badge reads
+              `Disabled` beside the switch that just reported the restart. */}
+          {detail !== null && <StateBadge state={enabledNow ? 'pending' : detail.state} />}
         </div>
         <Tabs tabs={tabs} active="configuration" onSelect={() => undefined} />
         {schema !== null && schema.available && (

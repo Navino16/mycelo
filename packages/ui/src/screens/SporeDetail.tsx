@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router'
-import { api } from '../api/client.ts'
+import { api, ApiError } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { Chip } from '../components/Chip.tsx'
@@ -148,22 +148,34 @@ export function SporeDetail(): React.JSX.Element {
   // are decoration and get no flag: refusing them costs their column, not the screen.
   const [sporeError, setSporeError] = useState(false)
   const [sourceError, setSourceError] = useState(false)
+  // A 404 is the source answering that it holds nothing under this name — a `local` driver
+  // says so in a sentence the operator needs, and error.generic threw it away.
+  const [refusal, setRefusal] = useState<string | null>(null)
   const [installError, setInstallError] = useState<string | null>(null)
   const [strainSheet, setStrainSheet] = useState(false)
   const error = sporeError || sourceError
 
+  // The two joins the install itself invalidates: the state chip and the collision line both
+  // read them, and both stayed on the pre-install answer until a reload.
+  const readJoins = useCallback((): void => {
+    api.get<PluginGroups>('/api/plugins').then((v) => { setGroups(v) }, () => { setGroups(null) })
+    api.get<CommandGroups>('/api/commands').then((v) => { setCommands(v) }, () => { setCommands(null) })
+  }, [])
+
   useEffect(() => {
     api.get<SporeStrainsDto>(`/api/sources/${id}/spores/${name}`).then(
-      (v) => { setStrains(v); setSporeError(false) },
-      () => { setSporeError(true) },
+      (v) => { setStrains(v); setSporeError(false); setRefusal(null) },
+      (e: unknown) => {
+        setSporeError(true)
+        setRefusal(e instanceof ApiError && e.status === 404 ? e.message : null)
+      },
     )
     api.get<SourceDto>(`/api/sources/${id}`).then(
       (v) => { setSource(v); setSourceError(false) },
       () => { setSourceError(true) },
     )
-    api.get<PluginGroups>('/api/plugins').then((v) => { setGroups(v) }, () => { setGroups(null) })
-    api.get<CommandGroups>('/api/commands').then((v) => { setCommands(v) }, () => { setCommands(null) })
-  }, [id, name])
+    readJoins()
+  }, [id, name, readJoins])
 
   const spore = strains?.detail ?? null
   const offered = readArray<string>(strains?.strains) ?? []
@@ -179,13 +191,20 @@ export function SporeDetail(): React.JSX.Element {
       setStrainSheet(false)
       setOutcome(result)
       setInstallError(null)
+      readJoins()
     } catch (e) {
       setStrainSheet(false)
       setInstallError(e instanceof Error ? e.message : t('error.generic'))
     }
   }
 
-  if (error) return <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.generic')}</p>
+  if (error) {
+    return (
+      <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>
+        {refusal ?? t('error.generic')}
+      </p>
+    )
+  }
   if (spore === null || source === null) return <div />
 
   const scopes = readArray<string>(spore.demands.scopes) ?? []

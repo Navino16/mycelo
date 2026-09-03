@@ -351,3 +351,39 @@ describe('editing a source', () => {
       .toHaveProperty('value', 'https://github.com/mycelo-community/spores.git')
   })
 })
+
+/** `mycelo.yaml`'s `spores: ./local-spores`, which the core registers as a source. */
+const LOCAL: SourceDto = {
+  id: 4, label: 'local-spores', driver: 'local', location: './local-spores', official: false, enabled: true,
+}
+
+describe('a source there is nothing to browse', () => {
+  // Measured: the core answers both browse routes with
+  // `404 not-found "this is a local spores directory: there is nothing to browse …"`, so the
+  // row linked to a route that can only fail — and it is the first row an operator meets.
+  it('renders a local directory as text, never as a link into a route that must fail', async () => {
+    mockApi([LOCAL])
+    render(<I18nProvider><MemoryRouter><Sources /></MemoryRouter></I18nProvider>)
+
+    const row = await screen.findByTestId('source-4')
+    expect(within(row).getByText('local-spores')).toBeDefined()
+    expect(within(row).queryByRole('link')).toBeNull()
+  })
+
+  it('says why the row has no catalogue count instead of leaving the cell blank', async () => {
+    mockApi([LOCAL])
+    render(<I18nProvider><MemoryRouter><Sources /></MemoryRouter></I18nProvider>)
+
+    const row = await screen.findByTestId('source-4')
+    expect(within(row).getByText('its spores are already installed')).toBeDefined()
+  })
+
+  // The control: a git registry is browsable and keeps its link.
+  it('keeps the link on a git source', async () => {
+    mockApi([OFFICIAL], { catalogues: { 1: 3 } })
+    render(<I18nProvider><MemoryRouter><Sources /></MemoryRouter></I18nProvider>)
+
+    const row = await screen.findByTestId('source-1')
+    expect(within(row).getByRole('link').getAttribute('href')).toBe('/sources/1')
+  })
+})

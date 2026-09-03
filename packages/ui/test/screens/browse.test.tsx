@@ -42,6 +42,8 @@ interface Options {
   offersFail?: boolean
   pluginsFail?: boolean
   missing?: boolean
+  /** The refusal `/spores` answers with, message included. */
+  offersRefusal?: { status: number, message: string }
 }
 
 function serve(opts: Options = {}): void {
@@ -53,6 +55,10 @@ function serve(opts: Options = {}): void {
         : json(opts.plugins ?? EMPTY_GROUPS))
     }
     if (/\/spores$/.test(url)) {
+      if (opts.offersRefusal !== undefined) {
+        const { status, message } = opts.offersRefusal
+        return Promise.resolve(json({ error: { code: 'not-found', message } }, status))
+      }
       return Promise.resolve(opts.offersFail === true
         ? json({ error: { message: 'could not read it' } }, 400)
         : json(opts.offers ?? []))
@@ -81,7 +87,9 @@ describe('browsing a source', () => {
     renderBrowse()
 
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toBe('This source is not answering. Installing is affected; nothing running is.')
+    expect(within(alert).getByText(
+      'This source is not answering. Installing is affected; nothing running is.',
+    )).toBeDefined()
   })
 
   // Reachable from a stale bookmark or a source deleted elsewhere: requireSource 404s both
@@ -234,5 +242,36 @@ describe('what is already installed here', () => {
     await waitFor(() => { expect(screen.getAllByRole('listitem')).toHaveLength(3) })
     expect(screen.queryByText('not installed')).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+describe('a source that answered a refusal, not a silence', () => {
+  // Measured on the scratch install's `local` source: it answered in 1 ms and the screen
+  // called it "not answering". The sentence the core sends is the one the operator needs.
+  it('renders the server’s refusal instead of calling the source unreachable', async () => {
+    serve({
+      offersRefusal: {
+        status: 404,
+        message: 'this is a local spores directory: there is nothing to browse,'
+          + ' its spores are already installed',
+      },
+    })
+    renderBrowse()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('this is a local spores directory')
+    expect(alert.textContent).not.toContain('not answering')
+  })
+
+  // The control, and the rule: only a 404 means the source answered and holds nothing here.
+  // Any other refusal is still an unreachable source — with the server's words beneath it,
+  // rather than instead of the sentence that says what is and is not affected.
+  it('keeps the unreachable headline for a refusal that is not a not-found', async () => {
+    serve({ offersFail: true })
+    renderBrowse()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('not answering')
+    expect(screen.getByText('could not read it')).toBeDefined()
   })
 })

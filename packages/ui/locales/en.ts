@@ -212,6 +212,7 @@ export const en = {
   'spore.septum': 'Wants plugin contract {range}',
   'sources.summary': '{count} registries · {spores} spores visible',
   'sources.summaryOne': '{count} registry · {spores} spores visible',
+  'sources.localNote': 'its spores are already installed',
   'sources.catalogue': '{count} spores',
   'sources.catalogueOne': '{count} spore',
   'sources.edit': 'Edit',

@@ -91,22 +91,32 @@ function SourceRow(
   },
 ): React.JSX.Element {
   const t = useT()
+  const browsable = source.driver !== 'local'
   return (
     <li
       data-testid={`source-${String(source.id)}`}
       className="grid items-baseline gap-x-3 gap-y-1 p-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_8rem_7rem_4rem]"
     >
-      <Link to={`/sources/${String(source.id)}`} className="truncate font-mono font-medium">
-        {source.label}
-      </Link>
+      {/* A `local` driver refuses both browse routes by design (drivers/local.ts): its spores
+          are already installed, so the row names it rather than linking into a route that
+          can only fail — the first row an operator meets on a scratch install. */}
+      {browsable
+        ? (
+            <Link to={`/sources/${String(source.id)}`} className="truncate font-mono font-medium">
+              {source.label}
+            </Link>
+          )
+        : <span className="truncate font-mono font-medium">{source.label}</span>}
       <span className="truncate font-mono text-meta-lg text-text/60">{source.location}</span>
       <span className="justify-self-start">
         <Chip label={t(badgeKey(source))} tone={source.official && source.enabled ? 'ok' : 'idle'} />
       </span>
       <span className="text-body text-text/70">
-        {spores === undefined
-          ? ''
-          : plural(t, 'sources.catalogue', spores, { count: spores })}
+        {!browsable
+          ? t('sources.localNote')
+          : spores === undefined
+            ? ''
+            : plural(t, 'sources.catalogue', spores, { count: spores })}
       </span>
       <button
         type="button"
@@ -144,7 +154,11 @@ export function Sources(): React.JSX.Element {
         setSources(v); setError(false)
         // Fired once the list is in state and in parallel, never as a gate on it: one
         // unreachable source must not blank the page.
-        for (const source of readArray<SourceDto>(v) ?? []) count(source.id)
+        // Not a `local` one: its listing route is a refusal by design, and asking costs a
+        // request per boot for a count that can never arrive.
+        for (const source of readArray<SourceDto>(v) ?? []) {
+          if (source.driver !== 'local') count(source.id)
+        }
       },
       () => { setError(true) },
     )

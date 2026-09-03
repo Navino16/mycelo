@@ -217,6 +217,7 @@ export const fr: Record<StringKey, string> = {
   'spore.septum': 'Demande le contrat de plugin {range}',
   'sources.summary': '{count} registres \u00b7 {spores} spores visibles',
   'sources.summaryOne': '{count} registre \u00b7 {spores} spores visibles',
+  'sources.localNote': 'ses spores sont d\u00e9j\u00e0 install\u00e9es',
   'sources.catalogue': '{count} spores',
   'sources.catalogueOne': '{count} spore',
   'sources.edit': 'Modifier',

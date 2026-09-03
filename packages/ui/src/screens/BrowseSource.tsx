@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { api } from '../api/client.ts'
+import { api, ApiError } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
@@ -51,7 +51,10 @@ export function BrowseSource(): React.JSX.Element {
   const [offers, setOffers] = useState<readonly SporeOffer[] | null>(null)
   const [groups, setGroups] = useState<PluginGroups | null>(null)
   const [sourceError, setSourceError] = useState(false)
-  const [offersError, setOffersError] = useState(false)
+  // A 404 means the source answered and holds nothing to browse — a `local` driver says so in
+  // a sentence — so only anything else is an unreachable source, whose own words go beneath
+  // the design's sentence rather than replacing it.
+  const [offersError, setOffersError] = useState<{ unreachable: boolean, message?: string } | null>(null)
   const [term, setTerm] = useState('')
   const [shown, setShown] = useState(PER_PAGE)
 
@@ -61,8 +64,12 @@ export function BrowseSource(): React.JSX.Element {
       () => { setSourceError(true) },
     )
     api.get<readonly SporeOffer[]>(`/api/sources/${id}/spores`).then(
-      (v) => { setOffers(v); setOffersError(false) },
-      () => { setOffersError(true) },
+      (v) => { setOffers(v); setOffersError(null) },
+      (e: unknown) => {
+        const message = e instanceof ApiError ? e.message : undefined
+        const answered = e instanceof ApiError && e.status === 404
+        setOffersError({ unreachable: !answered, ...(message === undefined ? {} : { message }) })
+      },
     )
     api.get<PluginGroups>('/api/plugins').then((v) => { setGroups(v) }, () => { setGroups(null) })
   }, [id])
@@ -98,11 +105,18 @@ export function BrowseSource(): React.JSX.Element {
       {/* Priority, not both: a missing source (a stale bookmark, deleted elsewhere) is a
           different fault than a live one that cannot be reached, and only one alert renders. */}
       {sourceError && <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.generic')}</p>}
-      {!sourceError && offersError && (
-        <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('sources.unreachable')}</p>
+      {!sourceError && offersError !== null && (
+        <div role="alert" className="space-y-1">
+          <p className={`text-body ${TONE_CLASSES.warn.text}`}>
+            {offersError.unreachable ? t('sources.unreachable') : offersError.message ?? t('error.generic')}
+          </p>
+          {offersError.unreachable && offersError.message !== undefined && (
+            <p className="font-mono text-body text-text/70">{offersError.message}</p>
+          )}
+        </div>
       )}
 
-      {!sourceError && !offersError && offers !== null && (
+      {!sourceError && offersError === null && offers !== null && (
         matched.length === 0
           ? (
             <EmptyState

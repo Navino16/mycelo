@@ -413,6 +413,20 @@ describe('the generated settings form', () => {
     expect(settled.disabled).toBe(true)
   })
 
+  // Measured on `links`: the switch turned checked and inert with "Enabled. It takes effect
+  // after a restart." while the header badge two lines above still read `Disabled`. The
+  // plugins list, reloaded, reads `Awaiting restart` — the header renders from a stale join.
+  it('moves the header badge to Awaiting restart, not leaving it on Disabled', async () => {
+    mockVault({ detail: DISABLED, settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByText('Disabled')).toBeDefined() })
+    fireEvent.click(screen.getByRole('switch'))
+
+    expect(await screen.findByText('Awaiting restart')).toBeDefined()
+    expect(screen.queryByText('Disabled')).toBeNull()
+  })
+
   it('never offers Enable for an already germinated plugin with an empty schema', async () => {
     mockVault({ schema: { available: false, reason: 'no toJsonSchema' }, detail: GERMINATED })
     renderSettings()

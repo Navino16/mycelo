@@ -131,23 +131,41 @@ interface Options {
   sourceFail?: boolean
   pluginsFail?: boolean
   commandsFail?: boolean
+  /** The refusal `/spores/:name` answers with, message included, instead of a bare 500. */
+  strainsRefusal?: { status: number, message: string }
+  /** What `/api/plugins` answers once the POST has succeeded, as the substrate would. */
+  pluginsAfterInstall?: PluginGroups
+  /** What the POST answers when it succeeds; without it a POST is refused. */
+  outcome?: InoculateOutcome
 }
 
 interface Call { method: string, url: string, body: unknown }
 
 function serve(opts: Options = {}): { calls: Call[] } {
   const calls: Call[] = []
+  let installed = false
   globalThis.fetch = mock((url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     calls.push({ method, url, body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined })
     const refused = json({ error: { message: 'x' } }, 500)
     if (url === '/api/plugins') {
-      return Promise.resolve(opts.pluginsFail === true ? refused : json(opts.plugins ?? INSTALLED))
+      if (opts.pluginsFail === true) return Promise.resolve(refused)
+      const after = opts.pluginsAfterInstall
+      if (installed && after !== undefined) return Promise.resolve(json(after))
+      return Promise.resolve(json(opts.plugins ?? INSTALLED))
     }
     if (url === '/api/commands') {
       return Promise.resolve(opts.commandsFail === true ? refused : json(opts.commands ?? NO_COLLISION))
     }
+    if (method === 'POST' && opts.outcome !== undefined) {
+      installed = true
+      return Promise.resolve(json(opts.outcome))
+    }
     if (/\/spores\//.test(url)) {
+      if (opts.strainsRefusal !== undefined) {
+        const { status, message } = opts.strainsRefusal
+        return Promise.resolve(json({ error: { code: 'not-found', message } }, status))
+      }
       return Promise.resolve(opts.strainsFail === true ? refused : json(opts.spore ?? WELCOME))
     }
     if (method === 'POST') return Promise.resolve(json({ error: { message: 'unexpected POST' } }, 400))
@@ -539,5 +557,71 @@ describe('a spore that asks for nothing', () => {
     expect(await screen.findByTestId('scope-table')).toBeDefined()
     expect(screen.getByText('Requirements')).toBeDefined()
     expect(screen.queryByText('Asks the core for nothing')).toBeNull()
+  })
+})
+
+describe('a spore detail whose source cannot serve it', () => {
+  // Measured on the scratch install's own `local` source: the core answers
+  // `404 not-found "this is a local spores directory: there is nothing to browse …"` in 1 ms,
+  // and the screen discarded that whole sentence for a bare "Something went wrong".
+  it('renders the server’s own refusal rather than the generic sentence', async () => {
+    serve({
+      strainsRefusal: {
+        status: 404,
+        message: 'this is a local spores directory: there is nothing to browse,'
+          + ' its spores are already installed',
+      },
+    })
+    renderDetail('admin')
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('this is a local spores directory')
+    expect(alert.textContent).not.toBe('Something went wrong')
+  })
+
+  // The rule: only a 404 means the source answered and holds nothing here.
+  it('keeps the generic sentence for a refusal that is not a not-found', async () => {
+    serve({ strainsFail: true, sourceFail: true })
+    renderDetail()
+
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Something went wrong')
+  })
+})
+
+describe('the screen after its own install', () => {
+  const OUTCOME: InoculateOutcome = {
+    name: 'enzyme-welcome', strain: '1.3.0', warnings: [], restartRequired: true,
+  }
+  const AFTER: PluginGroups = {
+    ...INSTALLED,
+    enzyme: [plugin('enzyme-welcome', { kind: 'enzyme', strain: '1.3.0' })],
+  }
+
+  // The buttons became "Installed as 1.3.0" while the chip two lines above still read
+  // `not installed`: the screen contradicted itself in the one moment the operator watches it.
+  it('refreshes the install-state chip, rather than keeping the pre-install join', async () => {
+    serve({ outcome: OUTCOME, pluginsAfterInstall: AFTER })
+    renderDetail()
+
+    const button = await screen.findByRole('button', { name: 'Inoculate and grant 4 scopes' })
+    expect(screen.getByTestId('install-state').textContent).toBe('not installed')
+    fireEvent.click(button)
+
+    await waitFor(() => { expect(screen.getByText('Installed as 1.3.0')).toBeDefined() })
+    expect(screen.getByTestId('install-state').textContent).toBe('installed')
+  })
+
+  // The collision line reads the command corpus, and it kept the pre-install one: both joins
+  // are re-read, not just the one the chip uses.
+  it('re-reads both joins the screen renders from', async () => {
+    const { calls } = serve({ outcome: OUTCOME, pluginsAfterInstall: AFTER })
+    renderDetail()
+
+    const button = await screen.findByRole('button', { name: 'Inoculate and grant 4 scopes' })
+    fireEvent.click(button)
+
+    await waitFor(() => { expect(screen.getByText('Installed as 1.3.0')).toBeDefined() })
+    expect(calls.filter((c) => c.url === '/api/plugins')).toHaveLength(2)
+    expect(calls.filter((c) => c.url === '/api/commands')).toHaveLength(2)
   })
 })
