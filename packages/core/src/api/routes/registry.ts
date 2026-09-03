@@ -93,13 +93,17 @@ function edgesOf(spore: GerminatedEnzyme | GerminatedInhibitor): readonly GraphE
 /**
  * The declared targets of a dormant spore, as edges. A dormant spore has no `resolved` set —
  * germination stopped before it wired anything — so the graph would otherwise draw no edge at
- * all for the one break it exists to show (ruling F9). An `any_of` group contributes an edge
- * per alternative that is on the canvas; an alternative nobody installed has no node.
+ * all for the one break it exists to show (ruling F9). An `any_of` group contributes its chosen
+ * alternative alone; only a group that chose nothing offers all of them, and an alternative
+ * nobody installed has no node.
  */
 function dormantEdgesOf(dormant: Dormant, placed: ReadonlySet<string>): readonly GraphEdge[] {
   const optionalOf = new Map<string, boolean>()
   for (const requirement of dormant.requires ?? []) {
-    for (const to of requirement.targets) {
+    const targets = requirement.chosen !== undefined && placed.has(requirement.chosen)
+      ? [requirement.chosen]
+      : requirement.targets
+    for (const to of targets) {
       const target = to === 'mycelium' ? CORE_NODE : to
       if (!placed.has(target)) continue
       optionalOf.set(target, (optionalOf.get(target) ?? true) && requirement.optional)
@@ -161,11 +165,14 @@ export function registerRegistryRoutes(app: FastifyInstance, state: RuntimeState
   app.get('/api/graph', async (): Promise<GraphDto> => {
     if (state.germination.status !== 'germinated') return { nodes: [], edges: [] }
     const { registry } = state.germination.mycelium
-    // The same probe /api/health runs, so the two screens cannot disagree about one plugin.
+    // The same probe /api/health runs, so both screens read one verdict per fetch — the graph
+    // fetches once per mount and the health poll every 15 s, so they still age apart.
     const unhealthy = new Map((await aggregateHealth(registry))
       .filter((h) => h.status.state !== 'healthy')
       .map((h) => [h.rhiza, {
-        state: h.status.state as 'degraded' | 'unreachable',
+        // aggregateHealth returns the plugin's own answer unvalidated: anything but the two
+        // known faults reads as unreachable, collapsed the way Overview.tsx already does it.
+        state: h.status.state === 'degraded' ? 'degraded' as const : 'unreachable' as const,
         ...(h.status.detail === undefined ? {} : { detail: h.status.detail }),
       }]))
     const recordedKind = new Map(listInstalls(state.db).map((i) => [i.name, i.kind as SporeKind]))

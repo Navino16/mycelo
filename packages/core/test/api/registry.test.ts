@@ -3,9 +3,9 @@ import { afterEach, describe, expect, it } from 'bun:test'
 import type { CommandGroups, GraphDto } from '../../src/api/routes/registry.js'
 import {
   bootAndLogin, brokenManifest, capabilityCommand, closeBooted, cyclingPair,
-  degradedRhizaWithDependent, dormantDependency,
+  chosenAmongInstalledAlternatives, degradedRhizaWithDependent, dormantDependency,
   mandatoryAndOptionalDependency, translatedCommand, twoPluginsTwoCommands, configurable,
-  unhealthyRhiza, writeSpore } from './support.js'
+  unhealthyRhiza, wrongShapeHealth, writeSpore } from './support.js'
 import type { LoggedIn } from './support.js'
 import { recordInstall, setEnabled } from '../../src/config/store.js'
 import { setAlias } from '../../src/rhizomorph/aliases.js'
@@ -186,6 +186,23 @@ describe('/api/graph draws what actually broke', () => {
     expect(body.edges.some((e) => e.to === 'jellyfinish')).toBe(false)
   })
 
+  // review I2: with two installed alternatives the germinated one got a plain intact edge
+  // from a spore that never wired it, and the link count counted it — ruling F9 draws the
+  // dependency that broke, and only that one.
+  it('draws only the any_of alternative that was chosen, not every installed one', async () => {
+    booted = await bootAndLogin({ spores: chosenAmongInstalledAlternatives })
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/graph', headers: { cookie } })).json<GraphDto>()
+    const byName = new Map(body.nodes.map((n) => [n.name, n]))
+
+    // The premise: both alternatives are on the canvas, and they disagree.
+    expect(byName.get('jellyish')?.state).toBe('dormant')
+    expect(byName.get('plexlike')?.state).toBe('germinated')
+    expect(byName.get('picker')?.state).toBe('dormant')
+    expect(body.edges).toContainEqual({ from: 'picker', to: 'jellyish', optional: false })
+    expect(body.edges.filter((e) => e.from === 'picker')).toHaveLength(1)
+  })
+
   // A germinated spore's edges come from `resolved`, which is the stricter source: a dormant
   // spore's declared targets must not be read for one that wired.
   it('keeps drawing a germinated spore’s edges from what it resolved', async () => {
@@ -211,6 +228,20 @@ describe('/api/graph draws what actually broke', () => {
     expect(node?.reason).toBe('HTTP 401')
     // The edge itself is intact — its end is what the client reads as broken.
     expect(body.edges).toContainEqual({ from: 'seeker', to: 'wobbly', optional: false })
+  })
+
+  // review I1: aggregateHealth returns the plugin's own answer unvalidated, and a state the
+  // client has no tone for leaves `state` absent — StateBadge destructures TONE[state] and
+  // the whole graph becomes the route-error page. Collapsed the way Overview.tsx already does.
+  it('reads an unknown health state as unreachable rather than leaving the node stateless', async () => {
+    booted = await bootAndLogin({ spores: wrongShapeHealth })
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/graph', headers: { cookie } })).json<GraphDto>()
+
+    // Two shapes, two paths through `status.state`: absent, and present but unknown. The
+    // second is the one that reached StateBadge and threw; the first read as germinated.
+    expect(body.nodes.find((n) => n.name === 'garbled')).toMatchObject({ state: 'unreachable' })
+    expect(body.nodes.find((n) => n.name === 'mangled')).toMatchObject({ state: 'unreachable' })
   })
 
   it('reports a rhiza whose health() threw as unreachable, never as germinated', async () => {

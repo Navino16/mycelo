@@ -74,6 +74,19 @@ describe('resolve', () => {
     expect(media?.reason).toBe("requires rhiza 'plex', which is dormant: requires rhiza 'absent', which is not installed")
   })
 
+  // ruling F9: /api/graph draws the dependency that broke, so a dormant spore must keep the
+  // alternative it chose — the offered list alone would draw an intact edge to 'jellyfin',
+  // which nothing ever wired.
+  it('keeps a dormant spore\u2019s any_of choice, not only the alternatives it was offered', () => {
+    const r = resolve([
+      enzyme('media', [{ any_of: [{ rhiza: 'plex' }, { rhiza: 'jellyfin' }] }]),
+      rhiza('plex', [{ rhiza: 'absent' }]),
+      rhiza('jellyfin'),
+    ])
+    expect(names(r)).not.toContain('media')
+    expect(r.anyOfChoices.get('media')).toEqual([{ chosen: 'plex', alternatives: ['plex', 'jellyfin'] }])
+  })
+
   it('propagates dormancy, naming the proximate cause', () => {
     const r = resolve([enzyme('top', [{ rhiza: 'middle' }]), rhiza('middle', [{ rhiza: 'absent' }])])
     expect(names(r)).toEqual([])

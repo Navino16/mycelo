@@ -285,7 +285,9 @@ it('records the targets a dormant spore declared, so the broken dependency is kn
   ])
 })
 
-it('records every alternative of an any_of group, not only the one that was chosen', async () => {
+// The untried alternatives stay on the record (design §2.2 refuses a re-collapse), and the
+// chosen one comes with them: /api/graph draws that edge alone (review I2).
+it('records every alternative of an any_of group, and which one was chosen', async () => {
   spore('alpha', {
     'spore.yaml': 'kind: rhiza\nname: alpha\nseptum: "^0.11"\n',
     'src/index.ts': 'throw new Error("alpha explodes")\n',
@@ -298,7 +300,7 @@ it('records every alternative of an any_of group, not only the one that was chos
   const registry = await germinate([dir], createLogger())
 
   expect(registry.dormant.find((d) => d.name === 'picks-one')?.requires)
-    .toEqual([{ targets: ['alpha', 'beta'], optional: false }])
+    .toEqual([{ targets: ['alpha', 'beta'], optional: false, chosen: 'alpha' }])
 })
 
 // A manifest that never parsed has no requirements to record, and the directory is all the

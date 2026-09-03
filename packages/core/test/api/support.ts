@@ -349,11 +349,6 @@ export const unhealthyRhiza: SporeWriter = (sporesDir) => {
 }
 
 /**
- * `cyclingPair` plus a module each. `enablePlugin` imports the module, so a module-less
- * spore cannot be enabled through `POST /api/plugins/:name/enable`; cycle detection still
- * precedes every import, so the pair cycles all the same (milestone, spec §15 steps 6-8).
- */
-/**
  * A rhiza whose configuration is refused, and an enzyme that requires it: the enzyme goes
  * dormant *because* the rhiza did. The measured substrate's own shape (`now-watching` on
  * `plex`), and the one break /api/graph exists to draw.
@@ -420,6 +415,76 @@ export const degradedRhizaWithDependent: SporeWriter = (sporesDir) => {
   })
 }
 
+/**
+ * Two rhizas whose `health()` answers something no state vocabulary covers: a bare string
+ * (the shape germinate.test.ts's own RHIZA_BODY writes), and a status carrying a state the
+ * client has no tone for. `aggregateHealth` returns both unvalidated (review I1).
+ */
+export const wrongShapeHealth: SporeWriter = (sporesDir) => {
+  const body = (health: string): string => `
+      export default {
+        create: () => ({
+          start: () => Promise.resolve(),
+          stop: () => Promise.resolve(),
+          health: () => Promise.resolve(${health}),
+          api: {},
+        }),
+      }
+    `
+  writeSpore(sporesDir, 'garbled', {
+    'spore.yaml': 'kind: rhiza\nname: garbled\nseptum: "^0.11"\n',
+    'src/index.ts': body("'healthy'"),
+  })
+  writeSpore(sporesDir, 'mangled', {
+    'spore.yaml': 'kind: rhiza\nname: mangled\nseptum: "^0.11"\n',
+    'src/index.ts': body("{ state: 'ok', checkedAt: new Date() }"),
+  })
+}
+
+/**
+ * An `any_of` over two alternatives that are *both* installed: the chosen one dormant, the
+ * other germinated. `dormantDependency` installs only one alternative and so cannot tell an
+ * edge to the choice from an edge to every alternative (ruling F9).
+ */
+export const chosenAmongInstalledAlternatives: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'jellyish', {
+    'spore.yaml': 'kind: rhiza\nname: jellyish\nseptum: "^0.11"\n',
+    'src/index.ts': `
+      export default {
+        configSchema: {
+          safeParse: () => ({
+            success: false,
+            error: { issues: [{ path: ['url'], message: 'missing required field' }] },
+          }),
+          toJsonSchema: () => ({
+            type: 'object', properties: { url: { type: 'string' } }, required: ['url'],
+          }),
+        },
+        create: () => ({
+          start: () => Promise.resolve(),
+          stop: () => Promise.resolve(),
+          health: () => Promise.resolve({ state: 'healthy', checkedAt: new Date() }),
+          api: {},
+        }),
+      }
+    `,
+  })
+  writeSpore(sporesDir, 'plexlike', {
+    'spore.yaml': 'kind: rhiza\nname: plexlike\nseptum: "^0.11"\n', 'src/index.ts': RHIZA_STUB,
+  })
+  // 'jellyish' first, so anastomoses.ts chooses the alternative that is dormant.
+  writeSpore(sporesDir, 'picker', {
+    'spore.yaml': 'kind: enzyme\nname: picker\nseptum: "^0.11"\ncommands:\n'
+      + '  - name: pick\n    description: Pick\n    respond: pick.text\n'
+      + 'requires:\n  - any_of:\n      - rhiza: jellyish\n      - rhiza: plexlike\n',
+  })
+}
+
+/**
+ * `cyclingPair` plus a module each. `enablePlugin` imports the module, so a module-less
+ * spore cannot be enabled through `POST /api/plugins/:name/enable`; cycle detection still
+ * precedes every import, so the pair cycles all the same (milestone, spec §15 steps 6-8).
+ */
 export const cyclingPairWithModules: SporeWriter = (sporesDir) => {
   cyclingPair(sporesDir)
   for (const name of ['alpha', 'beta']) writeSpore(sporesDir, name, { 'src/index.ts': RHIZA_STUB })

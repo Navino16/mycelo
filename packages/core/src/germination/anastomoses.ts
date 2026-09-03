@@ -33,6 +33,11 @@ export interface ResolvedSpore {
 export interface Resolution {
   order: readonly ResolvedSpore[]
   dormant: readonly Dormant[]
+  /**
+   * Every candidate's any_of outcomes, the dormant ones included — `order` holds survivors
+   * only, and a spore that went dormant here is exactly the one whose choice the graph draws.
+   */
+  anyOfChoices: ReadonlyMap<string, readonly AnyOfChoice[]>
 }
 
 export class CycleError extends Error {
@@ -196,9 +201,11 @@ export function resolve(reads: readonly ReadManifest[]): Resolution {
   // Steps 2-4: any_of collapse, mandatory targets, scopes — per candidate, in that
   // priority, against the candidate pool alone.
   const primaryReasons = new Map<string, string>()
+  const anyOfChoices = new Map<string, readonly AnyOfChoice[]>()
   const alive = new Map<string, AliveNode>()
   for (const [name, read] of candidates) {
     const evaluated = evaluate(read.manifest.requires ?? [], candidates)
+    anyOfChoices.set(name, evaluated.anyOf)
     if (evaluated.dormantReason !== undefined) {
       primaryReasons.set(name, evaluated.dormantReason)
       continue
@@ -256,5 +263,5 @@ export function resolve(reads: readonly ReadManifest[]): Resolution {
     }
   })
 
-  return { order, dormant }
+  return { order, dormant, anyOfChoices }
 }

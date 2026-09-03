@@ -43,6 +43,11 @@ export interface GerminatedInhibitor {
 export interface DormantRequirement {
   targets: readonly string[]
   optional: boolean
+  /**
+   * The alternative an `any_of` collapsed to, when one was chosen: the only target this spore
+   * would have wired, and so the only edge /api/graph may draw for it (ruling F9).
+   */
+  chosen?: string
 }
 
 export interface Dormant {

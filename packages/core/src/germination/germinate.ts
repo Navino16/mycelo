@@ -9,6 +9,7 @@ import type { LocaleMessages } from '../i18n/catalog.js'
 import type { Db } from '../persistence/db.js'
 import { describeConfigError } from '../support/thrown.js'
 import { resolve, targetName } from './anastomoses.js'
+import type { AnyOfChoice } from './anastomoses.js'
 import { discover } from './discover.js'
 import { loadModule } from './load.js'
 import { isFailure, readManifest } from './manifest.js'
@@ -22,19 +23,32 @@ import type {
 import { capabilityShapeError, enzymeShapeError, hyphaShapeError, inhibitorShapeError, rhizaShapeError, unreferencedHandlers } from './shape.js'
 
 /**
+ * A manifest's `requires:` as bare target names — `radarr@^2` is the node called `radarr` —
+ * each any_of entry carrying the alternative resolution collapsed it to. Matched on the
+ * alternative list rather than by index: `evaluate` records no choice for a group that
+ * resolved to the mycelium.
+ */
+function dormantRequirements(
+  manifest: Manifest, choices: readonly AnyOfChoice[],
+): readonly DormantRequirement[] {
+  const pending = [...choices]
+  return (manifest.requires ?? []).map((requirement) => {
+    if (!('any_of' in requirement)) {
+      return { targets: [targetName(requirement.rhiza)], optional: requirement.optional }
+    }
+    const targets = requirement.any_of.map((a) => targetName(a.rhiza))
+    const at = pending.findIndex((c) => c.alternatives.length === targets.length
+      && c.alternatives.every((a, i) => a === targets[i]))
+    const chosen = at === -1 ? undefined : pending.splice(at, 1)[0]?.chosen
+    return { targets, optional: false, ...(chosen === undefined ? {} : { chosen }) }
+  })
+}
+
+/**
  * Walks the spores directory, resolves dependencies, then loads only the survivors in
  * topological order. A spore that fails goes dormant with a reason; only a command
  * collision halts the whole phase (spec §8). CycleError propagates out untouched.
  */
-/** A manifest's `requires:` as bare target names — `radarr@^2` is the node called `radarr`. */
-function dormantRequirements(manifest: Manifest): readonly DormantRequirement[] {
-  return (manifest.requires ?? []).map((requirement) => (
-    'any_of' in requirement
-      ? { targets: requirement.any_of.map((a) => targetName(a.rhiza)), optional: false }
-      : { targets: [targetName(requirement.rhiza)], optional: requirement.optional }
-  ))
-}
-
 export async function germinate(
   sporesDirs: readonly string[],
   logger: Logger,
@@ -258,7 +272,10 @@ export async function germinate(
 
   // One place rather than fourteen `dormant.push` sites: `reads` holds every manifest that
   // parsed, including those that went dormant later in this walk.
-  const declared = new Map(reads.map((read) => [read.manifest.name, dormantRequirements(read.manifest)]))
+  const declared = new Map(reads.map((read) => [
+    read.manifest.name,
+    dormantRequirements(read.manifest, resolution.anyOfChoices.get(read.manifest.name) ?? []),
+  ]))
   const recorded = dormant.map((entry) => {
     const requires = declared.get(entry.name)
     return requires === undefined ? entry : { ...entry, requires }
