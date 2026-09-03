@@ -34,6 +34,11 @@ const GERMINATED: RuntimeHealth = {
 
 const DEGRADED: RuntimeHealth = { ...GERMINATED, mode: 'degraded' }
 
+const RADARR_401: RuntimeHealth = {
+  ...GERMINATED,
+  rhizas: [{ rhiza: 'radarr', status: { state: 'degraded', detail: 'HTTP 401', checkedAt: '2026-09-03T18:00:00.000Z' } }],
+}
+
 function serve(body: unknown): void {
   globalThis.fetch = mock(() => Promise.resolve(new Response(JSON.stringify(body), {
     headers: { 'content-type': 'application/json' },
@@ -61,6 +66,40 @@ function renderDetail(health: RuntimeHealth | null = GERMINATED, at = '/plugins/
 }
 
 describe('the plugin detail screen', () => {
+  // finding F17: /api/plugins answers `germinated` for a rhiza that germinated and then
+  // stopped answering, so the page an operator opens to diagnose it was the only surface in
+  // the SPA with no word about the 401 — the Overview and the graph both had it.
+  it('reads a germinated rhiza’s live health, not only its germination verdict', async () => {
+    serve(DETAIL)
+    renderDetail(RADARR_401)
+
+    await screen.findByRole('heading', { level: 1, name: 'radarr' })
+    expect(screen.getByText('Degraded')).toBeDefined()
+    expect(screen.getByText('HTTP 401')).toBeDefined()
+    expect(screen.queryByText('Germinated')).toBeNull()
+  })
+
+  // Two controls, or every plugin reads as failing: a rhiza the probe called healthy, and one
+  // the probe never mentions at all (every enzyme, hypha and inhibitor).
+  it('leaves a rhiza its own probe calls healthy on its germination verdict', async () => {
+    serve(DETAIL)
+    renderDetail({
+      ...GERMINATED,
+      rhizas: [{ rhiza: 'radarr', status: { state: 'healthy', checkedAt: '2026-09-03T18:00:00.000Z' } }],
+    })
+
+    await screen.findByRole('heading', { level: 1, name: 'radarr' })
+    expect(screen.getByText('Germinated')).toBeDefined()
+  })
+
+  it('leaves a plugin no health report mentions on its germination verdict', async () => {
+    serve(DETAIL)
+    renderDetail()
+
+    await screen.findByRole('heading', { level: 1, name: 'radarr' })
+    expect(screen.getByText('Germinated')).toBeDefined()
+  })
+
   it('says something went wrong when the fetch fails, rather than staying blank', async () => {
     serveError()
     renderDetail()

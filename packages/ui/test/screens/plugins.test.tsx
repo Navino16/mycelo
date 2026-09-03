@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter } from 'react-router'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { Plugins } from '../../src/screens/Plugins.tsx'
-import type { PluginDto, PluginGroups } from '../../src/api/types.ts'
+import type { PluginDto, PluginGroups, RuntimeHealth } from '../../src/api/types.ts'
 
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
@@ -25,6 +26,22 @@ function serve(body: unknown): void {
   })))
 }
 
+const GERMINATED: RuntimeHealth = {
+  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0,
+}
+
+// PluginRow reads /api/health for a rhiza that germinated and then stopped answering
+// (finding F17), and useHealth throws without a provider.
+function renderPlugins(health: RuntimeHealth | null = GERMINATED): void {
+  render(
+    <I18nProvider>
+      <HealthContext value={{ health, error: false, refresh: () => Promise.resolve() }}>
+        <MemoryRouter><Plugins /></MemoryRouter>
+      </HealthContext>
+    </I18nProvider>,
+  )
+}
+
 function serveError(): void {
   globalThis.fetch = mock(() => Promise.resolve(new Response('{"error":{"message":"x"}}', {
     status: 500, headers: { 'content-type': 'application/json' },
@@ -34,7 +51,7 @@ function serveError(): void {
 describe('the plugins list', () => {
   it('names every plugin of a group, not just the first', async () => {
     serve(GROUPS)
-    render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
+    renderPlugins()
 
     await waitFor(() => { expect(screen.getByText('radarr')).toBeDefined() })
     expect(screen.getByText('plex')).toBeDefined()
@@ -46,7 +63,7 @@ describe('the plugins list', () => {
   // rhizae, not merely all of them.
   it('renders the kind sections in hypha, rhiza, enzyme, inhibitor order', async () => {
     serve(GROUPS)
-    render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
+    renderPlugins()
 
     await waitFor(() => { expect(screen.getByText('Hyphae')).toBeDefined() })
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
@@ -58,7 +75,7 @@ describe('the plugins list', () => {
   // brief §6: the subtitle is what makes the vocabulary learnable.
   it('carries the plain-language subtitle beside each mycological header', async () => {
     serve(GROUPS)
-    render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
+    renderPlugins()
 
     await waitFor(() => { expect(screen.getByText('Hyphae')).toBeDefined() })
     expect(screen.getByText('channels')).toBeDefined()
@@ -68,7 +85,7 @@ describe('the plugins list', () => {
   // brief §5: the metaphor never replaces information.
   it('shows the literal reason beside a dormant plugin, never the word alone', async () => {
     serve(GROUPS)
-    render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
+    renderPlugins()
 
     await waitFor(() => { expect(screen.getByText('plex')).toBeDefined() })
     expect(screen.getByText(/radarr is not installed/)).toBeDefined()
@@ -77,7 +94,7 @@ describe('the plugins list', () => {
   // 'pending' is one phase old and its whole point is being visible.
   it('renders a pending plugin as awaiting a restart rather than as breakage', async () => {
     serve(GROUPS)
-    render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
+    renderPlugins()
 
     await waitFor(() => { expect(screen.getByText('help')).toBeDefined() })
     expect(screen.getByText('Awaiting restart')).toBeDefined()
@@ -85,7 +102,7 @@ describe('the plugins list', () => {
 
   it('renders a disabled plugin with its own word, distinct from dormant', async () => {
     serve({ ...GROUPS, hypha: [{ name: 'quiet', kind: 'hypha', commands: [], state: 'disabled', enabled: false }] })
-    render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
+    renderPlugins()
 
     // Scoped to the section: the filter chip row carries the same word (1b's `Disabled 1`).
     const section = await screen.findByTestId('kind-section-hypha')
@@ -95,7 +112,7 @@ describe('the plugins list', () => {
 
   it('names the empty message inside the kind that has nothing, not just anywhere on screen', async () => {
     serve(GROUPS)
-    render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
+    renderPlugins()
 
     const inhibitorSection = await screen.findByTestId('kind-section-inhibitor')
     expect(within(inhibitorSection).getByText('No plugin of this kind')).toBeDefined()
@@ -105,7 +122,7 @@ describe('the plugins list', () => {
   // design §7.4: a plugin nobody installed through a source still says where it came from.
   it('marks a plugin with no source as checked out locally', async () => {
     serve(GROUPS)
-    render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
+    renderPlugins()
 
     await waitFor(() => { expect(screen.getByText('signal')).toBeDefined() })
     expect(screen.getAllByText('checked out locally').length).toBeGreaterThan(0)
@@ -113,14 +130,14 @@ describe('the plugins list', () => {
 
   it('says something went wrong when the fetch itself fails, rather than staying blank', async () => {
     serveError()
-    render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
+    renderPlugins()
 
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Something went wrong')
   })
 
   it('renders the list on success, with no error banner', async () => {
     serve(GROUPS)
-    render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
+    renderPlugins()
 
     await waitFor(() => { expect(screen.getByText('signal')).toBeDefined() })
     expect(screen.queryByRole('alert')).toBeNull()
@@ -151,7 +168,7 @@ const SCALE: PluginGroups = {
 describe('the plugins list at scale', () => {
   it('keeps every kind\'s plugins inside that kind\'s own section, none scattered or dropped', async () => {
     serve(SCALE)
-    render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
+    renderPlugins()
 
     await waitFor(() => { expect(screen.getByTestId('kind-section-hypha')).toBeDefined() })
 
@@ -169,11 +186,42 @@ describe('the plugins list at scale', () => {
   })
 })
 
-const EMPTY_GROUPS: PluginGroups = { hypha: [], rhiza: [], enzyme: [], inhibitor: [], unknown: [] }
+describe('a germinated rhiza that stopped answering', () => {
+  // finding F17: /api/plugins knows only germination's verdict, so the row read `Germinated`
+  // with an empty reason cell while the Overview said `radarr · Degraded · HTTP 401` and the
+  // graph drew the node amber. 1b-plugins-desktop.png draws health in the row.
+  it('reads the live health on the row, not only the germination verdict', async () => {
+    serve(GROUPS)
+    renderPlugins({
+      ...GERMINATED,
+      rhizas: [{ rhiza: 'radarr', status: { state: 'degraded', detail: 'HTTP 401', checkedAt: '2026-09-03T18:00:00.000Z' } }],
+    })
 
-function renderPlugins(): void {
-  render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
-}
+    await waitFor(() => { expect(screen.getByText('radarr')).toBeDefined() })
+    const row = screen.getByText('radarr').closest('li')
+    expect(row).not.toBeNull()
+    expect(within(row as HTMLElement).getByText('Degraded')).toBeDefined()
+    expect(within(row as HTMLElement).getByText('HTTP 401')).toBeDefined()
+    // 'signal' is the other germinated plugin: exactly one badge is left, not two.
+    expect(screen.getAllByText('Germinated')).toHaveLength(1)
+  })
+
+  // A rhiza answering `unreachable` is the second state, and the badge must not collapse to
+  // whichever of the two was written first.
+  it('names an unreachable rhiza as unreachable, not as degraded', async () => {
+    serve(GROUPS)
+    renderPlugins({
+      ...GERMINATED,
+      rhizas: [{ rhiza: 'radarr', status: { state: 'unreachable', detail: 'connection refused', checkedAt: '2026-09-03T18:00:00.000Z' } }],
+    })
+
+    await waitFor(() => { expect(screen.getByText('radarr')).toBeDefined() })
+    const row = screen.getByText('radarr').closest('li')
+    expect(within(row as HTMLElement).getByText('Unreachable')).toBeDefined()
+  })
+})
+
+const EMPTY_GROUPS: PluginGroups = { hypha: [], rhiza: [], enzyme: [], inhibitor: [], unknown: [] }
 
 describe('the plugins list, sorted state-first', () => {
   // design note 1b: rows are sorted state-first inside each group, so a dormant plugin

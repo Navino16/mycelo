@@ -113,6 +113,14 @@ const COLLIDING: CommandGroups = {
 const COLLIDING_BY_ALIAS: CommandGroups = {
   'enzyme-other': [command('enzyme-other', 'films.search', 'welcome.test')],
 }
+/**
+ * The spore's own commands, as germination already routes them: `enzyme-welcome` is installed
+ * and declares exactly what the consent page offers (finding F18).
+ */
+const OWN_COMMANDS: CommandGroups = {
+  'enzyme-welcome': [command('enzyme-welcome', 'welcome.test'), command('enzyme-welcome', 'welcome.stats')],
+  'enzyme-third': [command('enzyme-third', 'calendar.show')],
+}
 /** Renamed AWAY from it: the old declared name is free, so nothing collides. */
 const FREED_BY_ALIAS: CommandGroups = {
   'enzyme-other': [command('enzyme-other', 'welcome.test', 'films.renamed')],
@@ -384,6 +392,20 @@ describe('what installing will bring in', () => {
 
     await waitFor(() => { expect(screen.getByText('Commands it will add')).toBeDefined() })
     expect(screen.getByText('Collides with an installed command: welcome.test')).toBeDefined()
+  })
+
+  // finding F18: clicking an already-installed spore in a catalogue warned "Collides with an
+  // installed command: welcome.test, welcome.stats" — against its own routes, under the same
+  // plugin name.
+  it('does not collide an installed spore with its own commands', async () => {
+    serve({ commands: OWN_COMMANDS })
+    renderDetail()
+
+    await waitFor(() => { expect(screen.getByText('Commands it will add')).toBeDefined() })
+    expect(screen.queryByText(/Collides/)).toBeNull()
+    // The other plugin's one command is still counted, so the exclusion is by name and not a
+    // corpus emptied wholesale.
+    expect(screen.getByText('No collision with the 1 command already installed.')).toBeDefined()
   })
 
   it('sees no collision with a command renamed away from the offer name', async () => {

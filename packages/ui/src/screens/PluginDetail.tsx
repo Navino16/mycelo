@@ -13,6 +13,7 @@ import { TONE_CLASSES } from '../components/tone.ts'
 import { useHealth } from '../health.tsx'
 import { plural, useT } from '../i18n.tsx'
 import { kindLabel, pluginTrail } from '../kinds.ts'
+import { faultOf } from '../rhizaHealth.ts'
 import type { MutationResult, PluginDetailDto } from '../api/types.ts'
 import type { Tab } from '../components/Tabs.tsx'
 
@@ -75,6 +76,9 @@ export function PluginDetail(): React.JSX.Element {
   }
 
   const dormant = plugin.state === 'dormant'
+  // finding F17: the page an operator opens to diagnose a plugin was the least informed
+  // surface in the SPA — /api/plugins knows germination's verdict, never the live probe's.
+  const fault = faultOf(health, plugin.name)
   const declared = commands ?? []
   const tabs: readonly Tab[] = [
     { id: 'diagnosis', label: t('detail.tabDiagnosis') },
@@ -92,8 +96,11 @@ export function PluginDetail(): React.JSX.Element {
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="font-mono text-page">{plugin.name}</h1>
-            <StateBadge state={plugin.state} />
+            <StateBadge state={fault?.state ?? plugin.state} />
           </div>
+          {fault?.detail !== undefined && (
+            <p className={`font-mono text-body ${TONE_CLASSES.warn.text}`}>{fault.detail}</p>
+          )}
           {plugin.description !== undefined && (
             <p className="text-body text-text/70">{plugin.description}</p>
           )}

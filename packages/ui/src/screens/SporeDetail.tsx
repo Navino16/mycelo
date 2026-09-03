@@ -105,10 +105,14 @@ function Requirements(
 }
 
 function CommandsAdded(
-  { declared, groups }: { declared: readonly CommandCapabilityDto[], groups: CommandGroups | null },
+  { name, declared, groups }: {
+    name: string, declared: readonly CommandCapabilityDto[], groups: CommandGroups | null,
+  },
 ): React.JSX.Element {
   const t = useT()
-  const existing = allCommands(groups)
+  // finding F18: an installed spore's consent page warned that it collided with its own
+  // routes. Same plugin name, same commands — a reinstall replaces them rather than clashing.
+  const existing = allCommands(groups).filter((c) => c.plugin !== name)
   // `command`, not `declared`: germination keys its route table by the alias-resolved name
   // (registry.ts:101), and a check the runtime disagrees with is broken either way.
   const clashes = declared.filter((c) => existing.some((e) => e.command === c.name)).map((c) => c.name)
@@ -315,7 +319,9 @@ export function SporeDetail(): React.JSX.Element {
                   <Requirements requires={requires} installed={installed} />
                 </section>
               )}
-          {declaredCommands.length > 0 && <CommandsAdded declared={declaredCommands} groups={commands} />}
+          {declaredCommands.length > 0 && (
+            <CommandsAdded name={spore.name} declared={declaredCommands} groups={commands} />
+          )}
         </div>
       </div>
 

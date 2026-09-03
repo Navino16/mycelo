@@ -1,8 +1,10 @@
 import { Link } from 'react-router'
+import { useHealth } from '../health.tsx'
 import { useT } from '../i18n.tsx'
 import { Dot } from './Dot.tsx'
 import { StateBadge, toneOf } from './StateBadge.tsx'
 import { TONE_CLASSES } from './tone.ts'
+import { faultOf } from '../rhizaHealth.ts'
 import type { PluginDto } from '../api/types.ts'
 
 /**
@@ -11,7 +13,13 @@ import type { PluginDto } from '../api/types.ts'
  */
 export function PluginRow({ plugin }: { plugin: PluginDto }): React.JSX.Element {
   const t = useT()
-  const tone = toneOf(plugin.state)
+  const { health } = useHealth()
+  // finding F17: /api/plugins answers germination's verdict alone, so a rhiza that germinated
+  // and then stopped answering read `Germinated` here while the Overview had its 401.
+  const fault = faultOf(health, plugin.name)
+  const state = fault?.state ?? plugin.state
+  const note = plugin.reason ?? fault?.detail
+  const tone = toneOf(state)
   return (
     <li className="grid items-baseline gap-x-3 gap-y-1 p-3 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_6rem_8rem_minmax(0,2fr)]">
       <span className="flex min-w-0 items-center gap-2">
@@ -31,13 +39,13 @@ export function PluginRow({ plugin }: { plugin: PluginDto }): React.JSX.Element 
         </span>
       </span>
       <span className="font-mono text-meta-lg text-text/60">{plugin.strain ?? ''}</span>
-      <span className="justify-self-start"><StateBadge state={plugin.state} /></span>
+      <span className="justify-self-start"><StateBadge state={state} /></span>
       {/* R7: the cause sits on the row, never behind a hover — clamped like the two columns
           beside it, since a real Zod refusal runs to 200 characters and 1b's model is a note
           with the full text on the diagnosis card the name links to. */}
-      {plugin.reason !== undefined && (
+      {note !== undefined && (
         <span className={`truncate text-body md:text-right ${TONE_CLASSES[tone].text}`}>
-          {plugin.reason}
+          {note}
         </span>
       )}
     </li>
