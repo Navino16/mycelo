@@ -2,15 +2,19 @@ import { Link } from 'react-router'
 import { TONE_CLASSES } from './tone.ts'
 import type { Tone } from './tone.ts'
 
+/**
+ * `value` undefined renders nothing where the number would be: a count nobody confirmed is
+ * withheld, and a marker in its place is one more thing to learn the meaning of.
+ */
 export function Tile(
   { label, value, note, noteTone = 'idle', to }: {
-    label: string, value: string, note?: string, noteTone?: Tone, to?: string,
+    label: string, value?: string, note?: string, noteTone?: Tone, to?: string,
   },
 ): React.JSX.Element {
   const body = (
     <>
       <p className="text-meta uppercase tracking-wide text-text/60">{label}</p>
-      <p className="text-hero font-medium">{value}</p>
+      {value !== undefined && <p className="text-hero font-medium">{value}</p>}
       {note !== undefined && <p className={`text-meta-lg ${TONE_CLASSES[noteTone].text}`}>{note}</p>}
     </>
   )

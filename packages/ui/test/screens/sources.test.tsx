@@ -164,7 +164,18 @@ describe('the sources list', () => {
     expect(screen.getByTestId('source-2')).toBeDefined()
     expect(within(screen.getByTestId('source-2')).queryByText(/\d+ spores/)).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
-    expect(screen.getByText('2 registries · 61 spores visible')).toBeDefined()
+    // The summary is withheld, never under-summed: `2 registries · 61 spores visible` while
+    // one source has not answered is a wrong number with no marker on it.
+    expect(screen.queryByText(/registries · \d+ spores visible/)).toBeNull()
+  })
+
+  // Discriminates withholding from never rendering: the same table with every count in
+  // prints the sum.
+  it('sums the catalogue only once every source has answered', async () => {
+    mockApi([OFFICIAL, THIRD_PARTY], { catalogues: { 1: 61, 2: 4 } })
+    renderSources()
+
+    expect(await screen.findByText('2 registries · 65 spores visible')).toBeDefined()
   })
 
   // The standing singular ruling: '1 registries · 1 spores' is what a plural-only key says.

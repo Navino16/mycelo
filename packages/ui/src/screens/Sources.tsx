@@ -196,15 +196,18 @@ export function Sources(): React.JSX.Element {
     )
   }
 
-  const known = list.map((s) => counts[s.id]).filter((n): n is number => n !== undefined)
-  const total = known.reduce((sum, n) => sum + n, 0)
+  // Withheld whenever one source has not answered, never under-summed: dropping an unknown
+  // from the sum prints a wrong number with no marker (Roles gates its own summary the same way).
+  const total = list.every((s) => counts[s.id] !== undefined)
+    ? list.reduce((sum, s) => sum + (counts[s.id] ?? 0), 0)
+    : undefined
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-page font-semibold">{t('sources.title')}</h1>
-          {sources !== null && (
+          {sources !== null && total !== undefined && (
             <p className="text-meta-lg text-text/60">
               {t(
                 list.length === 1 ? 'sources.summaryOne' : 'sources.summary',

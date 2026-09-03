@@ -8,7 +8,7 @@ import type { MutationResult } from '../api/types.ts'
 
 /** Replaces the route body while an enforcing inhibitor is blocked (design note 1a). */
 export function MuteTakeover(
-  { names, blocked }: { names: readonly string[], blocked: number },
+  { names, blocked }: { names: readonly string[], blocked?: number },
 ): React.JSX.Element {
   const t = useT()
   const { refresh } = useHealth()
@@ -44,10 +44,14 @@ export function MuteTakeover(
     <section role="alert" className={`space-y-4 rounded-xl border p-5 ${crit.border} ${crit.bg}`}>
       <h1 className={`text-hero font-semibold ${crit.text}`}>{t('health.blocked.title')}</h1>
       <p className="max-w-2xl text-body">{t('health.blocked.body', { names: names.join(', ') })}</p>
-      <div>
-        <p className="text-meta uppercase tracking-wide text-text/60">{t('health.blocked.dropped')}</p>
-        <p className={`text-hero font-medium ${crit.text}`}>{String(blocked)}</p>
-      </div>
+      {/* Withheld, not 0: `Messages dropped 0` for a counter the payload never carried reads
+          as an affirmative "nothing was dropped" on the one screen that must not lie. */}
+      {blocked !== undefined && (
+        <div>
+          <p className="text-meta uppercase tracking-wide text-text/60">{t('health.blocked.dropped')}</p>
+          <p className={`text-hero font-medium ${crit.text}`}>{String(blocked)}</p>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"

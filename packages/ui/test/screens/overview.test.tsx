@@ -366,6 +366,31 @@ describe('the mute takeover', () => {
     expect(screen.getByText('41')).toBeDefined()
   })
 
+  // I12: `Messages dropped 0` for a counter the payload never carried reads as an affirmative
+  // "nothing was dropped", on the one screen the design says makes every other number
+  // irrelevant. The label goes with the number.
+  it('withholds the dropped count when the payload carries none, rather than printing 0', async () => {
+    await withHealth({
+      ...GERMINATED,
+      enforcingBlocked: ['group-gate'],
+      blockedSinceBoot: undefined as unknown as number,
+    })
+    const takeover = screen.getByRole('alert')
+
+    expect(within(takeover).getByText('The bot is answering nobody')).toBeDefined()
+    expect(within(takeover).queryByText('Messages dropped')).toBeNull()
+    expect(within(takeover).queryByText('0')).toBeNull()
+  })
+
+  // Discriminates withholding from hiding the block: a confirmed zero is a fact and prints.
+  it('prints a confirmed zero, which is not the same as a counter it could not read', async () => {
+    await withHealth({ ...GERMINATED, enforcingBlocked: ['group-gate'], blockedSinceBoot: 0 })
+    const takeover = screen.getByRole('alert')
+
+    expect(within(takeover).getByText('Messages dropped')).toBeDefined()
+    expect(within(takeover).getByText('0')).toBeDefined()
+  })
+
   // §2 1c: POST /api/plugins/:name/disable is mounted and had no caller until this screen.
   it('disables the first blocked inhibitor and re-reads the health', async () => {
     let refreshed = 0
@@ -856,6 +881,16 @@ describe('the guided path out of an empty substrate', () => {
     expect(screen.getByLabelText('Search plugins, people, commands')).toBeDefined()
   })
 
+  // The tile convention: a refused route leaves the tile standing with nothing where its
+  // number would be — never a 0, which would read as a substrate with no source at all.
+  it('withholds a tile number for the one route that was refused, keeping the tile', async () => {
+    await withHealth(GERMINATED, { ...BUSY, refuse: ['/api/sources'] })
+
+    expect(screen.getByText('Sources')).toBeDefined()
+    expect(screen.getByText('128')).toBeDefined()
+    expect(screen.queryByText('—')).toBeNull()
+  })
+
   // Discriminates the plugin slot from the rest: the corpus and the health card go, the four
   // counts that come from other routes stay.
   it('keeps the people and roles counts when only the plugin route was refused', async () => {
@@ -863,19 +898,29 @@ describe('the guided path out of an empty substrate', () => {
 
     expect(screen.getByText('128')).toBeDefined()
     expect(screen.getByText('default: guest')).toBeDefined()
-    expect(within(sectionOf('Substrate health')).getByText('of — plugins germinated')).toBeDefined()
+    expect(within(sectionOf('Substrate health')).queryByText(/plugins germinated/)).toBeNull()
     expect(screen.queryByText('3 unavailable')).toBeNull()
   })
 
-  // Finding 6: `of 0 plugins germinated` reads as an empty substrate, which is a different
-  // fact from a total nobody could confirm.
-  it('never prints a zero total for a count it could not read', async () => {
+  // Finding 6, under the branch's one convention: `of 0 plugins germinated` reads as an empty
+  // substrate, and a marker in its place is one more thing to learn — so the whole sentence
+  // and the number above it are withheld. `—` means a confirmed-empty field elsewhere.
+  it('withholds the hero sentence entirely for a count it could not read', async () => {
     await withHealth(GERMINATED, 'fail')
     const card = sectionOf('Substrate health')
 
-    expect(within(card).getByText('of — plugins germinated')).toBeDefined()
-    expect(within(card).queryByText(/of 0 plugins/)).toBeNull()
-    expect(within(card).getByTestId('germinated-count').textContent).toBe('—')
+    expect(within(card).queryByText(/plugins germinated/)).toBeNull()
+    expect(within(card).queryByTestId('germinated-count')).toBeNull()
+    expect(within(card).queryByText('—')).toBeNull()
+  })
+
+  // The other half of the convention: a confirmed count renders as a number, zero included.
+  it('prints a confirmed total, so withholding is not the same as an empty substrate', async () => {
+    await withHealth(GERMINATED, BUSY)
+    const card = sectionOf('Substrate health')
+
+    expect(within(card).getByText('of 5 plugins germinated')).toBeDefined()
+    expect(within(card).getByTestId('germinated-count').textContent).toBe('2')
   })
 
   // Decision: an unreadable count is reported through its own alert, matching every other

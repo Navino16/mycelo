@@ -205,7 +205,7 @@ export function Overview(): React.JSX.Element {
             <>
               <MuteTakeover
                 names={enforcingBlocked ?? []}
-                blocked={Number.isFinite(health?.blockedSinceBoot) ? Number(health?.blockedSinceBoot) : 0}
+                blocked={Number.isFinite(health?.blockedSinceBoot) ? Number(health?.blockedSinceBoot) : undefined}
               />
               {/* Both mute renders keep the substrate's three numbers, collapsed: none of it
                   matters while the bot is mute, but the operator still gets to read it. */}
@@ -233,7 +233,7 @@ export function Overview(): React.JSX.Element {
                 <div className="grid grid-cols-2 gap-3">
                   <Tile
                     label={t('tile.people')}
-                    value={body?.people === undefined ? '—' : String(body.people)}
+                    value={body?.people === undefined ? undefined : String(body.people)}
                     note={body?.neverReviewed !== undefined && body.neverReviewed > 0
                       ? t('tile.peopleNote', { count: body.neverReviewed })
                       : undefined}
@@ -241,7 +241,7 @@ export function Overview(): React.JSX.Element {
                   />
                   <Tile
                     label={t('tile.commands')}
-                    value={body?.commands === undefined ? '—' : String(body.commands.length)}
+                    value={body?.commands === undefined ? undefined : String(body.commands.length)}
                     note={stats !== undefined && stats.unavailable > 0
                       ? t('tile.commandsNote', { count: stats.unavailable })
                       : undefined}
@@ -249,12 +249,12 @@ export function Overview(): React.JSX.Element {
                   />
                   <Tile
                     label={t('tile.roles')}
-                    value={body?.roles === undefined ? '—' : String(body.roles.length)}
+                    value={body?.roles === undefined ? undefined : String(body.roles.length)}
                     note={rolesNote(t, body?.defaultRole)}
                   />
                   <Tile
                     label={t('tile.sources')}
-                    value={body?.sources === undefined ? '—' : String(body.sources)}
+                    value={body?.sources === undefined ? undefined : String(body.sources)}
                   />
                 </div>
               </div>
@@ -385,15 +385,18 @@ function HealthCard(
   return (
     <section className="space-y-3 rounded-xl border border-line bg-surface p-4">
       <h2 className="text-meta uppercase tracking-wide text-text/60">{t('overview.health')}</h2>
-      <p className="flex flex-wrap items-baseline gap-2">
-        <span data-testid="germinated-count" className="text-hero font-medium">
-          {stats === undefined ? '—' : String(stats.germinated)}
-        </span>
-        {/* '—', never 0: a total nobody confirmed must not read as an empty substrate. */}
-        <span className="text-body text-text/70">
-          {t('overview.hero', { total: stats === undefined ? '—' : stats.total })}
-        </span>
-      </p>
+      {/* Withheld renders nothing, never 0 and never a marker: `0 of 0` reads as an empty
+          substrate, and `—` means a confirmed-empty field elsewhere in the SPA. */}
+      {stats !== undefined && (
+        <p className="flex flex-wrap items-baseline gap-2">
+          <span data-testid="germinated-count" className="text-hero font-medium">
+            {String(stats.germinated)}
+          </span>
+          <span className="text-body text-text/70">
+            {t('overview.hero', { total: stats.total })}
+          </span>
+        </p>
+      )}
       <ProportionBar segments={segments} />
       <div className="flex flex-wrap gap-x-6 gap-y-2">
         {legend.map((entry) => (
