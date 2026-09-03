@@ -47,7 +47,10 @@ describe('the dormant diagnosis', () => {
   it('diagnoses a duplicate spore name', () => {
     renderDiagnosis("name 'help' is already claimed by the spore at 'spores/help' (duplicate at 'spores/help2')")
     expect(screen.getByText('Two plugins declare the same command')).toBeDefined()
-    expect(screen.getByRole('link', { name: 'Rename one of the commands' })).toBeDefined()
+    // The list, not the plugin's own page: the alias control lives on the plugins list, and
+    // the collision names two plugins, neither of which is the one to fix on its own.
+    expect(screen.getByRole('link', { name: 'Rename one of the commands' }).getAttribute('href'))
+      .toBe('/plugins')
   })
 
   // germination/shape.ts's shape-check reasons match none of the named causes.

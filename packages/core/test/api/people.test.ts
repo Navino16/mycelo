@@ -349,4 +349,16 @@ describe('GET /api/people?role=', () => {
 
     expect(body.total).toBe(1)
   })
+
+  // `?role=` is refused, not silently ignored: a caller that means "no role filter" omits
+  // the parameter, and answering everybody to an empty one is the filter degrading again.
+  it('refuses an empty role rather than answering everybody', async () => {
+    booted = await bootAndLogin()
+
+    const answer = await booted.app.inject({
+      method: 'GET', url: '/api/people?role=', headers: { cookie: booted.cookie },
+    })
+
+    expect(answer.statusCode).toBe(400)
+  })
 })

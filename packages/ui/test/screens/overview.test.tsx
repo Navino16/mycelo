@@ -414,6 +414,52 @@ describe('the mute takeover', () => {
     expect(fetchedUrls()).toContain('/api/plugins/group-gate/disable')
   })
 
+  // Two clicks in one tick read the same render's `busy`, so only a ref can stop the second
+  // POST — against a substrate already mid-restart.
+  it('posts the disable once however fast the button is clicked twice', async () => {
+    mockCounts(COMPLETE)
+    const inner = globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>
+    globalThis.fetch = mock((url: string, init?: RequestInit) => (
+      url === '/api/plugins/group-gate/disable'
+        ? Promise.resolve(json({ ok: true, restartRequired: true }))
+        : inner(url, init)
+    )) as unknown as typeof fetch
+
+    renderOverview({ ...GERMINATED, enforcingBlocked: ['group-gate'], blockedSinceBoot: 2 })
+    await act(() => Promise.resolve())
+
+    const button = screen.getByRole('button', { name: /^Disable group-gate/ })
+    // Both dispatches inside one act(): fireEvent flushes between clicks, so `disabled`
+    // would already have blocked the second and the ref would never be under test.
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    await act(() => Promise.resolve())
+
+    expect(fetchedUrls().filter((u) => u === '/api/plugins/group-gate/disable')).toHaveLength(1)
+  })
+
+  // restartRequired is the substrate's own answer: a disable it applied straight away must
+  // not leave `Awaiting restart` standing beside it.
+  it('says nothing about a restart the disable did not ask for', async () => {
+    mockCounts(COMPLETE)
+    const inner = globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>
+    globalThis.fetch = mock((url: string, init?: RequestInit) => (
+      url === '/api/plugins/group-gate/disable'
+        ? Promise.resolve(json({ ok: true, restartRequired: false }))
+        : inner(url, init)
+    )) as unknown as typeof fetch
+
+    renderOverview({ ...GERMINATED, enforcingBlocked: ['group-gate'], blockedSinceBoot: 2 })
+    await act(() => Promise.resolve())
+
+    fireEvent.click(screen.getByRole('button', { name: /^Disable group-gate/ }))
+    await act(() => Promise.resolve())
+
+    expect(within(screen.getByRole('alert')).queryByText('Awaiting restart')).toBeNull()
+  })
+
   it('reports a refused disable rather than looking as though it worked', async () => {
     mockCounts(COMPLETE)
     const inner = globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>
@@ -897,6 +943,20 @@ describe('the guided path out of an empty substrate', () => {
     })
 
     expect(await screen.findByText('Create a role')).toBeDefined()
+    expect(screen.queryByText('Add a source')).toBeNull()
+    expect(screen.queryByText('Install a channel')).toBeNull()
+  })
+
+  // A refused count is not a step taken: with /api/sources refused the source step would
+  // silently drop, and the operator would be walked past the one thing that is missing.
+  it('withholds the guided panel entirely when one of its three counts was refused', async () => {
+    await withHealth(GERMINATED, {
+      sources: [], plugins: { ...COMPLETE_PLUGINS, hypha: [] }, roles: [],
+      refuse: ['/api/sources'],
+    })
+
+    expect(await screen.findByRole('alert')).toBeDefined()
+    expect(screen.queryByText('Nothing is installed yet')).toBeNull()
     expect(screen.queryByText('Add a source')).toBeNull()
     expect(screen.queryByText('Install a channel')).toBeNull()
   })

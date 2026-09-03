@@ -23,6 +23,39 @@ function openGroup(): void {
   fireEvent.click(screen.getByText('radarr'))
 }
 
+describe('the plugin group at its edges', () => {
+  // A group with nothing in it must not tick as fully granted: `0 / 0` beside a green tick
+  // says every command is covered on a plugin that declares none.
+  it('leaves a group with no command unticked', () => {
+    render(
+      <I18nProvider>
+        <PluginGroup plugin="silent" commands={[]} patterns={[]} onToggle={() => undefined} />
+      </I18nProvider>,
+    )
+
+    expect(screen.getByRole<HTMLInputElement>('checkbox').checked).toBe(false)
+  })
+
+  // The filter opens the group it matches: without it aria-expanded says expanded while the
+  // rows stay hidden, and the operator's search finds nothing.
+  it('opens a matching group on the filter alone, with no click', () => {
+    render(
+      <I18nProvider>
+        <PluginGroup
+          plugin="radarr"
+          commands={COMMANDS}
+          patterns={['radarr.*']}
+          filter="remove"
+          onToggle={() => undefined}
+        />
+      </I18nProvider>,
+    )
+
+    expect(screen.getByText('Granted by a wildcard, so it covers commands that are not installed yet.'))
+      .toBeDefined()
+  })
+})
+
 describe('the role editor', () => {
   // design §12: a wildcard drawn as every box ticked says something false about a role
   // that deliberately does not enumerate.

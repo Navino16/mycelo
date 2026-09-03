@@ -301,6 +301,11 @@ describe('the consent moment', () => {
     const read = table.querySelector('[data-scope="health.read"]')
     expect(read?.getAttribute('data-risk')).toBe('low')
     expect(read?.textContent).toContain('low')
+
+    // R7 keeps the word AND the colour: the literals, because an assertion reading
+    // TONE_CLASSES moves with the table and cannot see the grade lose its amber.
+    expect(assign?.querySelector('span[aria-hidden="true"]')?.className).toContain('bg-warn')
+    expect(read?.querySelector('span[aria-hidden="true"]')?.className).toContain('bg-idle')
   })
 
   it('says the scopes are granted as one block at install, and how many', async () => {

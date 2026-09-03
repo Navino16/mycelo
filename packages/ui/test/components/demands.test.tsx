@@ -71,6 +71,22 @@ describe('what a plugin is asking for', () => {
     expect(screen.getByText(/declares no dependency/)).toBeDefined()
   })
 
+  // A command capability is the one demand that can stand alone, so it is the only fixture
+  // that tells "asks for nothing" from "every other list is empty".
+  it('does not say a plugin asks for nothing when its only demand is a capability', () => {
+    render(
+      <I18nProvider>
+        <DemandsList demands={{
+          requires: [], scopes: [], externals: [],
+          commands: [{ name: 'watching', capabilities: ['reactions'] }],
+        }} />
+      </I18nProvider>,
+    )
+
+    expect(screen.queryByText('Asks for nothing')).toBeNull()
+    expect(document.body.textContent).toContain('reactions')
+  })
+
   // A field that crossed the API boundary malformed must not throw into the route error
   // boundary; the well-formed sections beside it still render.
   it('does not throw on a malformed nested field, and still renders the other sections', () => {

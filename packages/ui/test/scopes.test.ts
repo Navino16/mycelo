@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { SCOPE_RISK, SCOPE_SENTENCE, highRiskScopes } from '../src/scopes.ts'
+import { SCOPE_RISK, SCOPE_SENTENCE, highRiskScopes, riskOf } from '../src/scopes.ts'
 
 describe('scope risk', () => {
   it('grades every scope the sentences cover, so no scope renders ungraded', () => {
@@ -30,6 +30,13 @@ describe('scope risk', () => {
   })
 
   // A scope this UI has not caught up with cannot be promised harmless, so it grades high.
+  // riskOf and highRiskScopes must default the same way: a scope graded high in the consent
+  // alert and painted low in the table is the same unknown scope told two ways.
+  it('grades a scope it does not know as high through riskOf too', () => {
+    expect(riskOf('future.scope')).toBe('high')
+    expect(riskOf('plugins.read')).toBe('low')
+  })
+
   it('treats a scope it does not know as high rather than silently low', () => {
     expect(highRiskScopes(['not.a.scope'])).toEqual(['not.a.scope'])
   })

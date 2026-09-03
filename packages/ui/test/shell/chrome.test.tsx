@@ -88,7 +88,7 @@ const PLUGINS = {
 }
 
 /** Renders the real provider around Nav, so the counts come from fetches rather than a fixture. */
-function withCounts(refuse: readonly string[]): void {
+function withCounts(refuse: readonly string[], health: RuntimeHealth = HEALTHY): void {
   globalThis.fetch = mock((url: string) => {
     if (refuse.includes(url)) return Promise.resolve(json({ error: { message: 'refused' } }, 500))
     if (url === '/api/substrate') return Promise.resolve(json({ version: '0.9.3', startedAt: 'x', uptimeSeconds: 60 }))
@@ -101,7 +101,7 @@ function withCounts(refuse: readonly string[]): void {
 
   render(
     <I18nProvider>
-      <HealthContext value={{ health: HEALTHY, error: false, refresh: () => Promise.resolve() }}>
+      <HealthContext value={{ health, error: false, refresh: () => Promise.resolve() }}>
         <MemoryRouter initialEntries={['/plugins']}>
           <ChromeProvider><Nav /></ChromeProvider>
         </MemoryRouter>
@@ -143,5 +143,76 @@ describe('ChromeProvider counts', () => {
     expect(countOf('Plugins')).toBe('')
     expect(countOf('Overview')).toBe('')
     expect(countOf('Roles')).toBe('2')
+  })
+})
+
+/** One healthy connected system beside one that stopped answering: `Overview 5` is both halves. */
+const ONE_SYSTEM_DOWN: RuntimeHealth = {
+  ...HEALTHY,
+  rhizas: [
+    { rhiza: 'plex', status: { state: 'healthy', checkedAt: '2026-01-01' } },
+    { rhiza: 'radarr', status: { state: 'unreachable', checkedAt: '2026-01-01' } },
+  ],
+}
+
+describe('the Overview issue count', () => {
+  it('adds the unhealthy connected systems to the dormant plugins', async () => {
+    withCounts([], ONE_SYSTEM_DOWN)
+
+    // 1 dormant plugin in PLUGINS + 1 unreachable rhiza; a healthy one counts for nothing.
+    await waitFor(() => { expect(countOf('Overview')).toBe('2') })
+  })
+
+  it('marks the item amber only once there is something to see', async () => {
+    withCounts([])
+    await waitFor(() => { expect(countOf('Overview')).toBe('1') })
+
+    const nothing = screen.getByRole('link', { name: /^Plugins/ })
+    const problem = screen.getByRole('link', { name: /^Overview/ })
+    // The count span carries the tone; Plugins is a size, so it stays grey at any value.
+    expect(problem.querySelector('span.font-mono')?.className).toContain('text-warn')
+    expect(nothing.querySelector('span.font-mono')?.className).not.toContain('text-warn')
+  })
+
+  // The zero case is the boundary: an amber Overview on a substrate with nothing wrong is
+  // the alarm that cries every day.
+  it('keeps the item grey at a confirmed zero', async () => {
+    globalThis.fetch = mock((url: string) => {
+      if (url === '/api/substrate') return Promise.resolve(json({ version: '0.9.3', startedAt: 'x', uptimeSeconds: 60 }))
+      if (url === '/api/plugins') {
+        return Promise.resolve(json({ hypha: [], rhiza: [], enzyme: [], inhibitor: [], unknown: [] }))
+      }
+      if (url.startsWith('/api/people')) return Promise.resolve(json({ items: [], page: 1, perPage: 1, total: 0 }))
+      return Promise.resolve(json([]))
+    }) as unknown as typeof fetch
+    render(
+      <I18nProvider>
+        <HealthContext value={{ health: HEALTHY, error: false, refresh: () => Promise.resolve() }}>
+          <MemoryRouter initialEntries={['/plugins']}>
+            <ChromeProvider><Nav /></ChromeProvider>
+          </MemoryRouter>
+        </HealthContext>
+      </I18nProvider>,
+    )
+
+    await waitFor(() => { expect(countOf('Overview')).toBe('0') })
+    expect(screen.getByRole('link', { name: /^Overview/ }).querySelector('span.font-mono')?.className)
+      .not.toContain('text-warn')
+  })
+})
+
+describe('the sidebar shape', () => {
+  // brief §4: every journey must be completable on a phone, and the four-item phone bar has
+  // no room for the graph — which is the one item drawn desktop-only (1a).
+  it('hides the graph on the phone bar and shows every other item there', async () => {
+    withCounts([])
+    await waitFor(() => { expect(countOf('Plugins')).toBe('2') })
+
+    const graph = screen.getByRole('link', { name: /^Anastomosis/ })
+    expect(graph.className).toContain('hidden')
+    expect(graph.className).toContain('md:flex')
+    for (const name of ['Overview', 'Plugins', 'Sources', 'Roles', 'People']) {
+      expect(screen.getByRole('link', { name: new RegExp(`^${name}`) }).className).not.toContain('hidden')
+    }
   })
 })

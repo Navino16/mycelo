@@ -113,3 +113,23 @@ describe('aggregateRuntimeHealth', () => {
     expect((await aggregateRuntimeHealth({ status: 'starting' })).mode).toBe('degraded')
   })
 })
+
+describe('the mute counter reaches the health payload', () => {
+  // A non-zero fixture: every other case here counts nothing, so a hardcoded 0 read as
+  // "the chain's own count" survived the whole suite.
+  it('reports the chain\'s own count, not a zero of its own', async () => {
+    const germination = {
+      status: 'germinated' as const,
+      mycelium: {
+        registry: registry({ brokenEnforcing: ['gate'] }),
+        admission: { blockedSinceBoot: () => 7 },
+      },
+    } as unknown as Germination
+
+    expect((await aggregateRuntimeHealth(germination)).blockedSinceBoot).toBe(7)
+  })
+
+  it('answers zero for a substrate that never germinated', async () => {
+    expect((await aggregateRuntimeHealth({ status: 'starting' })).blockedSinceBoot).toBe(0)
+  })
+})

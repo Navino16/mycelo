@@ -5,6 +5,8 @@ import { startMycelium, stopMycelium } from '../../src/boot/start.js'
 import type { Mycelium } from '../../src/boot/start.js'
 import type { RuntimeState } from '../../src/boot/state.js'
 import { createLogger } from '../../src/support/logger.js'
+import { freshDb } from '../support/db.js'
+import type { IncomingMessage } from '@mycelo/septum'
 
 function myceliumWith(overrides: {
   hyphae?: readonly GerminatedHypha[]
@@ -213,5 +215,33 @@ describe('startMycelium', () => {
     // spec §4.2 rests on degraded mode meaning nothing is connected: the hypha this call
     // connected and the rhiza it started are both torn down before the fault escapes.
     expect(stopped).toEqual(['chan', 'r1'])
+  })
+
+  // start.ts must hand the chain RuntimeState's own refusals cell, not let it make a fresh
+  // one: the chain is rebuilt on every germination retry and the count has to outlive it.
+  it('counts a muted refusal into the runtime state, not into the chain alone', async () => {
+    const { db } = freshDb()
+    const state = {
+      config: { sporesDirs: ['/none'], discoveryDirs: ['/none'], managedRoot: '/none/spores', prefix: '/', defaultLocale: 'en' },
+      db,
+      translator: { has: () => false, translate: (k: string) => k },
+      refusals: { blocked: 0 },
+    } as unknown as RuntimeState
+    const registry: Registry = {
+      hyphae: [], enzymes: [], rhizas: [], inhibitors: [], dormant: [],
+      routes: new Map(), order: [], brokenEnforcing: ['gate'], catalogs: new Map(),
+    }
+    const message: IncomingMessage = {
+      channel: 'console', conversationId: 'c1', messageId: 'm1',
+      sender: { channel: 'console', externalId: 'alice' },
+      text: '/ping', attachments: [], raw: null, receivedAt: new Date(),
+    }
+
+    const mycelium = await startMycelium({ registry, state, logger: createLogger() })
+    const verdict = await mycelium.admission.admit(message)
+
+    expect(verdict.allow).toBe(false)
+    expect(state.refusals.blocked).toBe(1)
+    expect(mycelium.admission.blockedSinceBoot()).toBe(1)
   })
 })

@@ -1,4 +1,5 @@
-import { rmSync } from 'node:fs'
+import { rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'bun:test'
 import { eq } from 'drizzle-orm'
 import { REDACTED } from '../../src/support/redaction.js'
@@ -9,6 +10,7 @@ import { inoculate } from '../../src/sporangium/inoculate.js'
 import { managedRoot } from '../../src/sporangium/layout.js'
 import { bundleOf } from '../support/bundle.js'
 import { silentLogger } from '../support/logger.js'
+import { setAlias } from '../../src/rhizomorph/aliases.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
   bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configurable, configurableTwoFields,
@@ -715,6 +717,60 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     // Both, not the first: a `.commands[0]`-shaped implementation passes a one-command fixture.
     expect(orphan?.commands).toEqual(['first', 'second'])
     expect(orphan?.description).toBe('Needs a rhiza nobody installed')
+  })
+
+  // A germinated enzyme's `commands` are the names a caller types, so an alias must win over
+  // the manifest's declared name — the one fixture where the two disagree.
+  it('reports a renamed command under its alias, not under the name the manifest declared', async () => {
+    booted = await bootAndLogin({
+      spores: (dir) => {
+        writeSpore(dir, 'greeter2', {
+          'spore.yaml': 'kind: enzyme\nname: greeter2\nseptum: "^0.11"\n'
+            + 'commands:\n  - name: hello\n    description: command.hello.description\n    respond: hello.text\n',
+          'translations/en.yaml': 'command:\n  hello:\n    description: Say hello\nhello:\n  text: Hi\n',
+        })
+      },
+    })
+    const { app, served, cookie } = booted
+    setAlias(served.state.db, 'greeter2', 'hello', 'salut')
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/plugins', headers: { cookie },
+    })).json<{ enzyme: { name: string, commands: string[] }[] }>()
+
+    expect(body.enzyme.find((p) => p.name === 'greeter2')?.commands).toEqual(['salut'])
+  })
+
+  // The registry's own manifest wins over the re-read from disk: the route reports what
+  // germinated, not what someone edited under the running bot. A germinated spore is the
+  // only fixture where the two sources can disagree.
+  it('keeps the germinated manifest description when the file on disk has since changed', async () => {
+    let sporeDir = ''
+    booted = await bootAndLogin({
+      spores: (dir) => {
+        sporeDir = join(dir, 'drifter')
+        writeSpore(dir, 'drifter', {
+          'spore.yaml': 'kind: enzyme\nname: drifter\nseptum: "^0.11"\n'
+            + 'description: What germination read\n'
+            + 'commands:\n  - name: drift\n    description: command.drift.description\n    respond: drift.text\n',
+          'translations/en.yaml': 'command:\n  drift:\n    description: Drift\ndrift:\n  text: d\n',
+        })
+      },
+    })
+    const { app, cookie } = booted
+    writeFileSync(
+      join(sporeDir, 'spore.yaml'),
+      'kind: enzyme\nname: drifter\nseptum: "^0.11"\ndescription: Edited after boot\n'
+      + 'commands:\n  - name: drift\n    description: command.drift.description\n    respond: drift.text\n',
+    )
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/plugins', headers: { cookie },
+    })).json<{ enzyme: { name: string, state: string, description?: string }[] }>()
+    const drifter = body.enzyme.find((p) => p.name === 'drifter')
+
+    expect(drifter?.state).toBe('germinated')
+    expect(drifter?.description).toBe('What germination read')
   })
 
   /**

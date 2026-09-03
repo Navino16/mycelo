@@ -60,6 +60,22 @@ describe('the tone table is the only place a tone colour is spelled', () => {
     expect(stale).toEqual([])
   })
 
+  // Literals, not TONE_CLASSES: an assertion reading the table's own value moves with it,
+  // which is how `border` came to be the one field no test could see change.
+  it('spells each tone\'s four class names exactly', () => {
+    const table = readFileSync(SRC + TABLE, 'utf8')
+
+    for (const [tone, border] of [
+      ['ok', 'border-ok/40'], ['warn', 'border-warn/40'],
+      ['crit', 'border-crit/40'], ['idle', 'border-line'],
+    ] as const) {
+      expect(table).toContain(`text-${tone}`)
+      expect(table).toContain(`bg-${tone}-bg`)
+      expect(table).toContain(`fill: 'bg-${tone}'`)
+      expect(table).toContain(`border: '${border}'`)
+    }
+  })
+
   it('reads the table itself as carrying all four tones', () => {
     const table = readFileSync(SRC + TABLE, 'utf8')
 

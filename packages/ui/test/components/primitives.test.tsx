@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router'
 import { AttentionTable } from '../../src/components/AttentionTable.tsx'
 import { Avatar, initialsOf } from '../../src/components/Avatar.tsx'
 import { Breadcrumb } from '../../src/components/Breadcrumb.tsx'
+import { BulkBar } from '../../src/components/BulkBar.tsx'
 import { Chip } from '../../src/components/Chip.tsx'
 import { Dot } from '../../src/components/Dot.tsx'
 import { EmptyState } from '../../src/components/EmptyState.tsx'
@@ -85,6 +86,18 @@ describe('the proportion bar', () => {
     const { container } = render(<ProportionBar segments={[{ tone: 'ok', value: 0, label: 'germinated' }]} />)
 
     expect(container.querySelectorAll('[data-segment]')).toHaveLength(0)
+  })
+
+  // A mixed fixture: with every segment at zero the all-zero guard alone answers, so a state
+  // nothing is in would keep a zero-width segment — and its tooltip — in the bar.
+  it('draws a segment only for the states something is in', () => {
+    const { container } = render(<ProportionBar segments={[
+      { tone: 'ok', value: 2, label: 'germinated' },
+      { tone: 'warn', value: 0, label: 'dormant' },
+    ]} />)
+
+    expect([...container.querySelectorAll('[data-segment]')].map((e) => e.getAttribute('data-segment')))
+      .toEqual(['germinated'])
   })
 })
 
@@ -264,5 +277,69 @@ describe('the needs-attention table with nothing to show', () => {
 
     expect(screen.getByText('Reason')).toBeDefined()
     expect(screen.queryByText('Nothing under this filter')).toBeNull()
+  })
+})
+
+describe('the bulk bar', () => {
+  const HANDLERS = {
+    onClear: () => undefined,
+    onAddRole: () => undefined,
+    onRemoveRole: () => undefined,
+    onMarkReviewed: () => undefined,
+  }
+
+  it('renders nothing at all when there is no selection, no offer and no outcome', () => {
+    const { container } = render(
+      <I18nProvider><BulkBar count={0} roles={['guest']} {...HANDLERS} /></I18nProvider>,
+    )
+
+    expect(container.firstChild).toBeNull()
+  })
+
+  // A confirmed zero is the one case the offer must not appear for: `Select 0 never reviewed`
+  // is a button that does nothing on a substrate where everyone has been reviewed.
+  it('withholds the never-reviewed offer at a confirmed zero', () => {
+    const { container } = render(
+      <I18nProvider>
+        <BulkBar count={0} roles={[]} neverReviewed={0} onSelectNeverReviewed={() => undefined} {...HANDLERS} />
+      </I18nProvider>,
+    )
+
+    expect(container.firstChild).toBeNull()
+  })
+
+  it('offers the selection once someone has never been reviewed', () => {
+    render(
+      <I18nProvider>
+        <BulkBar count={0} roles={[]} neverReviewed={3} onSelectNeverReviewed={() => undefined} {...HANDLERS} />
+      </I18nProvider>,
+    )
+
+    expect(screen.getByRole('button', { name: /never-reviewed/ })).toBeDefined()
+  })
+})
+
+describe('the chip, the empty state and the tile print what they are given', () => {
+  // A chip count is computed from rows already held, so zero is a fact: `Unreachable` with
+  // no number beside it reads as a filter with no bound at all.
+  it('prints a confirmed zero count on a chip', () => {
+    const { container } = render(<I18nProvider><Chip label="Unreachable" count={0} /></I18nProvider>)
+
+    expect(container.firstElementChild?.textContent).toBe('Unreachable0')
+  })
+
+  // The dash is what separates "nothing to show" from a real card (1a-overview-mobile-healthy).
+  it('draws the empty state with a dashed border', () => {
+    const { container } = render(<EmptyState title="Nothing here" body="Yet." />)
+
+    expect((container.firstElementChild as HTMLElement).className).toContain('border-dashed')
+  })
+
+  it('renders no hero line at all for a withheld tile value', () => {
+    const { container } = render(
+      <I18nProvider><MemoryRouter><Tile label="Sources" /></MemoryRouter></I18nProvider>,
+    )
+
+    expect(container.querySelectorAll('p')).toHaveLength(1)
   })
 })

@@ -137,6 +137,16 @@ describe('the sources list', () => {
     expect(within(screen.getByTestId('source-3')).queryByText('Third-party')).toBeNull()
   })
 
+  // A disabled *official* source: the shipped fixture is third-party, so its tone is grey
+  // whichever half of the condition is dropped. Here the two answers differ.
+  it('greys a disabled official source rather than painting it trusted', async () => {
+    mockApi([{ ...OFFICIAL, enabled: false }], { catalogues: { 1: 0 } })
+    renderSources()
+
+    const badge = await waitFor(() => within(screen.getByTestId('source-1')).getByText('Disabled'))
+    expect(badge.parentElement?.getAttribute('data-tone')).toBe('idle')
+  })
+
   it('shows each source git url, which is what tells two mirrors apart', async () => {
     mockApi([OFFICIAL, THIRD_PARTY], { catalogues: { 1: 61, 2: 112 } })
     renderSources()

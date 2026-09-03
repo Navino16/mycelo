@@ -82,3 +82,15 @@ describe('the shell header', () => {
     expect(within(header).getByRole('status')).toBeDefined()
   })
 })
+
+describe('the shell body clears the phone nav bar', () => {
+  // Nav is `fixed bottom-0` under md, so without the padding the last row of every screen
+  // sits behind it — unreachable on a phone, and invisible in a DOM-only test.
+  it('pads the main region below the fixed bar, and drops the padding on desktop', async () => {
+    await headerAt('/plugins')
+    const main = document.querySelector('main')
+
+    expect(main?.className).toContain('pb-20')
+    expect(main?.className).toContain('md:pb-4')
+  })
+})

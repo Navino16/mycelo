@@ -44,6 +44,45 @@ describe('GET /api/substrate', () => {
     expect(second.uptimeSeconds).toBeGreaterThan(first.uptimeSeconds)
   })
 
+  // The uptime rounds down and the start time is this boot's, not a module-load constant:
+  // startedAt is pushed 1500 ms into the past, which floor reads as 1 and ceil as 2.
+  it('rounds the uptime down from the boot recorded in the runtime state', async () => {
+    booted = await bootAndLogin()
+    const { app, cookie, served } = booted
+    const past = new Date(Date.now() - 1_500)
+    ;(served.state as { startedAt: Date }).startedAt = past
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/substrate', headers: { cookie },
+    })).json<{ startedAt: string, uptimeSeconds: number }>()
+
+    expect(body.uptimeSeconds).toBe(1)
+    expect(body.startedAt).toBe(past.toISOString())
+  })
+
+  it('answers a start time this boot set, not the epoch', async () => {
+    booted = await bootAndLogin()
+
+    const body = (await booted.app.inject({
+      method: 'GET', url: '/api/substrate', headers: { cookie: booted.cookie },
+    })).json<{ startedAt: string }>()
+
+    // A minute is generous for a boot and still refuses a constant far from now.
+    expect(Date.now() - Date.parse(body.startedAt)).toBeLessThan(60_000)
+  })
+
+  // ISO 8601, not Date.prototype.toString: the SPA parses this and a locale string is not
+  // a wire format.
+  it('serialises the start time as ISO 8601, round-tripping unchanged', async () => {
+    booted = await bootAndLogin()
+
+    const body = (await booted.app.inject({
+      method: 'GET', url: '/api/substrate', headers: { cookie: booted.cookie },
+    })).json<{ startedAt: string }>()
+
+    expect(new Date(body.startedAt).toISOString()).toBe(body.startedAt)
+  })
+
   it('is refused without a session', async () => {
     booted = await bootAndLogin()
 

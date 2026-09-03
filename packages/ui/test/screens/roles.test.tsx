@@ -295,14 +295,19 @@ describe('a count still in flight, or refused', () => {
     // The card itself still renders: only the sentence it cannot yet state is withheld.
     expect(await screen.findByText('Default role · what unknown senders get')).toBeDefined()
     expect(screen.getByRole('link', { name: 'Edit guest' })).toBeDefined()
-    expect(screen.queryByText('1 of 4 commands · held by 0 of 128 people')).toBeNull()
+    // The whole sentence goes, not only its zero: `held by undefined of 128` is the same lie
+    // with a worse spelling, and asserting the absence of `0` cannot see it.
+    expect(screen.queryByText(/held by/)).toBeNull()
   })
 
   it('shows no 0 people in a row whose count was refused', async () => {
     mockApi({ holdersStatus: 500, people: 128 })
     renderRoles()
 
-    expect(within(await screen.findByTestId('role-guest')).queryByText('0 people')).toBeNull()
+    const cell = (await screen.findByTestId('role-guest')).children[3]
+    // The cell stands empty: no digit at all, so an `undefined people` renders no better
+    // than a `0 people`.
+    expect(cell?.textContent).toBe('')
   })
 })
 

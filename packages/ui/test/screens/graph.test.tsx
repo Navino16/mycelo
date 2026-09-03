@@ -317,3 +317,26 @@ describe('the anastomosis graph', () => {
     expect(screen.getByTestId('path')).toHaveProperty('textContent', '/plugins/upcoming')
   })
 })
+
+describe('the graph guards the payload it draws', () => {
+  // An edge naming a node the payload does not carry: the canvas guards its own coordinates,
+  // so the count in the summary is where a dangling edge shows — as a link nobody can see.
+  it('counts no link for an edge whose target is not a node', () => {
+    serve({
+      nodes: [
+        { name: 'core', state: 'germinated' },
+        { name: 'upcoming', kind: 'enzyme', state: 'germinated' },
+      ],
+      edges: [
+        { from: 'upcoming', to: 'core', optional: false },
+        { from: 'upcoming', to: 'vanished', optional: false },
+      ],
+    })
+    renderGraph()
+
+    return waitFor(() => {
+      expect(screen.getByText('1 plugins · 1 links · 0 broken')).toBeDefined()
+      expect(document.querySelector('[data-edge="upcoming->vanished"]')).toBeNull()
+    })
+  })
+})
