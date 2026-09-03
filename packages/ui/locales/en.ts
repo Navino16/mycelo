@@ -117,6 +117,7 @@ export const en = {
   'plugins.source.local': 'checked out locally',
   'plugins.installed': '{count} installed',
   'plugins.installedOne': '{count} installed',
+  'plugins.guidedCta': 'See what to do first',
   'plugins.inoculate': 'Inoculate',
   'plugins.search': 'Search {count} plugins',
   'plugins.searchOne': 'Search {count} plugin',

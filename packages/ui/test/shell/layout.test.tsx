@@ -23,6 +23,14 @@ async function headerAt(path: string): Promise<HTMLElement> {
     if (url === '/api/substrate') {
       return Promise.resolve(json({ version: '0.9.3', startedAt: '2026-01-01', uptimeSeconds: 14 * 86_400 }))
     }
+    // One germinated plugin: an empty substrate shows no pill at all (ruling F16), and the
+    // header tests are about a substrate that has one.
+    if (url === '/api/plugins') {
+      return Promise.resolve(json({
+        hypha: [{ name: 'signal', kind: 'hypha', commands: [], state: 'germinated', enabled: true }],
+        rhiza: [], enzyme: [], inhibitor: [], unknown: [],
+      }))
+    }
     return Promise.resolve(json({}))
   }) as unknown as typeof fetch
 

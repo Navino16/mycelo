@@ -23,9 +23,13 @@ export function KindSection(
   // arrival hides the dormant rows the state-first sort exists to surface.
   const [open, setOpen] = useState(true)
   const dormant = plugins.filter((p) => p.state === 'dormant').length
-  const meta = dormant === 0
-    ? t('kind.metaAllWell', { count: plugins.length })
-    : plural(t, 'kind.meta', dormant, { count: plugins.length, dormant })
+  // The bare count for an empty kind (ruling F4): 'all germinated' is a claim about nothing,
+  // and I1 keeps the confirmed zero itself on screen.
+  const meta = plugins.length === 0
+    ? String(plugins.length)
+    : (dormant === 0
+        ? t('kind.metaAllWell', { count: plugins.length })
+        : plural(t, 'kind.meta', dormant, { count: plugins.length, dormant }))
 
   return (
     <section className="space-y-2" data-testid={`kind-section-${kind}`}>

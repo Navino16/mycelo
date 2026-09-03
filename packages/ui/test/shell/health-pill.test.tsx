@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { HealthContext } from '../../src/health.tsx'
@@ -12,11 +12,11 @@ const OK: RuntimeHealth = {
   mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0,
 }
 
-function pill(health: RuntimeHealth | null, error = false): void {
+function pill(health: RuntimeHealth | null, error = false, plugins?: number): void {
   render(
     <I18nProvider>
       <HealthContext value={{ health, error, refresh: () => Promise.resolve() }}>
-        <HealthPill />
+        <HealthPill plugins={plugins} />
       </HealthContext>
     </I18nProvider>,
   )
@@ -124,6 +124,28 @@ describe('the pill', () => {
 
     expect(screen.queryByRole('status')).toBeNull()
   })
+
+  // ruling F16: a substrate with no plugins has nothing to be healthy about — the core's own
+  // boot log calls it a bot that can never answer. No fourth pill vocabulary: it renders nothing.
+  it('says nothing rather than Healthy on a substrate with no plugins', () => {
+    pill(OK, false, 0)
+
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  // Only the healthy claim is suppressed: an empty substrate whose API stopped answering is
+  // still a fact the operator needs, and the plugin count is unknown then anyway.
+  it('still reports a substrate that is not answering, empty or not', () => {
+    pill(null, true, 0)
+
+    expect(screen.getByText('Not answering')).toBeDefined()
+  })
+
+  it('keeps the healthy pill for a substrate whose plugin count is merely unknown', () => {
+    pill(OK, false, undefined)
+
+    expect(screen.getByText('Healthy')).toBeDefined()
+  })
 })
 
 const realFetch = globalThis.fetch
@@ -166,5 +188,36 @@ describe('the shell carries the pill everywhere', () => {
 
     expect(await screen.findByText('the roles screen')).toBeDefined()
     expect(await screen.findByText('Mute')).toBeDefined()
+  })
+
+  // The shell is what knows the plugin count, so F16's suppression only works if it is wired:
+  // HealthPill's own prop test stays green with Layout passing nothing.
+  it('hands the pill the substrate\u2019s plugin count, so an empty one shows no pill', async () => {
+    globalThis.fetch = mock((url: string) => {
+      if (url === '/api/substrate') {
+        return Promise.resolve(json({ version: '0.9.3', startedAt: '2026-01-01', uptimeSeconds: 100 }))
+      }
+      if (url === '/api/plugins') {
+        return Promise.resolve(json({ hypha: [], rhiza: [], enzyme: [], inhibitor: [], unknown: [] }))
+      }
+      return Promise.resolve(json([]))
+    }) as unknown as typeof fetch
+
+    render(
+      <I18nProvider>
+        <HealthContext value={{ health: OK, error: false, refresh: () => Promise.resolve() }}>
+          <MemoryRouter initialEntries={['/roles']}>
+            <Routes>
+              <Route path="/" element={<Layout />}>
+                <Route path="roles" element={<p>the roles screen</p>} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </HealthContext>
+      </I18nProvider>,
+    )
+
+    expect(await screen.findByText('the roles screen')).toBeDefined()
+    await waitFor(() => { expect(screen.queryByRole('status')).toBeNull() })
   })
 })

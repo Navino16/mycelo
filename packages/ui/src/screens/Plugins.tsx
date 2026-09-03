@@ -88,7 +88,21 @@ export function Plugins(): React.JSX.Element {
 
       {error && <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.generic')}</p>}
 
-      {groups !== null && (
+      {groups !== null && all.length === 0 && (
+        // ruling F16: one empty state, not five `No plugin of this kind` cards, and not three
+        // filters that can narrow nothing. The guided start lives on the Overview.
+        <EmptyState
+          title={t('guided.nothingInstalled')}
+          body={t('guided.nothingInstalledLead')}
+          action={(
+            <Link to="/" className="rounded-md bg-accent px-3 py-2 font-medium text-accent-ink">
+              {t('plugins.guidedCta')}
+            </Link>
+          )}
+        />
+      )}
+
+      {groups !== null && all.length > 0 && (
         <>
           <div className="flex flex-wrap gap-2">
             <Chip

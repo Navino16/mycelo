@@ -122,6 +122,7 @@ export const fr: Record<StringKey, string> = {
   'plugins.source.local': 'copie locale',
   'plugins.installed': '{count} install\u00e9s',
   'plugins.installedOne': '{count} install\u00e9',
+  'plugins.guidedCta': 'Voir quoi faire en premier',
   'plugins.inoculate': 'Inoculer',
   'plugins.search': 'Rechercher parmi {count} plugins',
   'plugins.searchOne': 'Rechercher parmi {count} plugin',

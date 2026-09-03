@@ -157,6 +157,9 @@ export function Overview(): React.JSX.Element {
 
   const { state } = healthPillState(health, error)
   const stats = body?.plugins
+  // ruling F16: a substrate with no plugins is "nothing there", not "nothing wrong" — the
+  // all-clear would otherwise render three lines above the guided card's own contradiction.
+  const empty = stats?.total === 0
   const rows = attentionRows(t, dormant ?? [], degradedRhizas, stats)
   // A selection nothing matches falls back to `all`: the poll that clears the chosen category
   // would otherwise leave an empty table under its own column headers, with no chip to click
@@ -316,7 +319,7 @@ export function Overview(): React.JSX.Element {
                 </section>
               )}
 
-              {allWell && (
+              {allWell && !empty && (
                 <EmptyState
                   title={t('overview.allWell')}
                   body={t('overview.allWellLead')}

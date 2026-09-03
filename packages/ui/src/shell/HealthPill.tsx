@@ -60,11 +60,17 @@ function pillLabel(t: (k: StringKey, p?: Record<string, string | number>) => str
     : t('health.pill.degradedCount', { count: issues })
 }
 
-export function HealthPill(): React.JSX.Element | null {
+/**
+ * `plugins` is the substrate's plugin total, or undefined while it is unknown. A confirmed
+ * zero renders no pill at all (ruling F16): there is nothing to be healthy about, and a
+ * conformance pass has no fourth pill vocabulary to say so in.
+ */
+export function HealthPill({ plugins }: { plugins?: number }): React.JSX.Element | null {
   const t = useT()
   const { health, error } = useHealth()
   if (health === null && !error) return null
   const { state, issues } = healthPillState(health, error)
+  if (plugins === 0 && state === 'healthy') return null
   const tone = TONE[state]
   const { text, bg, fill } = TONE_CLASSES[tone]
   // 2j paints the mute pill as a solid crit fill with light ink; every other tone is a tint.

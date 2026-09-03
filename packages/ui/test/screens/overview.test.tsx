@@ -30,6 +30,9 @@ const COMPLETE_PLUGINS: PluginGroups = {
   inhibitor: [],
   unknown: [],
 }
+const NO_PLUGINS: PluginGroups = {
+  hypha: [], rhiza: [], enzyme: [], inhibitor: [], unknown: [],
+}
 const COMPLETE_ROLES: readonly RoleDto[] = [
   { name: 'owner', builtin: true, patterns: ['*'] },
   { name: 'guest', builtin: false, patterns: [] },
@@ -899,9 +902,20 @@ describe('the cross-entity search', () => {
   })
 })
 
+/**
+ * A substrate mid-setup: a rhiza is installed, so the guided start still names the missing
+ * channel while the health body has something to be healthy about. `hypha: []` alone is a
+ * substrate with no plugins at all, which ruling F16 makes a different screen.
+ */
+const NO_CHANNEL: PluginGroups = {
+  ...COMPLETE_PLUGINS,
+  hypha: [],
+  rhiza: [{ name: 'radarr', kind: 'rhiza', commands: [], state: 'germinated', enabled: true }],
+}
+
 describe('the guided path out of an empty substrate', () => {
   it('renders the three steps alongside the health body when nothing is configured yet', async () => {
-    await withHealth(GERMINATED, { sources: [], plugins: { ...COMPLETE_PLUGINS, hypha: [] }, roles: [] })
+    await withHealth(GERMINATED, { sources: [], plugins: NO_CHANNEL, roles: [] })
 
     await waitFor(() => { expect(screen.getAllByRole('link')).toHaveLength(3) })
     expect(screen.getByText('Add a source')).toBeDefined()
@@ -959,6 +973,16 @@ describe('the guided path out of an empty substrate', () => {
     expect(screen.queryByText('Nothing is installed yet')).toBeNull()
     expect(screen.queryByText('Add a source')).toBeNull()
     expect(screen.queryByText('Install a channel')).toBeNull()
+  })
+
+  // ruling F16: the core's own boot log calls a zero-spore germination a substrate that
+  // "will never answer", so the all-clear must not render three lines above the guided card.
+  it('does not claim everything germinated on a substrate with no plugins at all', async () => {
+    await withHealth(GERMINATED, { sources: COMPLETE_SOURCES, plugins: NO_PLUGINS, roles: [] })
+
+    expect(await screen.findByText('Nothing is installed yet')).toBeDefined()
+    expect(screen.queryByText('Everything is germinated.')).toBeNull()
+    expect(screen.queryByText(/Every plugin germinated/)).toBeNull()
   })
 
   it('says nothing is outstanding and shows the ordinary tiles once all three exist', async () => {

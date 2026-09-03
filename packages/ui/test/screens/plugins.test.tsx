@@ -257,6 +257,17 @@ describe('the kind group header', () => {
     expect(within(section).getByText('1 · all germinated')).toBeDefined()
   })
 
+  // ruling F4: 'all germinated' is a claim about nothing when the kind holds nothing. The
+  // count itself stays, per I1 — a confirmed zero renders 0.
+  it('makes no claim about a kind nothing is installed of, keeping its count', async () => {
+    serve(GROUPS)
+    renderPlugins()
+
+    const section = await screen.findByTestId('kind-section-inhibitor')
+    expect(within(section).queryByText('0 · all germinated')).toBeNull()
+    expect(within(section).getByText('0')).toBeDefined()
+  })
+
   it('collapses a group without dropping its header', async () => {
     serve(GROUPS)
     renderPlugins()
@@ -441,5 +452,39 @@ describe('an empty list says which of its two causes emptied it', () => {
 
     expect(screen.getByText('No installed plugin matches “grafna”')).toBeDefined()
     expect(screen.getByRole('link', { name: 'Search the sources instead' })).toBeDefined()
+  })
+})
+
+describe('the plugins list on a substrate with no plugins at all', () => {
+  // ruling F16: total === 0 is "nothing there", never "nothing wrong" — five identical
+  // `No plugin of this kind` cards under five `0 · all germinated` headers is the first
+  // screen a new operator opens.
+  it('renders one empty state instead of five empty kind sections', async () => {
+    serve(EMPTY_GROUPS)
+    renderPlugins()
+
+    expect(await screen.findByText('Nothing is installed yet')).toBeDefined()
+    expect(screen.queryAllByText('No plugin of this kind')).toHaveLength(0)
+    for (const kind of ['hypha', 'rhiza', 'enzyme', 'inhibitor', 'unknown']) {
+      expect(screen.queryByTestId(`kind-section-${kind}`)).toBeNull()
+    }
+  })
+
+  it('sends the operator to the guided start rather than leaving the screen dead', async () => {
+    serve(EMPTY_GROUPS)
+    renderPlugins()
+
+    const link = await screen.findByRole('link', { name: 'See what to do first' })
+    expect(link.getAttribute('href')).toBe('/')
+  })
+
+  // Three filters over nothing are three dead controls; the search field stays, being the
+  // one control the header owns.
+  it('drops the state filters, which can narrow nothing', async () => {
+    serve(EMPTY_GROUPS)
+    renderPlugins()
+
+    await screen.findByText('Nothing is installed yet')
+    expect(screen.queryByRole('button', { name: /Dormant/ })).toBeNull()
   })
 })
