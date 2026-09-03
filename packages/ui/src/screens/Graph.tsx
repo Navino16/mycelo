@@ -3,18 +3,33 @@ import { Link, useNavigate } from 'react-router'
 import { api } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
 import { ORDER } from '../api/types.ts'
+import { Chip } from '../components/Chip.tsx'
+import { Dot } from '../components/Dot.tsx'
 import { StateBadge } from '../components/StateBadge.tsx'
-import { layout } from '../graphLayout.ts'
+import { TONE_CLASSES } from '../components/tone.ts'
+import { BOX_H, BOX_W, isBroken, layout } from '../graphLayout.ts'
 import { useT } from '../i18n.tsx'
 import type { GraphDto, GraphEdge, GraphNode, SporeKind } from '../api/types.ts'
 import type { PlacedNode } from '../graphLayout.ts'
 import type { StringKey } from '../../locales/en.ts'
 
-const RADIUS = 22
-// Wide enough that the leftmost label (a fifteen-character name) is not clipped by the viewBox.
-const MARGIN = 80
+/** The substrate is drawn narrower than a plugin, as design 2k draws it. */
+const CORE_W = 96
+const MARGIN = 24
 // A Zod refusal runs to hundreds of characters; the node shows a prefix, <title> the whole (defect 30).
 const REASON_CHARS = 48
+/** How far the drawn reason may run past its node's x, so the viewBox does not clip it. */
+const REASON_W = 300
+// SVG text cannot ellipsize, so the box width has to fix a character budget instead.
+const NAME_CHARS = 20
+
+function widthOf(node: GraphNode): number {
+  return node.name === 'core' ? CORE_W : BOX_W
+}
+
+function clip(text: string, chars: number): string {
+  return text.length > chars ? `${text.slice(0, chars - 1)}…` : text
+}
 
 function groupByKind(nodes: readonly PlacedNode[]): Record<SporeKind | 'unknown', PlacedNode[]> {
   const groups: Record<SporeKind | 'unknown', PlacedNode[]> = {
@@ -27,30 +42,41 @@ function groupByKind(nodes: readonly PlacedNode[]): Record<SporeKind | 'unknown'
 function GraphMark(
   { node, onOpen }: { node: PlacedNode, onOpen: (name: string) => void },
 ): React.JSX.Element {
-  const dormant = node.state === 'dormant'
+  // R1: dormancy is amber on every surface, the graph included.
+  const ink = node.state === 'dormant' ? 'var(--color-warn)' : 'var(--color-ok)'
+  const tint = node.state === 'dormant' ? 'var(--color-warn-bg)' : 'var(--color-ok-bg)'
   return (
     <g
       transform={`translate(${node.x + MARGIN}, ${node.y + MARGIN})`}
       role="button"
       aria-label={node.name}
       tabIndex={0}
+      data-node={node.name}
       className="cursor-pointer"
       onClick={() => { onOpen(node.name) }}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onOpen(node.name) }}
     >
-      <circle
-        r={RADIUS}
-        strokeWidth={2}
-        className={dormant ? 'fill-crit-bg stroke-crit' : 'fill-ok-bg stroke-ok'}
-      />
-      <text textAnchor="middle" dy={RADIUS + 16} className="fill-text text-xs font-mono">
-        {node.name}
+      <rect width={widthOf(node)} height={BOX_H} rx={8} stroke={ink} fill={tint} />
+      <circle cx={11} cy={BOX_H / 2} r={3.5} fill={ink} />
+      <text
+        x={24}
+        y={BOX_H / 2}
+        dominantBaseline="middle"
+        fill="var(--color-text)"
+        className="text-[12px] font-mono"
+      >
+        {clip(node.name, NAME_CHARS)}
       </text>
       {node.reason !== undefined && (
         <>
           <title>{node.reason}</title>
-          <text textAnchor="middle" dy={RADIUS + 30} className="fill-crit text-[10px]">
-            {node.reason.length > REASON_CHARS ? `${node.reason.slice(0, REASON_CHARS - 1)}…` : node.reason}
+          <text
+            data-reason={node.name}
+            y={BOX_H + 15}
+            fill="var(--color-warn)"
+            className="text-[12px] font-mono"
+          >
+            {clip(node.reason, REASON_CHARS)}
           </text>
         </>
       )}
@@ -63,6 +89,7 @@ export function Graph(): React.JSX.Element {
   const navigate = useNavigate()
   const [graph, setGraph] = useState<GraphDto | null>(null)
   const [error, setError] = useState(false)
+  const [onlyFailures, setOnlyFailures] = useState(false)
 
   useEffect(() => {
     api.get<GraphDto>('/api/graph').then(
@@ -78,55 +105,124 @@ export function Graph(): React.JSX.Element {
 
   const placed = layout({ nodes, edges })
   const byName = new Map(placed.map((n) => [n.name, n]))
-  const width = placed.reduce((m, n) => Math.max(m, n.x), 0) + MARGIN * 2
-  const height = placed.reduce((m, n) => Math.max(m, n.y), 0) + MARGIN * 2
-  const grouped = groupByKind(placed)
+  const dormant = new Set(placed.filter((n) => n.state === 'dormant').map((n) => n.name))
+  const shownEdges = onlyFailures
+    ? edges.filter((e) => dormant.has(e.from) || dormant.has(e.to))
+    : edges
+  // A break is only readable with both its ends on screen, so the intact end stays.
+  const shownNodes = onlyFailures
+    ? placed.filter((n) => dormant.has(n.name)
+      || shownEdges.some((e) => e.from === n.name || e.to === n.name))
+    : placed
+
+  const width = shownNodes.reduce(
+    (m, n) => Math.max(m, n.x + (n.reason === undefined ? widthOf(n) : REASON_W)), 0,
+  ) + MARGIN * 2
+  const height = shownNodes.reduce((m, n) => Math.max(m, n.y), 0) + BOX_H + MARGIN * 2
+  const grouped = groupByKind(shownNodes)
   const openPlugin = (name: string): void => { void navigate(`/plugins/${name}`) }
+  const summary = t('graph.summary', {
+    plugins: placed.filter((n) => n.name !== 'core').length,
+    links: edges.length,
+    broken: edges.filter((e) => isBroken(e, byName)).length,
+  })
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-medium">{t('graph.title')}</h1>
-      {error && <p role="alert" className="text-sm text-crit">{t('error.generic')}</p>}
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="text-page font-semibold">{t('graph.title')}</h1>
+          {placed.length > 0 && <p className="text-meta-lg text-text/60">{summary}</p>}
+        </div>
+        {placed.length > 0 && (
+          <div className="hidden items-center gap-4 text-meta-lg text-text/70 md:flex">
+            <span className="flex items-center gap-2"><Dot tone="ok" />{t('graph.legendGerminated')}</span>
+            <span className="flex items-center gap-2"><Dot tone="warn" />{t('graph.legendDormant')}</span>
+            <span className="flex items-center gap-2">
+              <svg aria-hidden="true" width={16} height={2}>
+                <line
+                  x1={0}
+                  y1={1}
+                  x2={16}
+                  y2={1}
+                  strokeWidth={2}
+                  stroke="var(--color-warn)"
+                  strokeDasharray="4 3"
+                />
+              </svg>
+              {t('graph.legendBroken')}
+            </span>
+            <Chip
+              label={t('graph.onlyFailures')}
+              active={onlyFailures}
+              onClick={() => { setOnlyFailures(!onlyFailures) }}
+            />
+          </div>
+        )}
+      </div>
 
-      {graph !== null && placed.length === 0 && <p className="text-text/70">{t('graph.empty')}</p>}
+      {error && <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.generic')}</p>}
+
+      {graph !== null && placed.length === 0 && <p className="text-body text-text/70">{t('graph.empty')}</p>}
 
       {placed.length > 0 && (
         <>
-          <div data-testid="graph-desktop" className="hidden overflow-x-auto md:block">
-            <svg role="img" aria-label={t('graph.title')} width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-              {edges.map((edge) => {
-                const from = byName.get(edge.from)
-                const to = byName.get(edge.to)
-                if (from === undefined || to === undefined) return null
-                const broken = from.state === 'dormant' || to.state === 'dormant'
-                return (
-                  <line
-                    key={`${edge.from}-${edge.to}`}
-                    x1={from.x + MARGIN}
-                    y1={from.y + MARGIN}
-                    x2={to.x + MARGIN}
-                    y2={to.y + MARGIN}
-                    strokeWidth={2}
-                    className={broken ? 'stroke-idle' : 'stroke-line'}
-                    strokeDasharray={edge.optional ? '6 4' : undefined}
-                  />
-                )
-              })}
-              {placed.map((node) => <GraphMark key={node.name} node={node} onOpen={openPlugin} />)}
-            </svg>
+          <div
+            data-testid="graph-desktop"
+            className="hidden space-y-2 rounded-xl border border-line bg-surface p-4 md:block"
+          >
+            <div className="overflow-x-auto">
+              <svg role="img" aria-label={t('graph.title')} width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+                {shownEdges.map((edge) => {
+                  const from = byName.get(edge.from)
+                  const to = byName.get(edge.to)
+                  if (from === undefined || to === undefined) return null
+                  const broken = isBroken(edge, byName)
+                  const rightward = from.x < to.x
+                  return (
+                    <line
+                      key={`${edge.from}-${edge.to}`}
+                      data-edge={`${edge.from}->${edge.to}`}
+                      x1={MARGIN + (rightward ? from.x + widthOf(from) : from.x)}
+                      y1={MARGIN + from.y + BOX_H / 2}
+                      x2={MARGIN + (rightward ? to.x : to.x + widthOf(to))}
+                      y2={MARGIN + to.y + BOX_H / 2}
+                      strokeWidth={2}
+                      stroke={broken ? 'var(--color-warn)' : 'var(--color-line)'}
+                      strokeDasharray={broken ? '6 4' : undefined}
+                      // An intact optional link is not a failure: quieter, and never dashed.
+                      opacity={edge.optional && !broken ? 0.6 : undefined}
+                    />
+                  )
+                })}
+                {shownNodes.map((node) => <GraphMark key={node.name} node={node} onOpen={openPlugin} />)}
+              </svg>
+            </div>
+            <p className="text-right font-mono text-meta text-text/50">{t('graph.reading')}</p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <section className="space-y-2 rounded-xl border border-line bg-surface p-4">
+              <h2 className="text-title font-medium">{t('graph.readingBreakTitle')}</h2>
+              <p className="text-body text-text/70">{t('graph.readingBreak')}</p>
+            </section>
+            <section className="space-y-2 rounded-xl border border-line bg-surface p-4">
+              <h2 className="text-title font-medium">{t('graph.desktopOnlyTitle')}</h2>
+              <p className="text-body text-text/70">{t('graph.desktopOnly')}</p>
+            </section>
           </div>
 
           <div data-testid="graph-mobile" className="space-y-6 md:hidden">
             {ORDER.filter((kind) => grouped[kind].length > 0).map((kind) => (
               <section key={kind} className="space-y-2" data-testid={`graph-kind-${kind}`}>
-                <h2 className="font-medium">{t(`kind.${kind}` as StringKey)}</h2>
+                <h2 className="text-title font-medium">{t(`kind.${kind}` as StringKey)}</h2>
                 <ul className="divide-y divide-line-soft rounded-lg border border-line">
                   {grouped[kind].map((node) => (
                     <li key={node.name} className="flex flex-wrap items-center gap-x-3 gap-y-1 p-3">
-                      <Link to={`/plugins/${node.name}`} className="font-mono">{node.name}</Link>
+                      <Link to={`/plugins/${node.name}`} className="font-mono text-body">{node.name}</Link>
                       <StateBadge state={node.state} />
                       {node.reason !== undefined && (
-                        <p className="w-full text-sm text-text/70">{node.reason}</p>
+                        <p className="w-full text-body text-text/70">{node.reason}</p>
                       )}
                     </li>
                   ))}

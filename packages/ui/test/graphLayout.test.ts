@@ -1,55 +1,100 @@
 import { describe, expect, it } from 'bun:test'
-import { layout } from '../src/graphLayout.ts'
-import type { GraphDto } from '../src/api/types.ts'
+import { COLUMNS, columnOf, isBroken, layout } from '../src/graphLayout.ts'
+import type { GraphDto, GraphNode } from '../src/api/types.ts'
 
-const GRAPH: GraphDto = {
-  nodes: [
-    { name: 'signal', kind: 'hypha', state: 'germinated' },
-    { name: 'radarr', kind: 'rhiza', state: 'germinated' },
-    { name: 'upcoming', kind: 'enzyme', state: 'germinated' },
-    { name: 'orphan', kind: 'enzyme', state: 'dormant', reason: 'radarr2 is not installed' },
-  ],
-  edges: [{ from: 'upcoming', to: 'radarr', optional: false }],
+function node(
+  name: string, kind?: GraphNode['kind'], state: GraphNode['state'] = 'germinated',
+): GraphNode {
+  return { name, ...(kind === undefined ? {} : { kind }), state }
 }
 
-describe('the graph layout', () => {
+// One node per column, plus a second hypha, so a swapped axis or a collapsed column shows.
+const GRAPH: GraphDto = {
+  nodes: [
+    node('signal', 'hypha'),
+    node('discord', 'hypha'),
+    node('allowlist', 'inhibitor'),
+    { name: 'core', state: 'germinated' },
+    node('radarr-search', 'enzyme'),
+    node('radarr', 'rhiza'),
+    node('brokenyaml', undefined, 'dormant'),
+  ],
+  edges: [{ from: 'radarr-search', to: 'radarr', optional: false }],
+}
+
+describe('the five columns', () => {
+  // design 2k's caption: left to right, channels → filters → core → commands → systems.
+  it('places each kind in its design column, with core in the middle', () => {
+    expect(columnOf(node('signal', 'hypha'))).toBe(0)
+    expect(columnOf(node('allowlist', 'inhibitor'))).toBe(1)
+    expect(columnOf({ name: 'core', state: 'germinated' })).toBe(2)
+    expect(columnOf(node('radarr-search', 'enzyme'))).toBe(3)
+    expect(columnOf(node('radarr', 'rhiza'))).toBe(4)
+  })
+
+  // A node whose manifest never parsed has no kind and must still be placed, not dropped.
+  it('places a kind-less node at the far right rather than losing it', () => {
+    expect(columnOf(node('brokenyaml', undefined, 'dormant'))).toBe(5)
+    expect(columnOf(node('brokenyaml', undefined, 'dormant'))).toBe(COLUMNS.length - 1)
+  })
+
   it('places every node, never dropping one that has no edge', () => {
     expect(layout(GRAPH).map((n) => n.name).sort())
-      .toEqual(['orphan', 'radarr', 'signal', 'upcoming'])
+      .toEqual(['allowlist', 'brokenyaml', 'core', 'discord', 'radarr', 'radarr-search', 'signal'])
   })
 
-  it('puts a requirer deeper than what it requires, which is what makes a break visible', () => {
+  // Pins the column width against the row height: only fixed values catch x and y aliased.
+  it('grows x by the column, left to right in the design order', () => {
     const placed = new Map(layout(GRAPH).map((n) => [n.name, n]))
-    expect(placed.get('upcoming')?.depth).toBeGreaterThan(placed.get('radarr')?.depth ?? 0)
+
+    expect(placed.get('signal')?.x).toBe(0)
+    expect(placed.get('allowlist')?.x).toBe(226)
+    expect(placed.get('core')?.x).toBe(452)
+    expect(placed.get('radarr-search')?.x).toBe(678)
+    expect(placed.get('radarr')?.x).toBe(904)
+    expect(placed.get('brokenyaml')?.x).toBe(1130)
   })
 
-  it('gives two nodes at the same depth different positions', () => {
-    const sameDepth = layout(GRAPH).filter((n) => n.depth === 0)
-    expect(new Set(sameDepth.map((n) => n.x)).size).toBe(sameDepth.length)
+  it('spreads nodes sharing a column downward, not on top of each other', () => {
+    const placed = layout(GRAPH)
+    const hyphae = placed.filter((n) => n.column === 0)
+
+    expect(hyphae.map((n) => n.name)).toEqual(['signal', 'discord'])
+    expect(hyphae.map((n) => n.y)).toEqual([0, 79])
+    expect(new Set(hyphae.map((n) => n.x)).size).toBe(1)
   })
 
-  // Discriminates the column-width constant from the row-height one: both spread nodes into
-  // distinct positions, so only a fixed value catches x and y being swapped or aliased.
-  it('spaces same-depth nodes by the column width and depth by the row height', () => {
-    const placed = new Map(layout(GRAPH).map((n) => [n.name, n]))
-    const sameDepth = layout(GRAPH).filter((n) => n.depth === 0).sort((a, b) => a.x - b.x)
-    expect(sameDepth[1]?.x).toBe(200)
-    expect(placed.get('upcoming')?.y).toBe(90)
+  // The old layout read depth off the edges; the design's order is the kind's alone.
+  it('places a node identically whether or not it has an edge', () => {
+    const withoutEdges = layout({ nodes: GRAPH.nodes, edges: [] })
+
+    expect(withoutEdges).toEqual(layout(GRAPH))
+  })
+})
+
+describe('the edge semantics', () => {
+  const byName = new Map<string, GraphNode>([
+    ['enzyme', node('enzyme', 'enzyme')],
+    ['broken', node('broken', 'rhiza', 'dormant')],
+    ['fine', node('fine', 'rhiza')],
+    ['sleeper', node('sleeper', 'enzyme', 'dormant')],
+  ])
+
+  it('is broken when the target is dormant', () => {
+    expect(isBroken({ from: 'enzyme', to: 'broken', optional: false }, byName)).toBe(true)
   })
 
-  // A cycle is what germination refuses, but a degraded substrate can still be asked for
-  // its graph — the layout must terminate rather than recurse forever.
-  it('terminates on a cycle', () => {
-    const cyclic: GraphDto = {
-      nodes: [
-        { name: 'alpha', kind: 'enzyme', state: 'dormant' },
-        { name: 'beta', kind: 'enzyme', state: 'dormant' },
-      ],
-      edges: [
-        { from: 'alpha', to: 'beta', optional: false },
-        { from: 'beta', to: 'alpha', optional: false },
-      ],
-    }
-    expect(layout(cyclic)).toHaveLength(2)
+  it('is broken when the source is dormant', () => {
+    expect(isBroken({ from: 'sleeper', to: 'fine', optional: false }, byName)).toBe(true)
+  })
+
+  // The discriminating case: the SPA dashed `optional` and greyed the broken edge, exactly
+  // inverted from design note 2k.
+  it('is not broken merely because it is optional', () => {
+    expect(isBroken({ from: 'enzyme', to: 'fine', optional: true }, byName)).toBe(false)
+  })
+
+  it('is not broken between two germinated nodes', () => {
+    expect(isBroken({ from: 'enzyme', to: 'fine', optional: false }, byName)).toBe(false)
   })
 })

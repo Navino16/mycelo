@@ -1,48 +1,38 @@
-import type { GraphDto, GraphNode } from './api/types.ts'
+import type { GraphDto, GraphEdge, GraphNode, SporeKind } from './api/types.ts'
 
 export interface PlacedNode extends GraphNode {
-  depth: number
+  column: number
   x: number
   y: number
 }
 
-const COLUMN = 200
-const ROW = 90
+/** The design's five columns, left to right: channels → filters → core → commands → systems. */
+export const COLUMNS: readonly (SporeKind | 'core' | 'unknown')[] =
+  ['hypha', 'inhibitor', 'core', 'enzyme', 'rhiza', 'unknown']
 
-/** Depth by longest path to a leaf, capped: a degraded substrate can carry a cycle. */
-function depths(graph: GraphDto): Map<string, number> {
-  const requires = new Map<string, string[]>()
-  for (const edge of graph.edges) {
-    requires.set(edge.from, [...(requires.get(edge.from) ?? []), edge.to])
-  }
-  const depth = new Map<string, number>()
-  const visiting = new Set<string>()
+export const BOX_W = 166
+export const BOX_H = 34
+const GAP_X = 60
+/** Wide enough that a dormant node's reason line fits under its box. */
+const GAP_Y = 45
 
-  function walk(name: string): number {
-    const known = depth.get(name)
-    if (known !== undefined) return known
-    if (visiting.has(name)) return 0
-    visiting.add(name)
-    const children = requires.get(name) ?? []
-    const own = children.length === 0 ? 0 : Math.max(...children.map(walk)) + 1
-    visiting.delete(name)
-    depth.set(name, own)
-    return own
-  }
+/** By kind, never by dependency depth (design 2k); `core` is synthetic, so it goes by name. */
+export function columnOf(node: GraphNode): number {
+  const key = node.name === 'core' ? 'core' : (node.kind ?? 'unknown')
+  return COLUMNS.indexOf(key)
+}
 
-  for (const node of graph.nodes) walk(node.name)
-  return depth
+/** R4: an edge is broken when either end is dormant. Optional is a separate, quieter treatment. */
+export function isBroken(edge: GraphEdge, byName: ReadonlyMap<string, GraphNode>): boolean {
+  return byName.get(edge.from)?.state === 'dormant' || byName.get(edge.to)?.state === 'dormant'
 }
 
 export function layout(graph: GraphDto): readonly PlacedNode[] {
-  const depth = depths(graph)
-  const perDepth = new Map<number, number>()
+  const perColumn = new Map<number, number>()
   return graph.nodes.map((node) => {
-    const d = depth.get(node.name) ?? 0
-    const column = perDepth.get(d) ?? 0
-    perDepth.set(d, column + 1)
-    // Depth grows downward (y) so a requirer sits visibly below what it requires; nodes
-    // sharing a depth spread sideways (x), which is what the brief's own test asserts.
-    return { ...node, depth: d, x: column * COLUMN, y: d * ROW }
+    const column = columnOf(node)
+    const row = perColumn.get(column) ?? 0
+    perColumn.set(column, row + 1)
+    return { ...node, column, x: column * (BOX_W + GAP_X), y: row * (BOX_H + GAP_Y) }
   })
 }

@@ -18,6 +18,24 @@ const GRAPH: GraphDto = {
   edges: [{ from: 'upcoming', to: 'radarr', optional: false }],
 }
 
+// The four edge cases R4 distinguishes, on the synthetic `core` node task 14 emits.
+const EDGES: GraphDto = {
+  nodes: [
+    { name: 'core', state: 'germinated' },
+    { name: 'signal', kind: 'hypha', state: 'germinated' },
+    { name: 'radarr', kind: 'rhiza', state: 'germinated' },
+    { name: 'sonarr', kind: 'rhiza', state: 'dormant', reason: 'url: Invalid input' },
+    { name: 'upcoming', kind: 'enzyme', state: 'germinated' },
+    { name: 'orphan', kind: 'enzyme', state: 'dormant', reason: 'radarr2 is not installed' },
+  ],
+  edges: [
+    { from: 'upcoming', to: 'radarr', optional: false },
+    { from: 'signal', to: 'core', optional: true },
+    { from: 'orphan', to: 'radarr', optional: false },
+    { from: 'upcoming', to: 'sonarr', optional: false },
+  ],
+}
+
 function serve(body: unknown): void {
   globalThis.fetch = mock(() => Promise.resolve(new Response(JSON.stringify(body), {
     headers: { 'content-type': 'application/json' },
@@ -48,6 +66,10 @@ function renderRouted(): void {
       </MemoryRouter>
     </I18nProvider>,
   )
+}
+
+function edge(from: string, to: string): Element | null {
+  return document.querySelector(`[data-edge="${from}->${to}"]`)
 }
 
 describe('the anastomosis graph', () => {
@@ -94,7 +116,7 @@ describe('the anastomosis graph', () => {
     renderGraph()
 
     await waitFor(() => { expect(screen.getAllByText('orphan').length).toBeGreaterThan(0) })
-    const drawn = screen.getByTestId('graph-desktop').querySelector('text.fill-crit')
+    const drawn = screen.getByTestId('graph-desktop').querySelector('[data-reason="orphan"]')
     expect(drawn?.textContent?.length).toBeLessThanOrEqual(60)
     expect(drawn?.textContent?.endsWith('…')).toBe(true)
     expect(screen.getByTestId('graph-desktop').querySelector('title')?.textContent).toBe(reason)
@@ -119,23 +141,127 @@ describe('the anastomosis graph', () => {
     }
   })
 
-  // Discriminates `edge.optional ? '6 4' : undefined`: only an optional edge draws dashed.
-  it('draws an optional edge dashed and a required one solid', async () => {
-    serve({
-      ...GRAPH,
-      edges: [
-        { from: 'upcoming', to: 'radarr', optional: false },
-        { from: 'orphan', to: 'radarr', optional: true },
-      ],
-    })
+  // R4, both halves: a dash means a dormant endpoint, and it says so at either end.
+  it('dashes a broken edge in amber, whichever end is dormant', async () => {
+    serve(EDGES)
     renderGraph()
 
-    await waitFor(() => { expect(screen.getAllByText('signal').length).toBeGreaterThan(0) })
-    const lines = document.querySelectorAll('line')
-    const dashed = [...lines].filter((l) => l.getAttribute('stroke-dasharray') === '6 4')
-    const solid = [...lines].filter((l) => l.getAttribute('stroke-dasharray') === null)
-    expect(dashed).toHaveLength(1)
-    expect(solid).toHaveLength(1)
+    await waitFor(() => { expect(edge('orphan', 'radarr')).not.toBeNull() })
+    for (const broken of [edge('orphan', 'radarr'), edge('upcoming', 'sonarr')]) {
+      expect(broken?.getAttribute('stroke-dasharray')).toBe('6 4')
+      expect(broken?.getAttribute('stroke')).toBe('var(--color-warn)')
+    }
+  })
+
+  // The discriminating case: the SPA dashed `optional`, which spent the dash on something
+  // that is not a failure at all.
+  it('leaves an intact optional edge solid and only quieter', async () => {
+    serve(EDGES)
+    renderGraph()
+
+    await waitFor(() => { expect(edge('signal', 'core')).not.toBeNull() })
+    const optional = edge('signal', 'core')
+    expect(optional?.getAttribute('stroke-dasharray')).toBeNull()
+    expect(optional?.getAttribute('stroke')).toBe('var(--color-line)')
+    expect(optional?.getAttribute('opacity')).toBe('0.6')
+  })
+
+  it('draws an intact required edge as a plain full-strength line', async () => {
+    serve(EDGES)
+    renderGraph()
+
+    await waitFor(() => { expect(edge('upcoming', 'radarr')).not.toBeNull() })
+    const intact = edge('upcoming', 'radarr')
+    expect(intact?.getAttribute('stroke-dasharray')).toBeNull()
+    expect(intact?.getAttribute('stroke')).toBe('var(--color-line)')
+    expect(intact?.getAttribute('opacity')).toBeNull()
+  })
+
+  // R1: amber is dormancy everywhere; red belongs to the mute bot alone.
+  it('paints a dormant node amber and a germinated one green, never red', async () => {
+    serve(EDGES)
+    renderGraph()
+
+    const desktop = await screen.findByTestId('graph-desktop')
+    const box = (name: string): Element | null => desktop.querySelector(`[data-node="${name}"] rect`)
+
+    expect(box('orphan')?.getAttribute('stroke')).toBe('var(--color-warn)')
+    expect(box('orphan')?.getAttribute('fill')).toBe('var(--color-warn-bg)')
+    expect(box('radarr')?.getAttribute('stroke')).toBe('var(--color-ok)')
+    expect(box('radarr')?.getAttribute('fill')).toBe('var(--color-ok-bg)')
+    expect(desktop.innerHTML).not.toContain('crit')
+  })
+
+  it('renders the core node narrower than a plugin, as the design draws it', async () => {
+    serve(EDGES)
+    renderGraph()
+
+    const desktop = await screen.findByTestId('graph-desktop')
+    const width = (name: string): number =>
+      Number(desktop.querySelector(`[data-node="${name}"] rect`)?.getAttribute('width'))
+
+    expect(width('core')).toBe(96)
+    expect(width('radarr')).toBe(166)
+  })
+
+  // The count is of plugins: `core` is the substrate, and counting it would overstate by one.
+  it('summarises the substrate without counting core as a plugin', async () => {
+    serve(EDGES)
+    renderGraph()
+
+    expect(await screen.findByText('5 plugins · 4 links · 2 broken')).toBeDefined()
+  })
+
+  it('gives the marks a legend and the columns their caption', async () => {
+    serve(EDGES)
+    renderGraph()
+
+    await waitFor(() => { expect(screen.getByText('germinated')).toBeDefined() })
+    expect(screen.getByText('dormant')).toBeDefined()
+    expect(screen.getByText('unsatisfied link')).toBeDefined()
+    expect(screen.getByText('left to right: channels → filters → core → commands → systems'))
+      .toBeDefined()
+  })
+
+  it('carries the two cards that explain the break and the breakpoint', async () => {
+    serve(EDGES)
+    renderGraph()
+
+    expect(await screen.findByText('Reading the break')).toBeDefined()
+    expect(screen.getByText(/A dashed edge with an amber node/)).toBeDefined()
+    expect(screen.getByText('Why this is desktop only')).toBeDefined()
+    expect(screen.getByText(/the graph appears from 1024 px up/)).toBeDefined()
+  })
+
+  it('narrows to the failures and back when the chip is pressed', async () => {
+    serve(EDGES)
+    renderGraph()
+
+    const chip = await screen.findByRole('button', { name: 'Only failures' })
+    expect(chip.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(chip)
+
+    const desktop = screen.getByTestId('graph-desktop')
+    expect(chip.getAttribute('aria-pressed')).toBe('true')
+    expect(within(desktop).getByText('orphan')).toBeDefined()
+    expect(within(desktop).getByText('sonarr')).toBeDefined()
+    // Kept because a break needs both its ends to be readable.
+    expect(within(desktop).getByText('radarr')).toBeDefined()
+    expect(within(desktop).queryByText('signal')).toBeNull()
+    expect(edge('signal', 'core')).toBeNull()
+    expect(edge('orphan', 'radarr')).not.toBeNull()
+
+    fireEvent.click(chip)
+    expect(within(screen.getByTestId('graph-desktop')).getByText('signal')).toBeDefined()
+  })
+
+  it('keeps the summary counting the whole substrate while narrowed', async () => {
+    serve(EDGES)
+    renderGraph()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Only failures' }))
+
+    expect(screen.getByText('5 plugins · 4 links · 2 broken')).toBeDefined()
   })
 
   it('does not throw when an edge names a node absent from the response', async () => {
