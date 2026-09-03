@@ -31,17 +31,46 @@ export function GuidedStart({ counts }: { counts: SubstrateCounts }): React.JSX.
 
   return (
     <section className="space-y-3">
-      <h2 className="font-medium">{t('guided.title')}</h2>
+      <div className="space-y-1">
+        <h2 className="text-title font-medium">{t('guided.nothingInstalled')}</h2>
+        <p className="text-body text-text/70">{t('guided.nothingInstalledLead')}</p>
+      </div>
       <ol className="grid gap-3 md:grid-cols-3">
-        {steps.map((step) => (
-          <li key={step} className="rounded-lg border border-line p-4">
-            <Link to={TARGET[step]} className="font-medium text-accent">
-              {t(`guided.${step}` as StringKey)}
+        {steps.map((step, index) => (
+          <li
+            key={step}
+            className={[
+              'flex flex-col gap-2 rounded-xl border p-4',
+              index === 0 ? 'border-accent' : 'border-line',
+            ].join(' ')}
+          >
+            <div className="flex items-start gap-3">
+              {/* 1b numbers what is left to do, not the fixed three: the first remaining
+                  step is always 1. */}
+              <span
+                data-step-number
+                className="flex size-[26px] shrink-0 items-center justify-center rounded-md bg-surface2 font-mono text-meta-lg"
+              >
+                {index + 1}
+              </span>
+              <div className="space-y-1">
+                <p className="text-title font-medium">{t(`guided.${step}` as StringKey)}</p>
+                <p className="text-body text-text/70">{t(`guided.${step}Lead` as StringKey)}</p>
+              </div>
+            </div>
+            <Link
+              to={TARGET[step]}
+              className={[
+                'mt-auto rounded-md px-3 py-2 text-center text-body font-medium',
+                index === 0 ? 'bg-accent text-accent-ink' : 'border border-line',
+              ].join(' ')}
+            >
+              {t(`guided.${step}Cta` as StringKey)}
             </Link>
-            <p className="mt-1 text-sm text-text/70">{t(`guided.${step}Lead` as StringKey)}</p>
           </li>
         ))}
       </ol>
+      <p className="text-meta-lg text-text/60">{t('guided.registryNote')}</p>
     </section>
   )
 }

@@ -6,25 +6,31 @@ import { SecretField } from '../../src/components/SecretField.tsx'
 import { PluginSettings } from '../../src/screens/PluginSettings.tsx'
 import type { FormSchema, PluginDetailDto } from '../../src/api/types.ts'
 
+/**
+ * The widget renders the bare input; the field template renders the label. The test stands in
+ * for the template, so a label the widget renders again would be the second one.
+ */
+function renderSecret(value: string, onChange: (next: string) => void = () => undefined): void {
+  render(
+    <I18nProvider>
+      <label htmlFor="apiKey">API key</label>
+      <SecretField id="apiKey" value={value} onChange={onChange} />
+    </I18nProvider>,
+  )
+}
+
 describe('the secret field', () => {
   // The mask must never be readable as a value, and it must never be typed back.
   it('renders a stored credential masked, and does not put it in an input the eye can read', () => {
-    render(
-      <I18nProvider>
-        <SecretField id="apiKey" label="API key" value="••••" onChange={() => undefined} />
-      </I18nProvider>,
-    )
-    const input = screen.getByLabelText<HTMLInputElement>('API key')
-    expect(input.type).toBe('password')
+    renderSecret('\u2022\u2022\u2022\u2022')
+
+    expect(screen.getByLabelText<HTMLInputElement>('API key').type).toBe('password')
   })
 
   // The whole point of task 10 step 1.
   it('masks a declared secret that has never been filled in', () => {
-    render(
-      <I18nProvider>
-        <SecretField id="apiKey" label="API key" value="" onChange={() => undefined} />
-      </I18nProvider>,
-    )
+    renderSecret('')
+
     expect(screen.getByLabelText<HTMLInputElement>('API key').type).toBe('password')
   })
 
@@ -32,24 +38,25 @@ describe('the secret field', () => {
   // that proves the typed value is reported, not that an untouched field emits nothing.
   it('emits nothing when the operator does not touch it', () => {
     const seen: string[] = []
-    render(
-      <I18nProvider>
-        <SecretField id="apiKey" label="API key" value="••••" onChange={(v) => seen.push(v)} />
-      </I18nProvider>,
-    )
+    renderSecret('\u2022\u2022\u2022\u2022', (v) => seen.push(v))
+
     expect(seen).toEqual([])
   })
 
   it('reports the typed value when the operator changes it', () => {
     const seen: string[] = []
-    render(
-      <I18nProvider>
-        <SecretField id="apiKey" label="API key" value="••••" onChange={(v) => seen.push(v)} />
-      </I18nProvider>,
-    )
+    renderSecret('\u2022\u2022\u2022\u2022', (v) => seen.push(v))
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'a-real-key' } })
 
     expect(seen).toEqual(['a-real-key'])
+  })
+
+  it('renders no label of its own, leaving the template label as the only one', () => {
+    renderSecret('')
+
+    const input = screen.getByLabelText<HTMLInputElement>('API key')
+    expect(input.closest('label')).toBeNull()
+    expect(document.querySelectorAll(`label[for="${input.id}"]`)).toHaveLength(1)
   })
 })
 
@@ -64,6 +71,36 @@ const SCHEMA: FormSchema = {
     properties: {
       url: { type: 'string', title: 'URL' },
       token: { type: 'string', title: 'Token' },
+    },
+  },
+}
+
+/** A schema whose one required field discriminates the enable gate's two halves. */
+const REQUIRING: FormSchema = {
+  available: true,
+  secrets: [],
+  schema: { type: 'object', required: ['url'], properties: { url: { type: 'string', title: 'URL' } } },
+}
+
+const REQUIRING_SECRET: FormSchema = {
+  available: true,
+  secrets: ['token'],
+  schema: { type: 'object', required: ['token'], properties: { token: { type: 'string', title: 'Token' } } },
+}
+
+/** One property of every kind the field meta line names (2c's left column). */
+const RICH: FormSchema = {
+  available: true,
+  secrets: ['apiKey'],
+  schema: {
+    type: 'object',
+    required: ['baseUrl', 'apiKey'],
+    properties: {
+      baseUrl: { type: 'string', title: 'Base URL' },
+      apiKey: { type: 'string', title: 'API key' },
+      profile: { type: 'string', title: 'Quality profile', enum: ['HD-1080p', 'HD-720p'] },
+      timeout: { type: 'number', title: 'Timeout', default: 30 },
+      monitored: { type: 'boolean', title: 'Add monitored' },
     },
   },
 }
@@ -139,14 +176,23 @@ describe('the generated settings form', () => {
 
   // available: false is a state, not a fetch failure: no form, no button, no alert —
   // only the sentence and the plugin's own raw reason.
-  it('renders the unavailable sentence and the raw reason, with no form and no alert', async () => {
-    mockVault({ schema: { available: false, reason: 'no toJsonSchema' } })
+  it('renders the empty-schema state and the raw reason, with no field and no alert', async () => {
+    mockVault({ schema: { available: false, reason: 'no toJsonSchema' }, detail: DISABLED })
     renderSettings()
 
     await waitFor(() => { expect(screen.getByText('no toJsonSchema')).toBeDefined() })
-    expect(screen.getByText('This plugin has nothing to configure here.')).toBeDefined()
-    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.getByText('Nothing to configure')).toBeDefined()
+    expect(screen.getByText(/publishes an empty schema/)).toBeDefined()
+    // 2c-config-form-mobile-empty offers Enable here: an empty schema is nothing to fill in,
+    // so the plugin can germinate straight away.
+    expect(screen.getByRole('button', { name: 'Enable' })).toBeDefined()
+    expect(screen.queryByRole('textbox')).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enable' }))
+
+    await waitFor(() => { expect(screen.getByText('Enabled. It takes effect after a restart.')).toBeDefined() })
+    expect(screen.queryByRole('button', { name: 'Enable' })).toBeNull()
   })
 
   // The integration, not the widget alone: a key named in `secrets` must reach RJSF's
@@ -263,43 +309,53 @@ describe('the generated settings form', () => {
     })
   })
 
-  it('offers the enable action after a successful save, for a disabled plugin', async () => {
-    mockVault({ detail: DISABLED, settings: { url: 'http://x', token: '••••' } })
+  // Both halves. The first alone passes for a switch that is always off; the second alone
+  // passes for one that is never gated (brief §7B step 5).
+  it('refuses the switch while a required field is unset, and allows it once it has a value', async () => {
+    mockVault({ schema: REQUIRING, detail: DISABLED, settings: {} })
     renderSettings()
 
-    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
-    expect(screen.queryByRole('button', { name: 'Enable' })).toBeNull()
+    const url = await screen.findByLabelText('URL')
+    expect(screen.getByRole<HTMLInputElement>('switch').disabled).toBe(true)
+    expect(screen.getByText(/Cannot be switched on: url required and currently unset/)).toBeDefined()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.change(url, { target: { value: 'http://x' } })
 
-    await waitFor(() => { expect(screen.getByRole('button', { name: 'Enable' })).toBeDefined() })
+    await waitFor(() => { expect(screen.getByRole<HTMLInputElement>('switch').disabled).toBe(false) })
+    expect(screen.queryByText(/Cannot be switched on/)).toBeNull()
   })
 
-  // Discriminates the `!enabledNow` guard from bare `saved && disabled`: once enabling
-  // succeeds, the Enable button must not still sit beside "Plugin enabled".
-  it('hides the enable button once enabling has succeeded', async () => {
-    mockVault({ detail: DISABLED, settings: { url: 'http://x', token: '••••' } })
+  // A stored credential arrives as the mask, which is a value: a plugin whose only required
+  // field is already stored must not be locked out of germinating.
+  it('reads a stored secret at its mask as a satisfied required field', async () => {
+    mockVault({ schema: REQUIRING_SECRET, detail: DISABLED, settings: { token: '\u2022\u2022\u2022\u2022' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('Token')).toBeDefined() })
+    expect(screen.getByRole<HTMLInputElement>('switch').disabled).toBe(false)
+  })
+
+  it('enables the plugin through the switch and says the restart is what applies it', async () => {
+    const { calls } = mockVault({ detail: DISABLED, settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
     renderSettings()
 
     await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await waitFor(() => { expect(screen.getByRole('button', { name: 'Enable' })).toBeDefined() })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Enable' }))
+    fireEvent.click(screen.getByRole('switch'))
 
     await waitFor(() => { expect(screen.getByText('Enabled. It takes effect after a restart.')).toBeDefined() })
-    expect(screen.queryByRole('button', { name: 'Enable' })).toBeNull()
+    expect(calls.some((c) => c.method === 'POST' && c.url === '/api/plugins/vault/enable')).toBe(true)
+    // Checked and inert, not gone: the operator must see the state the click produced.
+    const settled = screen.getByRole<HTMLInputElement>('switch')
+    expect(settled.getAttribute('aria-checked')).toBe('true')
+    expect(settled.disabled).toBe(true)
   })
 
-  it('never offers the enable action for an already germinated plugin', async () => {
-    const { calls } = mockVault({ settings: { url: 'http://x', token: '••••' } })
+  it('never offers the switch for an already enabled plugin', async () => {
+    mockVault({ settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
     renderSettings()
 
     await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
-    expect(screen.queryByRole('button', { name: 'Enable' })).toBeNull()
+    expect(screen.queryByRole('switch')).toBeNull()
   })
 
   // RJSF passes formData through as `value`, undefined for a never-stored key; typing then
@@ -335,11 +391,113 @@ describe('the generated settings form', () => {
     renderSettings()
 
     await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-    await waitFor(() => { expect(screen.getByRole('button', { name: 'Enable' })).toBeDefined() })
-
-    fireEvent.click(screen.getByRole('button', { name: 'Enable' }))
+    fireEvent.click(screen.getByRole('switch'))
 
     await waitFor(() => { expect(screen.getByText('configuration is incomplete: token: field required')).toBeDefined() })
+  })
+})
+
+describe("the generated form's page frame", () => {
+  it('carries the plugin header and the tab strip, with Configuration the active tab', async () => {
+    mockVault({ settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    expect(screen.getByRole('heading', { name: 'vault' })).toBeDefined()
+    expect(screen.getByText('Germinated')).toBeDefined()
+    // The three siblings navigate back to the detail route, so the two read as one screen.
+    for (const label of ['Diagnosis', 'Requirements']) {
+      expect(screen.getByRole('link', { name: label }).getAttribute('href')).toBe('/plugins/vault')
+    }
+    expect(screen.getByRole('button', { name: 'Configuration' }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('counts the schema properties under the title', async () => {
+    mockVault({ schema: RICH, detail: DISABLED, settings: {} })
+    renderSettings()
+
+    expect(await screen.findByText("5 fields from the plugin's schema")).toBeDefined()
+  })
+
+  // Singular key at exactly one, the project's convention: '1 fields' is what it exists to stop.
+  it('counts a one-property schema in the singular', async () => {
+    mockVault({ schema: REQUIRING, detail: DISABLED, settings: {} })
+    renderSettings()
+
+    expect(await screen.findByText("1 field from the plugin's schema")).toBeDefined()
+  })
+
+  // 2c's left column: the type word, then required or the default. Read from the schema alone,
+  // with `secrets` overriding the type — a secret is a string the operator must not read back.
+  it('names each field type and whether it is required or defaulted', async () => {
+    mockVault({ schema: RICH, detail: DISABLED, settings: {} })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('Base URL')).toBeDefined() })
+    expect(screen.getByText('text \u00b7 required')).toBeDefined()
+    expect(screen.getByText('secret \u00b7 required')).toBeDefined()
+    expect(screen.getByText('enum')).toBeDefined()
+    expect(screen.getByText('number \u00b7 default 30')).toBeDefined()
+    expect(screen.getByText('boolean')).toBeDefined()
+    // The checkbox widget renders its own label, so the template must not render a second one.
+    const monitored = screen.getByLabelText<HTMLInputElement>('Add monitored')
+    expect(document.querySelectorAll(`label[for="${monitored.id}"]`)).toHaveLength(1)
+  })
+
+  it('heads a rejected save with the summary naming the plugin and how many fields failed', async () => {
+    mockVault({
+      settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' },
+      putResult: {
+        status: 400,
+        body: {
+          error: {
+            message: 'refused',
+            detail: [{ key: 'url', issues: [{ path: ['url'], message: 'must start with http://' }] }],
+          },
+        },
+      },
+    })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Saved, but rejected by vault')).toBeDefined()
+    expect(screen.getByText(/1 of 2 fields failed validation on the server/)).toBeDefined()
+  })
+
+  // Discriminates a summary rendered whenever a save happened from one rendered on a refusal.
+  it('heads a successful save with no rejection summary', async () => {
+    mockVault({ settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    fireEvent.change(screen.getByLabelText('URL'), { target: { value: 'http://y' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => { expect(screen.queryByRole('alert')).toBeNull() })
+    expect(screen.queryByText('Saved, but rejected by vault')).toBeNull()
+  })
+
+  it('puts the form back to the fetched baseline when the operator discards', async () => {
+    mockVault({ settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
+    renderSettings()
+
+    const url = await screen.findByLabelText<HTMLInputElement>('URL')
+    fireEvent.change(url, { target: { value: 'http://y' } })
+    expect(screen.getByLabelText<HTMLInputElement>('URL').value).toBe('http://y')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
+
+    await waitFor(() => { expect(screen.getByLabelText<HTMLInputElement>('URL').value).toBe('http://x') })
+  })
+
+  it('states the secret rule the API enforces', async () => {
+    mockVault({ settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    expect(screen.getByText('About secrets')).toBeDefined()
+    expect(screen.getByText(/never returned by the API, and excluded from exports/)).toBeDefined()
   })
 })

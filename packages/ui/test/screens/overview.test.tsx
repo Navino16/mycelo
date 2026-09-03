@@ -801,7 +801,7 @@ describe('the guided path out of an empty substrate', () => {
       { sources: [], plugins: { ...COMPLETE_PLUGINS, hypha: [] }, roles: [] },
     )
 
-    expect(await screen.findByText('Three moves to a working substrate')).toBeDefined()
+    expect(await screen.findByText('Nothing is installed yet')).toBeDefined()
     expect(screen.getByText('radarr')).toBeDefined()
     expect(screen.getByText('apiKey: missing required field')).toBeDefined()
   })
@@ -833,7 +833,7 @@ describe('the guided path out of an empty substrate', () => {
     await withHealth(GERMINATED, COMPLETE)
 
     await waitFor(() => { expect(screen.getByText('Everything is germinated.')).toBeDefined() })
-    expect(screen.queryByText('Three moves to a working substrate')).toBeNull()
+    expect(screen.queryByText('Nothing is installed yet')).toBeNull()
   })
 
   // allSettled, not all: 9.7 gives a principal a narrowed scope set, and a 403 on one route

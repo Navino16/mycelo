@@ -88,9 +88,10 @@ describe('AuthGate', () => {
       return Promise.resolve(jsonResponse(200, {}))
     }) as unknown as typeof fetch
 
-    fireEvent.change(screen.getByLabelText(/user/i), { target: { value: 'owner' } })
-    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'a-long-enough-one' } })
-    fireEvent.click(screen.getByRole('button', { name: /create/i }))
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'owner' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'a-long-enough-one' } })
+    fireEvent.change(screen.getByLabelText('Repeat password'), { target: { value: 'a-long-enough-one' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create the account' }))
 
     await screen.findByText('protected content')
     expect(screen.queryByRole('heading', { name: 'Sign in' })).toBeNull()
