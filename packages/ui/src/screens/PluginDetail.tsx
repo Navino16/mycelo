@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router'
 import { ApiError, api } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
@@ -30,12 +30,14 @@ export function PluginDetail(): React.JSX.Element {
   // lands on a substrate already mid-restart.
   const inFlight = useRef(false)
 
-  useEffect(() => {
-    api.get<PluginDetailDto>(`/api/plugins/${name}`).then(
-      (v) => { setPlugin(v); setError(false) },
-      () => { setError(true) },
-    )
-  }, [name])
+  // A callback, not an inline effect: a POST that changes the plugin's state must re-read the
+  // DTO, or the header keeps describing what the action just changed.
+  const load = useCallback((): Promise<void> => api.get<PluginDetailDto>(`/api/plugins/${name}`).then(
+    (v) => { setPlugin(v); setError(false) },
+    () => { setError(true) },
+  ), [name])
+
+  useEffect(() => { void load() }, [load])
 
   const commands = readArray<string>(plugin?.commands)
   const mounted = readArray<string>(plugin?.mounted)
@@ -50,7 +52,7 @@ export function PluginDetail(): React.JSX.Element {
       inFlight.current = false
     }
     api.send<MutationResult>('POST', path).then(
-      () => refresh().then(() => { settle(null) }),
+      () => Promise.all([refresh(), load()]).then(() => { settle(null) }),
       (e: unknown) => { settle(e instanceof ApiError ? e.message : t('error.generic')) },
     ).catch(() => { settle(t('error.generic')) })
   }
@@ -190,7 +192,7 @@ export function PluginDetail(): React.JSX.Element {
         <section className="space-y-2">
           <h2 className="text-title font-medium">{t('detail.commands')}</h2>
           {declared.length === 0
-            ? <p className="text-body text-text/60">{t('demands.none')}</p>
+            ? <p className="text-body text-text/60">{t('detail.noCommands')}</p>
             : (
               <ul className="space-y-1 font-mono text-body">
                 {declared.map((c) => <li key={c}>{c}</li>)}

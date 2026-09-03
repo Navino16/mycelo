@@ -403,3 +403,42 @@ describe('the plugins list chrome', () => {
     expect(shownNames()).toEqual(['plex', 'quiet', 'sonarr'])
   })
 })
+
+describe('an empty list says which of its two causes emptied it', () => {
+  // `sections.length === 0` is reached by a filter as well as by a search, and the search
+  // sentence then reads `No installed plugin matches “”` with a term nobody typed.
+  it('names the state nothing is in when a filter empties the list', async () => {
+    serve(SEARCHABLE)
+    renderPlugins()
+
+    await waitFor(() => { expect(screen.getByText('meteo')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: /^Dormant/ }))
+
+    expect(screen.getByText('No installed plugin is dormant')).toBeDefined()
+    expect(screen.queryByText('No installed plugin matches “”')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Search the sources instead' })).toBeNull()
+  })
+
+  it('names the disabled state, not the dormant one, under the disabled filter', async () => {
+    serve(SEARCHABLE)
+    renderPlugins()
+
+    await waitFor(() => { expect(screen.getByText('meteo')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: /^Disabled/ }))
+
+    expect(screen.getByText('No installed plugin is disabled')).toBeDefined()
+  })
+
+  // Both narrowings at once: the term is what the operator typed, so its sentence wins.
+  it('keeps the search sentence when a term and a filter both narrow to nothing', async () => {
+    serve(SEARCHABLE)
+    renderPlugins()
+
+    await waitFor(() => { expect(screen.getByText('meteo')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: /^Dormant/ }))
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'grafna' } })
+
+    expect(screen.getByText('No installed plugin matches “grafna”')).toBeDefined()
+    expect(screen.getByRole('link', { name: 'Search the sources instead' })).toBeDefined()
+  })
+})

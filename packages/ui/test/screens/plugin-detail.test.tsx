@@ -282,3 +282,67 @@ describe('the dormant plugin detail, as 1c draws it', () => {
     await waitFor(() => { expect(calls).toContain('POST /api/plugins/radarr/disable') })
   })
 })
+
+/** Answers the first GET of the plugin with `first` and every later one with `second`. */
+function serveThenReload(first: unknown, second: unknown, calls: string[]): void {
+  let reads = 0
+  globalThis.fetch = mock((url: string, init?: RequestInit) => {
+    const method = init?.method ?? 'GET'
+    calls.push(`${method} ${url}`)
+    let body: unknown = { ok: true }
+    if (method === 'GET') {
+      reads += 1
+      body = reads === 1 ? first : second
+    }
+    return Promise.resolve(new Response(JSON.stringify(body), {
+      headers: { 'content-type': 'application/json' },
+    }))
+  }) as unknown as typeof fetch
+}
+
+describe('an action that succeeds leaves the screen describing the new state', () => {
+  // refresh() only re-reads /api/health: without a second GET of the plugin the header keeps
+  // the state the POST just changed, and the Disable button stays live for a second POST.
+  it('drops the Disable button once the refetched plugin says it is disabled', async () => {
+    const calls: string[] = []
+    serveThenReload(DORMANT, { ...DORMANT, enabled: false, state: 'disabled' }, calls)
+    renderDetail()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Disable' }))
+
+    await waitFor(() => { expect(screen.queryByRole('button', { name: 'Disable' })).toBeNull() })
+    expect(calls.filter((c) => c === 'GET /api/plugins/radarr')).toHaveLength(2)
+    expect(screen.getByText('disabled')).toBeDefined()
+  })
+
+  it('re-reads the plugin after a germination retry, so a germinated one stops reading dormant', async () => {
+    const calls: string[] = []
+    serveThenReload(
+      DORMANT,
+      { ...DORMANT, state: 'germinated', reason: undefined, mounted: ['health.read'] },
+      calls,
+    )
+    renderDetail(DEGRADED)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry germination' }))
+
+    await waitFor(() => { expect(screen.getByText('Germinated')).toBeDefined() })
+    expect(screen.queryByText('Something it depends on is missing')).toBeNull()
+    expect(screen.queryByText("requires rhiza 'plex', which is not installed")).toBeNull()
+  })
+})
+
+describe('the commands tab of a plugin that declares none', () => {
+  // 'Asks for nothing.' is DemandsList's sentence about scopes and dependencies; every hypha,
+  // rhiza and inhibitor reaches this branch, and none of them asks for nothing.
+  it('says it declares no command, not that it asks for nothing', async () => {
+    serve(DETAIL)
+    renderDetail()
+
+    await waitFor(() => { expect(screen.getByText('radarr')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: /^Commands/ }))
+
+    expect(screen.getByText('Declares no command.')).toBeDefined()
+    expect(screen.queryByText('Asks for nothing.')).toBeNull()
+  })
+})

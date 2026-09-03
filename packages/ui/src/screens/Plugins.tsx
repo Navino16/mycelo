@@ -110,17 +110,27 @@ export function Plugins(): React.JSX.Element {
           </div>
 
           {sections.length === 0
-            ? (
-                <EmptyState
-                  title={t('plugins.noMatch', { term: term.trim() })}
-                  body={t('plugins.noMatchLead')}
-                  action={(
-                    <Link to="/sources" className="rounded-md border border-line px-3 py-2 text-body">
-                      {t('plugins.searchSources')}
-                    </Link>
-                  )}
-                />
-              )
+            // A filter empties the list as readily as a search does, and the search sentence
+            // would then quote a term nobody typed. `all` never reaches here: an unnarrowed
+            // list keeps all five sections.
+            ? (needle === '' && filter !== 'all'
+                ? (
+                    <EmptyState
+                      title={t('plugins.noneInState', { state: t(`state.${filter}`).toLowerCase() })}
+                      body={t('plugins.noneInStateLead')}
+                    />
+                  )
+                : (
+                    <EmptyState
+                      title={t('plugins.noMatch', { term: term.trim() })}
+                      body={t('plugins.noMatchLead')}
+                      action={(
+                        <Link to="/sources" className="rounded-md border border-line px-3 py-2 text-body">
+                          {t('plugins.searchSources')}
+                        </Link>
+                      )}
+                    />
+                  ))
             : sections.map((section) => (
               <KindSection key={section.kind} kind={section.kind} plugins={section.plugins} />
             ))}
