@@ -6,6 +6,7 @@ import { ORDER } from '../api/types.ts'
 import { useUptimeLine } from '../chrome.tsx'
 import { AttentionTable } from '../components/AttentionTable.tsx'
 import { Chip } from '../components/Chip.tsx'
+import { diagnose } from '../components/DormantDiagnosis.tsx'
 import { Dot } from '../components/Dot.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
 import { GuidedStart } from '../components/GuidedStart.tsx'
@@ -31,51 +32,73 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** `total` off a PageDto, guarding a shape that crossed the boundary unchecked. */
-function pageTotal(value: unknown): number {
+function pageTotal(value: unknown): number | undefined {
   const total = isRecord(value) ? value.total : undefined
-  return typeof total === 'number' ? total : 0
+  return typeof total === 'number' ? total : undefined
 }
 
-interface Body {
-  guided: SubstrateCounts
-  plugins: readonly PluginDto[]
-  commands: readonly CommandDto[]
+/** The answer of one route, or undefined when it was refused. */
+function answer(result: PromiseSettledResult<unknown> | undefined): unknown {
+  return result?.status === 'fulfilled' ? result.value : undefined
+}
+
+interface PluginStats {
+  all: readonly PluginDto[]
+  total: number
   germinated: number
   dormant: number
   disabled: number
   /** Commands declared by plugins that did not start (PluginDto.commands, task 14). */
   unavailable: number
-  people: number
-  neverReviewed: number
-  roles: number
-  sources: number
-  defaultRole: string | undefined
+  channels: number
 }
 
-function readBody(answers: readonly unknown[]): Body {
-  const [rawPlugins, rawSources, rawRoles, rawCommands, rawConfig, rawPeople, rawUnreviewed] = answers
-  const groups = isRecord(rawPlugins) ? rawPlugins as unknown as PluginGroups : undefined
-  const plugins = ORDER.flatMap((kind) => readArray<PluginDto>(groups?.[kind]) ?? [])
-  const roles = readArray<RoleDto>(rawRoles) ?? []
-  const commandGroups = isRecord(rawCommands) ? Object.values(rawCommands) : []
-  const stopped = plugins.filter((p) => p.state !== 'germinated')
+/** Every slot is optional: one refused route must not blank the other six sections. */
+interface Body {
+  plugins: PluginStats | undefined
+  commands: readonly CommandDto[] | undefined
+  roles: readonly RoleDto[] | undefined
+  sources: number | undefined
+  people: number | undefined
+  neverReviewed: number | undefined
+  /** null when /api/config named no default role; undefined when the route was refused. */
+  defaultRole: string | null | undefined
+  refused: boolean
+}
+
+function readStats(raw: unknown): PluginStats {
+  const groups = raw as PluginGroups
+  const all = ORDER.flatMap((kind) => readArray<PluginDto>(groups[kind]) ?? [])
+  const stopped = all.filter((p) => p.state !== 'germinated')
   return {
-    guided: {
-      sources: (readArray<SourceDto>(rawSources) ?? []).length,
-      channels: (readArray<PluginDto>(groups?.hypha) ?? []).length,
-      customRoles: roles.filter((r) => !r.builtin).length,
-    },
-    plugins,
-    commands: commandGroups.flatMap((group) => readArray<CommandDto>(group) ?? []),
-    germinated: plugins.filter((p) => p.state === 'germinated').length,
-    dormant: plugins.filter((p) => p.state === 'dormant').length,
-    disabled: plugins.filter((p) => p.state === 'disabled').length,
+    all,
+    total: all.length,
+    germinated: all.filter((p) => p.state === 'germinated').length,
+    dormant: all.filter((p) => p.state === 'dormant').length,
+    disabled: all.filter((p) => p.state === 'disabled').length,
     unavailable: stopped.reduce((sum, p) => sum + (readArray<string>(p.commands) ?? []).length, 0),
-    people: pageTotal(rawPeople),
-    neverReviewed: pageTotal(rawUnreviewed),
-    roles: roles.length,
-    sources: (readArray<SourceDto>(rawSources) ?? []).length,
-    defaultRole: (rawConfig as ConfigDto | null | undefined)?.defaultRole,
+    channels: (readArray<PluginDto>(groups.hypha) ?? []).length,
+  }
+}
+
+function readBody(results: readonly PromiseSettledResult<unknown>[]): Body {
+  const [plugins, sources, roles, commands, config, people, unreviewed] = results
+  const rawPlugins = answer(plugins)
+  const rawCommands = answer(commands)
+  const rawConfig = answer(config)
+  return {
+    plugins: isRecord(rawPlugins) ? readStats(rawPlugins) : undefined,
+    commands: isRecord(rawCommands)
+      ? Object.values(rawCommands).flatMap((group) => readArray<CommandDto>(group) ?? [])
+      : undefined,
+    roles: readArray<RoleDto>(answer(roles)),
+    sources: readArray<SourceDto>(answer(sources))?.length,
+    people: pageTotal(answer(people)),
+    neverReviewed: pageTotal(answer(unreviewed)),
+    defaultRole: config?.status !== 'fulfilled'
+      ? undefined
+      : (rawConfig as ConfigDto | null)?.defaultRole ?? null,
+    refused: results.some((r) => r.status === 'rejected'),
   }
 }
 
@@ -84,15 +107,16 @@ export function Overview(): React.JSX.Element {
   const { health, error, refresh } = useHealth()
   const uptime = useUptimeLine()
   const [body, setBody] = useState<Body | null>(null)
-  const [bodyError, setBodyError] = useState(false)
   const [filter, setFilter] = useState<'all' | 'dormant' | 'unreachable'>('all')
   // Seconds since the poll that last answered. The substrate serves no check timestamp
   // (§2 1a), and setState directly in an effect is refused by react-hooks/set-state-in-effect,
   // so the age is re-derived by the interval and starts at the render that mounted it.
   const [age, setAge] = useState(0)
 
+  // allSettled, not all: a principal refused one of these routes would otherwise lose every
+  // section of the page, and 9.7 makes that reachable.
   useEffect(() => {
-    Promise.all([
+    void Promise.allSettled([
       api.get<unknown>('/api/plugins'),
       api.get<unknown>('/api/sources'),
       api.get<unknown>('/api/roles'),
@@ -100,10 +124,7 @@ export function Overview(): React.JSX.Element {
       api.get<unknown>('/api/config'),
       api.get<unknown>('/api/people?perPage=1'),
       api.get<unknown>('/api/people?reviewed=false&perPage=1'),
-    ]).then((answers) => {
-      setBody(readBody(answers))
-      setBodyError(false)
-    }, () => { setBodyError(true) })
+    ]).then((results) => { setBody(readBody(results)) })
   }, [])
 
   useEffect(() => {
@@ -130,10 +151,16 @@ export function Overview(): React.JSX.Element {
     && (enforcingBlocked?.length ?? 0) === 0
 
   const { state } = healthPillState(health, error)
-  const rows = attentionRows(t, dormant ?? [], degradedRhizas, body)
+  const stats = body?.plugins
+  const rows = attentionRows(t, dormant ?? [], degradedRhizas, stats)
   const shown = rows.filter((row) => (
     filter === 'all' || (filter === 'dormant' ? row.state === 'dormant' : row.state !== 'dormant')
   ))
+  // Every count must be known, or a refused route reads as a step already taken.
+  const guided: SubstrateCounts | undefined = body?.sources !== undefined
+    && body.roles !== undefined && stats !== undefined
+    ? { sources: body.sources, channels: stats.channels, customRoles: body.roles.filter((r) => !r.builtin).length }
+    : undefined
 
   return (
     <div className="space-y-6">
@@ -145,19 +172,25 @@ export function Overview(): React.JSX.Element {
             <span className="md:hidden">{t('substrate.title')}</span>
             <span className="hidden md:inline">{t('overview.title')}</span>
           </h1>
-          {uptime !== null && <p className="font-mono text-meta-lg text-text/60">{uptime}</p>}
+          {/* md:hidden: 1a-desktop draws this line in the sidebar foot, which Nav owns. */}
+          {uptime !== null && <p className="font-mono text-meta-lg text-text/60 md:hidden">{uptime}</p>}
         </div>
-        {state !== 'mute' && <Search plugins={body?.plugins ?? []} commands={body?.commands ?? []} />}
+        {state !== 'mute' && (
+          <Search plugins={stats?.all ?? []} commands={body?.commands ?? []} />
+        )}
       </div>
 
       {state === 'offline' && (
         <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.offline')}</p>
       )}
-      {bodyError && (
+      {body?.refused === true && (
         <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.generic')}</p>
       )}
       {unreadable && (
-        <div role="alert" className={`space-y-1 rounded-lg border p-3 ${TONE_CLASSES.warn.border} ${TONE_CLASSES.warn.bg}`}>
+        <div
+          role="alert"
+          className={`space-y-1 rounded-lg border p-3 ${TONE_CLASSES.warn.border} ${TONE_CLASSES.warn.bg}`}
+        >
           <p className={`font-medium ${TONE_CLASSES.warn.text}`}>{t('overview.unreadable')}</p>
           {/* Absent is not empty: a payload that never said whether traffic is blocked must say
               so in those words, or a mute bot reads as one more odd shape. */}
@@ -169,47 +202,60 @@ export function Overview(): React.JSX.Element {
 
       {state === 'mute'
         ? (
-            <MuteTakeover
-              names={enforcingBlocked ?? []}
-              blocked={Number.isFinite(health?.blockedSinceBoot) ? Number(health?.blockedSinceBoot) : 0}
-            />
+            <>
+              <MuteTakeover
+                names={enforcingBlocked ?? []}
+                blocked={Number.isFinite(health?.blockedSinceBoot) ? Number(health?.blockedSinceBoot) : 0}
+              />
+              {/* Both mute renders keep the substrate's three numbers, collapsed: none of it
+                  matters while the bot is mute, but the operator still gets to read it. */}
+              {stats !== undefined && (
+                <div className="space-y-1 rounded-xl border border-line bg-surface p-4">
+                  <p className="text-body text-text/70">{t('mute.collapsed')}</p>
+                  <p className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-meta-lg text-text/60">
+                    <span>{t('mute.germinated', { germinated: stats.germinated, total: stats.total })}</span>
+                    <span>{t('mute.dormant', { count: stats.dormant })}</span>
+                    <span>{t('mute.systemsDown', { count: degradedRhizas.length })}</span>
+                  </p>
+                </div>
+              )}
+            </>
           )
         : (
             <>
               {/* Renders alongside the health body, not instead of it: a fresh substrate's first
                   spores go dormant for missing configuration while steps are still outstanding,
                   and the operator must see both (whole-branch fix brief, item 2). */}
-              {body !== null && <GuidedStart counts={body.guided} />}
+              {guided !== undefined && <GuidedStart counts={guided} />}
 
               <div className="grid gap-3 lg:grid-cols-[2fr_1fr]">
-                <HealthCard body={body} systemsDown={degradedRhizas.length} />
+                <HealthCard stats={stats} systemsDown={degradedRhizas.length} />
                 <div className="grid grid-cols-2 gap-3">
                   <Tile
                     label={t('tile.people')}
-                    value={body === null ? '—' : String(body.people)}
-                    note={body !== null && body.neverReviewed > 0
+                    value={body?.people === undefined ? '—' : String(body.people)}
+                    note={body?.neverReviewed !== undefined && body.neverReviewed > 0
                       ? t('tile.peopleNote', { count: body.neverReviewed })
                       : undefined}
                     noteTone="warn"
                   />
                   <Tile
                     label={t('tile.commands')}
-                    value={body === null ? '—' : String(body.commands.length)}
-                    note={body !== null && body.unavailable > 0
-                      ? t('tile.commandsNote', { count: body.unavailable })
+                    value={body?.commands === undefined ? '—' : String(body.commands.length)}
+                    note={stats !== undefined && stats.unavailable > 0
+                      ? t('tile.commandsNote', { count: stats.unavailable })
                       : undefined}
                     noteTone="warn"
                   />
                   <Tile
                     label={t('tile.roles')}
-                    value={body === null ? '—' : String(body.roles)}
-                    note={body === null
-                      ? undefined
-                      : body.defaultRole === undefined
-                        ? t('tile.rolesNoteNone')
-                        : t('tile.rolesNote', { role: body.defaultRole })}
+                    value={body?.roles === undefined ? '—' : String(body.roles.length)}
+                    note={rolesNote(t, body?.defaultRole)}
                   />
-                  <Tile label={t('tile.sources')} value={body === null ? '—' : String(body.sources)} />
+                  <Tile
+                    label={t('tile.sources')}
+                    value={body?.sources === undefined ? '—' : String(body.sources)}
+                  />
                 </div>
               </div>
 
@@ -284,26 +330,30 @@ export function Overview(): React.JSX.Element {
   )
 }
 
-/** DormantDiagnosis's first cause, which is the one row action with a route behind it (§3). */
-function configAction(t: Translate, name: string, reason: string): AttentionRow['action'] {
-  if (!/configuration rejected|configuration is incomplete/i.test(reason)) return undefined
-  return { to: `/plugins/${name}/settings`, label: t('dormant.fixConfig') }
+/** undefined while /api/config is unknown: `default: undefined` is worse than no note at all. */
+function rolesNote(t: Translate, defaultRole: string | null | undefined): string | undefined {
+  if (defaultRole === undefined) return undefined
+  return defaultRole === null ? t('tile.rolesNoteNone') : t('tile.rolesNote', { role: defaultRole })
 }
 
 function attentionRows(
   t: Translate,
   dormant: readonly { name: string, reason: string }[],
   rhizas: readonly RhizaHealth[],
-  body: Body | null,
+  stats: PluginStats | undefined,
 ): readonly AttentionRow[] {
-  const plugins: readonly AttentionRow[] = dormant.map((d) => ({
-    name: d.name,
-    // health.dormant carries no kind; /api/plugins does.
-    kind: body?.plugins.find((p) => p.name === d.name)?.kind,
-    state: 'dormant',
-    reason: d.reason,
-    action: configAction(t, d.name, d.reason),
-  }))
+  const plugins: readonly AttentionRow[] = dormant.map((d) => {
+    // One classifier for the whole SPA: the row action is DormantDiagnosis's own verdict.
+    const { action } = diagnose(d.name, d.reason)
+    return {
+      name: d.name,
+      // health.dormant carries no kind; /api/plugins does.
+      kind: stats?.all.find((p) => p.name === d.name)?.kind,
+      state: 'dormant',
+      reason: d.reason,
+      action: action === undefined ? undefined : { to: action.to, label: t(action.label) },
+    }
+  })
   const systems: readonly AttentionRow[] = rhizas.map((r) => ({
     name: r.rhiza,
     kind: 'rhiza',
@@ -315,13 +365,14 @@ function attentionRows(
 
 interface LegendEntry { tone: Tone, label: string, value: number }
 
-function HealthCard({ body, systemsDown }: { body: Body | null, systemsDown: number }): React.JSX.Element {
+function HealthCard(
+  { stats, systemsDown }: { stats: PluginStats | undefined, systemsDown: number },
+): React.JSX.Element {
   const t = useT()
-  const total = body === null ? 0 : body.plugins.length
-  const segments: readonly Segment[] = body === null ? [] : [
-    { tone: 'ok', value: body.germinated, label: t('state.germinated') },
-    { tone: 'warn', value: body.dormant, label: t('state.dormant') },
-    { tone: 'idle', value: body.disabled, label: t('state.disabled') },
+  const segments: readonly Segment[] = stats === undefined ? [] : [
+    { tone: 'ok', value: stats.germinated, label: t('state.germinated') },
+    { tone: 'warn', value: stats.dormant, label: t('state.dormant') },
+    { tone: 'idle', value: stats.disabled, label: t('state.disabled') },
   ]
   // 1a-overview-mobile-healthy-light.png prints no `Dormant 0`: a state nothing is in is noise.
   // A rhiza that stopped answering is not a plugin state, so it is a legend entry and no segment.
@@ -336,9 +387,12 @@ function HealthCard({ body, systemsDown }: { body: Body | null, systemsDown: num
       <h2 className="text-meta uppercase tracking-wide text-text/60">{t('overview.health')}</h2>
       <p className="flex flex-wrap items-baseline gap-2">
         <span data-testid="germinated-count" className="text-hero font-medium">
-          {body === null ? '—' : String(body.germinated)}
+          {stats === undefined ? '—' : String(stats.germinated)}
         </span>
-        <span className="text-body text-text/70">{t('overview.hero', { total })}</span>
+        {/* '—', never 0: a total nobody confirmed must not read as an empty substrate. */}
+        <span className="text-body text-text/70">
+          {t('overview.hero', { total: stats === undefined ? '—' : stats.total })}
+        </span>
       </p>
       <ProportionBar segments={segments} />
       <div className="flex flex-wrap gap-x-6 gap-y-2">
@@ -362,8 +416,7 @@ const MAX_HITS = 8
 
 /**
  * 1a's cross-entity field, as a client filter over what this screen already holds (§3 row 19).
- * People are not in that: the term is handed to the screen that can search them, rather than
- * a second debounced query from here.
+ * People are not in that corpus: the term is handed to the screen that can search them.
  */
 function Search(
   { plugins, commands }: { plugins: readonly PluginDto[], commands: readonly CommandDto[] },

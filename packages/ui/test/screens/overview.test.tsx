@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter } from 'react-router'
 import { ChromeContext } from '../../src/chrome.tsx'
+import { diagnose } from '../../src/components/DormantDiagnosis.tsx'
 import { TONE_CLASSES } from '../../src/components/tone.ts'
 import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
@@ -66,6 +67,12 @@ const SUBSTRATE: SubstrateDto = {
   version: '0.9.3', startedAt: '2026-01-01T00:00:00.000Z', uptimeSeconds: 14 * 86_400 + 3 * 3_600,
 }
 
+/** One attention row, so a degradation test can watch that section survive on its own. */
+const ONE_DORMANT: RuntimeHealth = {
+  ...GERMINATED,
+  dormant: [{ name: 'radarr', reason: 'Configuration rejected: api_key returned 401.' }],
+}
+
 /** The Overview reads only `substrate` off the chrome; the counts belong to the sidebar. */
 const CHROME: ChromeValue = { substrate: SUBSTRATE, counts: null, host: 'substrate.home.lan' }
 
@@ -85,6 +92,8 @@ interface CountsFixture {
   config?: ConfigDto
   people?: number
   neverReviewed?: number
+  /** Routes this fixture answers 500 to, the rest answering normally. */
+  refuse?: readonly string[]
 }
 
 const COMPLETE: CountsFixture = { sources: COMPLETE_SOURCES, plugins: COMPLETE_PLUGINS, roles: COMPLETE_ROLES }
@@ -103,6 +112,9 @@ const BUSY: CountsFixture = {
 function mockCounts(fixture: CountsFixture | 'fail'): void {
   globalThis.fetch = mock((url: string) => {
     if (fixture === 'fail') return Promise.resolve(json({ error: { message: 'x' } }, 500))
+    if (fixture.refuse?.includes(url) === true) {
+      return Promise.resolve(json({ error: { message: 'refused' } }, 500))
+    }
     if (url === '/api/sources') return Promise.resolve(json(fixture.sources))
     if (url === '/api/plugins') return Promise.resolve(json(fixture.plugins))
     if (url === '/api/roles') return Promise.resolve(json(fixture.roles))
@@ -394,6 +406,80 @@ describe('the mute takeover', () => {
     expect(await screen.findByText('the substrate refused')).toBeDefined()
   })
 
+  // Both mute renders keep the substrate's three numbers under the takeover, collapsed:
+  // `2j` calls it "Everything else, unchanged", `1a-mobile` "Everything below is secondary".
+  it('keeps the substrate numbers collapsed under the takeover', async () => {
+    await withHealth({
+      ...GERMINATED,
+      enforcingBlocked: ['group-gate'],
+      blockedSinceBoot: 41,
+      rhizas: [{ rhiza: 'jellyfin', status: { state: 'unreachable', checkedAt: 'x' } }],
+    }, BUSY)
+
+    expect(screen.getByText('Everything below is secondary while the bot is mute.')).toBeDefined()
+    expect(screen.getByText('2 / 5 germinated')).toBeDefined()
+    expect(screen.getByText('2 dormant')).toBeDefined()
+    expect(screen.getByText('1 systems down')).toBeDefined()
+    // Numbers, not the body: the R2 pin still holds around them.
+    expect(screen.queryByText('People')).toBeNull()
+    expect(screen.queryByText('of 5 plugins germinated')).toBeNull()
+  })
+
+  it('shows no collapsed card while the bot is answering', async () => {
+    await withHealth(GERMINATED, BUSY)
+
+    expect(screen.queryByText('Everything below is secondary while the bot is mute.')).toBeNull()
+    expect(screen.queryByText('2 / 5 germinated')).toBeNull()
+  })
+
+  // Finding 7: the route answers { ok, restartRequired }, and a disable that changed nothing
+  // visible until the next restart must say so.
+  it('says a restart is awaited once the disable is accepted', async () => {
+    mockCounts(COMPLETE)
+    const inner = globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>
+    globalThis.fetch = mock((url: string, init?: RequestInit) => (
+      url === '/api/plugins/group-gate/disable'
+        ? Promise.resolve(json({ ok: true, restartRequired: true }))
+        : inner(url, init)
+    )) as unknown as typeof fetch
+
+    renderOverview({ ...GERMINATED, enforcingBlocked: ['group-gate'], blockedSinceBoot: 2 })
+    await act(() => Promise.resolve())
+
+    expect(screen.queryByText('Awaiting restart')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Disable group-gate/ }))
+
+    expect(await screen.findByText('Awaiting restart')).toBeDefined()
+  })
+
+  // A ref, not the `busy` state: two clicks in one tick read the same render, and the second
+  // POST would hit a substrate already mid-restart.
+  it('sends one disable, not two, when clicked twice in flight', async () => {
+    mockCounts(COMPLETE)
+    let resolveDisable: (r: Response) => void = () => {}
+    const held = new Promise<Response>((resolve) => { resolveDisable = resolve })
+    const inner = globalThis.fetch as unknown as (u: string, i?: RequestInit) => Promise<Response>
+    globalThis.fetch = mock((url: string, init?: RequestInit) => (
+      url === '/api/plugins/group-gate/disable' ? held : inner(url, init)
+    )) as unknown as typeof fetch
+
+    renderOverview({ ...GERMINATED, enforcingBlocked: ['group-gate'], blockedSinceBoot: 2 })
+    await act(() => Promise.resolve())
+
+    const button = screen.getByRole('button', { name: /^Disable group-gate/ })
+    fireEvent.click(button)
+    fireEvent.click(button)
+
+    const posts = fetchedUrls().filter((url) => url === '/api/plugins/group-gate/disable')
+    expect(posts).toHaveLength(1)
+
+    await act(async () => {
+      resolveDisable(json({ ok: true, restartRequired: true }))
+      await new Promise((resolve) => { setTimeout(resolve, 0) })
+    })
+  })
+
   // R1: mute is the one red state in the whole SPA, and the takeover is where it is spent.
   it('is the one surface painted crit', async () => {
     await withHealth({ ...GERMINATED, enforcingBlocked: ['group-gate'], blockedSinceBoot: 1 })
@@ -564,6 +650,24 @@ describe('what needs attention', () => {
     expect(screen.getAllByRole('link', { name: 'Fix its settings' })).toHaveLength(1)
   })
 
+  // Finding 5: one classifier for the whole SPA. DormantDiagnosis's config bucket carries the
+  // settings action; its version bucket carries none, and the row must follow it either way.
+  it('takes each row action from DormantDiagnosis, bucket for bucket', async () => {
+    const config = 'Configuration rejected: api_key returned 401.'
+    const version = 'Strain 0.6.2 requires core >=1.0.0; this substrate runs 0.9.3.'
+    expect(diagnose('radarr', config).action?.label).toBe('dormant.fixConfig')
+    expect(diagnose('matrix', version).action).toBeUndefined()
+
+    await withHealth({
+      ...GERMINATED,
+      dormant: [{ name: 'radarr', reason: config }, { name: 'matrix', reason: version }],
+    }, BUSY)
+
+    expect(screen.getByRole('link', { name: 'Fix its settings' }).getAttribute('href'))
+      .toBe('/plugins/radarr/settings')
+    expect(screen.getAllByRole('link', { name: 'Fix its settings' })).toHaveLength(1)
+  })
+
   it('offers a re-read of the health when nothing needs attention', async () => {
     let refreshed = 0
     await withHealth(GERMINATED, COMPLETE, { refresh: () => { refreshed += 1; return Promise.resolve() } })
@@ -586,6 +690,14 @@ describe('the page title block', () => {
     expect(screen.getByText('Substrate')).toBeDefined()
     expect(screen.getByText('Overview')).toBeDefined()
     expect(screen.getByText('mycelo 0.9.3 · up 14d 03h')).toBeDefined()
+  })
+
+  // 1a-desktop's title row is title + search: the line belongs to Nav's sidebar foot there,
+  // and without md:hidden the desktop draws it twice.
+  it('hides its uptime line on desktop, where the sidebar foot draws it', async () => {
+    await withHealth(GERMINATED)
+
+    expect(screen.getByText('mycelo 0.9.3 · up 14d 03h').className).toContain('md:hidden')
   })
 
   // useUptimeLine answers null for an unreadable uptime; `up 0s` is indistinguishable from a
@@ -722,6 +834,46 @@ describe('the guided path out of an empty substrate', () => {
 
     await waitFor(() => { expect(screen.getByText('Everything is germinated.')).toBeDefined() })
     expect(screen.queryByText('Three moves to a working substrate')).toBeNull()
+  })
+
+  // allSettled, not all: 9.7 gives a principal a narrowed scope set, and a 403 on one route
+  // must cost that route's own number and nothing else.
+  it('loses only the section whose route was refused', async () => {
+    await withHealth(ONE_DORMANT, { ...BUSY, refuse: ['/api/config'] })
+
+    expect(screen.getByRole('alert').textContent).toBe('Something went wrong')
+    // The Roles tile keeps its count, from /api/roles, and loses only the note /api/config fed.
+    expect(screen.getByText('Roles').closest('div')?.textContent).toBe('Roles2')
+    expect(screen.queryByText('no default role')).toBeNull()
+    expect(screen.queryByText(/^default:/)).toBeNull()
+    // Every other section, untouched.
+    expect(within(sectionOf('Substrate health')).getByText('of 5 plugins germinated')).toBeDefined()
+    expect(screen.getByText('128')).toBeDefined()
+    expect(screen.getByText('3 unavailable')).toBeDefined()
+    expect(screen.getByRole('heading', { name: 'Needs attention · 1' })).toBeDefined()
+    expect(screen.getByLabelText('Search plugins, people, commands')).toBeDefined()
+  })
+
+  // Discriminates the plugin slot from the rest: the corpus and the health card go, the four
+  // counts that come from other routes stay.
+  it('keeps the people and roles counts when only the plugin route was refused', async () => {
+    await withHealth(GERMINATED, { ...BUSY, refuse: ['/api/plugins'] })
+
+    expect(screen.getByText('128')).toBeDefined()
+    expect(screen.getByText('default: guest')).toBeDefined()
+    expect(within(sectionOf('Substrate health')).getByText('of — plugins germinated')).toBeDefined()
+    expect(screen.queryByText('3 unavailable')).toBeNull()
+  })
+
+  // Finding 6: `of 0 plugins germinated` reads as an empty substrate, which is a different
+  // fact from a total nobody could confirm.
+  it('never prints a zero total for a count it could not read', async () => {
+    await withHealth(GERMINATED, 'fail')
+    const card = sectionOf('Substrate health')
+
+    expect(within(card).getByText('of — plugins germinated')).toBeDefined()
+    expect(within(card).queryByText(/of 0 plugins/)).toBeNull()
+    expect(within(card).getByTestId('germinated-count').textContent).toBe('—')
   })
 
   // Decision: an unreadable count is reported through its own alert, matching every other

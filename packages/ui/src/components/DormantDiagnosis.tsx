@@ -2,14 +2,15 @@ import { Link } from 'react-router'
 import { useT } from '../i18n.tsx'
 import type { StringKey } from '../../locales/en.ts'
 
-interface Diagnosis { title: StringKey, action?: { to: string, label: StringKey } }
+export interface Diagnosis { title: StringKey, action?: { to: string, label: StringKey } }
 
 /**
  * One `reason` string per cause; the first match wins. The per-plugin duplicate-name reason is
  * "already claimed by" (anastomoses.ts) — a command collision aborts the whole germination
  * instead of reaching a single plugin's `reason`, so that message never appears here.
+ * Exported: the Overview's attention rows take their action from the same classifier.
  */
-function diagnose(name: string, reason: string): Diagnosis {
+export function diagnose(name: string, reason: string): Diagnosis {
   if (/configuration rejected|configuration is incomplete/i.test(reason)) {
     return { title: 'dormant.config', action: { to: `/plugins/${name}/settings`, label: 'dormant.fixConfig' } }
   }
