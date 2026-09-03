@@ -133,7 +133,7 @@ export const en = {
   'graph.readingBreakTitle': 'Reading the break',
   'graph.readingBreak': 'A dashed edge with an amber node at one end is a plugin that cannot reach what it needs. Selecting a node opens the same diagnosis as the plugin screen — the graph never holds information the list does not.',
   'graph.desktopOnlyTitle': 'Why this is desktop only',
-  'graph.desktopOnly': 'At 390 px the layout has to be panned to be read, which is slower than the card list. The phone gets the list; the graph appears from 1024 px up.',
+  'graph.desktopOnly': 'A graph has to be panned to be read on a narrow screen, which is slower than reading a list. On a phone the list below carries the same facts.',
   'scope.principals.read': 'See everyone the bot knows',
   'scope.principals.manage': 'Rename people and mark them reviewed',
   'scope.roles.read': 'See the roles and who holds them',

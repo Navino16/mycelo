@@ -16,12 +16,14 @@ import type { StringKey } from '../../locales/en.ts'
 /** The substrate is drawn narrower than a plugin, as design 2k draws it. */
 const CORE_W = 96
 const MARGIN = 24
+/** Advance of one 12 px mono character, and where a label starts inside its box. */
+const MONO_ADVANCE = 7.2
+const LABEL_X = 24
 // A Zod refusal runs to hundreds of characters; the node shows a prefix, <title> the whole (defect 30).
 const REASON_CHARS = 48
-/** How far the drawn reason may run past its node's x, so the viewBox does not clip it. */
-const REASON_W = 300
-// SVG text cannot ellipsize, so the box width has to fix a character budget instead.
-const NAME_CHARS = 20
+/** Both derived from the advance, so neither the reason clips nor the name overruns its box. */
+const REASON_W = Math.ceil(REASON_CHARS * MONO_ADVANCE)
+const NAME_CHARS = Math.floor((BOX_W - LABEL_X * 2) / MONO_ADVANCE)
 
 function widthOf(node: GraphNode): number {
   return node.name === 'core' ? CORE_W : BOX_W
@@ -59,7 +61,7 @@ function GraphMark(
       <rect width={widthOf(node)} height={BOX_H} rx={8} stroke={ink} fill={tint} />
       <circle cx={11} cy={BOX_H / 2} r={3.5} fill={ink} />
       <text
-        x={24}
+        x={LABEL_X}
         y={BOX_H / 2}
         dominantBaseline="middle"
         fill="var(--color-text)"
@@ -119,7 +121,8 @@ export function Graph(): React.JSX.Element {
     (m, n) => Math.max(m, n.x + (n.reason === undefined ? widthOf(n) : REASON_W)), 0,
   ) + MARGIN * 2
   const height = shownNodes.reduce((m, n) => Math.max(m, n.y), 0) + BOX_H + MARGIN * 2
-  const grouped = groupByKind(shownNodes)
+  // The substrate is not a plugin: it has no kind, and the phone's list is grouped by kind.
+  const grouped = groupByKind(shownNodes.filter((n) => n.name !== 'core'))
   const openPlugin = (name: string): void => { void navigate(`/plugins/${name}`) }
   const summary = t('graph.summary', {
     plugins: placed.filter((n) => n.name !== 'core').length,

@@ -38,6 +38,12 @@ describe('the five columns', () => {
     expect(columnOf(node('brokenyaml', undefined, 'dormant'))).toBe(COLUMNS.length - 1)
   })
 
+  // A kind the SPA does not know yet (a septum minor adding one) must not land at x = -226.
+  it('places a kind it does not know in the last column, never off the canvas', () => {
+    expect(columnOf({ name: 'future', kind: 'sporangium' as GraphNode['kind'], state: 'germinated' }))
+      .toBe(COLUMNS.length - 1)
+  })
+
   it('places every node, never dropping one that has no edge', () => {
     expect(layout(GRAPH).map((n) => n.name).sort())
       .toEqual(['allowlist', 'brokenyaml', 'core', 'discord', 'radarr', 'radarr-search', 'signal'])

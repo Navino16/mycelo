@@ -19,7 +19,9 @@ const GAP_Y = 45
 /** By kind, never by dependency depth (design 2k); `core` is synthetic, so it goes by name. */
 export function columnOf(node: GraphNode): number {
   const key = node.name === 'core' ? 'core' : (node.kind ?? 'unknown')
-  return COLUMNS.indexOf(key)
+  const column = COLUMNS.indexOf(key)
+  // A kind this build does not know still needs a place on the canvas, not x = -226.
+  return column === -1 ? COLUMNS.length - 1 : column
 }
 
 /** R4: an edge is broken when either end is dormant. Optional is a separate, quieter treatment. */

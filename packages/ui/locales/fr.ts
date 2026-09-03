@@ -138,7 +138,7 @@ export const fr: Record<StringKey, string> = {
   'graph.readingBreakTitle': 'Lire une rupture',
   'graph.readingBreak': 'Un lien en pointill\u00e9s avec un n\u0153ud ambre \u00e0 une extr\u00e9mit\u00e9 est un plugin qui n\u2019atteint pas ce dont il a besoin. S\u00e9lectionner un n\u0153ud ouvre le m\u00eame diagnostic que l\u2019\u00e9cran du plugin \u2014 le graphe ne contient jamais d\u2019information absente de la liste.',
   'graph.desktopOnlyTitle': 'Pourquoi seulement sur ordinateur',
-  'graph.desktopOnly': '\u00c0 390 px il faut faire d\u00e9filer la vue pour la lire, ce qui est plus lent que la liste de cartes. Le t\u00e9l\u00e9phone re\u00e7oit la liste ; le graphe appara\u00eet \u00e0 partir de 1024 px.',
+  'graph.desktopOnly': 'Sur un \u00e9cran \u00e9troit, il faut faire d\u00e9filer le graphe pour le lire, ce qui est plus lent que de lire une liste. Sur un t\u00e9l\u00e9phone, la liste ci-dessous contient les m\u00eames faits.',
   'scope.principals.read': 'Voir toutes les personnes connues du bot',
   'scope.principals.manage': 'Renommer les personnes et les marquer comme v\u00e9rifi\u00e9es',
   'scope.roles.read': 'Voir les r\u00f4les et qui les d\u00e9tient',

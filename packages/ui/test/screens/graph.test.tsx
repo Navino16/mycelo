@@ -230,7 +230,32 @@ describe('the anastomosis graph', () => {
     expect(await screen.findByText('Reading the break')).toBeDefined()
     expect(screen.getByText(/A dashed edge with an amber node/)).toBeDefined()
     expect(screen.getByText('Why this is desktop only')).toBeDefined()
-    expect(screen.getByText(/the graph appears from 1024 px up/)).toBeDefined()
+    // The copy names no breakpoint, so it cannot go stale when the breakpoint moves.
+    expect(screen.getByText(/the list below carries the same facts/)).toBeDefined()
+  })
+
+  // task 14's contract: the synthetic node has no kind, and 'Unrecognised — manifest did not
+  // parse' is a lie about the substrate. The desktop box stays.
+  it('keeps core out of the phone list while drawing it in the graph', async () => {
+    serve(EDGES)
+    renderGraph()
+
+    const desktop = await screen.findByTestId('graph-desktop')
+    expect(within(desktop).getByText('core')).toBeDefined()
+    expect(within(screen.getByTestId('graph-mobile')).queryByText('core')).toBeNull()
+    expect(screen.queryByTestId('graph-kind-unknown')).toBeNull()
+  })
+
+  // The drawn label has to fit the box it sits in; the full name stays the accessible name.
+  it('clips a name too long for its box and keeps the whole one reachable', async () => {
+    const name = 'enzyme-grafana-alerts-digest'
+    serve({ nodes: [{ name, kind: 'enzyme', state: 'germinated' }], edges: [] })
+    renderGraph()
+
+    const mark = await screen.findByRole('button', { name })
+    const label = mark.querySelector('text')?.textContent ?? ''
+    expect(label.endsWith('…')).toBe(true)
+    expect(label.length).toBeLessThanOrEqual(18)
   })
 
   it('narrows to the failures and back when the chip is pressed', async () => {
