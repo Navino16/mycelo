@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { I18nProvider, useLocale } from '../../src/i18n.tsx'
@@ -95,6 +95,25 @@ describe('the role editor', () => {
     renderGroup(['radarr.add'])
 
     expect(screen.getByLabelText<HTMLInputElement>('All radarr commands').disabled).toBe(true)
+  })
+
+  // Discriminates `readOnly || onSetPlugin === undefined` from the second clause alone: a
+  // built-in role is rendered WITH a handler by nothing today, so only this pins readOnly.
+  it('disables the group checkbox for a read-only group even when a handler is supplied', () => {
+    const seen: string[] = []
+    render(
+      <I18nProvider>
+        <PluginGroup
+          plugin="radarr" commands={COMMANDS} patterns={['radarr.add']} onToggle={() => undefined}
+          onSetPlugin={(p) => seen.push(p)} readOnly
+        />
+      </I18nProvider>,
+    )
+
+    const box = screen.getByLabelText<HTMLInputElement>('All radarr commands')
+    expect(box.disabled).toBe(true)
+    fireEvent.click(box)
+    expect(seen).toEqual([])
   })
 })
 
@@ -502,6 +521,30 @@ describe('the group checkbox', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save this role' }))
     await waitFor(() => { expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(2) })
     expect(calls.filter((c) => c.method === 'PUT')[1]?.body).toEqual({ patterns: [] })
+  })
+
+  // coversPlugin answers 'some' for any explicit pattern, so reading the box off it alone left
+  // a fully ticked group indeterminate beside a green `2 / 2`.
+  it('is checked when explicit patterns already cover every command, with no wildcard held', async () => {
+    const { calls } = mockApi({ role: { name: 'family', builtin: false, patterns: ['radarr.add', 'radarr.remove'] } })
+    renderEditor()
+
+    const box = await screen.findByLabelText<HTMLInputElement>('All radarr commands')
+    expect(box.checked).toBe(true)
+    expect(box.indeterminate).toBe(false)
+    // Checked, yet the group's own term stays an em dash: the role holds two ticks, not radarr.*
+    // (which the `+ add` select still offers, since a wildcard would also cover later commands).
+    const group = screen.getByText('radarr').closest('section')
+    expect(group).not.toBeNull()
+    expect(group !== null && within(group).queryByText('radarr.*')).toBeNull()
+    expect(group !== null && within(group).getByText('—')).toBeDefined()
+    expect(screen.getAllByText('2 / 2')).toHaveLength(2)
+
+    // Unchecking a fully-explicit group clears those commands rather than negating a wildcard.
+    fireEvent.click(box)
+    fireEvent.click(screen.getByRole('button', { name: 'Save this role' }))
+    await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
+    expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ patterns: [] })
   })
 
   // The tri-state: 'some' is neither on nor off, and rendering it as off would invite an

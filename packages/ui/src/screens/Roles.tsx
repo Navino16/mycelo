@@ -100,6 +100,8 @@ export function Roles(): React.JSX.Element {
     return t('roles.commandsSome', { granted, total })
   }
 
+  const defHolders = def === undefined ? undefined : holders[def.name]
+
   const ok = TONE_CLASSES.ok
   const warn = TONE_CLASSES.warn
   const crit = TONE_CLASSES.crit
@@ -109,7 +111,9 @@ export function Roles(): React.JSX.Element {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-page font-semibold">{t('roles.title')}</h1>
-          {roles !== null && people !== null && (
+          {/* Gated on all three counts, not on the roles alone: a count nobody confirmed is
+              withheld, never rendered as 0. */}
+          {roles !== null && people !== null && commands !== null && (
             <p className="text-meta-lg text-text/60">
               {t(list.length === 1 ? 'roles.summaryOne' : 'roles.summary', {
                 roles: list.length, people, commands: total,
@@ -133,10 +137,10 @@ export function Roles(): React.JSX.Element {
           <p className={`text-meta uppercase tracking-wide ${ok.text}`}>{t('roles.defaultCard')}</p>
           <div className="flex flex-wrap items-baseline gap-3">
             <span className={`font-mono text-page font-semibold ${ok.text}`}>{def.name}</span>
-            {commands !== null && people !== null && (
+            {commands !== null && people !== null && defHolders !== undefined && (
               <span className="text-body text-text/70">
                 {t(total === 1 ? 'roles.heldByOne' : 'roles.heldBy', {
-                  granted: grantedBy(def), total, holders: holders[def.name] ?? 0, people,
+                  granted: grantedBy(def), total, holders: defHolders, people,
                 })}
               </span>
             )}

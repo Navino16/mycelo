@@ -45,7 +45,9 @@ function mockApi(
     deleteStatus?: number
     deleteBody?: unknown
     commands?: CommandGroups
+    commandsStatus?: number
     holders?: Readonly<Record<string, number>>
+    holdersStatus?: number
     people?: number
   } = {},
 ): { calls: Call[] } {
@@ -60,12 +62,20 @@ function mockApi(
 
     if (method === 'GET' && url === '/api/roles') return Promise.resolve(json(roles))
     if (method === 'GET' && url === '/api/config') return Promise.resolve(json(config))
-    if (method === 'GET' && url === '/api/commands') return Promise.resolve(json(options.commands ?? COMMANDS))
+    if (method === 'GET' && url === '/api/commands') {
+      if (options.commandsStatus !== undefined) {
+        return Promise.resolve(json({ error: { message: 'refused' } }, options.commandsStatus))
+      }
+      return Promise.resolve(json(options.commands ?? COMMANDS))
+    }
     if (method === 'GET' && url === '/api/people?perPage=1') {
       return Promise.resolve(json({ items: [], page: 1, perPage: 1, total: options.people ?? 0 }))
     }
     const holder = /^\/api\/people\?role=([^&]+)&perPage=1$/.exec(url)
     if (method === 'GET' && holder !== null) {
+      if (options.holdersStatus !== undefined) {
+        return Promise.resolve(json({ error: { message: 'refused' } }, options.holdersStatus))
+      }
       const role = decodeURIComponent(holder[1] ?? '')
       return Promise.resolve(json({ items: [], page: 1, perPage: 1, total: options.holders?.[role] ?? 0 }))
     }
@@ -245,6 +255,36 @@ describe('what each row states about a role', () => {
     renderRoles()
 
     expect(await screen.findByText('3 roles · 128 people · 4 commands')).toBeDefined()
+  })
+})
+
+// A count nobody confirmed is withheld, never rendered as 0: a screen claiming `0 commands`
+// or `held by 0 of 128 people` states something about the substrate that no route answered.
+describe('a count still in flight, or refused', () => {
+  it('shows no 0 commands in the summary when /api/commands is refused', async () => {
+    mockApi({ commandsStatus: 500, holders: { guest: 98 }, people: 128 })
+    renderRoles()
+
+    expect(await screen.findByTestId('role-guest')).toBeDefined()
+    expect(screen.queryByText('3 roles · 128 people · 0 commands')).toBeNull()
+    expect(screen.queryByText('0 of 4')).toBeNull()
+  })
+
+  it('shows no held by 0 in the default card until that role’s own count answers', async () => {
+    mockApi({ holdersStatus: 500, people: 128 })
+    renderRoles()
+
+    // The card itself still renders: only the sentence it cannot yet state is withheld.
+    expect(await screen.findByText('Default role · what unknown senders get')).toBeDefined()
+    expect(screen.getByRole('link', { name: 'Edit guest' })).toBeDefined()
+    expect(screen.queryByText('1 of 4 commands · held by 0 of 128 people')).toBeNull()
+  })
+
+  it('shows no 0 people in a row whose count was refused', async () => {
+    mockApi({ holdersStatus: 500, people: 128 })
+    renderRoles()
+
+    expect(within(await screen.findByTestId('role-guest')).queryByText('0 people')).toBeNull()
   })
 })
 

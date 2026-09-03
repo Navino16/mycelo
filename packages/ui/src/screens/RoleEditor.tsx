@@ -41,6 +41,9 @@ export function PluginGroup(
   const box = useRef<HTMLInputElement | null>(null)
   const coverage = coversPlugin(patterns, plugin)
   const granted = commands.filter((c) => grants(patterns, c.qualified)).length
+  // Not `coverage === 'all'`: coversPlugin answers 'some' for any explicit pattern, which would
+  // leave a fully ticked group indeterminate beside a green `n / n`.
+  const full = commands.length > 0 && granted === commands.length
   const needle = filter.trim().toLowerCase()
   const shown = commands.filter((c) => matchesFilter(c, needle))
   const matched = needle !== '' && shown.length > 0
@@ -48,8 +51,8 @@ export function PluginGroup(
   // `indeterminate` is a DOM property with no React attribute, so partial coverage can only
   // be painted through the node itself.
   useEffect(() => {
-    if (box.current !== null) box.current.indeterminate = coverage === 'some'
-  }, [coverage])
+    if (box.current !== null) box.current.indeterminate = !full && granted > 0
+  }, [full, granted])
 
   if (patterns.includes('*')) {
     return (
@@ -67,7 +70,6 @@ export function PluginGroup(
     )
   }
 
-  const full = granted === commands.length && commands.length > 0
   return (
     <section className="rounded-lg border border-line">
       <div className="flex items-center gap-3 p-3">
@@ -75,7 +77,7 @@ export function PluginGroup(
           ref={box}
           type="checkbox"
           aria-label={t('role.groupToggle', { plugin })}
-          checked={coverage === 'all'}
+          checked={full}
           disabled={readOnly || onSetPlugin === undefined}
           onChange={(e) => { onSetPlugin?.(plugin, e.target.checked) }}
         />
@@ -173,8 +175,8 @@ export function RoleEditor(): React.JSX.Element {
       setPatterns(held)
       setSaved(held)
       setError(false)
-      // Fired from inside this resolution rather than from an effect keyed on the fetched
-      // role: such an effect outlives its own fetch mock and leaks a live request.
+      // Inside this resolution, not in an effect keyed on the fetched role: the count is part
+      // of the same load, so it is fired by it rather than by a second, later trigger.
       api.get<PageDto<PersonDto>>(`/api/people?role=${encodeURIComponent(name)}&perPage=1`).then(
         (page) => { setHolders(page.total) },
         () => undefined,
