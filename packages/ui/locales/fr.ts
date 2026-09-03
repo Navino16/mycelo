@@ -239,6 +239,7 @@ export const fr: Record<StringKey, string> = {
   'pluginSettings.enableRefused': 'Impossible \u00e0 activer : {fields} requis et non renseign\u00e9. L\u2019interface refuse ici plut\u00f4t que de laisser la germination \u00e9chouer au d\u00e9marrage.',
   'pluginSettings.aboutSecrets': '\u00c0 propos des secrets',
   'pluginSettings.aboutSecretsLead': 'Les champs marqu\u00e9s secrets par le sch\u00e9ma sont masqu\u00e9s, jamais renvoy\u00e9s par l\u2019API et exclus des exports. Un secret vide \u00e0 l\u2019enregistrement signifie \u00ab garder la valeur stock\u00e9e \u00bb.',
+  'pluginSettings.saved': 'Enregistr\u00e9.',
   'pluginSettings.discard': 'Annuler les modifications',
   'pluginSettings.nothingToConfigure': 'Rien \u00e0 configurer',
   'pluginSettings.nothingToConfigureLead': 'Ce plugin publie un sch\u00e9ma vide : il n\u2019y a aucun champ. Il peut \u00eatre activ\u00e9 directement.',

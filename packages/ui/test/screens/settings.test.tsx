@@ -311,18 +311,33 @@ describe('the generated settings form', () => {
 
   // Both halves. The first alone passes for a switch that is always off; the second alone
   // passes for one that is never gated (brief §7B step 5).
-  it('refuses the switch while a required field is unset, and allows it once it has a value', async () => {
+  it('refuses the switch while a required field is unset, and allows it once it is saved', async () => {
+    const { calls } = mockVault({ schema: REQUIRING, detail: DISABLED, settings: {} })
+    renderSettings()
+
+    const url = await screen.findByLabelText('URL')
+    expect(screen.getByRole<HTMLButtonElement>('switch').disabled).toBe(true)
+    expect(screen.getByText(/Cannot be switched on: url required and currently unset/)).toBeDefined()
+
+    fireEvent.change(url, { target: { value: 'http://x' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
+
+    await waitFor(() => { expect(screen.getByRole<HTMLButtonElement>('switch').disabled).toBe(false) })
+    expect(screen.queryByText(/Cannot be switched on/)).toBeNull()
+  })
+
+  // config/lifecycle.ts refuses on the STORED settings, so a typed-but-unsaved value opening the
+  // switch would put the operator straight into the server refusal step 5 exists to prevent.
+  it('keeps the switch shut for a required value typed but not saved', async () => {
     mockVault({ schema: REQUIRING, detail: DISABLED, settings: {} })
     renderSettings()
 
     const url = await screen.findByLabelText('URL')
-    expect(screen.getByRole<HTMLInputElement>('switch').disabled).toBe(true)
-    expect(screen.getByText(/Cannot be switched on: url required and currently unset/)).toBeDefined()
-
     fireEvent.change(url, { target: { value: 'http://x' } })
 
-    await waitFor(() => { expect(screen.getByRole<HTMLInputElement>('switch').disabled).toBe(false) })
-    expect(screen.queryByText(/Cannot be switched on/)).toBeNull()
+    expect(screen.getByRole<HTMLButtonElement>('switch').disabled).toBe(true)
+    expect(screen.getByText(/Cannot be switched on: url required and currently unset/)).toBeDefined()
   })
 
   // A stored credential arrives as the mask, which is a value: a plugin whose only required
@@ -348,6 +363,14 @@ describe('the generated settings form', () => {
     const settled = screen.getByRole<HTMLInputElement>('switch')
     expect(settled.getAttribute('aria-checked')).toBe('true')
     expect(settled.disabled).toBe(true)
+  })
+
+  it('never offers Enable for an already germinated plugin with an empty schema', async () => {
+    mockVault({ schema: { available: false, reason: 'no toJsonSchema' }, detail: GERMINATED })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByText('no toJsonSchema')).toBeDefined() })
+    expect(screen.queryByRole('button', { name: 'Enable' })).toBeNull()
   })
 
   it('never offers the switch for an already enabled plugin', async () => {
@@ -467,16 +490,57 @@ describe("the generated form's page frame", () => {
   })
 
   // Discriminates a summary rendered whenever a save happened from one rendered on a refusal.
-  it('heads a successful save with no rejection summary', async () => {
+  // The acknowledgement is the anchor: asserting the negatives alone would pass before the click.
+  it('acknowledges a successful save, and heads it with no rejection summary', async () => {
+    mockVault({ settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    expect(screen.queryByRole('status')).toBeNull()
+
+    fireEvent.change(screen.getByLabelText('URL'), { target: { value: 'http://y' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect((await screen.findByRole('status')).textContent).toBe('Saved.')
+    expect(screen.queryByText('Saved, but rejected by vault')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('drops the acknowledgement as soon as the operator edits again', async () => {
     mockVault({ settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
     renderSettings()
 
     await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
     fireEvent.change(screen.getByLabelText('URL'), { target: { value: 'http://y' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await screen.findByRole('status')
 
-    await waitFor(() => { expect(screen.queryByRole('alert')).toBeNull() })
-    expect(screen.queryByText('Saved, but rejected by vault')).toBeNull()
+    fireEvent.change(screen.getByLabelText('URL'), { target: { value: 'http://z' } })
+
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  // A refused save must not read as one that landed.
+  it('shows no acknowledgement when the server refuses the save', async () => {
+    mockVault({
+      settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' },
+      putResult: {
+        status: 400,
+        body: {
+          error: {
+            message: 'refused',
+            detail: [{ key: 'url', issues: [{ path: ['url'], message: 'must start with http://' }] }],
+          },
+        },
+      },
+    })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await screen.findByText('Saved, but rejected by vault')
+    expect(screen.queryByRole('status')).toBeNull()
   })
 
   it('puts the form back to the fetched baseline when the operator discards', async () => {

@@ -179,6 +179,7 @@ export function PluginSettings(): React.JSX.Element {
   const [error, setError] = useState(false)
   const [extraErrors, setExtraErrors] = useState<ErrorSchema<Settings>>({})
   const [rejectedCount, setRejectedCount] = useState<number | null>(null)
+  const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [enabledNow, setEnabledNow] = useState(false)
   const [enableError, setEnableError] = useState<string | null>(null)
@@ -216,7 +217,9 @@ export function PluginSettings(): React.JSX.Element {
       : fallback === undefined ? '' : t('pluginSettings.default', { value: fallback })
     return [`root_${key}`, [typeWord(property, secrets.includes(key)), rank].filter((p) => p !== '').join(' · ')]
   }))
-  const outstanding = missingRequired(body, formData)
+  // The stored settings, not the form: config/lifecycle.ts parses readSettings(db, name), so a
+  // typed-but-unsaved value opening the switch would walk straight into the server's refusal.
+  const outstanding = missingRequired(body, baseline ?? {})
 
   async function save(event: IChangeEvent<Settings>): Promise<void> {
     const current = event.formData ?? {}
@@ -224,9 +227,11 @@ export function PluginSettings(): React.JSX.Element {
     setSaveError(null)
     setExtraErrors({})
     setRejectedCount(null)
+    setSaved(false)
     try {
       await api.send('PUT', `/api/plugins/${name}/settings`, changed)
       setBaseline(current)
+      setSaved(true)
     } catch (e) {
       const rejections = e instanceof ApiError ? readRejections(e.detail) : []
       if (rejections.length > 0) {
@@ -243,6 +248,7 @@ export function PluginSettings(): React.JSX.Element {
     setExtraErrors({})
     setRejectedCount(null)
     setSaveError(null)
+    setSaved(false)
   }
 
   async function enable(): Promise<void> {
@@ -292,7 +298,7 @@ export function PluginSettings(): React.JSX.Element {
           action={
             <div className="space-y-2">
               <p className="font-mono text-meta-lg text-text/60">{schema.reason}</p>
-              {!enabledNow && (
+              {!enabledNow && detail?.enabled !== true && (
                 <button
                   type="button"
                   onClick={() => { void enable() }}
@@ -333,7 +339,7 @@ export function PluginSettings(): React.JSX.Element {
                 templates={{ FieldTemplate }}
                 validator={validator}
                 extraErrors={extraErrors}
-                onChange={(e) => { setFormData(e.formData ?? {}) }}
+                onChange={(e) => { setFormData(e.formData ?? {}); setSaved(false) }}
                 onSubmit={(e) => { void save(e) }}
               >
                 <div className="flex flex-wrap gap-2 pt-4">
@@ -346,6 +352,7 @@ export function PluginSettings(): React.JSX.Element {
                 </div>
               </TypedForm>
             </div>
+            {saved && <p role="status" className="text-body">{t('pluginSettings.saved')}</p>}
             {saveError !== null && <p role="alert" className={`text-body ${TONE_CLASSES.crit.text}`}>{saveError}</p>}
           </div>
 

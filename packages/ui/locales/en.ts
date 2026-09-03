@@ -234,6 +234,7 @@ export const en = {
   'pluginSettings.enableRefused': 'Cannot be switched on: {fields} required and currently unset. The UI refuses here rather than letting germination fail at startup.',
   'pluginSettings.aboutSecrets': 'About secrets',
   'pluginSettings.aboutSecretsLead': 'Fields the schema marks secret are masked, never returned by the API, and excluded from exports. An empty secret on save means \u201ckeep what is stored\u201d.',
+  'pluginSettings.saved': 'Saved.',
   'pluginSettings.discard': 'Discard changes',
   'pluginSettings.nothingToConfigure': 'Nothing to configure',
   'pluginSettings.nothingToConfigureLead': 'This plugin publishes an empty schema, so there are no fields. It can be enabled straight away.',
