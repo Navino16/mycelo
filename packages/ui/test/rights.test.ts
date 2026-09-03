@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { effectiveCommands, effectiveWildcards } from '../src/rights.ts'
+import { allCommands, effectiveCommands, effectiveWildcards } from '../src/rights.ts'
 import type { CommandGroups, RoleDto } from '../src/api/types.ts'
 
 const ROLES: readonly RoleDto[] = [
@@ -17,6 +17,25 @@ const COMMANDS: CommandGroups = {
     { plugin: 'help', command: 'help', declared: 'help', qualified: 'help.help', description: 'c', capabilities: [] },
   ],
 }
+
+describe('the command registry, flattened', () => {
+  it('flattens every group in the payload, in the payload’s own order', () => {
+    expect(allCommands(COMMANDS).map((c) => c.qualified))
+      .toEqual(['radarr.search', 'radarr.add', 'help.help'])
+  })
+
+  // The denominator of `May run {granted} of {total}` and the pool the numerator filters are
+  // now the same call, so a malformed payload cannot make the two halves disagree.
+  it('answers nothing for a payload that is not the group object', () => {
+    expect(allCommands(null)).toEqual([])
+    expect(allCommands('nope' as unknown as CommandGroups)).toEqual([])
+    expect(allCommands([] as unknown as CommandGroups)).toEqual([])
+  })
+
+  it('skips a group that is not an array rather than throwing', () => {
+    expect(allCommands({ radarr: 'nope' } as unknown as CommandGroups)).toEqual([])
+  })
+})
 
 describe('effective rights', () => {
   // Two roles, one wildcard and one single grant: a `roles[0]`-shaped join answers two of

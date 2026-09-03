@@ -8,15 +8,8 @@ import { Chip } from '../components/Chip.tsx'
 import { Dot } from '../components/Dot.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { useT } from '../i18n.tsx'
-import { effectiveCommands, effectiveWildcards } from '../rights.ts'
-import type {
-  CommandDto, CommandGroups, ConfigDto, IdentityDto, PersonDto, RoleDto,
-} from '../api/types.ts'
-
-function flatten(groups: CommandGroups | null): readonly CommandDto[] {
-  if (groups === null || typeof groups !== 'object' || Array.isArray(groups)) return []
-  return Object.values(groups).flatMap((g) => readArray<CommandDto>(g) ?? [])
-}
+import { allCommands, effectiveCommands, effectiveWildcards } from '../rights.ts'
+import type { CommandGroups, ConfigDto, IdentityDto, PersonDto, RoleDto } from '../api/types.ts'
 
 export function PersonDetail(): React.JSX.Element {
   const t = useT()
@@ -101,7 +94,7 @@ export function PersonDetail(): React.JSX.Element {
   const heldRoles = readArray<string>(person?.roles) ?? []
   const roleList = readArray<RoleDto>(roles) ?? []
   const availableRoles = roleList.filter((r) => !heldRoles.includes(r.name))
-  const totalCommands = flatten(commands).length
+  const totalCommands = allCommands(commands).length
   const granted = commands === null || roles === null
     ? null
     : effectiveCommands(heldRoles, roleList, commands)
@@ -136,7 +129,8 @@ export function PersonDetail(): React.JSX.Element {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h1 className="truncate text-page font-semibold">{person.displayName ?? person.id}</h1>
-                    {!person.reviewed && <Chip label={t('person.neverReviewedTitle')} tone="warn" />}
+                    {/* Not beside the banner, which says the same thing at length. */}
+                    {!person.reviewed && !banner && <Chip label={t('person.neverReviewedTitle')} tone="warn" />}
                   </div>
                   <p className="text-meta-lg text-text/60">
                     {t(identities.length === 1 ? 'person.identityCountOne' : 'person.identityCount', {

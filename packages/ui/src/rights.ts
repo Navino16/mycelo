@@ -2,6 +2,15 @@ import { readArray } from './api/read.ts'
 import { grants, wildcardsIn } from './patterns.ts'
 import type { CommandDto, CommandGroups, RoleDto } from './api/types.ts'
 
+/**
+ * `GET /api/commands` as one flat list. Shared with the person page, which shows `granted` over
+ * this list's length: two copies of the guard would compute the ratio's halves under two rules.
+ */
+export function allCommands(commands: CommandGroups | null): readonly CommandDto[] {
+  if (commands === null || typeof commands !== 'object' || Array.isArray(commands)) return []
+  return Object.values(commands).flatMap((group) => readArray<CommandDto>(group) ?? [])
+}
+
 /** The patterns of every named role that the roles list actually holds, in one flat list. */
 function patternsOf(roles: readonly string[], allRoles: readonly RoleDto[]): readonly string[] {
   const held = new Set(readArray<string>(roles) ?? [])
@@ -16,10 +25,7 @@ export function effectiveCommands(
 ): readonly CommandDto[] {
   const patterns = patternsOf(roles, allRoles)
   if (patterns.length === 0) return []
-  if (commands === null || typeof commands !== 'object' || Array.isArray(commands)) return []
-  return Object.values(commands)
-    .flatMap((group) => readArray<CommandDto>(group) ?? [])
-    .filter((c) => grants(patterns, c.qualified))
+  return allCommands(commands).filter((c) => grants(patterns, c.qualified))
 }
 
 /** The wildcards their roles hold, deduplicated. Empty means "no wildcard applies". */

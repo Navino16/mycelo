@@ -235,6 +235,9 @@ describe('the never-reviewed banner', () => {
     const banner = await screen.findByTestId('never-reviewed')
     expect(within(banner).getByText(/was given guest automatically on first contact/)).toBeDefined()
     expect(within(banner).getByRole('button', { name: 'Mark as reviewed' })).toBeDefined()
+    // 2i-desktop draws the header pill without a banner, 2i-mobile the banner without the
+    // pill: the banner's own heading is the only 'Never reviewed' on the page.
+    expect(screen.queryAllByText('Never reviewed')).toHaveLength(1)
   })
 
   // The banner's whole sentence is about defaultRole, so with none configured there is
