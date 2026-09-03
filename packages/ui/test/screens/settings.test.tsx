@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { TONE_CLASSES } from '../../src/components/tone.ts'
@@ -734,5 +734,109 @@ describe("the generated form's page frame", () => {
     await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
     expect(screen.getByText('About secrets')).toBeDefined()
     expect(screen.getByText(/never returned by the API, and excluded from exports/)).toBeDefined()
+  })
+})
+
+/**
+ * `links` — the only shipped spore with an array field, and the one step 2 installs from the
+ * official sporangium. No artboard draws an array and no other fixture has one, which is why
+ * the vendor theme's own chrome shipped on this screen.
+ */
+const WITH_ARRAY: FormSchema = {
+  available: true,
+  secrets: [],
+  schema: {
+    type: 'object',
+    properties: {
+      services: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['label', 'url'],
+          properties: {
+            label: { type: 'string', title: 'Label' },
+            url: { type: 'string', title: 'URL' },
+            note: { type: 'string', title: 'Note' },
+          },
+        },
+      },
+    },
+  },
+}
+
+const ONE_SERVICE = { services: [{ label: 'Plex', url: 'http://plex', note: '' }] }
+
+describe('an array field on the generated form', () => {
+  async function renderArray(): Promise<void> {
+    mockVault({ schema: WITH_ARRAY, settings: ONE_SERVICE })
+    renderSettings()
+    await waitFor(() => { expect(screen.getByLabelText('Label')).toBeDefined() })
+  }
+
+  // Both vendor buttons sat outside the token set on a shipped screen: `⊕ Add Item` in the
+  // theme's outline variant (a white border) and the remove control as a red-bordered trash.
+  it('paints the add control in the token set, with words of its own', async () => {
+    await renderArray()
+    const add = screen.getByRole('button', { name: 'Add an entry' })
+
+    expect(add.className).toContain('border-line')
+    expect(screen.queryByRole('button', { name: /Add Item/i })).toBeNull()
+  })
+
+  it('paints the remove control in the token set too', async () => {
+    await renderArray()
+    const remove = screen.getByRole('button', { name: 'Remove this entry' })
+
+    expect(remove.className).toContain('border-line')
+    expect(remove.className).not.toContain('destructive')
+  })
+
+  // 2c's rule is one row per field: the label left, the mono meta right. The array's meta line
+  // rendered above a separate plain `services` heading, splitting the row across two templates.
+  it('gives the array one row, its label beside its own meta line', async () => {
+    await renderArray()
+    const row = screen.getByTestId('array-field-root_services')
+
+    expect(within(row).getByText('services')).toBeDefined()
+    expect(within(row).getByText('list')).toBeDefined()
+  })
+
+  // metaLine answered for top-level ids only, so every nested field had no meta line at all.
+  it('gives each nested field the same meta line as a top-level one', async () => {
+    await renderArray()
+    const item = screen.getByTestId('array-item-0')
+
+    expect(within(item).getAllByText('text · required')).toHaveLength(2)
+    expect(within(item).getByText('text')).toBeDefined()
+  })
+
+  // RJSF titles an item `<name>-<index>`; the operator reads a numbered entry instead.
+  it('numbers the item in its own words, not as RJSF’s services-1', async () => {
+    await renderArray()
+
+    expect(screen.queryByText('services-1')).toBeNull()
+    expect(screen.getByText('Entry 1')).toBeDefined()
+  })
+
+  // The measured misplacement: the remove control was centred against the whole item block,
+  // so it landed beside a random field rather than on the item's own header row.
+  it('puts the remove control on the item’s header row, beside its number', async () => {
+    await renderArray()
+    const header = screen.getByTestId('array-item-header-0')
+
+    expect(within(header).getByText('Entry 1')).toBeDefined()
+    expect(within(header).getByRole('button', { name: 'Remove this entry' })).toBeDefined()
+  })
+
+  it('adds and removes an entry through its own controls', async () => {
+    await renderArray()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add an entry' }))
+    await waitFor(() => { expect(screen.getByTestId('array-item-1')).toBeDefined() })
+
+    fireEvent.click(within(screen.getByTestId('array-item-1')).getByRole('button', { name: 'Remove this entry' }))
+
+    await waitFor(() => { expect(screen.queryByTestId('array-item-1')).toBeNull() })
+    expect(screen.getByTestId('array-item-0')).toBeDefined()
   })
 })

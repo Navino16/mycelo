@@ -3,8 +3,11 @@ import { useParams } from 'react-router'
 import { generateForm } from '@rjsf/shadcn'
 import { customizeValidator } from '@rjsf/validator-ajv8'
 import Ajv2020 from 'ajv/dist/2020'
-import { getUiOptions } from '@rjsf/utils'
-import type { ErrorSchema, FieldTemplateProps, UiSchema } from '@rjsf/utils'
+import { buttonId, getUiOptions } from '@rjsf/utils'
+import type {
+  ArrayFieldItemTemplateProps, ArrayFieldTemplateProps, ErrorSchema, FieldTemplateProps,
+  IconButtonProps, UiSchema,
+} from '@rjsf/utils'
 import type { IChangeEvent } from '@rjsf/core'
 import { api, ApiError } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
@@ -18,6 +21,7 @@ import { TONE_CLASSES } from '../components/tone.ts'
 import { plural, useT } from '../i18n.tsx'
 import { pluginTrail } from '../kinds.ts'
 import type { Tab } from '../components/Tabs.tsx'
+import type { Translate } from '../i18n.tsx'
 import type { StringKey } from '../../locales/en.ts'
 
 // The core emits z.toJSONSchema output, which declares draft 2020-12; the default Ajv is draft-07
@@ -104,6 +108,7 @@ function typeWord(property: unknown, isSecret: boolean): StringKey {
   if (isSecret) return 'pluginSettings.type.secret'
   if (!isPlainObject(property)) return 'pluginSettings.type.text'
   if (Array.isArray(property.enum)) return 'pluginSettings.type.enum'
+  if (property.type === 'array') return 'pluginSettings.type.list'
   if (property.type === 'number' || property.type === 'integer') return 'pluginSettings.type.number'
   if (property.type === 'boolean') return 'pluginSettings.type.boolean'
   return 'pluginSettings.type.text'
@@ -115,6 +120,15 @@ function defaultWord(property: unknown): string | undefined {
   const value = property.default
   const scalar = typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
   return scalar ? String(value) : undefined
+}
+
+/** 2c's right column: the type word, then the rank — `required`, or the default it falls back to. */
+function metaFor(t: Translate, property: unknown, required: boolean, isSecret: boolean): string {
+  const fallback = defaultWord(property)
+  const rank = required
+    ? t('pluginSettings.required')
+    : fallback === undefined ? '' : t('pluginSettings.default', { value: fallback })
+  return [t(typeWord(property, isSecret)), rank].filter((part) => part !== '').join(' · ')
 }
 
 function metaLine(formContext: unknown, id: string): string | undefined {
@@ -130,6 +144,7 @@ function metaLine(formContext: unknown, id: string): string | undefined {
  * the additional-properties wrapper and the checkbox exception that owns its own label.
  */
 function FieldTemplate(props: FieldTemplateProps<Settings>): React.JSX.Element {
+  const t = useT()
   const {
     id, children, displayLabel, errors, help, description, rawDescription, classNames, style,
     disabled, label, hidden, readonly, required, schema, uiSchema, registry,
@@ -137,7 +152,13 @@ function FieldTemplate(props: FieldTemplateProps<Settings>): React.JSX.Element {
   if (hidden === true) return <div className="hidden">{children}</div>
   const Wrap = registry.templates.WrapIfAdditionalTemplate
   const context: unknown = registry.formContext
-  const meta = metaLine(context, id)
+  // The precomputed line for a top-level field, which is the only one that knows about
+  // secrets; anything nested is derived from the schema RJSF hands this template, since
+  // `meta` is keyed by id and no id below the root is in it. An array owns its own row
+  // (ArrayFieldTemplate), so the line here would be an orphan above it.
+  const meta = schema.type === 'array'
+    ? undefined
+    : metaLine(context, id) ?? (schema.type === 'object' ? undefined : metaFor(t, schema, required === true, false))
   const isCheckbox = getUiOptions(uiSchema).widget === 'checkbox'
   return (
     <Wrap
@@ -172,6 +193,107 @@ function FieldTemplate(props: FieldTemplateProps<Settings>): React.JSX.Element {
         {help}
       </div>
     </Wrap>
+  )
+}
+
+/**
+ * The token control the four array buttons share. Only RJSF's three behavioural props are
+ * read: the rest of `IconButtonProps` is the vendor theme's icon and variant plumbing, which
+ * is exactly what this replaces.
+ */
+function ArrayControl(
+  { id, onClick, disabled, label, glyph }: IconButtonProps<Settings> & { label: string, glyph?: string },
+): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      id={id}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={glyph === undefined ? undefined : label}
+      title={glyph === undefined ? undefined : label}
+      className="rounded-md border border-line px-2 py-1 text-meta-lg disabled:opacity-40"
+    >
+      {glyph ?? label}
+    </button>
+  )
+}
+
+function AddButton(props: IconButtonProps<Settings>): React.JSX.Element {
+  const t = useT()
+  return <ArrayControl {...props} label={t('pluginSettings.addItem')} />
+}
+
+function RemoveButton(props: IconButtonProps<Settings>): React.JSX.Element {
+  const t = useT()
+  return <ArrayControl {...props} label={t('pluginSettings.removeItem')} />
+}
+
+function MoveUpButton(props: IconButtonProps<Settings>): React.JSX.Element {
+  const t = useT()
+  return <ArrayControl {...props} label={t('pluginSettings.moveUp')} glyph="\u2191" />
+}
+
+function MoveDownButton(props: IconButtonProps<Settings>): React.JSX.Element {
+  const t = useT()
+  return <ArrayControl {...props} label={t('pluginSettings.moveDown')} glyph="\u2193" />
+}
+
+/**
+ * 2c's one row per field, applied to an array: its label and its own meta line on one line,
+ * then the items. The vendor theme titles the array a second time in an `<h5>` under
+ * FieldTemplate's line, and its add control is the theme's outline variant.
+ */
+function ArrayFieldTemplate(props: ArrayFieldTemplateProps<Settings>): React.JSX.Element {
+  const { canAdd, disabled, readonly, items, onAddClick, title, uiSchema, fieldPathId, registry } = props
+  const context: unknown = registry.formContext
+  const meta = metaLine(context, fieldPathId.$id)
+  const { AddButton: Add } = registry.templates.ButtonTemplates
+  return (
+    <div className="flex flex-col gap-2" data-testid={`array-field-${fieldPathId.$id}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span className="text-body font-medium">{getUiOptions(uiSchema).title ?? title}</span>
+        {meta !== undefined && <span className="font-mono text-meta text-text/60">{meta}</span>}
+      </div>
+      {items}
+      {canAdd === true && (
+        <Add
+          id={buttonId(fieldPathId, 'add')}
+          onClick={onAddClick}
+          disabled={disabled === true || readonly === true}
+          uiSchema={uiSchema}
+          registry={registry}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * One item as a card with its own header row: the entry's number on the left, its controls on
+ * the right. The vendor centres the controls against the whole block, so they land beside
+ * whichever field happens to sit at the item's middle.
+ */
+function ArrayFieldItemTemplate(props: ArrayFieldItemTemplateProps<Settings>): React.JSX.Element {
+  const t = useT()
+  const { children, buttonsProps, hasToolbar, index, registry } = props
+  const Buttons = registry.templates.ArrayFieldItemButtonsTemplate
+  return (
+    <div
+      data-testid={`array-item-${String(index)}`}
+      className="flex flex-col gap-2 rounded-lg border border-line bg-surface2 p-3"
+    >
+      <div
+        data-testid={`array-item-header-${String(index)}`}
+        className="flex flex-wrap items-center justify-between gap-2"
+      >
+        <span className="font-mono text-meta-lg text-text/60">
+          {t('pluginSettings.itemLabel', { n: index + 1 })}
+        </span>
+        {hasToolbar && <span className="flex gap-2"><Buttons {...buttonsProps} /></span>}
+      </div>
+      {children}
+    </div>
   )
 }
 
@@ -213,20 +335,19 @@ export function PluginSettings(): React.JSX.Element {
   const fields = properties(body)
   const fieldNames = Object.keys(fields)
   const required = requiredKeys(body)
-  const uiSchema: UiSchema<Settings> = Object.fromEntries(
-    secrets.map((key) => [key, { 'ui:widget': SecretField }]),
-  )
+  // `ui:label: false` on an array's items is what drops RJSF's own `<name>-<index>` heading
+  // (ObjectField.js:248); ArrayFieldItemTemplate numbers the entry instead.
+  const uiSchema: UiSchema<Settings> = {
+    ...Object.fromEntries(fieldNames
+      .filter((key) => isPlainObject(fields[key]) && fields[key].type === 'array')
+      .map((key) => [key, { items: { 'ui:label': false } }])),
+    ...Object.fromEntries(secrets.map((key) => [key, { 'ui:widget': SecretField }])),
+  }
   // Keyed by RJSF's own field id (idPrefix 'root', separator '_'): a field template is given
   // the id, never the property name.
-  const fieldMeta = Object.fromEntries(fieldNames.map((key) => {
-    const property = fields[key]
-    const fallback = defaultWord(property)
-    const rank = required.includes(key)
-      ? t('pluginSettings.required')
-      : fallback === undefined ? '' : t('pluginSettings.default', { value: fallback })
-    const type = t(typeWord(property, secrets.includes(key)))
-    return [`root_${key}`, [type, rank].filter((p) => p !== '').join(' · ')]
-  }))
+  const fieldMeta = Object.fromEntries(fieldNames.map((key) => (
+    [`root_${key}`, metaFor(t, fields[key], required.includes(key), secrets.includes(key))]
+  )))
   // The stored settings, not the form: config/lifecycle.ts parses readSettings(db, name), so a
   // typed-but-unsaved value opening the switch would walk straight into the server's refusal.
   const outstanding = missingRequired(body, baseline ?? {})
@@ -355,7 +476,12 @@ export function PluginSettings(): React.JSX.Element {
                 uiSchema={uiSchema}
                 formData={formData}
                 formContext={{ meta: fieldMeta }}
-                templates={{ FieldTemplate }}
+                templates={{
+                  FieldTemplate,
+                  ArrayFieldTemplate,
+                  ArrayFieldItemTemplate,
+                  ButtonTemplates: { AddButton, RemoveButton, MoveUpButton, MoveDownButton },
+                }}
                 validator={validator}
                 extraErrors={extraErrors}
                 onChange={(e) => { setFormData(e.formData ?? {}); setSaved(false) }}
