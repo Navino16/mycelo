@@ -53,7 +53,9 @@ function useI18n(): I18n {
   return ctx
 }
 
-export function useT(): I18n['t'] { return useI18n().t }
+export type Translate = I18n['t']
+
+export function useT(): Translate { return useI18n().t }
 export function useLocale(): Pick<I18n, 'locale' | 'setLocale'> {
   const { locale, setLocale } = useI18n()
   return { locale, setLocale }

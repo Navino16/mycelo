@@ -48,11 +48,11 @@ function serveError(): void {
 
 // The screen reads the runtime's mode to decide whether a germination retry is even offered,
 // so it needs a HealthContext; useHealth throws without one.
-function renderDetail(health: RuntimeHealth | null = GERMINATED): void {
+function renderDetail(health: RuntimeHealth | null = GERMINATED, at = '/plugins/radarr'): void {
   render(
     <I18nProvider>
       <HealthContext value={{ health, error: false, refresh: () => Promise.resolve() }}>
-        <MemoryRouter initialEntries={['/plugins/radarr']}>
+        <MemoryRouter initialEntries={[at]}>
           <Routes><Route path="/plugins/:name" element={<PluginDetail />} /></Routes>
         </MemoryRouter>
       </HealthContext>
@@ -72,7 +72,7 @@ describe('the plugin detail screen', () => {
     serve(DETAIL)
     renderDetail()
 
-    await waitFor(() => { expect(screen.getByText('radarr')).toBeDefined() })
+    await screen.findByRole('heading', { level: 1, name: 'radarr' })
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
@@ -125,7 +125,7 @@ describe('the plugin detail screen', () => {
     serve({ ...DETAIL, state: 'dormant', reason: 'create() returned undefined, expected an object', mounted: undefined })
     renderDetail()
 
-    await waitFor(() => { expect(screen.getByText('radarr')).toBeDefined() })
+    await screen.findByRole('heading', { level: 1, name: 'radarr' })
     expect(screen.queryByText('Granted at germination')).toBeNull()
   })
 })
@@ -182,7 +182,9 @@ describe('the dormant plugin detail, as 1c draws it', () => {
     serve(DORMANT)
     renderDetail()
 
-    expect(await screen.findByText('enzyme · commands')).toBeDefined()
+    // I3: the catalogue's spelling, not the wire value — the chip printed `enzyme · commands`
+    // while the trail eighteen lines above printed `Enzymes · commands`.
+    expect(await screen.findAllByText('Enzymes \u00b7 commands')).toHaveLength(2)
     expect(screen.getByText('strain 3.1.0')).toBeDefined()
     expect(screen.getByText('enabled')).toBeDefined()
     expect(screen.getByText('3 commands')).toBeDefined()
@@ -338,6 +340,54 @@ describe('an action that succeeds leaves the screen describing the new state', (
   })
 })
 
+describe('the panel the URL asks for', () => {
+  // The settings screen's tab strip links here with `?panel=`, so the panel must be readable
+  // from the URL and not held in state the incoming navigation cannot reach.
+  it('opens the commands panel when the URL names it', async () => {
+    serve({ ...DETAIL, commands: ['radarr.search'] })
+    renderDetail(GERMINATED, '/plugins/radarr?panel=commands')
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Commands' })).toBeDefined()
+  })
+
+  it('opens the requirements panel when the URL names it', async () => {
+    serve(DETAIL)
+    renderDetail(GERMINATED, '/plugins/radarr?panel=requirements')
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Declared in its manifest' })).toBeDefined()
+  })
+
+  it('falls back to diagnosis for a panel name it does not know', async () => {
+    serve(DETAIL)
+    renderDetail(GERMINATED, '/plugins/radarr?panel=nonsense')
+
+    await screen.findByRole('heading', { level: 1, name: 'radarr' })
+    expect(screen.getByRole('button', { name: 'Diagnosis' }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  // I9: the same trail as the settings screen, so one click between the two tabs does not
+  // swap the last crumb for one of a different type.
+  it('trails Plugins, the kind and the plugin, in that order', async () => {
+    serve(DETAIL)
+    renderDetail()
+
+    await waitFor(() => { expect(screen.getByLabelText('breadcrumb')).toBeDefined() })
+    expect(screen.getByLabelText('breadcrumb').textContent)
+      .toBe('Plugins\u203aRhizae \u00b7 connected systems\u203aradarr')
+  })
+
+  // I3: the chip read the wire value, so one screen printed `Rhizae · connected systems` in
+  // its trail and `rhiza · connected systems` eighteen lines below.
+  it('spells the kind the same way in the chip as in the trail', async () => {
+    serve(DETAIL)
+    renderDetail()
+
+    await waitFor(() => { expect(screen.getByLabelText('breadcrumb')).toBeDefined() })
+    expect(screen.getAllByText('Rhizae \u00b7 connected systems')).toHaveLength(2)
+    expect(screen.queryByText('rhiza \u00b7 connected systems')).toBeNull()
+  })
+})
+
 describe('the commands tab of a plugin that declares none', () => {
   // 'Asks for nothing.' is DemandsList's sentence about scopes and dependencies; every hypha,
   // rhiza and inhibitor reaches this branch, and none of them asks for nothing.
@@ -345,7 +395,7 @@ describe('the commands tab of a plugin that declares none', () => {
     serve(DETAIL)
     renderDetail()
 
-    await waitFor(() => { expect(screen.getByText('radarr')).toBeDefined() })
+    await screen.findByRole('heading', { level: 1, name: 'radarr' })
     fireEvent.click(screen.getByRole('button', { name: /^Commands/ }))
 
     expect(screen.getByText('Declares no command.')).toBeDefined()

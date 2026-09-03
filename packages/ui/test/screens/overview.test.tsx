@@ -600,8 +600,10 @@ describe('what needs attention', () => {
     expect(screen.queryByText('Since')).toBeNull()
     // The kind comes from /api/plugins; health.dormant does not carry one. Two rows are rhizas
     // — the dormant connector and the silent one — and one is the enzyme that depends on it.
-    expect(screen.getAllByText('rhiza · connected systems')).toHaveLength(2)
-    expect(screen.getByText('enzyme · commands')).toBeDefined()
+    // I3: the catalogue's plural term, not the wire value — brief §6 fixes the vocabulary as
+    // `Rhizae · connected systems`, and this table printed the lowercase singular.
+    expect(screen.getAllByText('Rhizae \u00b7 connected systems')).toHaveLength(2)
+    expect(screen.getByText('Enzymes \u00b7 commands')).toBeDefined()
   })
 
   it('says how long ago the substrate was last read', async () => {

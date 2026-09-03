@@ -16,6 +16,7 @@ import { StateBadge } from '../components/StateBadge.tsx'
 import { Tabs } from '../components/Tabs.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { useT } from '../i18n.tsx'
+import { pluginTrail } from '../kinds.ts'
 import type { Tab } from '../components/Tabs.tsx'
 
 // The core emits z.toJSONSchema output, which declares draft 2020-12; the default Ajv is draft-07
@@ -263,16 +264,23 @@ export function PluginSettings(): React.JSX.Element {
   }
 
   const commands = readArray<string>(detail?.commands) ?? []
+  // Each sibling names its own panel: PluginDetail holds the panel in `?panel=`, so three
+  // links to the bare route all landed on Diagnosis.
   const tabs: readonly Tab[] = [
-    { id: 'diagnosis', label: t('detail.tabDiagnosis'), to: `/plugins/${name}` },
+    { id: 'diagnosis', label: t('detail.tabDiagnosis'), to: `/plugins/${name}?panel=diagnosis` },
     { id: 'configuration', label: t('detail.tabConfiguration') },
-    { id: 'requirements', label: t('detail.tabRequirements'), to: `/plugins/${name}` },
-    { id: 'commands', label: t('detail.tabCommands'), count: commands.length, to: `/plugins/${name}` },
+    { id: 'requirements', label: t('detail.tabRequirements'), to: `/plugins/${name}?panel=requirements` },
+    {
+      id: 'commands',
+      label: t('detail.tabCommands'),
+      count: commands.length,
+      to: `/plugins/${name}?panel=commands`,
+    },
   ]
 
   return (
     <div className="space-y-4">
-      <Breadcrumb trail={[{ label: t('plugins.title'), to: '/plugins' }, { label: name, to: `/plugins/${name}` }]} />
+      <Breadcrumb trail={pluginTrail(t, name, detail?.kind)} />
 
       <header className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">

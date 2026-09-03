@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
 import { useT } from '../i18n.tsx'
+import { kindLabel } from '../kinds.ts'
 import { Dot } from './Dot.tsx'
 import { TONE_CLASSES } from './tone.ts'
 import type { SporeKind } from '../api/types.ts'
@@ -56,9 +57,7 @@ export function AttentionTable({ rows }: { rows: readonly AttentionRow[] }): Rea
             <div className="min-w-0">
               <Link to={`/plugins/${row.name}`} className="font-mono text-body">{row.name}</Link>
               {row.kind !== undefined && (
-                <p className="text-meta text-text/60">
-                  {`${row.kind} · ${t(`kind.${row.kind}.subtitle` as StringKey)}`}
-                </p>
+                <p className="text-meta text-text/60">{kindLabel(t, row.kind)}</p>
               )}
             </div>
             <StateWord state={row.state} />

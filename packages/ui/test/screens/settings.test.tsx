@@ -477,11 +477,62 @@ describe("the generated form's page frame", () => {
     await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
     expect(screen.getByRole('heading', { name: 'vault' })).toBeDefined()
     expect(screen.getByText('Germinated')).toBeDefined()
-    // The three siblings navigate back to the detail route, so the two read as one screen.
-    for (const label of ['Diagnosis', 'Requirements']) {
-      expect(screen.getByRole('link', { name: label }).getAttribute('href')).toBe('/plugins/vault')
-    }
     expect(screen.getByRole('button', { name: 'Configuration' }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  // Each sibling names its own panel: three links to the bare detail route all landed on
+  // Diagnosis, and the count on the Commands tab makes the promise explicit.
+  it('sends the Diagnosis tab to the diagnosis panel', async () => {
+    mockVault({ settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    expect(screen.getByRole('link', { name: 'Diagnosis' }).getAttribute('href'))
+      .toBe('/plugins/vault?panel=diagnosis')
+  })
+
+  it('sends the Requirements tab to the requirements panel, not to Diagnosis', async () => {
+    mockVault({ settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    const href = screen.getByRole('link', { name: 'Requirements' }).getAttribute('href')
+    expect(href).toBe('/plugins/vault?panel=requirements')
+    expect(href).not.toBe(screen.getByRole('link', { name: 'Diagnosis' }).getAttribute('href'))
+  })
+
+  it('sends the Commands tab to the commands panel, not to Diagnosis', async () => {
+    mockVault({ settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    const href = screen.getByRole('link', { name: /^Commands/ }).getAttribute('href')
+    expect(href).toBe('/plugins/vault?panel=commands')
+    expect(href).not.toBe(screen.getByRole('link', { name: 'Diagnosis' }).getAttribute('href'))
+  })
+
+  // I9: one trail shape for the plugin's two screens, so navigating between the tabs does not
+  // swap one crumb for another of a different type.
+  it('trails Plugins, the kind and the plugin, in that order', async () => {
+    mockVault({ settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    const trail = screen.getByLabelText('breadcrumb')
+    expect(trail.textContent).toBe('Plugins\u203aEnzymes \u00b7 commands\u203avault')
+  })
+
+  it('drops the kind crumb while the plugin route has not answered', async () => {
+    mockVault({ schema: { available: false, reason: 'none' }, detail: undefined })
+    globalThis.fetch = mock((url: string) => (
+      url === '/api/plugins/vault'
+        ? Promise.resolve(json({ error: { message: 'x' } }, 500))
+        : Promise.resolve(json(url.endsWith('/schema') ? SCHEMA : {}))
+    )) as unknown as typeof fetch
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('breadcrumb')).toBeDefined() })
+    expect(screen.getByLabelText('breadcrumb').textContent).toBe('Plugins\u203avault')
   })
 
   it('counts the schema properties under the title', async () => {

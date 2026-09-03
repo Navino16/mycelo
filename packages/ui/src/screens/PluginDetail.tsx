@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router'
+import { useParams, useSearchParams } from 'react-router'
 import { ApiError, api } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
@@ -11,11 +11,16 @@ import { Tabs } from '../components/Tabs.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { useHealth } from '../health.tsx'
 import { useT } from '../i18n.tsx'
+import { kindLabel, pluginTrail } from '../kinds.ts'
 import type { MutationResult, PluginDetailDto } from '../api/types.ts'
 import type { Tab } from '../components/Tabs.tsx'
-import type { StringKey } from '../../locales/en.ts'
 
-type Panel = 'diagnosis' | 'requirements' | 'commands'
+const PANELS = ['diagnosis', 'requirements', 'commands'] as const
+type Panel = typeof PANELS[number]
+
+function panelOf(requested: string | null): Panel {
+  return PANELS.find((p) => p === requested) ?? 'diagnosis'
+}
 
 export function PluginDetail(): React.JSX.Element {
   const t = useT()
@@ -23,7 +28,10 @@ export function PluginDetail(): React.JSX.Element {
   const { health, refresh } = useHealth()
   const [plugin, setPlugin] = useState<PluginDetailDto | null>(null)
   const [error, setError] = useState(false)
-  const [panel, setPanel] = useState<Panel>('diagnosis')
+  // In the query string, not in state: the sibling settings screen's own tab strip links here,
+  // and three links to one href all landed on the diagnosis panel.
+  const [params, setParams] = useSearchParams()
+  const panel = panelOf(params.get('panel'))
   const [actionError, setActionError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   // A ref, not `busy`: two clicks in one tick read the same render's state, and a second POST
@@ -73,12 +81,7 @@ export function PluginDetail(): React.JSX.Element {
     { id: 'requirements', label: t('detail.tabRequirements') },
     { id: 'commands', label: t('detail.tabCommands'), count: declared.length },
   ]
-  const trail = [
-    { label: t('plugins.title'), to: '/plugins' },
-    ...plugin.kind === undefined
-      ? []
-      : [{ label: `${t(`kind.${plugin.kind}` as StringKey)} · ${t(`kind.${plugin.kind}.subtitle` as StringKey)}` }],
-  ]
+  const trail = pluginTrail(t, plugin.name, plugin.kind)
 
   return (
     <div className="space-y-4">
@@ -94,9 +97,7 @@ export function PluginDetail(): React.JSX.Element {
             <p className="text-body text-text/70">{plugin.description}</p>
           )}
           <div className="flex flex-wrap gap-2">
-            {plugin.kind !== undefined && (
-              <Chip label={`${plugin.kind} · ${t(`kind.${plugin.kind}.subtitle` as StringKey)}`} />
-            )}
+            {plugin.kind !== undefined && <Chip label={kindLabel(t, plugin.kind)} />}
             {plugin.strain !== undefined && <Chip label={`strain ${plugin.strain}`} />}
             <Chip label={t(plugin.enabled ? 'detail.enabled' : 'detail.disabled')} />
             <Chip
@@ -139,7 +140,8 @@ export function PluginDetail(): React.JSX.Element {
         <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{actionError}</p>
       )}
 
-      <Tabs tabs={tabs} active={panel} onSelect={(id) => { setPanel(id as Panel) }} />
+      {/* replace, not push: a tab is a view of one screen, not a page in the reader's trail. */}
+      <Tabs tabs={tabs} active={panel} onSelect={(id) => { setParams({ panel: id }, { replace: true }) }} />
 
       {panel === 'diagnosis' && (
         <div className="space-y-4">
