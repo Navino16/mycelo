@@ -167,6 +167,15 @@ describe('the sources list', () => {
     expect(screen.getByText('2 registries · 61 spores visible')).toBeDefined()
   })
 
+  // The standing singular ruling: '1 registries · 1 spores' is what a plural-only key says.
+  it('counts one registry and one spore in the singular', async () => {
+    mockApi([OFFICIAL], { catalogues: { 1: 1 } })
+    renderSources()
+
+    await waitFor(() => { expect(screen.getByText('1 registry · 1 spores visible')).toBeDefined() })
+    expect(within(screen.getByTestId('source-1')).getByText('1 spore')).toBeDefined()
+  })
+
   it('says what an unreachable source does and does not block', async () => {
     mockApi([OFFICIAL], { catalogues: { 1: 61 } })
     renderSources()

@@ -51,6 +51,23 @@ const HARMLESS: SporeStrainsDto = {
   },
 }
 
+/** One scope, which is the common case a plural-only string gets wrong. */
+const ONE_SCOPE: SporeStrainsDto = {
+  strains: ['1.0.0'],
+  detail: {
+    name: 'enzyme-ping',
+    kind: 'enzyme',
+    description: 'Answers ping',
+    septum: '^0.11',
+    demands: {
+      requires: [],
+      scopes: ['messages.send'],
+      externals: [],
+      commands: [{ name: 'ping', capabilities: [] }],
+    },
+  },
+}
+
 const OFFICIAL: SourceDto = {
   id: 1, label: 'Official registry', driver: 'github', location: 'https://github.com/x/y', official: true, enabled: true,
 }
@@ -70,9 +87,18 @@ const INSTALLED: PluginGroups = {
   unknown: [],
 }
 
-function command(plugin: string, declared: string): CommandGroups[string][number] {
+/**
+ * `command` is the alias-resolved name germination keys its route table by, `declared` the
+ * manifest's own; registry.ts:101 collides on the former (task 18 review finding 2).
+ */
+function command(plugin: string, declared: string, alias?: string): CommandGroups[string][number] {
   return {
-    plugin, command: declared, declared, qualified: `${plugin}.${declared}`, description: '', capabilities: [],
+    plugin,
+    command: alias ?? declared,
+    declared,
+    qualified: `${plugin}.${declared}`,
+    description: '',
+    capabilities: [],
   }
 }
 
@@ -82,6 +108,14 @@ const NO_COLLISION: CommandGroups = {
 }
 const COLLIDING: CommandGroups = {
   'enzyme-other': [command('enzyme-other', 'welcome.test'), command('enzyme-other', 'films.add')],
+}
+/** Renamed INTO the offer's name: the alias is what the runtime would refuse. */
+const COLLIDING_BY_ALIAS: CommandGroups = {
+  'enzyme-other': [command('enzyme-other', 'films.search', 'welcome.test')],
+}
+/** Renamed AWAY from it: the old declared name is free, so nothing collides. */
+const FREED_BY_ALIAS: CommandGroups = {
+  'enzyme-other': [command('enzyme-other', 'welcome.test', 'films.renamed')],
 }
 
 function json(body: unknown, status = 200): Response {
@@ -165,6 +199,18 @@ describe('the spore detail screen', () => {
     await waitFor(() => { expect(screen.getByText('enzyme-welcome')).toBeDefined() })
     expect(screen.getByTestId('consent')).toBeDefined()
     expect(screen.queryByText('Something went wrong')).toBeNull()
+  })
+
+  // Finding 1: `undefined` from the join's map is "known and not installed"; a refused join
+  // knows nothing, and must not claim it either on the chip or anywhere else.
+  it('claims nothing about the install state when the plugin join is refused', async () => {
+    serve({ pluginsFail: true })
+    renderDetail()
+
+    await waitFor(() => { expect(screen.getByText('enzyme-welcome')).toBeDefined() })
+    expect(screen.queryByTestId('install-state')).toBeNull()
+    expect(screen.queryByText('not installed')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Inoculate and grant 4 scopes' })).toBeDefined()
   })
 
   it('renders the spore on success, with no error banner', async () => {
@@ -305,6 +351,26 @@ describe('what installing will bring in', () => {
     expect(screen.getByText('Collides with an installed command: welcome.test')).toBeDefined()
     expect(screen.queryByText(/No collision/)).toBeNull()
   })
+
+  // Finding 2: germination keys its route table by the alias-resolved name
+  // (registry.ts:101), so a check against `declared` is both stricter and more lenient than
+  // the runtime — broken either way (CLAUDE.md).
+  it('collides with a command renamed into the offer name, not with its old declared name', async () => {
+    serve({ commands: COLLIDING_BY_ALIAS })
+    renderDetail()
+
+    await waitFor(() => { expect(screen.getByText('Commands it will add')).toBeDefined() })
+    expect(screen.getByText('Collides with an installed command: welcome.test')).toBeDefined()
+  })
+
+  it('sees no collision with a command renamed away from the offer name', async () => {
+    serve({ commands: FREED_BY_ALIAS })
+    renderDetail()
+
+    await waitFor(() => { expect(screen.getByText('Commands it will add')).toBeDefined() })
+    expect(screen.getByText('No collision with the 1 command already installed.')).toBeDefined()
+    expect(screen.queryByText(/Collides/)).toBeNull()
+  })
 })
 
 describe('installing it', () => {
@@ -313,6 +379,14 @@ describe('installing it', () => {
     renderDetail()
 
     expect(await screen.findByRole('button', { name: 'Inoculate and grant 4 scopes' })).toBeDefined()
+  })
+
+  // A one-scope plugin is the common case, and 'grant 1 scopes' is what a plural-only key says.
+  it('says one scope in the singular on the button', async () => {
+    serve({ spore: ONE_SCOPE, commands: FREED_BY_ALIAS })
+    renderDetail('enzyme-ping')
+
+    expect(await screen.findByRole('button', { name: 'Inoculate and grant 1 scope' })).toBeDefined()
   })
 
   it('says installing is not starting, which is the two-act rule the SPA implements', async () => {

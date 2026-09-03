@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router'
 import { api } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
-import { ORDER } from '../api/types.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { Chip } from '../components/Chip.tsx'
 import { ScopeTable } from '../components/ScopeTable.tsx'
 import { Sheet } from '../components/Sheet.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { useT } from '../i18n.tsx'
+import { pluginsByName } from '../plugins.ts'
 import { SCOPE_SENTENCE, highRiskScopes } from '../scopes.ts'
 import type {
   CommandCapabilityDto, CommandDto, CommandGroups, InoculateOutcome, PluginDto, PluginGroups,
@@ -63,7 +63,7 @@ function ConsentAlert({ scopes }: { scopes: readonly string[] }): React.JSX.Elem
 }
 
 function Requirements(
-  { requires, installed }: { requires: readonly RequirementDto[], installed: Map<string, PluginDto> | null },
+  { requires, installed }: { requires: readonly RequirementDto[], installed: ReadonlyMap<string, PluginDto> | null },
 ): React.JSX.Element {
   const t = useT()
   return (
@@ -109,7 +109,9 @@ function CommandsAdded(
   const existing = groups === null
     ? []
     : Object.values(groups).flatMap((list) => readArray<CommandDto>(list) ?? [])
-  const clashes = declared.filter((c) => existing.some((e) => e.declared === c.name)).map((c) => c.name)
+  // `command`, not `declared`: germination keys its route table by the alias-resolved name
+  // (registry.ts:101), and a check the runtime disagrees with is broken either way.
+  const clashes = declared.filter((c) => existing.some((e) => e.command === c.name)).map((c) => c.name)
   return (
     <section className="space-y-2 rounded-xl border border-line bg-surface p-4">
       <h2 className="text-title font-semibold">{t('spore.commandsAdded')}</h2>
@@ -118,7 +120,11 @@ function CommandsAdded(
       </ul>
       {groups !== null && (
         clashes.length === 0
-          ? <p className="text-meta-lg text-text/60">{t('spore.noCollision', { count: existing.length })}</p>
+          ? (
+            <p className="text-meta-lg text-text/60">
+              {t(existing.length === 1 ? 'spore.noCollisionOne' : 'spore.noCollision', { count: existing.length })}
+            </p>
+          )
           : (
             <p className={`text-meta-lg ${TONE_CLASSES.warn.text}`}>
               {t('spore.collision', { names: clashes.join(', ') })}
@@ -163,9 +169,7 @@ export function SporeDetail(): React.JSX.Element {
   const offered = readArray<string>(strains?.strains) ?? []
   const newest = offered[0]
   const warnings = readArray<string>(outcome?.warnings) ?? []
-  const installed = groups === null
-    ? null
-    : new Map(ORDER.flatMap((kind) => readArray<PluginDto>(groups[kind]) ?? []).map((p) => [p.name, p]))
+  const installed = pluginsByName(groups)
 
   async function install(strain?: string): Promise<void> {
     try {
@@ -187,7 +191,9 @@ export function SporeDetail(): React.JSX.Element {
   const scopes = readArray<string>(spore.demands.scopes) ?? []
   const declaredCommands = readArray<CommandCapabilityDto>(spore.demands.commands) ?? []
   const highRisk = highRiskScopes(scopes)
-  const here = installed?.get(spore.name)
+  // `undefined` is "known and not installed"; `null` is "the join said nothing", and the
+  // chip is dropped rather than claiming either (review finding 1).
+  const here = installed === null ? null : installed.get(spore.name)
 
   return (
     <div className="space-y-5">
@@ -203,12 +209,14 @@ export function SporeDetail(): React.JSX.Element {
           <h1 className="font-mono text-page">{spore.name}</h1>
           <p className="text-body text-text/70">{spore.description}</p>
           <div className="flex flex-wrap items-center gap-2">
-            <span data-testid="install-state">
-              <Chip
-                label={t(here === undefined ? 'spore.notInstalled' : 'spore.installed')}
-                tone={here === undefined ? 'idle' : 'ok'}
-              />
-            </span>
+            {here !== null && (
+              <span data-testid="install-state">
+                <Chip
+                  label={t(here === undefined ? 'spore.notInstalled' : 'spore.installed')}
+                  tone={here === undefined ? 'idle' : 'ok'}
+                />
+              </span>
+            )}
             {newest !== undefined && <Chip label={t('spore.strain', { strain: newest })} />}
             <Chip
               label={t(
@@ -235,7 +243,10 @@ export function SporeDetail(): React.JSX.Element {
                   >
                     {scopes.length === 0
                       ? t('spore.install')
-                      : t('spore.inoculateGrant', { count: scopes.length })}
+                      : t(
+                        scopes.length === 1 ? 'spore.inoculateGrantOne' : 'spore.inoculateGrant',
+                        { count: scopes.length },
+                      )}
                   </button>
                   {offered.length > 1 && (
                     <button

@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { api } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
-import { ORDER } from '../api/types.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { useT } from '../i18n.tsx'
+import { pluginsByName } from '../plugins.ts'
 import { isNewerStrain } from '../strains.ts'
 import type { PluginDto, PluginGroups, SourceDto, SporeOffer } from '../api/types.ts'
 import type { StringKey } from '../../locales/en.ts'
@@ -68,9 +68,7 @@ export function BrowseSource(): React.JSX.Element {
   }, [id])
 
   const all = readArray<SporeOffer>(offers) ?? []
-  const installed = groups === null
-    ? null
-    : new Map(ORDER.flatMap((kind) => readArray<PluginDto>(groups[kind]) ?? []).map((p) => [p.name, p]))
+  const installed = pluginsByName(groups)
   const needle = term.trim().toLowerCase()
   const matched = needle === '' ? all : all.filter((o) => o.name.toLowerCase().includes(needle))
   const visible = matched.slice(0, shown)

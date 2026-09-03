@@ -104,7 +104,9 @@ function SourceRow(
         <Chip label={t(badgeKey(source))} tone={source.official && source.enabled ? 'ok' : 'idle'} />
       </span>
       <span className="text-body text-text/70">
-        {spores === undefined ? '' : t('sources.catalogue', { count: spores })}
+        {spores === undefined
+          ? ''
+          : t(spores === 1 ? 'sources.catalogueOne' : 'sources.catalogue', { count: spores })}
       </span>
       <button
         type="button"
@@ -204,7 +206,10 @@ export function Sources(): React.JSX.Element {
           <h1 className="text-page font-semibold">{t('sources.title')}</h1>
           {sources !== null && (
             <p className="text-meta-lg text-text/60">
-              {t('sources.summary', { count: list.length, spores: total })}
+              {t(
+                list.length === 1 ? 'sources.summaryOne' : 'sources.summary',
+                { count: list.length, spores: total },
+              )}
             </p>
           )}
         </div>
