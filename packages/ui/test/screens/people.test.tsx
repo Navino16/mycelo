@@ -352,6 +352,31 @@ describe('the people list in bulk', () => {
     expect(await screen.findByText('14 selected')).toBeDefined()
   })
 
+  // ruling F15: on an empty search the screen says nobody matches and still offered the bar;
+  // one click armed Add role / Remove role / Mark reviewed over 121 invisible people.
+  it('withdraws the select-all offer while the filtered list is empty', async () => {
+    mockApi()
+    renderPeople()
+
+    expect(await screen.findByRole('button', { name: 'Select all 14 never-reviewed' })).toBeDefined()
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'nobody at all' } })
+
+    expect(await screen.findByText('Nobody matches that')).toBeDefined()
+    expect(screen.queryByRole('button', { name: /Select all/ })).toBeNull()
+  })
+
+  it('disarms a live selection\u2019s actions while the filtered list is empty', async () => {
+    mockApi()
+    await selectThree()
+
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'nobody at all' } })
+
+    expect(await screen.findByText('Nobody matches that')).toBeDefined()
+    expect(screen.queryByText('3 selected')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Mark reviewed' })).toBeNull()
+    expect(screen.queryByLabelText('Add role\u2026')).toBeNull()
+  })
+
   // Discriminates the singular selection: 'Select all 1 never-reviewed' would read wrong and
   // is not what the catalogue holds.
   it('names the one never-reviewed person in the singular', async () => {
@@ -415,5 +440,28 @@ describe('the people list against an out-of-order response', () => {
 
     expect(screen.getByText('Page3 Person')).toBeDefined()
     expect(screen.queryByText('Page2 Person')).toBeNull()
+  })
+})
+
+describe('the people list under the docked bulk bar', () => {
+  // Measured at 390x844: the fixed bar sits at bottom-16 and covered the whole paging footer,
+  // so `Showing 1-25 of 121`, `Per page` and Previous/Next were unreachable while a selection
+  // was live. Invisible in a DOM-only test, hence the class-pair assertion.
+  it('reserves room under the bar while a selection is live, and none once it is not', async () => {
+    mockApi()
+    const { container } = render(<I18nProvider><MemoryRouter><People /></MemoryRouter></I18nProvider>)
+
+    await screen.findByText('Person 1')
+    const page = container.firstElementChild
+    expect(page?.className).not.toContain('pb-52')
+
+    selectRow('Person 1')
+
+    expect(page?.className).toContain('pb-52')
+    expect(page?.className).toContain('md:pb-0')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+
+    expect(page?.className).not.toContain('pb-52')
   })
 })

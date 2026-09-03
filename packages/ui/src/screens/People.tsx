@@ -159,9 +159,14 @@ export function People(): React.JSX.Element {
   const to = Math.min(page * size, total)
   const roleList = readArray<RoleDto>(roles) ?? []
   const warn = TONE_CLASSES.warn
+  // ruling F15: nothing on screen to act on means nothing armed. The set itself is kept rather
+  // than emptied, so clearing the search brings the operator's selection back.
+  const armed = items.length === 0 ? 0 : selected.size
 
   return (
-    <div className="space-y-4">
+    // The docked bar sits at bottom-16 and covered the whole paging footer on a phone
+    // (ruling F13): 13rem clears its measured height plus that offset.
+    <div className={`space-y-4${armed > 0 ? ' pb-52 md:pb-0' : ''}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-page font-semibold">{t('people.title')}</h1>
@@ -203,14 +208,14 @@ export function People(): React.JSX.Element {
       </div>
 
       <BulkBar
-        count={selected.size}
+        count={armed}
         roles={roleList.map((r) => r.name)}
         neverReviewed={neverReviewed}
         onClear={() => { setSelected(new Set()); setMessage(undefined) }}
         onAddRole={addRole}
         onRemoveRole={removeRole}
         onMarkReviewed={markReviewed}
-        onSelectNeverReviewed={selectNeverReviewed}
+        onSelectNeverReviewed={items.length === 0 ? undefined : selectNeverReviewed}
         message={message}
       />
 
