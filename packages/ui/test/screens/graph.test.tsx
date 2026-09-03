@@ -93,7 +93,7 @@ describe('the anastomosis graph', () => {
     serve({ nodes: [], edges: [] })
     renderGraph()
 
-    expect(await screen.findByText(/nothing to draw/i)).toBeDefined()
+    expect(await screen.findByText('Nothing to draw')).toBeDefined()
     expect(screen.queryByRole('img')).toBeNull()
   })
 

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'bun:test'
 import { MemoryRouter } from 'react-router'
+import { AttentionTable } from '../../src/components/AttentionTable.tsx'
 import { Avatar, initialsOf } from '../../src/components/Avatar.tsx'
 import { Breadcrumb } from '../../src/components/Breadcrumb.tsx'
 import { Chip } from '../../src/components/Chip.tsx'
@@ -236,5 +237,32 @@ describe('a person avatar', () => {
 
     const node = screen.getByText('MB')
     expect(node.getAttribute('aria-hidden')).toBe('true')
+  })
+})
+
+describe('the needs-attention table with nothing to show', () => {
+  // §1.7 ships one empty state — a headline and a paragraph. The bordered card with its four
+  // column headers over no rows is not it, and the Overview's filter chips reach it.
+  it('renders the empty state instead of its own column headers', () => {
+    render(<I18nProvider><MemoryRouter><AttentionTable rows={[]} /></MemoryRouter></I18nProvider>)
+
+    expect(screen.getByText('Nothing under this filter')).toBeDefined()
+    expect(screen.getByText(/Clear it to see everything/)).toBeDefined()
+    expect(screen.queryByText('Reason')).toBeNull()
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0)
+  })
+
+  // Discriminates the empty branch from a table that lost its headers: one row brings them back.
+  it('heads the table as soon as it has a row', () => {
+    render(
+      <I18nProvider>
+        <MemoryRouter>
+          <AttentionTable rows={[{ name: 'radarr', state: 'dormant', reason: 'refused' }]} />
+        </MemoryRouter>
+      </I18nProvider>,
+    )
+
+    expect(screen.getByText('Reason')).toBeDefined()
+    expect(screen.queryByText('Nothing under this filter')).toBeNull()
   })
 })

@@ -21,11 +21,17 @@ import type { AttentionRow } from '../components/AttentionTable.tsx'
 import type { Segment } from '../components/ProportionBar.tsx'
 import type { SubstrateCounts } from '../components/GuidedStart.tsx'
 import type { Tone } from '../components/tone.ts'
+import type { Translate } from '../i18n.tsx'
 import type {
   CommandDto, ConfigDto, PluginDto, PluginGroups, RhizaHealth, RoleDto, SourceDto,
 } from '../api/types.ts'
 
-type Translate = ReturnType<typeof useT>
+type Filter = 'all' | 'dormant' | 'unreachable'
+
+function matchesFilter(row: AttentionRow, filter: Filter): boolean {
+  if (filter === 'all') return true
+  return filter === 'dormant' ? row.state === 'dormant' : row.state !== 'dormant'
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -107,7 +113,7 @@ export function Overview(): React.JSX.Element {
   const { health, error, refresh } = useHealth()
   const uptime = useUptimeLine()
   const [body, setBody] = useState<Body | null>(null)
-  const [filter, setFilter] = useState<'all' | 'dormant' | 'unreachable'>('all')
+  const [chosen, setChosen] = useState<Filter>('all')
   // Seconds since the poll that last answered. The substrate serves no check timestamp
   // (§2 1a), and setState directly in an effect is refused by react-hooks/set-state-in-effect,
   // so the age is re-derived by the interval and starts at the render that mounted it.
@@ -153,9 +159,11 @@ export function Overview(): React.JSX.Element {
   const { state } = healthPillState(health, error)
   const stats = body?.plugins
   const rows = attentionRows(t, dormant ?? [], degradedRhizas, stats)
-  const shown = rows.filter((row) => (
-    filter === 'all' || (filter === 'dormant' ? row.state === 'dormant' : row.state !== 'dormant')
-  ))
+  // A selection nothing matches falls back to `all`: the poll that clears the chosen category
+  // would otherwise leave an empty table under its own column headers, with no chip to click
+  // back — the operator reaches that in two clicks on a substrate whose only fault is dormancy.
+  const filter = rows.some((row) => matchesFilter(row, chosen)) ? chosen : 'all'
+  const shown = rows.filter((row) => matchesFilter(row, filter))
   // Every count must be known, or a refused route reads as a step already taken.
   const guided: SubstrateCounts | undefined = body?.sources !== undefined
     && body.roles !== undefined && stats !== undefined
@@ -287,21 +295,21 @@ export function Overview(): React.JSX.Element {
                       <Chip
                         label={t('filter.all')}
                         active={filter === 'all'}
-                        onClick={() => { setFilter('all') }}
+                        onClick={() => { setChosen('all') }}
                       />
                       <Chip
                         label={t('filter.dormant')}
                         count={rows.filter((r) => r.state === 'dormant').length}
                         tone="warn"
                         active={filter === 'dormant'}
-                        onClick={() => { setFilter('dormant') }}
+                        onClick={() => { setChosen('dormant') }}
                       />
                       <Chip
                         label={t('filter.unreachable')}
                         count={rows.filter((r) => r.state !== 'dormant').length}
                         tone="warn"
                         active={filter === 'unreachable'}
-                        onClick={() => { setFilter('unreachable') }}
+                        onClick={() => { setChosen('unreachable') }}
                       />
                     </div>
                   </div>

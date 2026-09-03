@@ -660,6 +660,36 @@ describe('what needs attention', () => {
     expect(rows()).toBe(3)
   })
 
+  /**
+   * I5: two clicks reach this — a substrate whose only faults are dormant plugins, and the
+   * `Unreachable` chip. The old code rendered the bordered card and its column headers over
+   * nothing, and no chip returned to `all`.
+   */
+  it('never renders the table headed and empty when the chosen filter matches no row', async () => {
+    await withHealth({
+      ...GERMINATED,
+      dormant: [{ name: 'radarr', reason: 'Configuration rejected.' }],
+    }, BUSY)
+
+    fireEvent.click(screen.getByRole('button', { name: /^Unreachable/ }))
+
+    expect(rows()).toBe(1)
+    expect(screen.getByText('radarr')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'All' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: /^Unreachable/ }).getAttribute('aria-pressed')).toBe('false')
+  })
+
+  // Discriminates the fallback from a filter that never worked: with rows on both sides the
+  // selection is honoured.
+  it('keeps a filter the rows do satisfy', async () => {
+    await withHealth(BUSY_HEALTH, BUSY)
+
+    fireEvent.click(screen.getByRole('button', { name: /^Unreachable/ }))
+
+    expect(rows()).toBe(1)
+    expect(screen.getByRole('button', { name: /^Unreachable/ }).getAttribute('aria-pressed')).toBe('true')
+  })
+
   it('counts each filter, so a chip says how many rows it would keep', async () => {
     await withHealth(BUSY_HEALTH, BUSY)
 

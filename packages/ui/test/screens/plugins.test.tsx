@@ -98,7 +98,8 @@ describe('the plugins list', () => {
     render(<I18nProvider><MemoryRouter><Plugins /></MemoryRouter></I18nProvider>)
 
     const inhibitorSection = await screen.findByTestId('kind-section-inhibitor')
-    expect(within(inhibitorSection).getByText('No plugin of this kind.')).toBeDefined()
+    expect(within(inhibitorSection).getByText('No plugin of this kind')).toBeDefined()
+    expect(within(inhibitorSection).getByText(/New plugins come from a source/)).toBeDefined()
   })
 
   // design §7.4: a plugin nobody installed through a source still says where it came from.
@@ -372,7 +373,7 @@ describe('the plugins list chrome', () => {
     expect(screen.getByText('No installed plugin matches “grafna”')).toBeDefined()
     expect(screen.getByRole('link', { name: 'Search the sources instead' }).getAttribute('href')).toBe('/sources')
     expect(screen.queryAllByTestId('plugin-name')).toHaveLength(0)
-    expect(screen.queryByText('No plugin of this kind.')).toBeNull()
+    expect(screen.queryByText('No plugin of this kind')).toBeNull()
   })
 
   it('counts each state on its own filter chip', async () => {

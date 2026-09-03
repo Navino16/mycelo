@@ -398,7 +398,7 @@ describe('the commands tab of a plugin that declares none', () => {
     await screen.findByRole('heading', { level: 1, name: 'radarr' })
     fireEvent.click(screen.getByRole('button', { name: /^Commands/ }))
 
-    expect(screen.getByText('Declares no command.')).toBeDefined()
-    expect(screen.queryByText('Asks for nothing.')).toBeNull()
+    expect(screen.getByText('Declares no command')).toBeDefined()
+    expect(screen.queryByText('Asks for nothing')).toBeNull()
   })
 })

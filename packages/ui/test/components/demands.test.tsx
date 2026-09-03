@@ -67,7 +67,8 @@ describe('what a plugin is asking for', () => {
         <DemandsList demands={{ requires: [], scopes: [], externals: [], commands: [] }} />
       </I18nProvider>,
     )
-    expect(screen.getByText('Asks for nothing.')).toBeDefined()
+    expect(screen.getByText('Asks for nothing')).toBeDefined()
+    expect(screen.getByText(/declares no dependency/)).toBeDefined()
   })
 
   // A field that crossed the API boundary malformed must not throw into the route error

@@ -6,6 +6,7 @@ import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { Chip } from '../components/Chip.tsx'
 import { DemandsList } from '../components/DemandsList.tsx'
 import { DormantDiagnosis } from '../components/DormantDiagnosis.tsx'
+import { EmptyState } from '../components/EmptyState.tsx'
 import { StateBadge } from '../components/StateBadge.tsx'
 import { Tabs } from '../components/Tabs.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
@@ -194,7 +195,7 @@ export function PluginDetail(): React.JSX.Element {
         <section className="space-y-2">
           <h2 className="text-title font-medium">{t('detail.commands')}</h2>
           {declared.length === 0
-            ? <p className="text-body text-text/60">{t('detail.noCommands')}</p>
+            ? <EmptyState title={t('detail.noCommandsTitle')} body={t('detail.noCommands')} />
             : (
               <ul className="space-y-1 font-mono text-body">
                 {declared.map((c) => <li key={c}>{c}</li>)}

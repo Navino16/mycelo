@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import { useT } from '../i18n.tsx'
 import { kindLabel } from '../kinds.ts'
 import { Dot } from './Dot.tsx'
+import { EmptyState } from './EmptyState.tsx'
 import { TONE_CLASSES } from './tone.ts'
 import type { SporeKind } from '../api/types.ts'
 import type { StringKey } from '../../locales/en.ts'
@@ -41,6 +42,11 @@ function StateWord({ state }: { state: AttentionRow['state'] }): React.JSX.Eleme
 /** 1a's `Needs attention` table: one row per dormant plugin and per connected system that is down. */
 export function AttentionTable({ rows }: { rows: readonly AttentionRow[] }): React.JSX.Element {
   const t = useT()
+  // Never the bordered card and its column headers over nothing: §1.7 ships one empty state,
+  // a headline and a paragraph, and a headed empty container is not it.
+  if (rows.length === 0) {
+    return <EmptyState title={t('attention.emptyTitle')} body={t('attention.empty')} />
+  }
   return (
     <div className="overflow-hidden rounded-xl border border-line bg-surface">
       <div

@@ -1,6 +1,7 @@
 import { readArray } from '../api/read.ts'
 import { useT } from '../i18n.tsx'
 import { SCOPE_SENTENCE } from '../scopes.ts'
+import { EmptyState } from './EmptyState.tsx'
 import type { CommandCapabilityDto, RequirementDto, SporeDemands } from '../api/types.ts'
 
 export function DemandsList({ demands }: { demands: SporeDemands }): React.JSX.Element {
@@ -15,7 +16,7 @@ export function DemandsList({ demands }: { demands: SporeDemands }): React.JSX.E
   const empty = requires.length === 0 && scopes.length === 0
     && externals.length === 0
     && commands.every((c) => c.capabilities.length === 0)
-  if (empty) return <p className="text-sm text-text/70">{t('demands.none')}</p>
+  if (empty) return <EmptyState title={t('demands.noneTitle')} body={t('demands.none')} />
 
   return (
     <div className="space-y-4">

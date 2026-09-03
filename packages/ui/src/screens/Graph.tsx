@@ -5,6 +5,7 @@ import { readArray } from '../api/read.ts'
 import { ORDER } from '../api/types.ts'
 import { Chip } from '../components/Chip.tsx'
 import { Dot } from '../components/Dot.tsx'
+import { EmptyState } from '../components/EmptyState.tsx'
 import { StateBadge } from '../components/StateBadge.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { BOX_H, BOX_W, isBroken, layout } from '../graphLayout.ts'
@@ -166,7 +167,9 @@ export function Graph(): React.JSX.Element {
 
       {error && <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.generic')}</p>}
 
-      {graph !== null && placed.length === 0 && <p className="text-body text-text/70">{t('graph.empty')}</p>}
+      {graph !== null && placed.length === 0 && (
+        <EmptyState title={t('graph.emptyTitle')} body={t('graph.empty')} />
+      )}
 
       {placed.length > 0 && (
         <>

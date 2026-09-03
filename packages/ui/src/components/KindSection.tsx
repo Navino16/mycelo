@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useT } from '../i18n.tsx'
+import { EmptyState } from './EmptyState.tsx'
 import { PluginRow } from './PluginRow.tsx'
 import type { PluginDto, PluginState, SporeKind } from '../api/types.ts'
 import type { StringKey } from '../../locales/en.ts'
@@ -47,7 +48,7 @@ export function KindSection(
         </button>
       </h2>
       {open && (plugins.length === 0
-        ? <p className="text-body text-text/60">{t('plugins.empty')}</p>
+        ? <EmptyState title={t('plugins.emptyTitle')} body={t('plugins.empty')} />
         : (
           <ul className="divide-y divide-line-soft rounded-lg border border-line">
             {sortStateFirst(plugins).map((plugin) => (
