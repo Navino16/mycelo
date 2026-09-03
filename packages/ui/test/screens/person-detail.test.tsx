@@ -157,12 +157,18 @@ describe('a person', () => {
   })
 
   it('offers "mark as reviewed" while unreviewed, and removes it once reviewed', async () => {
-    mockApi({ person: { ...UNREVIEWED, reviewed: false } })
+    const { calls } = mockApi({ person: { ...UNREVIEWED, reviewed: false } })
     renderDetail()
 
-    const button = await screen.findByRole('button', { name: 'Mark as reviewed' })
-    fireEvent.click(button)
+    // Inside the settled banner: /api/config lands after the person and re-parents the button
+    // from the header into the banner, and a click on the node React just unmounted goes
+    // nowhere — React 19's root delegation never sees it.
+    const banner = await screen.findByTestId('never-reviewed')
+    fireEvent.click(within(banner).getByRole('button', { name: 'Mark as reviewed' }))
 
+    // The PATCH first: without it the removal below cannot say whether the click landed or
+    // the state never changed.
+    await waitFor(() => { expect(calls.some((c) => c.method === 'PATCH')).toBe(true) })
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: 'Mark as reviewed' })).toBeNull()
     })

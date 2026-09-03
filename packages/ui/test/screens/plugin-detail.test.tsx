@@ -283,14 +283,18 @@ describe('the dormant plugin detail, as 1c draws it', () => {
   })
 })
 
-/** Answers the first GET of the plugin with `first` and every later one with `second`. */
+/**
+ * Answers the first GET of the plugin with `first` and every later one with `second`. Keyed on
+ * the URL, not on a GET counter: any other GET reaching this mock first would consume the
+ * `first` slot and serve the screen the already-acted-on state.
+ */
 function serveThenReload(first: unknown, second: unknown, calls: string[]): void {
   let reads = 0
   globalThis.fetch = mock((url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
     calls.push(`${method} ${url}`)
     let body: unknown = { ok: true }
-    if (method === 'GET') {
+    if (method === 'GET' && url === '/api/plugins/radarr') {
       reads += 1
       body = reads === 1 ? first : second
     }
@@ -310,9 +314,11 @@ describe('an action that succeeds leaves the screen describing the new state', (
 
     fireEvent.click(await screen.findByRole('button', { name: 'Disable' }))
 
-    await waitFor(() => { expect(screen.queryByRole('button', { name: 'Disable' })).toBeNull() })
+    // The refetched state first: a waitFor on a null query passes instantly when the element
+    // never rendered and hangs to its timeout otherwise, so it can fail for neither reason.
+    expect(await screen.findByText('disabled')).toBeDefined()
+    expect(screen.queryByRole('button', { name: 'Disable' })).toBeNull()
     expect(calls.filter((c) => c === 'GET /api/plugins/radarr')).toHaveLength(2)
-    expect(screen.getByText('disabled')).toBeDefined()
   })
 
   it('re-reads the plugin after a germination retry, so a germinated one stops reading dormant', async () => {
