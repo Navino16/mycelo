@@ -7,7 +7,8 @@ import { Chip } from '../components/Chip.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
 import { KindSection } from '../components/KindSection.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
-import { useT } from '../i18n.tsx'
+import { plural, useT } from '../i18n.tsx'
+import { flatPlugins } from '../plugins.ts'
 import type { PluginDto, PluginGroups } from '../api/types.ts'
 
 type Filter = 'all' | 'dormant' | 'disabled'
@@ -39,7 +40,7 @@ export function Plugins(): React.JSX.Element {
   }, [])
 
   const needle = term.trim().toLowerCase()
-  const all = ORDER.flatMap((kind) => readArray<PluginDto>(groups?.[kind]) ?? [])
+  const all = flatPlugins(groups)
   const commands = all.reduce((sum, p) => sum + commandsOf(p).length, 0)
   const dormant = all.filter((p) => p.state === 'dormant').length
   const disabled = all.filter((p) => p.state === 'disabled').length
@@ -53,8 +54,10 @@ export function Plugins(): React.JSX.Element {
     // A narrowed list drops the kinds it emptied: "No plugin of this kind." five times over
     // is not an answer to a search, and 1b-plugins-mobile-no-results.png draws one card.
     .filter((section) => !narrowed || section.plugins.length > 0)
-  const installed = t(all.length === 1 ? 'plugins.installedOne' : 'plugins.installed', { count: all.length })
-  const declared = t(commands === 1 ? 'detail.commandCountOne' : 'detail.commandCount', { count: commands })
+  const installed = plural(t, 'plugins.installed', all.length, { count: all.length })
+  const declared = plural(t, 'detail.commandCount', commands, { count: commands })
+  // One call, two attributes: the aria-label and the placeholder are the same sentence.
+  const searchLabel = plural(t, 'plugins.search', all.length, { count: all.length })
 
   return (
     <div className="space-y-4">
@@ -69,8 +72,8 @@ export function Plugins(): React.JSX.Element {
           <input
             type="search"
             value={term}
-            aria-label={t(all.length === 1 ? 'plugins.searchOne' : 'plugins.search', { count: all.length })}
-            placeholder={t(all.length === 1 ? 'plugins.searchOne' : 'plugins.search', { count: all.length })}
+            aria-label={searchLabel}
+            placeholder={searchLabel}
             onChange={(e) => { setTerm(e.target.value) }}
             className="w-full rounded-md border border-line bg-surface px-3 py-2 text-body md:w-65"
           />

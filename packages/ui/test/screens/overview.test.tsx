@@ -631,6 +631,21 @@ describe('what needs attention', () => {
     expect(screen.getByText('Enzymes \u00b7 commands')).toBeDefined()
   })
 
+  // I3: the chip and the row read `plugin.kind` off the wire, so French printed
+  // `rhiza \u00b7 syst\u00e8mes connect\u00e9s` \u2014 half-translated. Only a French render can fail this.
+  it('names the kind in French on every attention row', async () => {
+    globalThis.localStorage?.setItem('mycelo.locale', 'fr')
+    try {
+      await withHealth(BUSY_HEALTH, BUSY)
+
+      expect(screen.getAllByText('Rhizes \u00b7 syst\u00e8mes connect\u00e9s')).toHaveLength(2)
+      expect(screen.getByText('Enzymes \u00b7 commandes')).toBeDefined()
+      expect(screen.queryByText(/^rhiza \u00b7/)).toBeNull()
+    } finally {
+      globalThis.localStorage?.removeItem('mycelo.locale')
+    }
+  })
+
   it('says how long ago the substrate was last read', async () => {
     await withHealth(BUSY_HEALTH, BUSY)
 

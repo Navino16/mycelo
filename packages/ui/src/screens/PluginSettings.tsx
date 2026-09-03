@@ -15,9 +15,10 @@ import { SecretField } from '../components/SecretField.tsx'
 import { StateBadge } from '../components/StateBadge.tsx'
 import { Tabs } from '../components/Tabs.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
-import { useT } from '../i18n.tsx'
+import { plural, useT } from '../i18n.tsx'
 import { pluginTrail } from '../kinds.ts'
 import type { Tab } from '../components/Tabs.tsx'
+import type { StringKey } from '../../locales/en.ts'
 
 // The core emits z.toJSONSchema output, which declares draft 2020-12; the default Ajv is draft-07
 // and refuses the whole form (plan defect 28).
@@ -94,14 +95,18 @@ export function missingRequired(
     .filter((k) => settings[k] === undefined || settings[k] === '')
 }
 
-/** 2c's left column: `secret` overrides the JSON type, since the operator never reads one back. */
-function typeWord(property: unknown, isSecret: boolean): string {
-  if (isSecret) return 'secret'
-  if (!isPlainObject(property)) return 'text'
-  if (Array.isArray(property.enum)) return 'enum'
-  if (property.type === 'number' || property.type === 'integer') return 'number'
-  if (property.type === 'boolean') return 'boolean'
-  return 'text'
+/**
+ * 2c's left column: `secret` overrides the JSON type, since the operator never reads one back.
+ * A catalogue key, not the word: the rank beside it is translated, and `text · Obligatoire`
+ * is one English word and one French word on one line.
+ */
+function typeWord(property: unknown, isSecret: boolean): StringKey {
+  if (isSecret) return 'pluginSettings.type.secret'
+  if (!isPlainObject(property)) return 'pluginSettings.type.text'
+  if (Array.isArray(property.enum)) return 'pluginSettings.type.enum'
+  if (property.type === 'number' || property.type === 'integer') return 'pluginSettings.type.number'
+  if (property.type === 'boolean') return 'pluginSettings.type.boolean'
+  return 'pluginSettings.type.text'
 }
 
 /** Only a scalar default has a one-line rendering; an object or an array has none. */
@@ -185,19 +190,22 @@ export function PluginSettings(): React.JSX.Element {
   const [enabledNow, setEnabledNow] = useState(false)
   const [enableError, setEnableError] = useState<string | null>(null)
 
+  // allSettled, not all: the detail DTO feeds the badge, the trail's kind crumb and the tab
+  // count, and a refusal of it must not blank the form, which is the screen's whole purpose.
   useEffect(() => {
-    Promise.all([
+    void Promise.allSettled([
       api.get<FormSchema>(`/api/plugins/${name}/schema`),
       api.get<unknown>(`/api/plugins/${name}/settings`),
       api.get<PluginDetailDto>(`/api/plugins/${name}`),
     ]).then(([s, settings, dto]) => {
-      const initial = isPlainObject(settings) ? settings : {}
-      setSchema(s)
-      setDetail(dto)
+      setDetail(dto.status === 'fulfilled' ? dto.value : null)
+      if (s.status !== 'fulfilled' || settings.status !== 'fulfilled') { setError(true); return }
+      const initial = isPlainObject(settings.value) ? settings.value : {}
+      setSchema(s.value)
       setBaseline(initial)
       setFormData(initial)
       setError(false)
-    }, () => { setError(true) })
+    })
   }, [name])
 
   const body = schema !== null && schema.available ? schema.schema : {}
@@ -216,7 +224,8 @@ export function PluginSettings(): React.JSX.Element {
     const rank = required.includes(key)
       ? t('pluginSettings.required')
       : fallback === undefined ? '' : t('pluginSettings.default', { value: fallback })
-    return [`root_${key}`, [typeWord(property, secrets.includes(key)), rank].filter((p) => p !== '').join(' · ')]
+    const type = t(typeWord(property, secrets.includes(key)))
+    return [`root_${key}`, [type, rank].filter((p) => p !== '').join(' · ')]
   }))
   // The stored settings, not the form: config/lifecycle.ts parses readSettings(db, name), so a
   // typed-but-unsaved value opening the switch would walk straight into the server's refusal.
@@ -290,7 +299,7 @@ export function PluginSettings(): React.JSX.Element {
         <Tabs tabs={tabs} active="configuration" onSelect={() => undefined} />
         {schema !== null && schema.available && (
           <p className="font-mono text-meta-lg text-text/60">
-            {t(fieldNames.length === 1 ? 'pluginSettings.fieldCountOne' : 'pluginSettings.fieldCount', {
+            {plural(t, 'pluginSettings.fieldCount', fieldNames.length, {
               count: fieldNames.length,
             })}
           </p>

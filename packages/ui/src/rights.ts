@@ -6,7 +6,7 @@ import type { CommandDto, CommandGroups, RoleDto } from './api/types.ts'
  * `GET /api/commands` as one flat list. Shared with the person page, which shows `granted` over
  * this list's length: two copies of the guard would compute the ratio's halves under two rules.
  */
-export function allCommands(commands: CommandGroups | null): readonly CommandDto[] {
+export function allCommands(commands: unknown): readonly CommandDto[] {
   if (commands === null || typeof commands !== 'object' || Array.isArray(commands)) return []
   return Object.values(commands).flatMap((group) => readArray<CommandDto>(group) ?? [])
 }

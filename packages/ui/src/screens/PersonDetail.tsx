@@ -7,7 +7,7 @@ import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { Chip } from '../components/Chip.tsx'
 import { Dot } from '../components/Dot.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
-import { useT } from '../i18n.tsx'
+import { plural, useT } from '../i18n.tsx'
 import { allCommands, effectiveCommands, effectiveWildcards } from '../rights.ts'
 import type { CommandGroups, ConfigDto, IdentityDto, PersonDto, RoleDto } from '../api/types.ts'
 
@@ -25,16 +25,19 @@ export function PersonDetail(): React.JSX.Element {
   const [roleToAdd, setRoleToAdd] = useState('')
   const [roleError, setRoleError] = useState<string | null>(null)
 
+  // allSettled, not all: a principal refused /api/roles must lose the rights panel, which is
+  // what the comment below already claimed — the gate blanked the person too.
   function load(): void {
-    Promise.all([
+    void Promise.allSettled([
       api.get<PersonDto>(`/api/people/${id}`),
       api.get<readonly RoleDto[]>('/api/roles'),
     ]).then(([p, r]) => {
-      setPerson(p)
-      setName(p.displayName ?? '')
-      setRoles(r)
+      setRoles(r.status === 'fulfilled' ? r.value : null)
+      if (p.status !== 'fulfilled') { setError(true); return }
+      setPerson(p.value)
+      setName(p.value.displayName ?? '')
       setError(false)
-    }, () => { setError(true) })
+    })
   }
 
   useEffect(load, [id])
@@ -133,7 +136,7 @@ export function PersonDetail(): React.JSX.Element {
                     {!person.reviewed && !banner && <Chip label={t('person.neverReviewedTitle')} tone="warn" />}
                   </div>
                   <p className="text-meta-lg text-text/60">
-                    {t(identities.length === 1 ? 'person.identityCountOne' : 'person.identityCount', {
+                    {plural(t, 'person.identityCount', identities.length, {
                       count: identities.length,
                     })}
                   </p>
@@ -184,7 +187,7 @@ export function PersonDetail(): React.JSX.Element {
             {granted !== null && (
               <section data-testid="rights" className="space-y-3 rounded-xl border border-line bg-surface p-4">
                 <h2 className={`text-title font-semibold ${ok.text}`}>
-                  {t(totalCommands === 1 ? 'person.mayRunOne' : 'person.mayRun', {
+                  {plural(t, 'person.mayRun', totalCommands, {
                     granted: granted.length, total: totalCommands,
                   })}
                 </h2>
@@ -196,7 +199,7 @@ export function PersonDetail(): React.JSX.Element {
                 <p className="text-meta-lg text-text/60">
                   {wildcards.length === 0
                     ? t('person.noWildcard')
-                    : t(wildcards.length === 1 ? 'person.wildcardsOne' : 'person.wildcards', {
+                    : plural(t, 'person.wildcards', wildcards.length, {
                         names: wildcards.join(', '),
                       })}
                 </p>

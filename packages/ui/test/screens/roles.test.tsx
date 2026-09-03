@@ -40,6 +40,7 @@ function mockApi(
   options: {
     roles?: readonly RoleDto[]
     config?: ConfigDto
+    configStatus?: number
     postStatus?: number
     postBody?: unknown
     deleteStatus?: number
@@ -61,7 +62,12 @@ function mockApi(
     calls.push({ method, url, body })
 
     if (method === 'GET' && url === '/api/roles') return Promise.resolve(json(roles))
-    if (method === 'GET' && url === '/api/config') return Promise.resolve(json(config))
+    if (method === 'GET' && url === '/api/config') {
+      if (options.configStatus !== undefined) {
+        return Promise.resolve(json({ error: { message: 'refused' } }, options.configStatus))
+      }
+      return Promise.resolve(json(config))
+    }
     if (method === 'GET' && url === '/api/commands') {
       if (options.commandsStatus !== undefined) {
         return Promise.resolve(json({ error: { message: 'refused' } }, options.commandsStatus))
@@ -118,6 +124,18 @@ describe('the roles list', () => {
     renderRoles()
 
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Something went wrong')
+  })
+
+  // I2: a refused /api/config costs the default-role card, never the table — the comment four
+  // lines above the holder counts already reasoned that no single refusal may blank the screen.
+  it('keeps the roles table when /api/config is refused, losing only the default card', async () => {
+    mockApi({ configStatus: 500 })
+    renderRoles()
+
+    await waitFor(() => { expect(row('guest')).toBeDefined() })
+    expect(row('owner')).toBeDefined()
+    expect(screen.queryByText('Default role · what unknown senders get')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('renders the list on success, with no error banner', async () => {

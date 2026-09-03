@@ -3,14 +3,12 @@ import { useLocation } from 'react-router'
 import type { ReactNode } from 'react'
 import { api } from './api/client.ts'
 import { readArray } from './api/read.ts'
-import { ORDER } from './api/types.ts'
 import { formatUptime } from './format.ts'
 import { useHealth } from './health.tsx'
 import { useT } from './i18n.tsx'
+import { flatPlugins } from './plugins.ts'
 import { countUnhealthyRhizas } from './shell/HealthPill.tsx'
-import type {
-  PageDto, PersonDto, PluginDto, PluginGroups, RoleDto, SourceDto, SubstrateDto,
-} from './api/types.ts'
+import type { PageDto, PersonDto, RoleDto, SourceDto, SubstrateDto } from './api/types.ts'
 
 /** Every count is optional: one refused route must not blank the other four. */
 export interface ChromeCounts {
@@ -86,10 +84,7 @@ export function ChromeProvider({ children }: { children: ReactNode }): React.JSX
       api.get<unknown>('/api/roles'),
       api.get<unknown>('/api/people?perPage=1'),
     ]).then(([plugins, sources, roles, people]) => {
-      const groups = fulfilled(plugins) as PluginGroups | null | undefined
-      const all = plugins.status === 'fulfilled'
-        ? ORDER.flatMap((kind) => readArray<PluginDto>(groups?.[kind]) ?? [])
-        : undefined
+      const all = plugins.status === 'fulfilled' ? flatPlugins(fulfilled(plugins)) : undefined
       setCounts({
         plugins: all?.length,
         issues: all === undefined ? undefined : all.filter((p) => p.state === 'dormant').length,

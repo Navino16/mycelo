@@ -56,6 +56,7 @@ function mockApi(
     commands?: CommandGroups
     config?: ConfigDto
     commandsFail?: boolean
+    rolesFail?: boolean
     patchStatus?: number
     patchBody?: unknown
     postStatus?: number
@@ -76,7 +77,10 @@ function mockApi(
     if (options.fail === true) return Promise.resolve(json({ error: { message: 'x' } }, 500))
 
     if (method === 'GET' && url === `/api/people/${person.id}`) return Promise.resolve(json(person))
-    if (method === 'GET' && url === '/api/roles') return Promise.resolve(json(roles))
+    if (method === 'GET' && url === '/api/roles') {
+      if (options.rolesFail === true) return Promise.resolve(json({ error: { message: 'x' } }, 500))
+      return Promise.resolve(json(roles))
+    }
     if (method === 'GET' && url === '/api/config') return Promise.resolve(json(config))
     if (method === 'GET' && url === '/api/commands') {
       if (options.commandsFail === true) return Promise.resolve(json({ error: { message: 'x' } }, 500))
@@ -128,6 +132,17 @@ describe('a person', () => {
     renderDetail()
 
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Something went wrong')
+  })
+
+  // I2: rulings 15 concern 1 and 16 Imp 1 converted two screens to allSettled and reached
+  // none of the five after them. The file's own comment claimed this behaviour already.
+  it('keeps the person when the roles join is refused, losing only the rights panel', async () => {
+    mockApi({ person: TWO_ROLES, rolesFail: true })
+    renderDetail()
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Zelda' })).toBeDefined()
+    expect(screen.getByText('zelda-99')).toBeDefined()
+    expect(screen.queryByTestId('rights')).toBeNull()
   })
 
   it('renders identities and roles on success, with no error banner', async () => {

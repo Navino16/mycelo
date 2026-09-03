@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useT } from '../i18n.tsx'
+import { plural, useT } from '../i18n.tsx'
 import { EmptyState } from './EmptyState.tsx'
 import { PluginRow } from './PluginRow.tsx'
 import type { PluginDto, PluginState, SporeKind } from '../api/types.ts'
@@ -25,7 +25,7 @@ export function KindSection(
   const dormant = plugins.filter((p) => p.state === 'dormant').length
   const meta = dormant === 0
     ? t('kind.metaAllWell', { count: plugins.length })
-    : t(dormant === 1 ? 'kind.metaOne' : 'kind.meta', { count: plugins.length, dormant })
+    : plural(t, 'kind.meta', dormant, { count: plugins.length, dormant })
 
   return (
     <section className="space-y-2" data-testid={`kind-section-${kind}`}>

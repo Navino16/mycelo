@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { api } from '../src/api/client.ts'
-import { I18nProvider, useLocale, useT } from '../src/i18n.tsx'
+import { I18nProvider, plural, useLocale, useT } from '../src/i18n.tsx'
 import { LanguageSwitch } from '../src/shell/LanguageSwitch.tsx'
 
 function Probe(): React.JSX.Element {
@@ -90,5 +90,43 @@ describe('the chrome speaks its own language', () => {
 
       expect(new Headers(calls[0]?.init.headers).get('x-mycelo-locale')).toBe('fr')
     })
+  })
+})
+
+function Plurals(): React.JSX.Element {
+  const t = useT()
+  const { locale, setLocale } = useLocale()
+  return (
+    <div>
+      <span data-testid="zero">{plural(t, 'person.identityCount', 0, { count: 0 })}</span>
+      <span data-testid="one">{plural(t, 'person.identityCount', 1, { count: 1 })}</span>
+      <span data-testid="two">{plural(t, 'person.identityCount', 2, { count: 2 })}</span>
+      {/* English is identical on both halves of this pair, so only French can fail it. */}
+      <span data-testid="kind">{plural(t, 'kind.meta', 1, { count: 3, dormant: 1 })}</span>
+      <button onClick={() => { setLocale(locale === 'en' ? 'fr' : 'en') }}>switch</button>
+    </div>
+  )
+}
+
+describe('the plural helper', () => {
+  // The twenty-nine hand-written ternaries it replaces each named their own sibling key, so
+  // each was its own chance to name the wrong one.
+  it('selects the One variant at exactly 1, and the plural at 0 and above 1', () => {
+    render(<I18nProvider><Plurals /></I18nProvider>)
+
+    expect(screen.getByTestId('one').textContent).toBe('1 identity')
+    expect(screen.getByTestId('zero').textContent).toBe('0 identities')
+    expect(screen.getByTestId('two').textContent).toBe('2 identities')
+  })
+
+  // Minor 3: three pairs are word-for-word identical in English, so an English-only assertion
+  // over them cannot fail. The French half is what discriminates.
+  it('selects the One variant in French too, where the two halves differ', () => {
+    render(<I18nProvider><Plurals /></I18nProvider>)
+    fireEvent.click(screen.getByText('switch'))
+
+    expect(screen.getByTestId('kind').textContent).toBe('3 \u00b7 1 dormant')
+    expect(screen.getByTestId('one').textContent).toBe('1 identit\u00e9')
+    expect(screen.getByTestId('two').textContent).toBe('2 identit\u00e9s')
   })
 })

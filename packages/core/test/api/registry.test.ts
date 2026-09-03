@@ -169,6 +169,31 @@ describe('the synthetic core node', () => {
     expect(graph.edges.filter((e) => e.to === 'core')).toEqual([])
   })
 
+  /**
+   * germinate.ts does not refuse a spore named 'core' — it makes it dormant with the reserved
+   * translation-domain reason, and the comment on CORE_NODE claimed the opposite. Two nodes of
+   * that name duplicate a React key in Graph.tsx and collapse in its `byName` index.
+   */
+  it('answers exactly one node named core when a dormant spore claims the name', async () => {
+    booted = await bootAndLogin({
+      spores: (dir) => {
+        writeSpore(dir, 'core', { 'spore.yaml': 'kind: rhiza\nname: core\nseptum: "^0.11"\n' })
+      },
+    })
+    const { app, cookie } = booted
+    // The premise: the spore is dormant rather than absent, or this proves nothing.
+    const state = booted.served.state.germination
+    expect(state.status).toBe('germinated')
+    expect(state.status === 'germinated' && state.mycelium.registry.dormant.map((d) => d.name))
+      .toContain('core')
+
+    const graph = (await app.inject({
+      method: 'GET', url: '/api/graph', headers: { cookie },
+    })).json<GraphDto>()
+
+    expect(graph.nodes.filter((n) => n.name === 'core')).toEqual([{ name: 'core', state: 'germinated' }])
+  })
+
   it('routes a rhiza: mycelium requirement to the core node instead of dropping it', async () => {
     booted = await bootAndLogin({
       spores: (dir) => {

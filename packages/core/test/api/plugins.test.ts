@@ -717,14 +717,36 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     expect(orphan?.description).toBe('Needs a rhiza nobody installed')
   })
 
-  it('leaves commands empty for a plugin kind that declares none', async () => {
-    booted = await bootAndLogin({ spores: cyclingPair })
+  /**
+   * The old fixture was `cyclingPair` — two rhizas, and no rhiza can declare a command whatever
+   * the fallback does, so the assertion could not fail. Here an enzyme declaring two sits beside
+   * a rhiza that declares none and an enzyme whose manifest declares none at all: the last does
+   * not parse (septum requires `commands.min(1)`), so it lands in `unknown`, which is the only
+   * shape an enzyme with no commands can take.
+   */
+  it('fills the commands of a kind that declares them and leaves every other kind empty', async () => {
+    booted = await bootAndLogin({
+      spores: (dir) => {
+        writeSpore(dir, 'greeter', {
+          'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^0.11"\ncommands:\n'
+            + '  - name: hello\n    description: command.hello.description\n    respond: hello.text\n'
+            + '  - name: farewell\n    description: command.farewell.description\n    respond: farewell.text\n',
+          'translations/en.yaml': 'command:\n  hello:\n    description: Say hello\n'
+            + '  farewell:\n    description: Say goodbye\nhello:\n  text: Hi\nfarewell:\n  text: Bye\n',
+        })
+        writeSpore(dir, 'silent', { 'spore.yaml': 'kind: rhiza\nname: silent\nseptum: "^0.11"\n' })
+        writeSpore(dir, 'commandless', { 'spore.yaml': 'kind: enzyme\nname: commandless\nseptum: "^0.11"\n' })
+      },
+    })
     const { app, cookie } = booted
 
     const body = (await app.inject({
       method: 'GET', url: '/api/plugins', headers: { cookie },
-    })).json<{ rhiza: { name: string, commands: string[] }[] }>()
+    })).json<PluginGroups>()
 
-    expect(body.rhiza.every((p) => p.commands.length === 0)).toBe(true)
+    // Both, not the first: a `.commands[0]`-shaped read passes a one-command fixture.
+    expect(body.enzyme.find((p) => p.name === 'greeter')?.commands).toEqual(['hello', 'farewell'])
+    expect(body.rhiza.find((p) => p.name === 'silent')?.commands).toEqual([])
+    expect(body.unknown.find((p) => p.name === 'commandless')?.commands).toEqual([])
   })
 })

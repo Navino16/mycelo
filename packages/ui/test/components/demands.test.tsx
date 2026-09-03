@@ -83,3 +83,20 @@ describe('what a plugin is asking for', () => {
     expect(screen.getByText('signal-cli')).toBeDefined()
   })
 })
+
+describe('the requirement list on the design type scale', () => {
+  /**
+   * I8: nine `text-sm` survived nine per-task reviews because this file was in no task's Files
+   * block. It renders on PluginDetail's Requirements tab, one step above the body text around
+   * it, with body-weight section headings.
+   */
+  it('spells no size off the scale, and heads each section at title size', () => {
+    const { container } = render(<I18nProvider><DemandsList demands={DEMANDS} /></I18nProvider>)
+
+    expect(container.querySelectorAll('[class*="text-sm"]')).toHaveLength(0)
+    const headings = [...container.querySelectorAll('h3')]
+    expect(headings.length).toBeGreaterThan(3)
+    for (const h of headings) expect(h.className).toContain('text-title')
+    for (const ul of container.querySelectorAll('ul')) expect(ul.className).toContain('text-body')
+  })
+})

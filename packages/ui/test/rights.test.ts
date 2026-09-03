@@ -28,12 +28,13 @@ describe('the command registry, flattened', () => {
   // now the same call, so a malformed payload cannot make the two halves disagree.
   it('answers nothing for a payload that is not the group object', () => {
     expect(allCommands(null)).toEqual([])
-    expect(allCommands('nope' as unknown as CommandGroups)).toEqual([])
-    expect(allCommands([] as unknown as CommandGroups)).toEqual([])
+    expect(allCommands(undefined)).toEqual([])
+    expect(allCommands('nope')).toEqual([])
+    expect(allCommands([])).toEqual([])
   })
 
   it('skips a group that is not an array rather than throwing', () => {
-    expect(allCommands({ radarr: 'nope' } as unknown as CommandGroups)).toEqual([])
+    expect(allCommands({ radarr: 'nope' })).toEqual([])
   })
 })
 

@@ -43,8 +43,9 @@ export interface GraphNode {
   reason?: string
 }
 
-// germinate.ts refuses a spore named 'core', so this name is free. Emitted always: it is the
-// substrate, and 2k's five-column reading hangs off it (inventory §4).
+// germinate.ts makes a spore named 'core' dormant rather than refusing it, so the synthetic
+// node must win over it (nodesOf filters it out). Emitted always: it is the substrate, and
+// 2k's five-column reading hangs off it (inventory §4).
 const CORE_NODE = 'core'
 
 export interface GraphEdge {
@@ -93,7 +94,10 @@ function nodesOf(registry: Registry, recordedKind: ReadonlyMap<string, SporeKind
     ...registry.rhizas.map((s): GraphNode => ({ name: s.name, kind: s.manifest.kind, state: 'germinated' })),
     ...registry.enzymes.map((s): GraphNode => ({ name: s.name, kind: s.manifest.kind, state: 'germinated' })),
     ...registry.inhibitors.map((s): GraphNode => ({ name: s.name, kind: s.manifest.kind, state: 'germinated' })),
-    ...registry.dormant.map((d): GraphNode => ({
+    // A spore deliberately named 'core' is dormant, not absent: two nodes of that name
+    // duplicate a React key, collapse in `byName` and either dash every core edge amber or
+    // hide the dormancy. The substrate's own node wins.
+    ...registry.dormant.filter((d) => d.name !== CORE_NODE).map((d): GraphNode => ({
       name: d.name,
       ...(recordedKind.has(d.name) ? { kind: recordedKind.get(d.name) } : {}),
       state: 'dormant',

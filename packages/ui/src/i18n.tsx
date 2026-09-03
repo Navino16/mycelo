@@ -55,6 +55,20 @@ function useI18n(): I18n {
 
 export type Translate = I18n['t']
 
+/** A key whose `…One` sibling exists: the two halves of one plural pair (ruling C12). */
+export type PluralKey = { [K in StringKey]: `${K}One` extends StringKey ? K : never }[StringKey]
+
+/**
+ * The `…One` variant at exactly 1, the plural otherwise. Twenty-nine hand-written ternaries
+ * did this, which is twenty-nine chances to name the wrong sibling.
+ */
+export function plural(
+  t: Translate, base: PluralKey, count: number, params?: Record<string, string | number>,
+): string {
+  // PluralKey guarantees the sibling is a key; the compiler cannot follow that through here.
+  return t(count === 1 ? `${base}One` as StringKey : base, params)
+}
+
 export function useT(): Translate { return useI18n().t }
 export function useLocale(): Pick<I18n, 'locale' | 'setLocale'> {
   const { locale, setLocale } = useI18n()

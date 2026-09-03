@@ -1,4 +1,4 @@
-import { useT } from '../i18n.tsx'
+import { plural, useT } from '../i18n.tsx'
 
 /**
  * The bulk row of `2h`: docked above the mobile nav bar, an ordinary row above md. It renders
@@ -38,7 +38,7 @@ export function BulkBar(
       {count > 0 && (
         <>
           <span className="text-body font-medium">
-            {t(count === 1 ? 'people.selectedOne' : 'people.selected', { count })}
+            {plural(t, 'people.selected', count, { count })}
           </span>
           <select
             aria-label={t('people.addRole')}
@@ -72,7 +72,7 @@ export function BulkBar(
           onClick={onSelectNeverReviewed}
           className="text-body text-text/60 hover:text-text md:ml-auto"
         >
-          {t(offer === 1 ? 'people.selectNeverReviewedOne' : 'people.selectNeverReviewed', { count: offer })}
+          {plural(t, 'people.selectNeverReviewed', offer, { count: offer })}
         </button>
       )}
       {/* Not role="alert": every screen on this branch reads queryByRole('alert') as

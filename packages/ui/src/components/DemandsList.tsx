@@ -22,8 +22,8 @@ export function DemandsList({ demands }: { demands: SporeDemands }): React.JSX.E
     <div className="space-y-4">
       {requires.length > 0 && (
         <section>
-          <h3 className="text-sm font-medium">{t('demands.requires')}</h3>
-          <ul className="mt-1 space-y-1 text-sm">
+          <h3 className="text-title font-medium">{t('demands.requires')}</h3>
+          <ul className="mt-1 space-y-1 text-body">
             {requires.map((r) => (
               <li key={r.targets.join('|')} className="font-mono">
                 {r.anyOf && <span className="mr-1 font-sans text-text/60">{t('demands.anyOf')}</span>}
@@ -36,8 +36,8 @@ export function DemandsList({ demands }: { demands: SporeDemands }): React.JSX.E
       )}
       {scopes.length > 0 && (
         <section>
-          <h3 className="text-sm font-medium">{t('demands.scopes')}</h3>
-          <ul className="mt-1 space-y-1 text-sm">
+          <h3 className="text-title font-medium">{t('demands.scopes')}</h3>
+          <ul className="mt-1 space-y-1 text-body">
             {scopes.map((s) => {
               const key = SCOPE_SENTENCE[s]
               return <li key={s}>{key === undefined ? s : t(key)}</li>
@@ -47,16 +47,16 @@ export function DemandsList({ demands }: { demands: SporeDemands }): React.JSX.E
       )}
       {externals.length > 0 && (
         <section>
-          <h3 className="text-sm font-medium">{t('demands.externals')}</h3>
-          <ul className="mt-1 space-y-1 font-mono text-sm">
+          <h3 className="text-title font-medium">{t('demands.externals')}</h3>
+          <ul className="mt-1 space-y-1 font-mono text-body">
             {externals.map((e) => <li key={e}>{e}</li>)}
           </ul>
         </section>
       )}
       {commands.some((c) => c.capabilities.length > 0) && (
         <section>
-          <h3 className="text-sm font-medium">{t('demands.capabilities')}</h3>
-          <ul className="mt-1 space-y-1 text-sm">
+          <h3 className="text-title font-medium">{t('demands.capabilities')}</h3>
+          <ul className="mt-1 space-y-1 text-body">
             {commands.filter((c) => c.capabilities.length > 0).map((c) => (
               <li key={c.name}>
                 <span className="font-mono">{c.name}</span>

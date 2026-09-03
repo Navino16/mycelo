@@ -11,7 +11,7 @@ import { StateBadge } from '../components/StateBadge.tsx'
 import { Tabs } from '../components/Tabs.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { useHealth } from '../health.tsx'
-import { useT } from '../i18n.tsx'
+import { plural, useT } from '../i18n.tsx'
 import { kindLabel, pluginTrail } from '../kinds.ts'
 import type { MutationResult, PluginDetailDto } from '../api/types.ts'
 import type { Tab } from '../components/Tabs.tsx'
@@ -102,7 +102,7 @@ export function PluginDetail(): React.JSX.Element {
             {plugin.strain !== undefined && <Chip label={`strain ${plugin.strain}`} />}
             <Chip label={t(plugin.enabled ? 'detail.enabled' : 'detail.disabled')} />
             <Chip
-              label={t(declared.length === 1 ? 'detail.commandCountOne' : 'detail.commandCount', {
+              label={plural(t, 'detail.commandCount', declared.length, {
                 count: declared.length,
               })}
             />
@@ -157,7 +157,7 @@ export function PluginDetail(): React.JSX.Element {
                 {declared.map((c) => <li key={c}>{c}</li>)}
               </ul>
               <p className="text-body text-text/70">
-                {t(declared.length === 1 ? 'detail.unavailableLeadOne' : 'detail.unavailableLead', {
+                {plural(t, 'detail.unavailableLead', declared.length, {
                   count: declared.length,
                 })}
               </p>

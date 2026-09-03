@@ -5,7 +5,7 @@ import { readArray } from '../api/read.ts'
 import { Chip } from '../components/Chip.tsx'
 import { Sheet } from '../components/Sheet.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
-import { useT } from '../i18n.tsx'
+import { plural, useT } from '../i18n.tsx'
 import type { SourceDto, SporeOffer } from '../api/types.ts'
 import type { StringKey } from '../../locales/en.ts'
 
@@ -106,7 +106,7 @@ function SourceRow(
       <span className="text-body text-text/70">
         {spores === undefined
           ? ''
-          : t(spores === 1 ? 'sources.catalogueOne' : 'sources.catalogue', { count: spores })}
+          : plural(t, 'sources.catalogue', spores, { count: spores })}
       </span>
       <button
         type="button"
@@ -209,10 +209,7 @@ export function Sources(): React.JSX.Element {
           <h1 className="text-page font-semibold">{t('sources.title')}</h1>
           {sources !== null && total !== undefined && (
             <p className="text-meta-lg text-text/60">
-              {t(
-                list.length === 1 ? 'sources.summaryOne' : 'sources.summary',
-                { count: list.length, spores: total },
-              )}
+              {plural(t, 'sources.summary', list.length, { count: list.length, spores: total })}
             </p>
           )}
         </div>

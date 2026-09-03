@@ -7,7 +7,7 @@ import { BulkBar } from '../components/BulkBar.tsx'
 import { Chip } from '../components/Chip.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
-import { useT } from '../i18n.tsx'
+import { plural, useT } from '../i18n.tsx'
 import type { PageDto, PersonDto, RoleDto } from '../api/types.ts'
 
 const DEBOUNCE_MS = 300
@@ -108,7 +108,6 @@ export function People(): React.JSX.Element {
   async function bulk(
     run: (id: string) => Promise<unknown>,
     key: 'people.assigned' | 'people.unassigned' | 'people.markedReviewed',
-    one: 'people.assignedOne' | 'people.unassignedOne' | 'people.markedReviewedOne',
   ): Promise<void> {
     const ids = [...selected]
     if (ids.length === 0) return
@@ -116,7 +115,7 @@ export function People(): React.JSX.Element {
     const results = await Promise.allSettled(ids.map(run))
     const seconds = ((performance.now() - start) / 1000).toFixed(1)
     const ok = results.filter((r) => r.status === 'fulfilled').length
-    setMessage(t(ids.length === 1 ? one : key, { ok, total: ids.length, seconds }))
+    setMessage(plural(t, key, ids.length, { ok, total: ids.length, seconds }))
     setSelected(new Set())
     setReload((n) => n + 1)
     countNeverReviewed()
@@ -126,7 +125,7 @@ export function People(): React.JSX.Element {
     if (next === '') return
     void bulk(
       (id) => api.send('POST', `/api/people/${id}/roles`, { role: next }),
-      'people.assigned', 'people.assignedOne',
+      'people.assigned',
     )
   }
 
@@ -134,14 +133,14 @@ export function People(): React.JSX.Element {
     if (next === '') return
     void bulk(
       (id) => api.send('DELETE', `/api/people/${id}/roles/${next}`),
-      'people.unassigned', 'people.unassignedOne',
+      'people.unassigned',
     )
   }
 
   function markReviewed(): void {
     void bulk(
       (id) => api.send('PATCH', `/api/people/${id}`, { reviewed: true }),
-      'people.markedReviewed', 'people.markedReviewedOne',
+      'people.markedReviewed',
     )
   }
 
@@ -168,7 +167,7 @@ export function People(): React.JSX.Element {
           <h1 className="text-page font-semibold">{t('people.title')}</h1>
           {data !== null && (
             <p className="text-meta-lg text-text/60">
-              {t(total === 1 ? 'people.knownOne' : 'people.known', { total })}
+              {plural(t, 'people.known', total, { total })}
             </p>
           )}
         </div>
@@ -186,7 +185,7 @@ export function People(): React.JSX.Element {
 
       <div className="flex flex-wrap items-center gap-2">
         <Chip
-          label={t(neverReviewed === 1 ? 'people.neverReviewedOne' : 'people.neverReviewed')}
+          label={plural(t, 'people.neverReviewed', neverReviewed ?? 0)}
           count={neverReviewed}
           tone="warn"
           active={reviewedOnly}

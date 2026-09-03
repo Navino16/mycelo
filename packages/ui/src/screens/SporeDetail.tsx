@@ -7,11 +7,12 @@ import { Chip } from '../components/Chip.tsx'
 import { ScopeTable } from '../components/ScopeTable.tsx'
 import { Sheet } from '../components/Sheet.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
-import { useT } from '../i18n.tsx'
+import { plural, useT } from '../i18n.tsx'
 import { pluginsByName } from '../plugins.ts'
+import { allCommands } from '../rights.ts'
 import { SCOPE_SENTENCE, highRiskScopes } from '../scopes.ts'
 import type {
-  CommandCapabilityDto, CommandDto, CommandGroups, InoculateOutcome, PluginDto, PluginGroups,
+  CommandCapabilityDto, CommandGroups, InoculateOutcome, PluginDto, PluginGroups,
   RequirementDto, SourceDto, SporeStrainsDto,
 } from '../api/types.ts'
 import type { Tone } from '../components/tone.ts'
@@ -106,9 +107,7 @@ function CommandsAdded(
   { declared, groups }: { declared: readonly CommandCapabilityDto[], groups: CommandGroups | null },
 ): React.JSX.Element {
   const t = useT()
-  const existing = groups === null
-    ? []
-    : Object.values(groups).flatMap((list) => readArray<CommandDto>(list) ?? [])
+  const existing = allCommands(groups)
   // `command`, not `declared`: germination keys its route table by the alias-resolved name
   // (registry.ts:101), and a check the runtime disagrees with is broken either way.
   const clashes = declared.filter((c) => existing.some((e) => e.command === c.name)).map((c) => c.name)
@@ -122,7 +121,7 @@ function CommandsAdded(
         clashes.length === 0
           ? (
             <p className="text-meta-lg text-text/60">
-              {t(existing.length === 1 ? 'spore.noCollisionOne' : 'spore.noCollision', { count: existing.length })}
+              {plural(t, 'spore.noCollision', existing.length, { count: existing.length })}
             </p>
           )
           : (
@@ -219,10 +218,9 @@ export function SporeDetail(): React.JSX.Element {
             )}
             {newest !== undefined && <Chip label={t('spore.strain', { strain: newest })} />}
             <Chip
-              label={t(
-                declaredCommands.length === 1 ? 'detail.commandCountOne' : 'detail.commandCount',
-                { count: declaredCommands.length },
-              )}
+              label={plural(t, 'detail.commandCount', declaredCommands.length, {
+                count: declaredCommands.length,
+              })}
             />
           </div>
           <p className="text-meta-lg text-text/60">{t('spore.septum', { range: spore.septum })}</p>
@@ -243,10 +241,7 @@ export function SporeDetail(): React.JSX.Element {
                   >
                     {scopes.length === 0
                       ? t('spore.install')
-                      : t(
-                        scopes.length === 1 ? 'spore.inoculateGrantOne' : 'spore.inoculateGrant',
-                        { count: scopes.length },
-                      )}
+                      : plural(t, 'spore.inoculateGrant', scopes.length, { count: scopes.length })}
                   </button>
                   {offered.length > 1 && (
                     <button

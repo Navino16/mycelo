@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router'
 import { api, ApiError } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
-import { ORDER } from '../api/types.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { coversPlugin, grants, wildcardsIn } from '../patterns.ts'
-import { useLocale, useT } from '../i18n.tsx'
+import { plural, useLocale, useT } from '../i18n.tsx'
+import { flatPlugins } from '../plugins.ts'
 import type {
-  CommandDto, CommandGroups, PageDto, PersonDto, PluginDto, PluginGroups, RoleDto,
+  CommandDto, CommandGroups, PageDto, PersonDto, PluginGroups, RoleDto,
 } from '../api/types.ts'
 
 interface GroupProps {
@@ -141,10 +141,8 @@ function isCommandGroups(value: unknown): value is CommandGroups {
 
 function describedPlugins(groups: PluginGroups): Readonly<Record<string, string>> {
   const map: Record<string, string> = {}
-  for (const kind of ORDER) {
-    for (const plugin of readArray<PluginDto>(groups[kind]) ?? []) {
-      if (plugin.description !== undefined) map[plugin.name] = plugin.description
-    }
+  for (const plugin of flatPlugins(groups)) {
+    if (plugin.description !== undefined) map[plugin.name] = plugin.description
   }
   return map
 }
@@ -164,14 +162,17 @@ export function RoleEditor(): React.JSX.Element {
   const [error, setError] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  // allSettled, not all: a refused /api/commands costs the per-command editor, never the
+  // role's own name, its holder count or the `*` alert.
   useEffect(() => {
-    Promise.all([
+    void Promise.allSettled([
       api.get<CommandGroups>('/api/commands'),
       api.get<RoleDto>(`/api/roles/${name}`),
     ]).then(([c, r]) => {
-      setCommands(c)
-      setRole(r)
-      const held = readArray<string>(r.patterns) ?? []
+      setCommands(c.status === 'fulfilled' ? c.value : null)
+      if (r.status !== 'fulfilled') { setError(true); return }
+      setRole(r.value)
+      const held = readArray<string>(r.value.patterns) ?? []
       setPatterns(held)
       setSaved(held)
       setError(false)
@@ -181,7 +182,7 @@ export function RoleEditor(): React.JSX.Element {
         (page) => { setHolders(page.total) },
         () => undefined,
       )
-    }, () => { setError(true) })
+    })
   }, [name, locale])
 
   useEffect(() => {
@@ -236,6 +237,9 @@ export function RoleEditor(): React.JSX.Element {
     granted += list.filter((c) => grants(patterns, c.qualified)).length
   }
 
+  // One call, two attributes: the aria-label and the placeholder are the same sentence.
+  const filterLabel = plural(t, 'role.filter', total, { count: total })
+
   const crit = TONE_CLASSES.crit
   const ok = TONE_CLASSES.ok
   const warn = TONE_CLASSES.warn
@@ -249,18 +253,21 @@ export function RoleEditor(): React.JSX.Element {
             <h1 className="font-mono text-page font-semibold">{name}</h1>
             {holders !== null && (
               <span className="text-meta-lg text-text/60">
-                {t(holders === 1 ? 'role.holdersOne' : 'role.holders', { count: holders })}
+                {plural(t, 'role.holders', holders, { count: holders })}
               </span>
             )}
           </div>
         </div>
-        {role !== null && commands !== null && (
+        {role !== null && (
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`font-mono text-title ${ok.text}`}>
-              {holdsAll
-                ? t(total === 1 ? 'roles.commandsAllOne' : 'roles.commandsAll', { total })
-                : t('role.counter', { granted, total })}
-            </span>
+            {/* Withheld while /api/commands is unknown: `0 / 0` is a count nobody confirmed. */}
+            {commands !== null && (
+              <span className={`font-mono text-title ${ok.text}`}>
+                {holdsAll
+                  ? plural(t, 'roles.commandsAll', total, { total })
+                  : t('role.counter', { granted, total })}
+              </span>
+            )}
             {!role.builtin && (
               <>
                 <button
@@ -285,7 +292,7 @@ export function RoleEditor(): React.JSX.Element {
 
       {error && <p role="alert" className={`text-body ${warn.text}`}>{t('error.generic')}</p>}
 
-      {role !== null && commands !== null && (
+      {role !== null && (
         <>
           {role.builtin && <p className="text-body text-text/70">{t('role.builtinReadOnly')}</p>}
 
@@ -305,14 +312,14 @@ export function RoleEditor(): React.JSX.Element {
                   )}
                 </section>
               )
-            : (
+            : commands !== null && (
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-3">
                     <input
                       type="search"
                       value={filter}
-                      aria-label={t(total === 1 ? 'role.filterOne' : 'role.filter', { count: total })}
-                      placeholder={t(total === 1 ? 'role.filterOne' : 'role.filter', { count: total })}
+                      aria-label={filterLabel}
+                      placeholder={filterLabel}
                       onChange={(e) => { setFilter(e.target.value) }}
                       className="w-full rounded-md border border-line bg-surface px-3 py-2 text-body md:w-70"
                     />
@@ -361,7 +368,7 @@ export function RoleEditor(): React.JSX.Element {
                       </>
                     )}
                     <span className="text-meta-lg text-text/60 md:ml-auto">
-                      {t(groups.length === 1 ? 'role.groupsOne' : 'role.groups', { count: groups.length })}
+                      {plural(t, 'role.groups', groups.length, { count: groups.length })}
                     </span>
                   </div>
                   <p className="text-meta-lg text-text/60">{t('role.wildcardLead')}</p>

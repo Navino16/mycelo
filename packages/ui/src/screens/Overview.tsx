@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { api } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
-import { ORDER } from '../api/types.ts'
 import { useUptimeLine } from '../chrome.tsx'
 import { AttentionTable } from '../components/AttentionTable.tsx'
 import { Chip } from '../components/Chip.tsx'
@@ -16,6 +15,8 @@ import { Tile } from '../components/Tile.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { useHealth } from '../health.tsx'
 import { useT } from '../i18n.tsx'
+import { flatPlugins } from '../plugins.ts'
+import { allCommands } from '../rights.ts'
 import { healthPillState } from '../shell/HealthPill.tsx'
 import type { AttentionRow } from '../components/AttentionTable.tsx'
 import type { Segment } from '../components/ProportionBar.tsx'
@@ -74,7 +75,7 @@ interface Body {
 
 function readStats(raw: unknown): PluginStats {
   const groups = raw as PluginGroups
-  const all = ORDER.flatMap((kind) => readArray<PluginDto>(groups[kind]) ?? [])
+  const all = flatPlugins(raw)
   const stopped = all.filter((p) => p.state !== 'germinated')
   return {
     all,
@@ -94,9 +95,7 @@ function readBody(results: readonly PromiseSettledResult<unknown>[]): Body {
   const rawConfig = answer(config)
   return {
     plugins: isRecord(rawPlugins) ? readStats(rawPlugins) : undefined,
-    commands: isRecord(rawCommands)
-      ? Object.values(rawCommands).flatMap((group) => readArray<CommandDto>(group) ?? [])
-      : undefined,
+    commands: isRecord(rawCommands) ? allCommands(rawCommands) : undefined,
     roles: readArray<RoleDto>(answer(roles)),
     sources: readArray<SourceDto>(answer(sources))?.length,
     people: pageTotal(answer(people)),

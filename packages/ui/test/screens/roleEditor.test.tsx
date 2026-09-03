@@ -137,6 +137,7 @@ function mockApi(
     putStatus?: number
     putBody?: unknown
     descriptions?: Record<string, string>
+    commandsStatus?: number
     holders?: number
   } = {},
 ): { calls: Call[] } {
@@ -149,7 +150,12 @@ function mockApi(
     const body: unknown = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined
     calls.push({ method, url, body, locale: new Headers(init?.headers).get('x-mycelo-locale') })
 
-    if (method === 'GET' && url === '/api/commands') return Promise.resolve(json(commands))
+    if (method === 'GET' && url === '/api/commands') {
+      if (options.commandsStatus !== undefined) {
+        return Promise.resolve(json({ error: { message: 'refused' } }, options.commandsStatus))
+      }
+      return Promise.resolve(json(commands))
+    }
     if (method === 'GET' && url === '/api/plugins') {
       return Promise.resolve(json({
         enzyme: Object.keys(commands).map((name) => ({
@@ -201,6 +207,29 @@ describe('the role editor screen', () => {
     renderEditor()
 
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Something went wrong')
+  })
+
+  // I2: a refused /api/commands costs the per-command editor. The role's own name, its holder
+  // count and its Save action come from /api/roles/:name and must survive.
+  it('keeps the role and its holder count when /api/commands is refused', async () => {
+    mockApi({ commandsStatus: 500, holders: 9 })
+    renderEditor()
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'family' })).toBeDefined()
+    expect(screen.getByText('9 people hold this role')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Save this role' })).toBeDefined()
+    expect(screen.queryByRole('searchbox')).toBeNull()
+    // Withheld, not `0 / 0`: the total is a count nobody confirmed.
+    expect(screen.queryByText('0 / 0')).toBeNull()
+  })
+
+  // The `*` alert reads off the role's own patterns, so it survives the same refusal.
+  it('keeps the * alert when /api/commands is refused', async () => {
+    mockApi({ role: { name: 'family', builtin: false, patterns: ['*'] }, commandsStatus: 500 })
+    renderEditor()
+
+    expect(await screen.findByText('This role holds *')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'Remove * and pick commands' })).toBeDefined()
   })
 
   it('renders on success, with no error banner', async () => {

@@ -6,15 +6,9 @@ import { Chip } from '../components/Chip.tsx'
 import { Sheet } from '../components/Sheet.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { grants, wildcardsIn } from '../patterns.ts'
-import { useT } from '../i18n.tsx'
-import type {
-  CommandDto, CommandGroups, ConfigDto, PageDto, PersonDto, RoleDto,
-} from '../api/types.ts'
-
-function flatten(groups: CommandGroups | null): readonly CommandDto[] {
-  if (groups === null || typeof groups !== 'object' || Array.isArray(groups)) return []
-  return Object.values(groups).flatMap((g) => readArray<CommandDto>(g) ?? [])
-}
+import { plural, useT } from '../i18n.tsx'
+import { allCommands } from '../rights.ts'
+import type { CommandGroups, ConfigDto, PageDto, PersonDto, RoleDto } from '../api/types.ts'
 
 const COLUMNS = 'md:grid-cols-[minmax(0,1fr)_10rem_minmax(0,12rem)_7rem_5rem]'
 
@@ -38,18 +32,21 @@ export function Roles(): React.JSX.Element {
     )
   }
 
+  // allSettled, not all: a refused /api/config costs the default-role card, never the table —
+  // the same rule the holder counts below are already fired under.
   function load(): void {
-    Promise.all([
+    void Promise.allSettled([
       api.get<readonly RoleDto[]>('/api/roles'),
       api.get<ConfigDto>('/api/config'),
     ]).then(([r, c]) => {
-      setRoles(r)
-      setDefaultRole(c.defaultRole)
+      if (c.status === 'fulfilled') setDefaultRole(c.value.defaultRole)
+      if (r.status !== 'fulfilled') { setError(true); return }
+      setRoles(r.value)
       setError(false)
       // Fired from inside this resolution and in parallel, never as a gate on the list: the
       // People column is one request per role and no single refusal may blank the screen.
-      for (const role of readArray<RoleDto>(r) ?? []) countHolders(role.name)
-    }, () => { setError(true) })
+      for (const role of readArray<RoleDto>(r.value) ?? []) countHolders(role.name)
+    })
   }
 
   useEffect(load, [])
@@ -83,7 +80,7 @@ export function Roles(): React.JSX.Element {
   }
 
   const list = readArray<RoleDto>(roles) ?? []
-  const all = flatten(commands)
+  const all = allCommands(commands)
   const total = all.length
   const def = list.find((r) => r.name === defaultRole)
 
@@ -95,7 +92,7 @@ export function Roles(): React.JSX.Element {
   function commandsCell(role: RoleDto): string {
     const granted = grantedBy(role)
     if (granted === total && total > 0) {
-      return t(total === 1 ? 'roles.commandsAllOne' : 'roles.commandsAll', { total })
+      return plural(t, 'roles.commandsAll', total, { total })
     }
     return t('roles.commandsSome', { granted, total })
   }
@@ -115,7 +112,7 @@ export function Roles(): React.JSX.Element {
               withheld, never rendered as 0. */}
           {roles !== null && people !== null && commands !== null && (
             <p className="text-meta-lg text-text/60">
-              {t(list.length === 1 ? 'roles.summaryOne' : 'roles.summary', {
+              {plural(t, 'roles.summary', list.length, {
                 roles: list.length, people, commands: total,
               })}
             </p>
@@ -139,7 +136,7 @@ export function Roles(): React.JSX.Element {
             <span className={`font-mono text-page font-semibold ${ok.text}`}>{def.name}</span>
             {commands !== null && people !== null && defHolders !== undefined && (
               <span className="text-body text-text/70">
-                {t(total === 1 ? 'roles.heldByOne' : 'roles.heldBy', {
+                {plural(t, 'roles.heldBy', total, {
                   granted: grantedBy(def), total, holders: defHolders, people,
                 })}
               </span>
@@ -197,7 +194,7 @@ export function Roles(): React.JSX.Element {
                   <span className="text-body text-text/70">
                     {held === undefined
                       ? ''
-                      : t(held === 1 ? 'roles.holdersOne' : 'roles.holders', { count: held })}
+                      : plural(t, 'roles.holders', held, { count: held })}
                   </span>
                   {!isDefault && !role.builtin
                     ? (

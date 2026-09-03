@@ -178,6 +178,20 @@ describe('the generated settings form', () => {
     expect(alert.className).not.toContain(TONE_CLASSES.crit.text)
   })
 
+  // I2: the detail DTO feeds the badge, the trail's kind crumb and the tab count. A refusal of
+  // it must not blank the form, which is the screen's whole purpose.
+  it('renders the form when the plugin route is refused, losing only the badge', async () => {
+    globalThis.fetch = mock((url: string) => {
+      if (url === '/api/plugins/vault') return Promise.resolve(json({ error: { message: 'x' } }, 500))
+      return Promise.resolve(json(url.endsWith('/schema') ? SCHEMA : { url: 'http://x' }))
+    }) as unknown as typeof fetch
+    renderSettings()
+
+    expect(await screen.findByLabelText('URL')).toBeDefined()
+    expect(screen.queryByText('Germinated')).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('renders the form on success, with no error banner', async () => {
     mockVault({ settings: { url: 'http://x', token: '••••' } })
     renderSettings()
@@ -559,12 +573,33 @@ describe("the generated form's page frame", () => {
     await waitFor(() => { expect(screen.getByLabelText('Base URL')).toBeDefined() })
     expect(screen.getByText('text \u00b7 required')).toBeDefined()
     expect(screen.getByText('secret \u00b7 required')).toBeDefined()
-    expect(screen.getByText('enum')).toBeDefined()
+    // I10: a catalogue key each, not the JSON word - the rank beside them is translated, so
+    // the line read `text \u00b7 Obligatoire` in French.
+    expect(screen.getByText('choice')).toBeDefined()
     expect(screen.getByText('number \u00b7 default 30')).toBeDefined()
-    expect(screen.getByText('boolean')).toBeDefined()
+    expect(screen.getByText('yes/no')).toBeDefined()
     // The checkbox widget renders its own label, so the template must not render a second one.
     const monitored = screen.getByLabelText<HTMLInputElement>('Add monitored')
     expect(document.querySelectorAll(`label[for="${monitored.id}"]`)).toHaveLength(1)
+  })
+
+  // The only assertion that can fail I10: `text`, `secret`, `number` and `boolean` are the
+  // same word in English whether they come from the JSON schema or the catalogue.
+  it('names each field type in French, beside the French rank word', async () => {
+    globalThis.localStorage?.setItem('mycelo.locale', 'fr')
+    try {
+      mockVault({ schema: RICH, detail: DISABLED, settings: {} })
+      renderSettings()
+
+      await waitFor(() => { expect(screen.getByLabelText('Base URL')).toBeDefined() })
+      expect(screen.getByText('texte \u00b7 requis')).toBeDefined()
+      expect(screen.getByText('secret \u00b7 requis')).toBeDefined()
+      expect(screen.getByText('choix')).toBeDefined()
+      expect(screen.getByText('oui/non')).toBeDefined()
+      expect(screen.queryByText('enum')).toBeNull()
+    } finally {
+      globalThis.localStorage?.removeItem('mycelo.locale')
+    }
   })
 
   it('heads a rejected save with the summary naming the plugin and how many fields failed', async () => {
