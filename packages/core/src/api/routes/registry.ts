@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify'
 import type { SporeKind } from '@mycelo/septum'
 import type { RuntimeState } from '../../boot/state.js'
+import { listInstalls } from '../../config/store.js'
 import { targetName } from '../../germination/anastomoses.js'
-import type { GerminatedEnzyme, GerminatedInhibitor, Registry } from '../../germination/registry.js'
+import type { Dormant, GerminatedEnzyme, GerminatedInhibitor, Registry } from '../../germination/registry.js'
+import { aggregateHealth } from '../../supervision/health.js'
 
 export interface CommandDto {
   plugin: string
@@ -38,9 +40,18 @@ export interface GraphNode {
   name: string
   /** Absent only for a `registry.dormant` entry whose manifest never parsed. */
   kind?: SporeKind
-  state: 'germinated' | 'dormant'
+  /**
+   * Germination's own verdict, except for a rhiza that germinated and then stopped answering:
+   * its live health state wins, which is what the Overview reads off /api/health (ruling F11).
+   */
+  state: 'germinated' | 'dormant' | 'degraded' | 'unreachable'
   reason?: string
 }
+
+// germinate.ts makes a spore named 'core' dormant rather than refusing it, so the synthetic
+// node must win over it (nodesOf filters it out). Emitted always: it is the substrate, and
+// 2k's five-column reading hangs off it (inventory §4).
+const CORE_NODE = 'core'
 
 export interface GraphEdge {
   from: string
@@ -62,8 +73,11 @@ export interface GraphDto {
 function edgesOf(spore: GerminatedEnzyme | GerminatedInhibitor): readonly GraphEdge[] {
   const optionalOf = new Map<string, boolean>()
   const mark = (to: string, optional: boolean): void => {
-    if (to === 'mycelium' || !spore.resolved.has(to)) return
-    optionalOf.set(to, (optionalOf.get(to) ?? true) && optional)
+    if (!spore.resolved.has(to)) return
+    // 'mycelium' IS the core (anastomoses.ts puts it in `resolved`); the design's centre
+    // column is that node, so it becomes an edge here rather than being dropped.
+    const target = to === 'mycelium' ? CORE_NODE : to
+    optionalOf.set(target, (optionalOf.get(target) ?? true) && optional)
   }
   for (const requirement of spore.manifest.requires ?? []) {
     if ('any_of' in requirement) {
@@ -76,13 +90,58 @@ function edgesOf(spore: GerminatedEnzyme | GerminatedInhibitor): readonly GraphE
   return [...optionalOf].map(([to, optional]) => ({ from: spore.name, to, optional }))
 }
 
-function nodesOf(registry: Registry): readonly GraphNode[] {
+/**
+ * The declared targets of a dormant spore, as edges. A dormant spore has no `resolved` set —
+ * germination stopped before it wired anything — so the graph would otherwise draw no edge at
+ * all for the one break it exists to show (ruling F9). An `any_of` group contributes its chosen
+ * alternative alone; only a group that chose nothing offers all of them, and an alternative
+ * nobody installed has no node.
+ */
+function dormantEdgesOf(dormant: Dormant, placed: ReadonlySet<string>): readonly GraphEdge[] {
+  const optionalOf = new Map<string, boolean>()
+  for (const requirement of dormant.requires ?? []) {
+    const targets = requirement.chosen !== undefined && placed.has(requirement.chosen)
+      ? [requirement.chosen]
+      : requirement.targets
+    for (const to of targets) {
+      const target = to === 'mycelium' ? CORE_NODE : to
+      if (!placed.has(target)) continue
+      optionalOf.set(target, (optionalOf.get(target) ?? true) && requirement.optional)
+    }
+  }
+  return [...optionalOf].map(([to, optional]) => ({ from: dormant.name, to, optional }))
+}
+
+// A dormant spore has no manifest in the registry; its install row recorded the kind at the
+// manifest's first parse, so only a never-parsed spore stays kind-less (plan defect 29).
+function nodesOf(
+  registry: Registry,
+  recordedKind: ReadonlyMap<string, SporeKind>,
+  unhealthy: ReadonlyMap<string, { state: 'degraded' | 'unreachable', detail?: string }>,
+): readonly GraphNode[] {
   return [
+    { name: CORE_NODE, state: 'germinated' },
     ...registry.hyphae.map((s): GraphNode => ({ name: s.name, kind: s.manifest.kind, state: 'germinated' })),
-    ...registry.rhizas.map((s): GraphNode => ({ name: s.name, kind: s.manifest.kind, state: 'germinated' })),
+    ...registry.rhizas.map((s): GraphNode => {
+      const failing = unhealthy.get(s.name)
+      return {
+        name: s.name,
+        kind: s.manifest.kind,
+        state: failing?.state ?? 'germinated',
+        ...(failing?.detail === undefined ? {} : { reason: failing.detail }),
+      }
+    }),
     ...registry.enzymes.map((s): GraphNode => ({ name: s.name, kind: s.manifest.kind, state: 'germinated' })),
     ...registry.inhibitors.map((s): GraphNode => ({ name: s.name, kind: s.manifest.kind, state: 'germinated' })),
-    ...registry.dormant.map((d): GraphNode => ({ name: d.name, state: 'dormant', reason: d.reason })),
+    // A spore deliberately named 'core' is dormant, not absent: two nodes of that name
+    // duplicate a React key, collapse in `byName` and either dash every core edge amber or
+    // hide the dormancy. The substrate's own node wins.
+    ...registry.dormant.filter((d) => d.name !== CORE_NODE).map((d): GraphNode => ({
+      name: d.name,
+      ...(recordedKind.has(d.name) ? { kind: recordedKind.get(d.name) } : {}),
+      state: 'dormant',
+      reason: d.reason,
+    })),
   ]
 }
 
@@ -103,10 +162,26 @@ export function registerRegistryRoutes(app: FastifyInstance, state: RuntimeState
     return groupByPlugin(commands)
   })
 
-  app.get('/api/graph', (): GraphDto => {
+  app.get('/api/graph', async (): Promise<GraphDto> => {
     if (state.germination.status !== 'germinated') return { nodes: [], edges: [] }
     const { registry } = state.germination.mycelium
-    const edges = [...registry.enzymes, ...registry.inhibitors].flatMap(edgesOf)
-    return { nodes: nodesOf(registry), edges }
+    // The same probe /api/health runs, so both screens read one verdict per fetch — the graph
+    // fetches once per mount and the health poll every 15 s, so they still age apart.
+    const unhealthy = new Map((await aggregateHealth(registry))
+      .filter((h) => h.status.state !== 'healthy')
+      .map((h) => [h.rhiza, {
+        // aggregateHealth returns the plugin's own answer unvalidated: anything but the two
+        // known faults reads as unreachable, collapsed the way Overview.tsx already does it.
+        state: h.status.state === 'degraded' ? 'degraded' as const : 'unreachable' as const,
+        ...(h.status.detail === undefined ? {} : { detail: h.status.detail }),
+      }]))
+    const recordedKind = new Map(listInstalls(state.db).map((i) => [i.name, i.kind as SporeKind]))
+    const nodes = nodesOf(registry, recordedKind, unhealthy)
+    const placed = new Set(nodes.map((n) => n.name))
+    const edges = [
+      ...[...registry.enzymes, ...registry.inhibitors].flatMap(edgesOf),
+      ...registry.dormant.flatMap((d) => dormantEdgesOf(d, placed)),
+    ]
+    return { nodes, edges }
   })
 }

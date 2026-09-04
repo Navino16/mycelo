@@ -11,6 +11,8 @@ function registry(over: Partial<Registry>): Registry {
   }
 }
 
+const NO_ADMISSION = { admission: { blockedSinceBoot: () => 0 } }
+
 describe('aggregateRuntimeHealth', () => {
   it('reports degraded with its failure and nothing else known', async () => {
     const germination: Germination = {
@@ -32,6 +34,7 @@ describe('aggregateRuntimeHealth', () => {
         registry: registry({
           dormant: [{ name: 'a', reason: 'boom' }, { name: 'b', reason: 'bang' }],
         }),
+        ...NO_ADMISSION,
       },
     } as unknown as Germination
     const health = await aggregateRuntimeHealth(germination)
@@ -48,6 +51,7 @@ describe('aggregateRuntimeHealth', () => {
           dormant: [{ name: 'other', reason: 'boom' }],
           brokenEnforcing: ['gate'],
         }),
+        ...NO_ADMISSION,
       },
     } as unknown as Germination
     const health = await aggregateRuntimeHealth(germination)
@@ -63,7 +67,7 @@ describe('aggregateRuntimeHealth', () => {
   it('carries every enforcing-blocked inhibitor, not only the last', async () => {
     const germination = {
       status: 'germinated' as const,
-      mycelium: { registry: registry({ brokenEnforcing: ['gate', 'guard'] }) },
+      mycelium: { registry: registry({ brokenEnforcing: ['gate', 'guard'] }), ...NO_ADMISSION },
     } as unknown as Germination
     expect((await aggregateRuntimeHealth(germination)).enforcingBlocked).toEqual(['gate', 'guard'])
   })
@@ -75,7 +79,10 @@ describe('aggregateRuntimeHealth', () => {
     })
     const germination = {
       status: 'germinated' as const,
-      mycelium: { registry: registry({ rhizas: [rhiza('a', 'healthy'), rhiza('b', 'unreachable')] as never }) },
+      mycelium: {
+        registry: registry({ rhizas: [rhiza('a', 'healthy'), rhiza('b', 'unreachable')] as never }),
+        ...NO_ADMISSION,
+      },
     } as unknown as Germination
     const health = await aggregateRuntimeHealth(germination)
     // Distinct states, so a collapse to one entry cannot be mistaken for a duplicate.
@@ -94,6 +101,7 @@ describe('aggregateRuntimeHealth', () => {
             { name: 'fine', instance: { health: () => Promise.resolve({ state: 'healthy', checkedAt: new Date(0) }) } },
           ] as never,
         }),
+        ...NO_ADMISSION,
       },
     } as unknown as Germination
     const health = await aggregateRuntimeHealth(germination)
@@ -103,5 +111,25 @@ describe('aggregateRuntimeHealth', () => {
 
   it('answers starting as degraded rather than inventing a third mode', async () => {
     expect((await aggregateRuntimeHealth({ status: 'starting' })).mode).toBe('degraded')
+  })
+})
+
+describe('the mute counter reaches the health payload', () => {
+  // A non-zero fixture: every other case here counts nothing, so a hardcoded 0 read as
+  // "the chain's own count" survived the whole suite.
+  it('reports the chain\'s own count, not a zero of its own', async () => {
+    const germination = {
+      status: 'germinated' as const,
+      mycelium: {
+        registry: registry({ brokenEnforcing: ['gate'] }),
+        admission: { blockedSinceBoot: () => 7 },
+      },
+    } as unknown as Germination
+
+    expect((await aggregateRuntimeHealth(germination)).blockedSinceBoot).toBe(7)
+  })
+
+  it('answers zero for a substrate that never germinated', async () => {
+    expect((await aggregateRuntimeHealth({ status: 'starting' })).blockedSinceBoot).toBe(0)
   })
 })

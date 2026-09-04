@@ -9,9 +9,9 @@
   "scripts": {
     "prelint": "tsc -b",
     "lint": "eslint .",
-    "typecheck": "tsc -b && tsc -p tsconfig.spec.json",
+    "typecheck": "tsc -b && tsc -p tsconfig.spec.json && bun run --cwd packages/ui typecheck",
     "test": "bun test",
-    "ci": "bun run lint && bun run typecheck && bun run test",
+    "ci": "bun run lint && bun run typecheck && bun run test && bun run --cwd packages/ui build",
     "build": "tsc -b",
     "start": "bun packages/core/src/index.ts"
   },
@@ -20,6 +20,7 @@
     "@types/node": "^24.13.3",
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.8.1",
+    "eslint-plugin-react-hooks": "7.1.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.66.0"
   }

@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'bun:test'
-import { createRole } from '../../src/authorization/roles.js'
+import { assignRole, createRole } from '../../src/authorization/roles.js'
 import { markReviewed } from '../../src/identity/people.js'
 import { channelIdentity, principal } from '../../src/persistence/schema.js'
 import type { Db } from '../../src/persistence/db.js'
@@ -285,5 +285,80 @@ describe('POST /api/people/:id/roles and DELETE /api/people/:id/roles/:role', ()
     const body = response.json<{ error: { code: string, message: string } }>()
     expect(body.error.code).toBe('internal')
     expect(body.error.message).toBe('an internal error occurred')
+  })
+})
+
+describe('GET /api/people?role=', () => {
+  it('answers only the people who hold that role, and a total that counts them', async () => {
+    booted = await bootAndLogin()
+    const { app, served, cookie } = booted
+    person(served.state.db, 'role-anais', 'Anaïs')
+    person(served.state.db, 'role-theo', 'Théo')
+    person(served.state.db, 'role-guest', 'Guest Person')
+    createRole(served.state.db, 'family', ['ping.*'])
+    createRole(served.state.db, 'guest', ['ping.*'])
+    assignRole(served.state.db, 'role-anais', 'family')
+    assignRole(served.state.db, 'role-theo', 'family')
+    assignRole(served.state.db, 'role-guest', 'guest')
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/people?role=family', headers: { cookie },
+    })).json<{ items: { displayName?: string }[], total: number }>()
+
+    expect(body.total).toBe(2)
+    expect(body.items).toHaveLength(2)
+    expect(body.items.map((p) => p.displayName).sort()).toEqual(['Anaïs', 'Théo'])
+  })
+
+  // The whole point of the filter is the count 2f and 2g show; a filter that degrades to
+  // "everyone" for an unknown name would render 128 beside every role.
+  it('answers zero for a role nobody holds, never everybody', async () => {
+    booted = await bootAndLogin()
+    const { app, cookie } = booted
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/people?role=nobody-holds-this', headers: { cookie },
+    })).json<{ items: unknown[], total: number }>()
+
+    expect(body.total).toBe(0)
+    expect(body.items).toEqual([])
+  })
+
+  it('combines with q, rather than replacing it', async () => {
+    booted = await bootAndLogin()
+    const { app, served, cookie } = booted
+    person(served.state.db, 'role-anais2', 'Anaïs')
+    person(served.state.db, 'role-theo2', 'Théo')
+    // Matches q=Th too, but holds a different role: without this, q=Th alone already
+    // narrows to the answer role= is meant to produce, and the test cannot fail.
+    person(served.state.db, 'role-thomas2', 'Thomas')
+    createRole(served.state.db, 'family2', ['ping.*'])
+    createRole(served.state.db, 'guest2', ['ping.*'])
+    assignRole(served.state.db, 'role-anais2', 'family2')
+    assignRole(served.state.db, 'role-theo2', 'family2')
+    assignRole(served.state.db, 'role-thomas2', 'guest2')
+
+    const byQAlone = (await app.inject({
+      method: 'GET', url: '/api/people?q=Th', headers: { cookie },
+    })).json<{ total: number }>()
+    expect(byQAlone.total).toBe(2)
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/people?role=family2&q=Th', headers: { cookie },
+    })).json<{ total: number }>()
+
+    expect(body.total).toBe(1)
+  })
+
+  // `?role=` is refused, not silently ignored: a caller that means "no role filter" omits
+  // the parameter, and answering everybody to an empty one is the filter degrading again.
+  it('refuses an empty role rather than answering everybody', async () => {
+    booted = await bootAndLogin()
+
+    const answer = await booted.app.inject({
+      method: 'GET', url: '/api/people?role=', headers: { cookie: booted.cookie },
+    })
+
+    expect(answer.statusCode).toBe(400)
   })
 })

@@ -263,6 +263,56 @@ it('does not fall back to a healthy any_of alternative when the chosen one fails
   )
 })
 
+// ruling F9: a dormant spore has no manifest in the registry, so /api/graph could draw no
+// edge for it — and the one break the graph exists to show is exactly a dormant dependency.
+// The declared targets are recorded on the dormancy itself, where the manifest was in scope.
+it('records the targets a dormant spore declared, so the broken dependency is knowable', async () => {
+  spore('alpha', {
+    'spore.yaml': 'kind: rhiza\nname: alpha\nseptum: "^0.11"\n',
+    'src/index.ts': 'throw new Error("alpha explodes")\n',
+  })
+  spore('needs-alpha', {
+    'spore.yaml': 'kind: enzyme\nname: needs-alpha\nseptum: "^0.11"\n'
+      + 'requires:\n  - rhiza: alpha\n  - rhiza: mycelium\n    scopes: [principals.read]\n'
+      + 'commands:\n  - name: hi\n    description: x\n    respond: hi\n',
+  })
+  const registry = await germinate([dir], createLogger())
+
+  const dormant = registry.dormant.find((d) => d.name === 'needs-alpha')
+  expect(dormant?.requires).toEqual([
+    { targets: ['alpha'], optional: false },
+    { targets: ['mycelium'], optional: false },
+  ])
+})
+
+// The untried alternatives stay on the record (design §2.2 refuses a re-collapse), and the
+// chosen one comes with them: /api/graph draws that edge alone (review I2).
+it('records every alternative of an any_of group, and which one was chosen', async () => {
+  spore('alpha', {
+    'spore.yaml': 'kind: rhiza\nname: alpha\nseptum: "^0.11"\n',
+    'src/index.ts': 'throw new Error("alpha explodes")\n',
+  })
+  spore('picks-one', {
+    'spore.yaml': 'kind: enzyme\nname: picks-one\nseptum: "^0.11"\nrequires:\n'
+      + '  - any_of:\n      - rhiza: alpha\n      - rhiza: beta\n'
+      + 'commands:\n  - name: hi\n    description: x\n    respond: hi\n',
+  })
+  const registry = await germinate([dir], createLogger())
+
+  expect(registry.dormant.find((d) => d.name === 'picks-one')?.requires)
+    .toEqual([{ targets: ['alpha', 'beta'], optional: false, chosen: 'alpha' }])
+})
+
+// A manifest that never parsed has no requirements to record, and the directory is all the
+// dormancy carries: the field must be absent rather than an empty list claiming none.
+it('records no targets for a spore whose manifest never parsed', async () => {
+  spore('brokenyaml', { 'spore.yaml': 'kind: enzyme\nname: [unclosed\n' })
+  const registry = await germinate([dir], createLogger())
+
+  expect(registry.dormant).toHaveLength(1)
+  expect(registry.dormant[0]?.requires).toBeUndefined()
+})
+
 const RHIZA_BODY = 'start: async () => {}, stop: async () => {}, health: async () => "healthy", api: {}'
 
 it('germinates a valid rhiza into registry.rhizas', async () => {

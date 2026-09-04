@@ -1,22 +1,48 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { septumIncompatibility } from '@mycelo/septum'
-import type { Enzyme, Hypha, Inhibitor, Logger, Rhiza } from '@mycelo/septum'
+import type { Enzyme, Hypha, Inhibitor, Logger, Manifest, Rhiza } from '@mycelo/septum'
 import { describeUndeclaredSecrets, undeclaredSecretKeys } from '../config/plugins.js'
 import { getInstall } from '../config/store.js'
 import { loadCatalogs } from '../i18n/catalog.js'
 import type { LocaleMessages } from '../i18n/catalog.js'
 import type { Db } from '../persistence/db.js'
 import { describeConfigError } from '../support/thrown.js'
-import { resolve } from './anastomoses.js'
+import { resolve, targetName } from './anastomoses.js'
+import type { AnyOfChoice } from './anastomoses.js'
 import { discover } from './discover.js'
 import { loadModule } from './load.js'
 import { isFailure, readManifest } from './manifest.js'
 import type { ReadManifest } from './manifest.js'
 import { buildRoutes } from './registry.js'
 import { listAliases } from '../rhizomorph/aliases.js'
-import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor, GerminatedRhiza, Registry } from './registry.js'
+import type {
+  Dormant, DormantRequirement, GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor,
+  GerminatedRhiza, Registry,
+} from './registry.js'
 import { capabilityShapeError, enzymeShapeError, hyphaShapeError, inhibitorShapeError, rhizaShapeError, unreferencedHandlers } from './shape.js'
+
+/**
+ * A manifest's `requires:` as bare target names — `radarr@^2` is the node called `radarr` —
+ * each any_of entry carrying the alternative resolution collapsed it to. Matched on the
+ * alternative list rather than by index: `evaluate` records no choice for a group that
+ * resolved to the mycelium.
+ */
+function dormantRequirements(
+  manifest: Manifest, choices: readonly AnyOfChoice[],
+): readonly DormantRequirement[] {
+  const pending = [...choices]
+  return (manifest.requires ?? []).map((requirement) => {
+    if (!('any_of' in requirement)) {
+      return { targets: [targetName(requirement.rhiza)], optional: requirement.optional }
+    }
+    const targets = requirement.any_of.map((a) => targetName(a.rhiza))
+    const at = pending.findIndex((c) => c.alternatives.length === targets.length
+      && c.alternatives.every((a, i) => a === targets[i]))
+    const chosen = at === -1 ? undefined : pending.splice(at, 1)[0]?.chosen
+    return { targets, optional: false, ...(chosen === undefined ? {} : { chosen }) }
+  })
+}
 
 /**
  * Walks the spores directory, resolves dependencies, then loads only the survivors in
@@ -244,5 +270,19 @@ export async function germinate(
     .map((spore) => spore.read.manifest.name)
     .filter((name) => registered.has(name))
 
-  return { hyphae, enzymes, rhizas, inhibitors, dormant, routes: buildRoutes(enzymes, aliases), order, brokenEnforcing, catalogs }
+  // One place rather than fourteen `dormant.push` sites: `reads` holds every manifest that
+  // parsed, including those that went dormant later in this walk.
+  const declared = new Map(reads.map((read) => [
+    read.manifest.name,
+    dormantRequirements(read.manifest, resolution.anyOfChoices.get(read.manifest.name) ?? []),
+  ]))
+  const recorded = dormant.map((entry) => {
+    const requires = declared.get(entry.name)
+    return requires === undefined ? entry : { ...entry, requires }
+  })
+
+  return {
+    hyphae, enzymes, rhizas, inhibitors, dormant: recorded,
+    routes: buildRoutes(enzymes, aliases), order, brokenEnforcing, catalogs,
+  }
 }

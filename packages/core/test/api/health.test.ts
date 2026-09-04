@@ -22,6 +22,16 @@ describe('/api/health', () => {
     expect(body).toMatchObject({ mode: 'germinated', dormant: [], enforcingBlocked: [] })
   })
 
+  // An absent field and a zero read the same to a client that uses `?? 0`; only this
+  // explicit membership check tells the two apart.
+  it('carries blockedSinceBoot, zero on a substrate that never refused a message', async () => {
+    booted = await bootAndLogin()
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/health', headers: { cookie } })).json<RuntimeHealth>()
+    expect('blockedSinceBoot' in body).toBe(true)
+    expect(body.blockedSinceBoot).toBe(0)
+  })
+
   it('reports degraded and names the cycle', async () => {
     booted = await bootAndLogin({ spores: cyclingPair })
     const { app, cookie } = booted

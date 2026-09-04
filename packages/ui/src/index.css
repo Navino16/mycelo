@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: oklch(0.17 0.008 85);
+  --color-surface: oklch(0.212 0.009 85);
+  --color-text: oklch(0.93 0.012 88);
+  --color-line: oklch(0.31 0.010 85);
+  --color-line-soft: oklch(0.265 0.010 85);
+  --color-accent: oklch(0.78 0.14 148);
+  --color-accent-ink: oklch(0.19 0.04 148);
+  --color-ok: oklch(0.78 0.14 148);
+  --color-ok-bg: oklch(0.78 0.14 148 / 0.13);
+  --color-warn: oklch(0.81 0.13 78);
+  --color-warn-bg: oklch(0.81 0.13 78 / 0.14);
+  --color-crit: oklch(0.68 0.19 25);
+  --color-crit-bg: oklch(0.68 0.19 25 / 0.16);
+  --color-idle: oklch(0.63 0.018 250);
+  --color-idle-bg: oklch(0.63 0.018 250 / 0.14);
+  --color-surface2: oklch(0.245 0.009 85);
+  --text-meta: 0.6875rem;
+  --text-meta--line-height: 1rem;
+  --text-meta-lg: 0.75rem;
+  --text-meta-lg--line-height: 1.125rem;
+  --text-body: 0.8125rem;
+  --text-body--line-height: 1.25rem;
+  --text-title: 0.875rem;
+  --text-title--line-height: 1.25rem;
+  --text-page: 1.0625rem;
+  --text-page--line-height: 1.5rem;
+  --text-hero: 1.75rem;
+  --text-hero--line-height: 2rem;
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html:not(.dark) {
+  --color-bg: oklch(0.968 0.008 85);
+  --color-surface: oklch(0.995 0.004 85);
+  --color-text: oklch(0.255 0.014 85);
+  --color-line: oklch(0.855 0.010 85);
+  --color-line-soft: oklch(0.905 0.010 85);
+  --color-accent: oklch(0.48 0.13 148);
+  --color-accent-ink: oklch(0.99 0.01 148);
+  --color-ok: oklch(0.50 0.13 148);
+  --color-ok-bg: oklch(0.50 0.13 148 / 0.10);
+  --color-warn: oklch(0.55 0.12 70);
+  --color-warn-bg: oklch(0.55 0.12 70 / 0.12);
+  --color-crit: oklch(0.50 0.19 25);
+  --color-crit-bg: oklch(0.50 0.19 25 / 0.10);
+  --color-idle: oklch(0.52 0.02 250);
+  --color-idle-bg: oklch(0.52 0.02 250 / 0.10);
+  --color-surface2: oklch(0.945 0.006 85);
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}

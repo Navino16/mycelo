@@ -3,8 +3,9 @@ import { afterEach, describe, expect, it } from 'bun:test'
 import type { CommandGroups, GraphDto } from '../../src/api/routes/registry.js'
 import {
   bootAndLogin, brokenManifest, capabilityCommand, closeBooted, cyclingPair,
-  mandatoryAndOptionalDependency, translatedCommand, twoPluginsTwoCommands,
-} from './support.js'
+  chosenAmongInstalledAlternatives, degradedRhizaWithDependent, dormantDependency,
+  mandatoryAndOptionalDependency, translatedCommand, twoPluginsTwoCommands, configurable,
+  unhealthyRhiza, wrongShapeHealth, writeSpore } from './support.js'
 import type { LoggedIn } from './support.js'
 import { recordInstall, setEnabled } from '../../src/config/store.js'
 import { setAlias } from '../../src/rhizomorph/aliases.js'
@@ -129,6 +130,17 @@ describe('/api/graph', () => {
     expect(broken?.reason).toBeDefined()
   })
 
+  // needs-config parses and then refuses its empty configuration: the commonest dormancy of a
+  // fresh substrate, which the UI must file under its kind, not under "manifest did not parse".
+  it('gives a dormant node whose manifest parsed the kind its install row recorded', async () => {
+    booted = await bootAndLogin({ spores: configurable })
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/graph', headers: { cookie } })).json<GraphDto>()
+    const node = body.nodes.find((n) => n.name === 'needs-config')
+    expect(node).toMatchObject({ kind: 'enzyme', state: 'dormant' })
+    expect(node?.reason).toContain('configuration')
+  })
+
   it('tells a mandatory dependency edge from an optional one, and dedupes a target reached twice', async () => {
     booted = await bootAndLogin({ spores: mandatoryAndOptionalDependency })
     const { app, cookie } = booted
@@ -143,5 +155,170 @@ describe('/api/graph', () => {
     // merge must answer mandatory (false) — an "AND" over both, not whichever was read last.
     expect(byTarget.get('coreconn')).toBe(false)
     expect(byTarget.get('sideconn')).toBe(true)
+  })
+})
+
+describe('/api/graph draws what actually broke', () => {
+  // Measured on the real substrate: `now-watching` was dormant *because* `plex` was, and the
+  // graph drew no edge between them — `3 links · 0 broken` over the one failure it exists to
+  // show. edgesOf walked germinated spores only, whose `resolved` cannot name a dormant one.
+  it('emits the edge from a dormant spore to the dependency that broke it', async () => {
+    booted = await bootAndLogin({ spores: dormantDependency })
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/graph', headers: { cookie } })).json<GraphDto>()
+    const byName = new Map(body.nodes.map((n) => [n.name, n]))
+
+    // The premise: both ends are dormant, or the edge proves nothing.
+    expect(byName.get('plexish')?.state).toBe('dormant')
+    expect(byName.get('watcher')?.state).toBe('dormant')
+    expect(body.edges).toContainEqual({ from: 'watcher', to: 'plexish', optional: false })
+  })
+
+  // An any_of alternative nobody installed has no node, so an edge to it could be neither
+  // placed nor drawn — Graph.tsx drops such an edge, and the count would still have moved.
+  it('draws no edge to an any_of alternative that is not installed', async () => {
+    booted = await bootAndLogin({ spores: dormantDependency })
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/graph', headers: { cookie } })).json<GraphDto>()
+
+    expect(body.nodes.some((n) => n.name === 'jellyfinish')).toBe(false)
+    expect(body.edges).toContainEqual({ from: 'chooser', to: 'plexish', optional: false })
+    expect(body.edges.some((e) => e.to === 'jellyfinish')).toBe(false)
+  })
+
+  // review I2: with two installed alternatives the germinated one got a plain intact edge
+  // from a spore that never wired it, and the link count counted it — ruling F9 draws the
+  // dependency that broke, and only that one.
+  it('draws only the any_of alternative that was chosen, not every installed one', async () => {
+    booted = await bootAndLogin({ spores: chosenAmongInstalledAlternatives })
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/graph', headers: { cookie } })).json<GraphDto>()
+    const byName = new Map(body.nodes.map((n) => [n.name, n]))
+
+    // The premise: both alternatives are on the canvas, and they disagree.
+    expect(byName.get('jellyish')?.state).toBe('dormant')
+    expect(byName.get('plexlike')?.state).toBe('germinated')
+    expect(byName.get('picker')?.state).toBe('dormant')
+    expect(body.edges).toContainEqual({ from: 'picker', to: 'jellyish', optional: false })
+    expect(body.edges.filter((e) => e.from === 'picker')).toHaveLength(1)
+  })
+
+  // A germinated spore's edges come from `resolved`, which is the stricter source: a dormant
+  // spore's declared targets must not be read for one that wired.
+  it('keeps drawing a germinated spore’s edges from what it resolved', async () => {
+    booted = await bootAndLogin({ spores: mandatoryAndOptionalDependency })
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/graph', headers: { cookie } })).json<GraphDto>()
+
+    // 'nowhere' is an any_of alternative that is not installed: no node, so no edge.
+    expect(body.edges.some((e) => e.to === 'nowhere')).toBe(false)
+    expect(body.edges.filter((e) => e.from === 'grapher')).toHaveLength(2)
+  })
+
+  // ruling F11: the Overview reads `radarr · Degraded · HTTP 401` off /api/health while the
+  // graph called the same plugin germinated in the same second, and the graph is the one
+  // claiming everything is fine.
+  it('carries a rhiza’s runtime health into its node state, not only its germination', async () => {
+    booted = await bootAndLogin({ spores: degradedRhizaWithDependent })
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/graph', headers: { cookie } })).json<GraphDto>()
+    const node = body.nodes.find((n) => n.name === 'wobbly')
+
+    expect(node).toMatchObject({ kind: 'rhiza', state: 'degraded' })
+    expect(node?.reason).toBe('HTTP 401')
+    // The edge itself is intact — its end is what the client reads as broken.
+    expect(body.edges).toContainEqual({ from: 'seeker', to: 'wobbly', optional: false })
+  })
+
+  // review I1: aggregateHealth returns the plugin's own answer unvalidated, and a state the
+  // client has no tone for leaves `state` absent — StateBadge destructures TONE[state] and
+  // the whole graph becomes the route-error page. Collapsed the way Overview.tsx already does.
+  it('reads an unknown health state as unreachable rather than leaving the node stateless', async () => {
+    booted = await bootAndLogin({ spores: wrongShapeHealth })
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/graph', headers: { cookie } })).json<GraphDto>()
+
+    // Two shapes, two paths through `status.state`: absent, and present but unknown. The
+    // second is the one that reached StateBadge and threw; the first read as germinated.
+    expect(body.nodes.find((n) => n.name === 'garbled')).toMatchObject({ state: 'unreachable' })
+    expect(body.nodes.find((n) => n.name === 'mangled')).toMatchObject({ state: 'unreachable' })
+  })
+
+  it('reports a rhiza whose health() threw as unreachable, never as germinated', async () => {
+    booted = await bootAndLogin({ spores: unhealthyRhiza })
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/graph', headers: { cookie } })).json<GraphDto>()
+
+    expect(body.nodes.find((n) => n.name === 'flapping')).toMatchObject({ state: 'unreachable' })
+  })
+
+  // The control: a healthy rhiza stays germinated, or every node would read as failing.
+  it('leaves a healthy rhiza germinated', async () => {
+    booted = await bootAndLogin()
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/graph', headers: { cookie } })).json<GraphDto>()
+
+    expect(body.nodes.find((n) => n.name === 'mock')).toMatchObject({ state: 'germinated' })
+  })
+})
+
+describe('the synthetic core node', () => {
+  it('emits a germinated core node even when nothing requires the mycelium', async () => {
+    booted = await bootAndLogin({ spores: twoPluginsTwoCommands })
+    const { app, cookie } = booted
+
+    const graph = (await app.inject({
+      method: 'GET', url: '/api/graph', headers: { cookie },
+    })).json<{ nodes: { name: string, state: string }[], edges: { from: string, to: string }[] }>()
+
+    expect(graph.nodes.find((n) => n.name === 'core')).toEqual({ name: 'core', state: 'germinated' })
+    expect(graph.edges.filter((e) => e.to === 'core')).toEqual([])
+  })
+
+  /**
+   * germinate.ts does not refuse a spore named 'core' — it makes it dormant with the reserved
+   * translation-domain reason, and the comment on CORE_NODE claimed the opposite. Two nodes of
+   * that name duplicate a React key in Graph.tsx and collapse in its `byName` index.
+   */
+  it('answers exactly one node named core when a dormant spore claims the name', async () => {
+    booted = await bootAndLogin({
+      spores: (dir) => {
+        writeSpore(dir, 'core', { 'spore.yaml': 'kind: rhiza\nname: core\nseptum: "^0.11"\n' })
+      },
+    })
+    const { app, cookie } = booted
+    // The premise: the spore is dormant rather than absent, or this proves nothing.
+    const state = booted.served.state.germination
+    expect(state.status).toBe('germinated')
+    expect(state.status === 'germinated' && state.mycelium.registry.dormant.map((d) => d.name))
+      .toContain('core')
+
+    const graph = (await app.inject({
+      method: 'GET', url: '/api/graph', headers: { cookie },
+    })).json<GraphDto>()
+
+    expect(graph.nodes.filter((n) => n.name === 'core')).toEqual([{ name: 'core', state: 'germinated' }])
+  })
+
+  it('routes a rhiza: mycelium requirement to the core node instead of dropping it', async () => {
+    booted = await bootAndLogin({
+      spores: (dir) => {
+        writeSpore(dir, 'reader', {
+          'spore.yaml': 'kind: enzyme\nname: reader\nseptum: "^0.11"\n'
+            + 'commands:\n  - name: who\n    description: command.who.description\n    respond: who.text\n'
+            + 'requires:\n  - rhiza: mycelium\n    scopes: [principals.read]\n',
+          'translations/en.yaml': 'command:\n  who:\n    description: Who\nwho:\n  text: ok\n',
+        })
+      },
+    })
+    const { app, cookie } = booted
+
+    const graph = (await app.inject({
+      method: 'GET', url: '/api/graph', headers: { cookie },
+    })).json<{ edges: { from: string, to: string, optional: boolean }[] }>()
+
+    expect(graph.edges).toContainEqual({ from: 'reader', to: 'core', optional: false })
+    // The old name must not survive alongside the new one, or the client draws both.
+    expect(graph.edges.some((e) => e.to === 'mycelium')).toBe(false)
   })
 })

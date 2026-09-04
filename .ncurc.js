@@ -17,3 +17,7 @@ export default {
     'bun-types',
   ],
 }
+
+// Front-end majors (react, vite, tailwindcss, @rjsf/*) are NOT held: unlike the four above,
+// no version of them has to track a runtime. A major is a deliberate upgrade, reviewed on its
+// own, not something `ncu -u` should be prevented from proposing.

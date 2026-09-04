@@ -309,7 +309,12 @@ describe('/api/sources', () => {
   it('answers 401 without the session cookie, on a route that exists', async () => {
     // Fastify's onRequest runs before routing, so a 401 asserted on a URL that does not
     // exist passes whether the hook works or not.
-    booted = await bootAndLogin({ spores: twoPluginsTwoCommands })
+    // driverFor is required here: without it the authenticated control falls through to the
+    // real GitHub driver and opens a socket (whole-branch fix brief, item 7).
+    booted = await bootAndLogin({
+      spores: twoPluginsTwoCommands,
+      driverFor: await fakeSporangium({ radarr: ['0.1.0'] }),
+    })
     const seeded = await official(booted)
     const url = `/api/sources/${String(seeded.id)}/inoculate`
     expect((await booted.app.inject({ method: 'POST', url, payload: { name: 'radarr' } })).statusCode).toBe(401)

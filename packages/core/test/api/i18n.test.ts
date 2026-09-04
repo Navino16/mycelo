@@ -219,6 +219,8 @@ describe('every api.* key renders its own catalogue text, not a fallback key', (
     expect(response.json<{ error: { message: string } }>().error.message).toBe('the request is invalid')
   })
 
+  // Eleven argon2id verifications at m=65536 exceed bun:test's 5 s default under load
+  // (auth.test.ts and error-handler.test.ts budget the same class at 20 s).
   it('api.rateLimited — the 11th failed login within the window', async () => {
     const a = start()
     await setup(a)
@@ -230,7 +232,7 @@ describe('every api.* key renders its own catalogue text, not a fallback key', (
     }
     expect(last?.statusCode).toBe(429)
     expect(last?.json<{ error: { message: string } }>().error.message).toBe('too many requests; try again later')
-  })
+  }, 20_000)
 
   it('api.internalError — an ownerPrincipal fault, never the raw invariant message', async () => {
     const a = start('owner:\n  channel: console\n  userId: owner-on-console\n')

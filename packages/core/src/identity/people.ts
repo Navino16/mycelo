@@ -63,6 +63,12 @@ export function markReviewed(db: Db, id: string): void {
   db.update(principal).set({ reviewedAt: new Date() }).where(eq(principal.id, id)).run()
 }
 
+/** No septum counterpart: `Principal` carries no reviewed flag, so this stays local to the HTTP layer. */
+export function isReviewed(db: Db, id: string): boolean {
+  const row = db.select({ reviewedAt: principal.reviewedAt }).from(principal).where(eq(principal.id, id)).get()
+  return row?.reviewedAt != null
+}
+
 export function setDisplayName(db: Db, id: string, displayName: string): void {
   requirePrincipal(db, id)
   db.update(principal).set({ displayName }).where(eq(principal.id, id)).run()
@@ -83,6 +89,8 @@ export interface PeopleQuery {
   perPage: number
   search?: string
   reviewed?: boolean
+  /** Exact role name. An unheld or unknown name answers zero rows, never every row. */
+  role?: string
 }
 
 export interface PeoplePage {
@@ -106,6 +114,15 @@ export function searchPrincipals(db: Db, query: PeopleQuery): PeoplePage {
   }
   if (query.reviewed === true) conditions.push(isNotNull(principal.reviewedAt))
   if (query.reviewed === false) conditions.push(isNull(principal.reviewedAt))
+  if (query.role !== undefined && query.role !== '') {
+    const holders = db.select({ principalId: principalRole.principalId }).from(principalRole)
+      .innerJoin(role, eq(role.id, principalRole.roleId))
+      .where(eq(role.name, query.role))
+      .all().map((r) => r.principalId)
+    // inArray over an empty list answers zero rows under drizzle 0.45 (measured), which is
+    // what an unheld role must mean — not an absent condition.
+    conditions.push(inArray(principal.id, holders))
+  }
   const where = conditions.length === 0 ? undefined : and(...conditions)
 
   const total = db.select({ n: count() }).from(principal).where(where).get()?.n ?? 0

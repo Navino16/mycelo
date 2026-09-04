@@ -18,10 +18,11 @@ import { registerPluginRoutes } from './routes/plugins.js'
 import { registerRegistryRoutes } from './routes/registry.js'
 import { registerRoleRoutes } from './routes/roles.js'
 import { registerSourceRoutes } from './routes/sources.js'
+import { registerSubstrateRoutes } from './routes/substrate.js'
 import { describeFault } from '../support/thrown.js'
 
-// Both roots, tried in order: a real build the day phase 9 produces one, the committed
-// sentinel until then. dist/ is gitignored, so public/ is the only one in the tree today.
+// Both roots, tried in order: dist/ if the SPA has been built (gitignored, so absent on
+// a fresh checkout), then public/'s committed sentinel, which is what a fresh checkout serves.
 const UI_ROOTS = [
   fileURLToPath(new URL('../../../ui/dist', import.meta.url)),
   fileURLToPath(new URL('../../../ui/public', import.meta.url)),
@@ -101,6 +102,7 @@ export function createServer(options: ServerOptions): FastifyInstance {
     registerAuthRoutes(app, options.state)
     registerHealthRoutes(app, options.state)
     registerConfigRoutes(app, options.state)
+    registerSubstrateRoutes(app, options.state)
     registerPeopleRoutes(app, options.state)
     registerPluginRoutes(app, options.state)
     registerRoleRoutes(app, options.state)

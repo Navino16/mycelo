@@ -1,5 +1,7 @@
 import { and, eq } from 'drizzle-orm'
-import type { FormSchema, PluginInfo, SporeKind } from '@mycelo/septum'
+import type { FormSchema, Manifest, PluginInfo, SporeKind } from '@mycelo/septum'
+import { discover } from '../germination/discover.js'
+import { isFailure, readManifest } from '../germination/manifest.js'
 import type { Registry } from '../germination/registry.js'
 import type { Db } from '../persistence/db.js'
 import { pluginSetting } from '../persistence/schema.js'
@@ -55,11 +57,13 @@ export function listPlugins(registry: Registry, sporesDirs: readonly string[], d
     ...registry.rhizas.map((r) => ({ name: r.name, kind: r.manifest.kind, commands: [], state: 'germinated' as const, enabled: true, ...from(r.name) })),
     ...registry.inhibitors.map((i) => ({ name: i.name, kind: i.manifest.kind, commands: [], state: 'germinated' as const, enabled: true, ...from(i.name) })),
   ]
-  // Dormant carries no kind: a spore may fail before its manifest ever parses. `enabled`
-  // is what germination saw, like every other entry here — an operator's later toggle is
-  // only reflected by the next germination.
+  // A dormant spore has no manifest in the registry, but its install row recorded the kind
+  // the day the manifest first parsed; only a spore that never parsed has none (plan defect 29).
+  // `enabled` is what germination saw — an operator's later toggle waits for the next one.
+  const recordedKind = new Map(installs.map((i) => [i.name, i.kind as SporeKind]))
   const dormant: PluginInfo[] = registry.dormant.map((d) => ({
     name: d.name,
+    ...(recordedKind.has(d.name) ? { kind: recordedKind.get(d.name) } : {}),
     commands: [],
     state: 'dormant' as const,
     reason: d.reason,
@@ -89,6 +93,37 @@ export function listPlugins(registry: Registry, sporesDirs: readonly string[], d
       }]
     })
   return [...germinated, ...dormant, ...rest]
+}
+
+export interface PluginFacts {
+  description?: string
+  /** Declared names, before any alias. */
+  commands: readonly string[]
+}
+
+/**
+ * Description and declared commands per plugin name (inventory §3 rows 4 and 11). One
+ * directory walk, never one per plugin: findSpore() re-walks every time.
+ */
+export function manifestFactsByName(
+  registry: Registry, sporesDirs: readonly string[],
+): ReadonlyMap<string, PluginFacts> {
+  const facts = new Map<string, PluginFacts>()
+  const put = (manifest: Manifest): void => {
+    if (facts.has(manifest.name)) return
+    facts.set(manifest.name, {
+      ...(manifest.description === undefined ? {} : { description: manifest.description }),
+      commands: manifest.kind === 'enzyme' ? manifest.commands.map((c) => c.name) : [],
+    })
+  }
+  for (const spore of [...registry.hyphae, ...registry.rhizas, ...registry.enzymes, ...registry.inhibitors]) {
+    put(spore.manifest)
+  }
+  for (const location of discover(sporesDirs)) {
+    const read = readManifest(location)
+    if (!isFailure(read)) put(read.manifest)
+  }
+  return facts
 }
 
 // The published contract says enable() rejects; enablePlugin() returns a refusal object,

@@ -55,15 +55,25 @@ export function registerContext(app: FastifyInstance, state: RuntimeState): void
   })
 
   // Refines the header-only guess above with the principal's own saved preference, once the
-  // gate has resolved one — the one query this already paid for before task 10.5.
+  // gate has resolved one — the one query this already paid for before task 10.5. The explicit
+  // override (task 9.5.2) beats even that: it is the UI naming its own chrome language.
   app.addHook('preHandler', (request, _reply, done) => {
     if (request.principalId !== undefined) {
-      const saved = state.db.select({ locale: principal.locale }).from(principal)
-        .where(eq(principal.id, request.principalId)).get()?.locale ?? null
-      if (saved !== null) request.locale = saved
+      const principalLocale = state.db.select({ locale: principal.locale }).from(principal)
+        .where(eq(principal.id, request.principalId)).get()?.locale ?? undefined
+      request.locale = overrideLocale(request, state.translator.availableLocales())
+        ?? principalLocale
+        ?? headerLocale(state, request)
     }
     done()
   })
+}
+
+/** spec §11. A distinct header, never Accept-Language: a browser always sends that one. */
+function overrideLocale(request: FastifyRequest, available: readonly string[]): string | undefined {
+  const asked = request.headers['x-mycelo-locale']
+  if (typeof asked !== 'string') return undefined
+  return available.includes(asked) ? asked : undefined
 }
 
 /** Accept-Language ?? default — no query. The final answer for a request with no principal. */

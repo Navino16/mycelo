@@ -39,9 +39,26 @@ export interface GerminatedInhibitor {
   config: unknown
 }
 
+/** One `requires:` entry of a dormant spore, flattened: every alternative of an `any_of`. */
+export interface DormantRequirement {
+  targets: readonly string[]
+  optional: boolean
+  /**
+   * The alternative an `any_of` collapsed to, when one was chosen: the only target this spore
+   * would have wired, and so the only edge /api/graph may draw for it (ruling F9).
+   */
+  chosen?: string
+}
+
 export interface Dormant {
   name: string
   reason: string
+  /**
+   * The targets its manifest declared, absent when the manifest never parsed. A dormant spore
+   * has no manifest here and no `resolved`, so this is the only record of the dependency that
+   * broke — the one edge /api/graph exists to draw (ruling F9).
+   */
+  requires?: readonly DormantRequirement[]
 }
 
 /** Which enzyme answers a command, and under which plugin it is authorized. */

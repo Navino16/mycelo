@@ -4,8 +4,8 @@ import type { MyceliumScope, SporeKind } from '@mycelo/septum'
 import type { RuntimeState } from '../../boot/state.js'
 import { enablePlugin } from '../../config/lifecycle.js'
 import {
-  formSchemaOf, listPlugins, provenanceByName, redactSecrets, rejectedSettings, rewriteSetting, secretKeysOf,
-  undeclaredKeys,
+  formSchemaOf, listPlugins, manifestFactsByName, provenanceByName, redactSecrets, rejectedSettings,
+  rewriteSetting, secretKeysOf, undeclaredKeys,
 } from '../../config/plugins.js'
 import { getInstall, listInstalls, setEnabled } from '../../config/store.js'
 import { findSpore } from '../../config/lifecycle.js'
@@ -21,6 +21,10 @@ export interface PluginDto {
   name: string
   /** Absent only for a `registry.dormant` entry whose manifest never parsed (spec §8). */
   kind?: SporeKind
+  /**
+   * Declared command names. Non-empty for a dormant, disabled or pending enzyme too, unlike
+   * septum's PluginInfo.commands (inventory §3 row 11).
+   */
   commands: readonly string[]
   state: 'germinated' | 'dormant' | 'disabled' | 'pending' | 'unknown'
   reason?: string
@@ -32,6 +36,8 @@ export interface PluginDto {
    */
   source?: string
   strain?: string
+  /** The manifest's own one-line description. Absent when the manifest declares none. */
+  description?: string
 }
 
 /**
@@ -79,16 +85,23 @@ function pluginsOf(state: RuntimeState): readonly PluginDto[] {
     }))
   }
   const { registry } = state.germination.mycelium
-  return listPlugins(registry, state.config.discoveryDirs, state.db).map((info) => ({
-    name: info.name,
-    ...(info.kind === undefined ? {} : { kind: info.kind }),
-    commands: info.commands,
-    state: info.state,
-    ...(info.reason === undefined ? {} : { reason: info.reason }),
-    enabled: installs.get(info.name)?.enabled ?? info.enabled,
-    ...(info.source === undefined ? {} : { source: info.source }),
-    ...(info.strain === undefined ? {} : { strain: info.strain }),
-  }))
+  const facts = manifestFactsByName(registry, state.config.discoveryDirs)
+  return listPlugins(registry, state.config.discoveryDirs, state.db).map((info) => {
+    const fact = facts.get(info.name)
+    return {
+      name: info.name,
+      ...(info.kind === undefined ? {} : { kind: info.kind }),
+      // listPlugins answers [] for anything not germinated (config/plugins.ts); the manifest
+      // still declares them, and 1c's dead-command list is exactly that set.
+      commands: info.commands.length > 0 ? info.commands : fact?.commands ?? [],
+      ...(fact?.description === undefined ? {} : { description: fact.description }),
+      state: info.state,
+      ...(info.reason === undefined ? {} : { reason: info.reason }),
+      enabled: installs.get(info.name)?.enabled ?? info.enabled,
+      ...(info.source === undefined ? {} : { source: info.source }),
+      ...(info.strain === undefined ? {} : { strain: info.strain }),
+    }
+  })
 }
 
 /**
@@ -176,7 +189,11 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
   app.get('/api/plugins/:name/schema', async (request) => {
     const { name } = request.params as { name: string }
     requireInstalled(state, name)
-    return await formSchemaOf(state.db, state.config.discoveryDirs, name)
+    const form = await formSchemaOf(state.db, state.config.discoveryDirs, name)
+    if (!form.available) return form
+    // A never-yet-filled credential is in neither the schema nor the redacted settings,
+    // so without this the form renders it as an ordinary text input.
+    return { ...form, secrets: await secretKeysOf(state.db, state.config.discoveryDirs, name) }
   })
 
   app.get('/api/plugins/:name/settings', (request) => {

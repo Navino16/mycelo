@@ -32,6 +32,13 @@ export function classifyGerminationFailure(e: unknown): GerminationFailure {
 export interface RuntimeState {
   readonly config: Bootstrap
   readonly db: Db
+  /** When serve() built this state. One per boot, unlike a module-load constant. */
+  readonly startedAt: Date
+  /**
+   * Survives every germination retry, unlike the admission chain that reads it: a fresh
+   * chain is built each retry, so the count itself must live outside it (design §7).
+   */
+  readonly refusals: { blocked: number }
   /** Replaced by phase 2 once spore catalogues load; core-only until then (spec §3). */
   translator: Translator
   germination: Germination
@@ -42,5 +49,8 @@ export interface RuntimeState {
 export function createRuntimeState(
   config: Bootstrap, db: Db, translator: Translator,
 ): RuntimeState {
-  return { config, db, translator, germination: { status: 'starting' } }
+  return {
+    config, db, startedAt: new Date(), refusals: { blocked: 0 }, translator,
+    germination: { status: 'starting' },
+  }
 }
