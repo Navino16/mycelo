@@ -208,7 +208,9 @@ const NEEDS_TWO_FIELDS_MODULE = `
     configSchema: { safeParse: () => ({
       success: false,
       error: { issues: [
-        { path: ['host'], message: 'host is required', messageKey: { domain: 'common', key: 'refusal.config.invalidType' }, params: { expected: 'string' } },
+        // 'expected' collides between the ref's own params and the issue's: pins that the
+        // issue-level value wins, matching renderConfigIssue's identical precedence.
+        { path: ['host'], message: 'host is required', messageKey: { domain: 'common', key: 'refusal.config.invalidType', params: { expected: 'string' } }, params: { expected: 'number' } },
         { path: ['port'], message: 'port is required', messageKey: { domain: 'common', key: 'refusal.config.invalidType' }, params: { expected: 'number' } },
       ] },
     }) },
@@ -285,9 +287,11 @@ it('an incomplete configuration carries every issue as a ref', async () => {
   const result = await enablePlugin(db, [dir], 'needs-two-fields')
   if (result.ok) throw new Error('expected a refusal')
   expect(result.refusal.key).toBe('refusal.config.incomplete')
-  const issues = result.refusal.params?.['issues'] as readonly { domain: string, key: string }[]
+  const issues = result.refusal.params?.['issues'] as readonly { domain: string, key: string, params?: Record<string, unknown> }[]
   expect(issues).toHaveLength(2)
   expect(issues.map((i) => i.domain)).toEqual(['common', 'common'])
+  // The issue's own params must win over the messageKey ref's own, pinning the merge order.
+  expect(issues[0]?.params?.['expected']).toBe('number')
   close()
 })
 
