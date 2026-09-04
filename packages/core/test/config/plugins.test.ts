@@ -44,9 +44,8 @@ it('a rejected value is reported once the schema carries a declared issue', asyn
 })
 
 // Named for what it refuses, not for a real spore: a fixture called `plex` would read as that
-// published rhiza. Duck-typed like the fixtures below — a spore under /tmp cannot resolve zod —
-// but its issue carries a messageKey ref shaped the way septum's toConfigIssue builds one
-// (config.ts:69), so this is the first proof the renderer and the catalogues meet in practice.
+// published rhiza. Its messageKey is a ref, shaped the way septum's toConfigIssue builds one for
+// a mapped `too_small` issue (config.ts:69).
 function minPort(): void {
   mkdirSync(join(dir, 'minport', 'src'), { recursive: true })
   writeFileSync(
@@ -90,6 +89,42 @@ it('undeclaredSecretsRefusal carries the count its plural needs', () => {
   })
   // The plural case: a count the message's `one` branch does not match.
   expect(undeclaredSecretsRefusal(['a', 'b']).params?.['count']).toBe(2)
+})
+
+// Installed under a real catalogue domain's own name, so a bare-string messageKey resolves
+// through the shipped `common` catalogue instead of falling back — the only way to pin that
+// rejectedSettings threads its `name` argument into renderConfigIssue's `domain` parameter.
+function ownDomainName(): void {
+  mkdirSync(join(dir, 'common', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'common', 'spore.yaml'),
+    'kind: enzyme\nname: common\nseptum: "^0.11"\n'
+      + 'commands:\n  - name: common\n    description: x\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(
+    join(dir, 'common', 'src/index.ts'),
+    'export default {\n'
+      + '  configSchema: {\n'
+      + '    safeParse: () => ({ success: false, error: { issues: [{\n'
+      + '      path: ["address"], message: "not a valid email",\n'
+      + '      messageKey: "refusal.config.invalidFormat",\n'
+      + '      params: { format: "email" },\n'
+      + '    }] } }),\n'
+      + '  },\n'
+      + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+      + '}\n',
+    'utf8',
+  )
+}
+
+it('renders a bare-string messageKey through the plugin name as domain', async () => {
+  const { db, close } = fresh()
+  ownDomainName()
+  recordInstall(db, 'common', 'enzyme')
+  const rejected = await rejectedSettings(db, [dir], 'common', { address: 'x' }, translator, 'fr')
+  expect(rejected).toEqual([{ key: 'address', messages: ["n'est pas un email valide"] }])
+  close()
 })
 
 // Duck-typed like the fixtures in lifecycle.test.ts: a spore in a temporary directory
