@@ -167,10 +167,13 @@ describe('/api/plugins', () => {
     const body = response.json<{ error: { message: string, detail: string } }>()
     // Rendered text: the message itself, not only detail, must be the real sentence.
     expect(body.error.message).toBe("plugin 'needs-config' could not be enabled")
-    // Rendered here (task 11), through the same `refusal.config.incomplete` catalogue entry as
-    // the locale test below. The repeated sentence, not a field name, is the plural signal: an
-    // error built from issues[0] would render it only once.
-    expect(body.error.detail).toBe('configuration is incomplete: missing required field, missing required field')
+    // Both field names, through `refusal.config.issueAt`'s nesting (§2.4): an implementation
+    // that dropped the issue's path renders two identical clauses naming nothing, and one built
+    // from issues[0] renders one clause.
+    expect(body.error.detail).toContain('url')
+    expect(body.error.detail).toContain('token')
+    expect(body.error.detail)
+      .toBe('configuration is incomplete: url: missing required field, token: missing required field')
   })
 
   it('renders that same refusal in the request locale, and differently in each', async () => {
@@ -184,9 +187,10 @@ describe('/api/plugins', () => {
     })
     // The discriminating fixture: without a second locale, a hardcoded French string would pass.
     expect(en.json<{ error: { detail: string } }>().error.detail)
-      .toBe('configuration is incomplete: missing required field, missing required field')
+      .toBe('configuration is incomplete: url: missing required field, token: missing required field')
+    // The French joiner too: `issueAt` carries its own typography per locale.
     expect(fr.json<{ error: { detail: string } }>().error.detail)
-      .toBe('la configuration est incomplète : missing required field, missing required field')
+      .toBe('la configuration est incomplète : url : missing required field, token : missing required field')
   })
 
   it('serves a JSON Schema a form generator can use', async () => {
@@ -239,7 +243,9 @@ describe('/api/plugins', () => {
     expect(body.error.detail).toEqual(['bogus', 'alsoBogus'])
     // The message still names them too, in order — this is what item 2's rendered-text
     // rule pins for this key.
-    expect(body.error.message).toBe("plugin 'needs-config' declares no setting named: bogus, alsoBogus")
+    // The `common` wording the mycelium's own refusal uses, plural branch included: the route
+    // no longer carries a `core` twin of this verdict.
+    expect(body.error.message).toBe("plugin 'needs-config' declares no settings: bogus, alsoBogus")
     // The whole write is refused: a partial write would leave 'url' recorded.
     expect(served.state.db.select().from(pluginSetting).all()).toEqual([])
   })
@@ -338,7 +344,7 @@ describe('/api/plugins', () => {
     expect(refused.statusCode).toBe(400)
     expect(refused.json<{ error: { message: string, detail: string[] } }>().error).toMatchObject({
       code: 'validation',
-      message: "plugin 'strict' declares no setting named: nope",
+      message: "plugin 'strict' declares no setting: nope",
       detail: ['nope'],
     })
     // Not simply refusing everything: the declared key still writes.

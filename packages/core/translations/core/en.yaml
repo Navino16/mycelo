@@ -23,7 +23,6 @@ api:
   commandNotFound: "plugin ''{plugin}'' declares no command named ''{command}''"
   aliasRefused: "the alias for ''{plugin}.{command}'' was refused"
   aliasManifestUnreadable: "plugin ''{plugin}'' has no readable manifest on disk"
-  pluginSettingUndeclared: "plugin ''{plugin}'' declares no setting named: {keys}"
   pluginSettingInvalid: "plugin ''{plugin}'' rejected the value given for: {keys}"
   germinationNotDegraded: "germination can only be retried while the runtime is degraded"
   routeNotFound: "no route for ''{path}''"

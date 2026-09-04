@@ -5,7 +5,8 @@ import { afterEach, beforeEach, expect, it } from 'bun:test'
 import type { Logger } from '@mycelo/septum'
 import { readSettings, recordInstall, writeSetting } from '../../src/config/store.js'
 import {
-  listPlugins, redactSecrets, rejectedSettings, undeclaredSecretsRefusal, writeDeclaredSetting,
+  describeUndeclaredSecrets, listPlugins, redactSecrets, rejectedSettings, undeclaredSecretsRefusal,
+  writeDeclaredSetting,
 } from '../../src/config/plugins.js'
 import { REDACTED } from '../../src/support/redaction.js'
 import type { Db } from '../../src/persistence/db.js'
@@ -15,6 +16,7 @@ import { addSource, listSources, seedOfficialSource } from '../../src/sporangium
 import { describeConfigError } from '../../src/support/thrown.js'
 import { emptyRegistry } from '../support/registry.js'
 import { loadCoreCatalogs } from '../../src/i18n/core-catalogs.js'
+import { renderRefusal } from '../../src/i18n/refusal.js'
 import { createTranslator } from '../../src/i18n/translator.js'
 
 const SPORES = [resolve(import.meta.dirname, '../../../../fixtures')]
@@ -89,6 +91,16 @@ it('undeclaredSecretsRefusal carries the count its plural needs', () => {
   })
   // The plural case: a count the message's `one` branch does not match.
   expect(undeclaredSecretsRefusal(['a', 'b']).params?.['count']).toBe(2)
+})
+
+// The two spellings of one verdict, byte for byte: germination still builds the English by hand
+// while enablePlugin renders the catalogue, and nothing else holds them together until the
+// companion plan migrates the dormancy reasons. Both counts, or the plural halves drift alone.
+it('spells the undeclared-secret verdict identically by hand and through the catalogue', () => {
+  for (const keys of [['token'], ['a', 'b']]) {
+    expect(renderRefusal(translator, undeclaredSecretsRefusal(keys), 'en'))
+      .toBe(describeUndeclaredSecrets(keys))
+  }
 })
 
 // Installed under a real catalogue domain's own name, so a bare-string messageKey resolves

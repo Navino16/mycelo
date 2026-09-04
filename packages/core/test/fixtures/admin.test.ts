@@ -1,8 +1,12 @@
 import { resolve } from 'node:path'
 import { expect, it } from 'bun:test'
 import { MYCELIUM_SCOPES } from '@mycelo/septum'
-import type { EnzymeContext, Invocation, Translate, TranslatableRef } from '@mycelo/septum'
+import type { EnzymeContext, Invocation, Logger, Translate, TranslatableRef } from '@mycelo/septum'
 import { readManifest } from '../../src/germination/manifest.js'
+import { undeclaredSecretsRefusal } from '../../src/config/plugins.js'
+import { bindTranslate } from '../../src/i18n/bind.js'
+import { loadCoreCatalogs } from '../../src/i18n/core-catalogs.js'
+import { createTranslator } from '../../src/i18n/translator.js'
 import module from '../../../../fixtures/admin/src/index.js'
 
 function invocation(args: Record<string, string>, message: Partial<Invocation['message']> = {}): Invocation {
@@ -88,6 +92,83 @@ it('plugin-enable renders the refusal through ctx.t rather than reporting succes
   await module.create().handlers['handlePluginEnable']?.(invocation({ name: 'needs-config' }), ctx)
   // The refusal, not "enabled needs-config": a dropped `ok` check reads a refusal as success.
   expect(replies).toEqual(['common/refusal.config.incomplete'])
+})
+
+const silent: Logger = { info() {}, warn() {}, error() {}, debug() {}, child: () => silent }
+
+/**
+ * The real binding over the shipped catalogues: the stub `t` above renders `domain/key` and can
+ * therefore never see a parameter. Design §3 assigns the channel surface to `ctx.t`, so this is
+ * the one place the flagship refusal's own sentence is measured.
+ */
+function realT(locale: string): Translate {
+  return bindTranslate({
+    translator: createTranslator({ defaultLocale: 'en', logger: silent, catalogs: loadCoreCatalogs() }),
+    domain: 'admin',
+    allowed: new Set(),
+    localeOf: () => locale,
+  })
+}
+
+/** Exactly what enablePlugin builds: two issues, each wrapped in `issueAt` by its path (§2.4). */
+const INCOMPLETE: TranslatableRef = {
+  domain: 'common',
+  key: 'refusal.config.incomplete',
+  params: {
+    issues: [
+      {
+        domain: 'common',
+        key: 'refusal.config.issueAt',
+        params: {
+          field: 'url',
+          cause: { domain: 'common', key: 'refusal.config.invalidType', params: { expected: 'string' } },
+        },
+      },
+      {
+        domain: 'common',
+        key: 'refusal.config.issueAt',
+        params: {
+          field: 'port',
+          cause: { domain: 'common', key: 'refusal.config.tooSmall', params: { origin: 'number', minimum: 1 } },
+        },
+      },
+    ],
+  },
+}
+
+it('renders an incomplete-configuration refusal through the real ctx.t, in both locales', async () => {
+  const rendered: Record<string, string> = {}
+  for (const locale of ['en', 'fr']) {
+    const replies: string[] = []
+    const ctx = stubContext(
+      { enable: () => Promise.resolve({ ok: false, refusal: INCOMPLETE }) },
+      replies,
+      { t: realT(locale) },
+    )
+    await module.create().handlers['handlePluginEnable']?.(invocation({ name: 'needs-config' }), ctx)
+    rendered[locale] = replies[0] ?? ''
+  }
+  // Both locales, and the whole sentence: an array of refs left unresolved renders
+  // ',[object Object],[object Object]' with no assertion on the nested half able to see it.
+  expect(rendered['en'])
+    .toBe('configuration is incomplete: url: expected string, port: must be at least 1')
+  expect(rendered['fr'])
+    .toBe('la configuration est incomplète : url : attend string, port : doit valoir au moins 1')
+})
+
+it('renders an undeclared-secret refusal through the real ctx.t, joining its keys', async () => {
+  const replies: string[] = []
+  const ctx = stubContext(
+    { enable: () => Promise.resolve({ ok: false, refusal: undeclaredSecretsRefusal(['token', 'apiKey']) }) },
+    replies,
+    { t: realT('fr') },
+  )
+  await module.create().handlers['handlePluginEnable']?.(invocation({ name: 'vault' }), ctx)
+  // Two keys, so the plural branch and the join are both exercised: a bare array reaches ICU
+  // as a non-primitive and comes back with a leading comma.
+  expect(replies[0]).toBe(
+    "la configuration déclare des secrets 'token', 'apiKey' que le schéma ne possède pas",
+  )
 })
 
 it('plugin-disable reports success', async () => {

@@ -9,8 +9,14 @@ import { loadCatalogs } from './catalog.js'
 // `../../translations` reaches the same directory from either.
 export const CORE_TRANSLATIONS_DIR = join(import.meta.dirname, '../../translations')
 
+/** The runtime's own domain, closed to plugins: its messages change without notice for them. */
+export const CORE_DOMAIN = 'core'
+
+/** design §4: the one core-owned domain a spore may read without declaring it. */
+export const SHARED_DOMAIN = 'common'
+
 /** The two domains the runtime owns; asserted present at boot by assertCoreCatalogs. */
-export const CORE_OWNED_DOMAINS = ['core', 'common'] as const
+export const CORE_OWNED_DOMAINS = [CORE_DOMAIN, SHARED_DOMAIN] as const
 
 /**
  * The runtime's own domains. Every subdirectory is one domain, named by the directory.

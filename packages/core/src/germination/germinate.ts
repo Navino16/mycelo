@@ -5,6 +5,7 @@ import type { Enzyme, Hypha, Inhibitor, Logger, Manifest, Rhiza } from '@mycelo/
 import { describeUndeclaredSecrets, undeclaredSecretKeys } from '../config/plugins.js'
 import { getInstall } from '../config/store.js'
 import { loadCatalogs } from '../i18n/catalog.js'
+import { CORE_DOMAIN, SHARED_DOMAIN } from '../i18n/core-catalogs.js'
 import type { LocaleMessages } from '../i18n/catalog.js'
 import type { Db } from '../persistence/db.js'
 import { describeConfigError } from '../support/thrown.js'
@@ -123,7 +124,7 @@ export async function germinate(
     }
     // design §3: the runtime owns these two domains, and a spore taking either would
     // replace the bot's own refusal sentences.
-    if (manifest.name === 'core' || manifest.name === 'common') {
+    if (manifest.name === CORE_DOMAIN || manifest.name === SHARED_DOMAIN) {
       const reason = `'${manifest.name}' is a reserved translation domain`
       dormant.push({ name: manifest.name, reason })
       failed.set(manifest.name, reason)

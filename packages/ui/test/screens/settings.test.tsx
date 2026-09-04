@@ -507,9 +507,9 @@ describe('the generated settings form', () => {
     }
   })
 
-  // Task 12: the sentence is the shipped `refusal.config.incomplete` rendering (renderRefusal
-  // joins each zod issue's own `message`, with no path prefix) — not the hand-built
-  // "field: required" phrasing the fixture carried before task 11 shipped it server-side.
+  // The server renders the whole sentence (§3), field name included, and the SPA shows it
+  // verbatim — so the fixture is a real `refusal.config.incomplete` rendering with its
+  // `issueAt` prefix, and the assertion is what proves the field name survives to the screen.
   it('renders the refusal naming the missing field when enabling fails', async () => {
     mockVault({
       detail: DISABLED,
@@ -519,7 +519,7 @@ describe('the generated settings form', () => {
         body: {
           error: {
             message: 'refused',
-            detail: 'configuration is incomplete: Invalid input: expected string, received undefined',
+            detail: 'configuration is incomplete: token: expected string, received undefined',
           },
         },
       },
@@ -530,8 +530,10 @@ describe('the generated settings form', () => {
     fireEvent.click(screen.getByRole('switch'))
 
     await waitFor(() => {
-      expect(screen.getByText('configuration is incomplete: Invalid input: expected string, received undefined'))
-        .toBeDefined()
+      const shown = screen.getByText('configuration is incomplete: token: expected string, received undefined')
+      // The field name, not only the sentence: a detail rendered with the path stripped out
+      // reaches the operator naming nothing to fix.
+      expect(shown.textContent).toContain('token')
     })
   })
 

@@ -12,7 +12,7 @@ import { findSpore } from '../../config/lifecycle.js'
 import { demandsOf } from '../../germination/requirements.js'
 import type { SporeDemands } from '../../germination/requirements.js'
 import { isFailure } from '../../germination/manifest.js'
-import { badRequest, notFound } from '../errors.js'
+import { badRequest, badRequestRefusal, notFound } from '../errors.js'
 import { parseBody } from '../parse.js'
 import { AliasRefused, clearAlias, setAlias } from '../../rhizomorph/aliases.js'
 import { describeThrown } from '../../support/thrown.js'
@@ -219,9 +219,14 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     const form = await formSchemaOf(state.db, state.config.discoveryDirs, name)
     const bad = undeclaredKeys(form, keys)
     if (bad.length > 0) {
-      // detail carries the structure (§9): a form wanting to highlight fields would
+      // One wording for this verdict, shared with the mycelium's own `setting-undeclared`
+      // refusal (§4). detail keeps the structure: a form wanting to highlight fields would
       // otherwise have to parse the localized sentence back apart.
-      throw badRequest('api.pluginSettingUndeclared', { plugin: name, keys: bad.join(', ') }, bad)
+      throw badRequestRefusal(
+        'setting-undeclared',
+        { plugin: name, count: bad.length, keys: bad.join(', ') },
+        bad,
+      )
     }
     // Declared is not valid: without this an enabled plugin takes a value that makes it
     // dormant at the next boot, which is the failure enablePlugin() exists to prevent (§8).

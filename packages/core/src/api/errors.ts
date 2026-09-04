@@ -1,4 +1,5 @@
 import type { RefusalCode } from '../authorization/refusal.js'
+import { SHARED_DOMAIN } from '../i18n/core-catalogs.js'
 import { refusalKeyOf } from '../mycelium-refusal.js'
 
 export class ApiError extends Error {
@@ -43,9 +44,10 @@ export const degradedError = (key: string, params?: Record<string, unknown>): Ap
  * `common` entry, so the two audiences cannot drift apart. The status stays the route's choice,
  * and the params are the thrower's — it is the only side that knows which argument the code names.
  */
-export const badRequestRefusal = (code: RefusalCode, params?: Record<string, unknown>): ApiError =>
-  new ApiError(400, 'validation', refusalKeyOf(code), params, undefined, 'common')
+export const badRequestRefusal = (
+  code: RefusalCode, params?: Record<string, unknown>, detail?: unknown,
+): ApiError => new ApiError(400, 'validation', refusalKeyOf(code), params, detail, SHARED_DOMAIN)
 export const notFoundRefusal = (code: RefusalCode, params?: Record<string, unknown>): ApiError =>
-  new ApiError(404, 'not-found', refusalKeyOf(code), params, undefined, 'common')
+  new ApiError(404, 'not-found', refusalKeyOf(code), params, undefined, SHARED_DOMAIN)
 export const conflictRefusal = (code: RefusalCode, params?: Record<string, unknown>): ApiError =>
-  new ApiError(409, 'conflict', refusalKeyOf(code), params, undefined, 'common')
+  new ApiError(409, 'conflict', refusalKeyOf(code), params, undefined, SHARED_DOMAIN)

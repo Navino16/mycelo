@@ -4,8 +4,9 @@ import { StoreRefusal } from '../authorization/refusal.js'
 import { discover } from '../germination/discover.js'
 import { isFailure, readManifest } from '../germination/manifest.js'
 import type { Registry } from '../germination/registry.js'
-import type { Translator } from '../i18n/translator.js'
+import { SHARED_DOMAIN } from '../i18n/core-catalogs.js'
 import { renderConfigIssue } from '../i18n/refusal.js'
+import type { Translator } from '../i18n/translator.js'
 import type { Db } from '../persistence/db.js'
 import { pluginSetting } from '../persistence/schema.js'
 import { listSources } from '../sporangium/sources.js'
@@ -165,8 +166,9 @@ export function undeclaredSecretKeys(configSchema: unknown): readonly string[] {
   return undeclaredKeys(formSchemaFor(configSchema), keys)
 }
 
-// One wording for germination's dormancy reason and enablePlugin's refusal: two spellings of
-// one verdict would drift, and the operator meets whichever surface they reached first.
+// Germination's dormancy reason, which is still an English string until the companion plan
+// migrates it. Pinned byte-for-byte against `refusal.config.undeclaredSecrets`'s own `en`
+// rendering by plugins.test.ts, so the two spellings of one verdict cannot drift.
 export function describeUndeclaredSecrets(keys: readonly string[]): string {
   const named = keys.map((k) => `'${k}'`).join(', ')
   const noun = keys.length === 1 ? 'a secret' : 'secrets'
@@ -174,13 +176,12 @@ export function describeUndeclaredSecrets(keys: readonly string[]): string {
 }
 
 /**
- * The same verdict as `describeUndeclaredSecrets`, as a ref. Both exist only until the companion
- * plan migrates germination's dormancy reasons — `refusal.config.undeclaredSecrets` carries the
- * `count` its own plural needs, so the two cannot spell the verdict differently.
+ * The same verdict as `describeUndeclaredSecrets`, as a ref, for `enablePlugin`. Both exist only
+ * until the companion plan migrates germination's dormancy reasons.
  */
 export function undeclaredSecretsRefusal(keys: readonly string[]): TranslatableRef {
   return {
-    domain: 'common',
+    domain: SHARED_DOMAIN,
     key: 'refusal.config.undeclaredSecrets',
     params: { count: keys.length, keys: keys.map((k) => `'${k}'`) },
   }
@@ -246,7 +247,8 @@ export async function writeDeclaredSetting(
   const form = await formSchemaOf(db, sporesDirs, name)
   if (undeclaredKeys(form, [key]).length > 0) {
     throw new StoreRefusal(
-      'setting-undeclared', `plugin '${name}' declares no setting '${key}'`, { plugin: name, key },
+      'setting-undeclared', `plugin '${name}' declares no setting '${key}'`,
+      { plugin: name, count: 1, keys: key },
     )
   }
   rewriteSetting(db, name, key, value, await secretKeysOf(db, sporesDirs, name))

@@ -11,7 +11,7 @@ refusal:
     unreadableManifest: "spore ''{plugin}'' has an unreadable manifest: {detail}"
     septumIncompatible: "spore ''{plugin}'' {detail}"
     loadFailed: "spore ''{plugin}'' failed to load: {detail}"
-    settingUndeclared: "plugin ''{plugin}'' declares no setting ''{key}''"
+    settingUndeclared: "plugin ''{plugin}'' declares no {count, plural, one{setting} other{settings}}: {keys}"
   role:
     notFound: "role ''{role}'' does not exist"
     exists: "role ''{role}'' already exists"
@@ -31,6 +31,7 @@ refusal:
     invalidValue: "must be one of: {values}"
     notMultipleOf: "must be a multiple of {divisor}"
     unrecognizedKeys: "declares no setting named: {keys}"
+    issueAt: "{field}: {cause}"
     incomplete: "configuration is incomplete: {issues}"
     validationThrew: "configuration is incomplete: validating it threw: {detail}"
     undeclaredSecrets: "configuration declares {count, plural, one{a secret} other{secrets}} {keys} the schema does not have"

@@ -96,9 +96,17 @@ it('sync leaves the row of a spore that has disappeared from disk', () => {
   close()
 })
 
-// Renamed from 'and names the path': the temp spore's schema is hand-written, so what
-// this proves is that enablePlugin carries the schema's own reason through unaltered.
-it('enabling refuses while a required setting is missing, and carries the schema\'s reason through', async () => {
+type Ref = { domain: string, key: string, params?: Record<string, unknown> }
+
+/** The ref an issue's `issueAt` wrapper quotes, with the field name it was wrapped under. */
+function causeOf(ref: Ref): { field: unknown, cause: Ref } {
+  expect(ref).toMatchObject({ domain: 'common', key: 'refusal.config.issueAt' })
+  return { field: ref.params?.['field'], cause: ref.params?.['cause'] as Ref }
+}
+
+// The path is named again, through `issueAt` (§2.4), and the schema's own reason still travels
+// through unaltered — the temp spore's schema is hand-written, so both halves are its own.
+it('enabling refuses while a required setting is missing, naming the field and its reason', async () => {
   const { db, close } = fresh()
   needsConfig()
   recordInstall(db, 'needs-config', 'enzyme')
@@ -106,8 +114,10 @@ it('enabling refuses while a required setting is missing, and carries the schema
   expect(result.ok).toBe(false)
   if (!result.ok) {
     expect(result.refusal.key).toBe('refusal.config.incomplete')
-    const issues = result.refusal.params?.['issues'] as readonly { domain: string, key: string }[]
-    expect(issues[0]?.key).toContain('url')
+    const issues = result.refusal.params?.['issues'] as readonly Ref[]
+    expect(causeOf(issues[0] as Ref)).toEqual({
+      field: 'url', cause: { domain: 'common', key: "'url' must be a non-empty string" },
+    })
   }
   expect(getInstall(db, 'needs-config')?.enabled).toBe(false)
   close()
@@ -270,6 +280,49 @@ function handRolled(): void {
   })
 }
 
+// A `messageKey` that looks like a ref and is not one: `domain` alone, no `key`. isRef rejects it,
+// an inline `key.domain === 'common'` test does not.
+const MALFORMED_KEY_MODULE = `
+  export default {
+    configSchema: { safeParse: () => ({
+      success: false,
+      error: { issues: [
+        { path: ['url'], message: 'url must be a url', messageKey: { domain: 'common' } },
+      ] },
+    }) },
+    create: () => ({ handlers: {} }),
+  }
+`
+
+function malformedKey(): void {
+  spore('malformed-key', {
+    'spore.yaml': 'kind: enzyme\nname: malformed-key\nseptum: "^0.11"\n'
+      + 'commands:\n  - name: malformed-key\n    description: x\n    respond: hi\n',
+    'src/index.ts': MALFORMED_KEY_MODULE,
+  })
+}
+
+// An object-level .refine(): zod carries `path: []` for one, so there is no field to name.
+const WHOLE_OBJECT_MODULE = `
+  export default {
+    configSchema: { safeParse: () => ({
+      success: false,
+      error: { issues: [
+        { path: [], message: 'config.mutually.exclusive', messageKey: 'config.mutually.exclusive' },
+      ] },
+    }) },
+    create: () => ({ handlers: {} }),
+  }
+`
+
+function wholeObject(): void {
+  spore('whole-object', {
+    'spore.yaml': 'kind: enzyme\nname: whole-object\nseptum: "^0.11"\n'
+      + 'commands:\n  - name: whole-object\n    description: x\n    respond: hi\n',
+    'src/index.ts': WHOLE_OBJECT_MODULE,
+  })
+}
+
 it('an uninstalled plugin is refused with a key, not a sentence', async () => {
   const { db, close } = fresh()
   const result = await enablePlugin(db, [dir], 'nope')
@@ -280,18 +333,20 @@ it('an uninstalled plugin is refused with a key, not a sentence', async () => {
   close()
 })
 
-it('an incomplete configuration carries every issue as a ref', async () => {
+it('an incomplete configuration carries every issue as a ref, named by its field', async () => {
   const { db, close } = fresh()
   needsTwoFields()
   recordInstall(db, 'needs-two-fields', 'enzyme')
   const result = await enablePlugin(db, [dir], 'needs-two-fields')
   if (result.ok) throw new Error('expected a refusal')
   expect(result.refusal.key).toBe('refusal.config.incomplete')
-  const issues = result.refusal.params?.['issues'] as readonly { domain: string, key: string, params?: Record<string, unknown> }[]
+  const issues = result.refusal.params?.['issues'] as readonly Ref[]
   expect(issues).toHaveLength(2)
-  expect(issues.map((i) => i.domain)).toEqual(['common', 'common'])
+  // Both fields, not only the first: the operator's whole reason for reading this sentence.
+  expect(issues.map((i) => causeOf(i).field)).toEqual(['host', 'port'])
+  expect(issues.map((i) => causeOf(i).cause.domain)).toEqual(['common', 'common'])
   // The issue's own params must win over the messageKey ref's own, pinning the merge order.
-  expect(issues[0]?.params?.['expected']).toBe('number')
+  expect(causeOf(issues[0] as Ref).cause.params?.['expected']).toBe('number')
   close()
 })
 
@@ -301,8 +356,10 @@ it("a plugin's own refine key keeps the plugin's domain, not common", async () =
   recordInstall(db, 'refines', 'enzyme')
   const result = await enablePlugin(db, [dir], 'refines')
   if (result.ok) throw new Error('expected a refusal')
-  const issues = result.refusal.params?.['issues'] as readonly { domain: string, key: string }[]
-  expect(issues[0]).toEqual({ domain: 'refines', key: 'config.path.relative' })
+  const issues = result.refusal.params?.['issues'] as readonly Ref[]
+  expect(causeOf(issues[0] as Ref)).toEqual({
+    field: 'path', cause: { domain: 'refines', key: 'config.path.relative' },
+  })
   close()
 })
 
@@ -312,8 +369,39 @@ it('an issue with no messageKey degrades to its English message as a literal', a
   recordInstall(db, 'hand-rolled', 'enzyme')
   const result = await enablePlugin(db, [dir], 'hand-rolled')
   if (result.ok) throw new Error('expected a refusal')
-  const issues = result.refusal.params?.['issues'] as readonly { domain: string, key: string }[]
-  expect(issues[0]).toEqual({ domain: 'common', key: 'url is required' })
+  const issues = result.refusal.params?.['issues'] as readonly Ref[]
+  expect(causeOf(issues[0] as Ref)).toEqual({
+    field: 'url', cause: { domain: 'common', key: 'url is required' },
+  })
+  close()
+})
+
+// Fix 3's shape: `messageKey` carrying a domain and no key is not a ref, and an inline test of
+// `domain === 'common'` alone pushes the object itself into the refusal, which prints as
+// '[object Object]'. The settings path already degraded correctly through isRef.
+it('an issue whose messageKey is a malformed ref degrades to its English message', async () => {
+  const { db, close } = fresh()
+  malformedKey()
+  recordInstall(db, 'malformed-key', 'enzyme')
+  const result = await enablePlugin(db, [dir], 'malformed-key')
+  if (result.ok) throw new Error('expected a refusal')
+  const issues = result.refusal.params?.['issues'] as readonly Ref[]
+  expect(causeOf(issues[0] as Ref)).toEqual({
+    field: 'url', cause: { domain: 'common', key: 'url must be a url' },
+  })
+  close()
+})
+
+// An object-level .refine() carries `path: []`, which keeps the pre-fix shape: there is no
+// field to name, and `issueAt` with an empty `field` would render a stray separator.
+it('an issue with an empty path is not wrapped in issueAt', async () => {
+  const { db, close } = fresh()
+  wholeObject()
+  recordInstall(db, 'whole-object', 'enzyme')
+  const result = await enablePlugin(db, [dir], 'whole-object')
+  if (result.ok) throw new Error('expected a refusal')
+  const issues = result.refusal.params?.['issues'] as readonly Ref[]
+  expect(issues[0]).toEqual({ domain: 'whole-object', key: 'config.mutually.exclusive' })
   close()
 })
 

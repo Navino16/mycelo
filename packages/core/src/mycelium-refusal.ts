@@ -1,9 +1,7 @@
 import type { Outcome, OutcomeOf, TranslatableRef } from '@mycelo/septum'
 import type { RefusalCode } from './authorization/refusal.js'
 import { isRefusal } from './authorization/refusal.js'
-
-/** design §4: the one core-owned domain a spore may read without declaring it. */
-const SHARED_DOMAIN = 'common'
+import { SHARED_DOMAIN } from './i18n/core-catalogs.js'
 
 /**
  * `Record<RefusalCode, string>` and not a partial one: a code added to `RefusalCode` without a key

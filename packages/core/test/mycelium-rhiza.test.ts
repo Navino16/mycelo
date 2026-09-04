@@ -556,7 +556,9 @@ describe('setSetting against the keys the plugin declares', () => {
       expect(await refusalOf(api.setSetting('declares', 'ur1', 'http://x'))).toEqual({
         domain: 'common',
         key: 'refusal.plugin.settingUndeclared',
-        params: { plugin: 'declares', key: 'ur1' },
+        // count and keys, not key: one wording now serves this refusal and the settings route's
+        // plural list, so the singular case must carry the plural's own parameters.
+        params: { plugin: 'declares', count: 1, keys: 'ur1' },
       })
       expect(await valueOf(api.settings('declares'))).toEqual({})
       await succeeds(api.setSetting('declares', 'url', 'http://x'))
@@ -609,9 +611,9 @@ describe('setSetting against the keys the plugin declares', () => {
     expect(renderRefusal(translator, notInstalled, 'fr')).toBe("le plugin « ghost » n'est pas installé")
     await withSpore(CLOSED, async (api) => {
       const undeclared = await refusalOf(api.setSetting('declares', 'ur1', 'x'))
-      expect(renderRefusal(translator, undeclared, 'en')).toBe("plugin 'declares' declares no setting 'ur1'")
+      expect(renderRefusal(translator, undeclared, 'en')).toBe("plugin 'declares' declares no setting: ur1")
       expect(renderRefusal(translator, undeclared, 'fr'))
-        .toBe('le plugin « declares » ne déclare aucun réglage « ur1 »')
+        .toBe('le plugin « declares » ne déclare pas le réglage : ur1')
     })
   })
 })

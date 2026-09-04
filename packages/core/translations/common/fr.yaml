@@ -11,7 +11,7 @@ refusal:
     unreadableManifest: "le manifeste du spore « {plugin} » est illisible : {detail}"
     septumIncompatible: "le spore « {plugin} » {detail}"
     loadFailed: "le chargement du spore « {plugin} » a échoué : {detail}"
-    settingUndeclared: "le plugin « {plugin} » ne déclare aucun réglage « {key} »"
+    settingUndeclared: "le plugin « {plugin} » ne déclare {count, plural, one{pas le réglage} other{pas les réglages}} : {keys}"
   role:
     notFound: "le rôle « {role} » n''existe pas"
     exists: "le rôle « {role} » existe déjà"
@@ -31,6 +31,7 @@ refusal:
     invalidValue: "doit valoir l''une de ces valeurs : {values}"
     notMultipleOf: "doit être un multiple de {divisor}"
     unrecognizedKeys: "ne déclare aucun réglage nommé : {keys}"
+    issueAt: "{field} : {cause}"
     incomplete: "la configuration est incomplète : {issues}"
     validationThrew: "la configuration est incomplète : sa validation a levé une erreur : {detail}"
     undeclaredSecrets: "la configuration déclare {count, plural, one{un secret} other{des secrets}} {keys} que le schéma ne possède pas"

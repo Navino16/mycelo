@@ -16,6 +16,12 @@ function everySourceFile(dir: string): string[] {
 const SOURCES = everySourceFile(SRC).map((path) => readFileSync(path, 'utf8'))
 const ALL_SOURCE = SOURCES.join('\n')
 
+// The other half of the refusal namespace: `defineConfig`'s mapping table lives in septum, and
+// the join between it and `common` was verified by hand during review — which is not a pin.
+const SEPTUM_CONFIG = readFileSync(
+  resolve(import.meta.dirname, '../../../septum/src/config.ts'), 'utf8',
+)
+
 function read(relative: string): string {
   return readFileSync(join(SRC, relative), 'utf8')
 }
@@ -39,6 +45,32 @@ describe('the api lists nothing else pins', () => {
     // A key no throw site names is dead weight the next reader trusts.
     expect(en.filter((key) => !used.has(key))).toEqual([])
     // A throw site with no entry renders the raw key to the operator, in both directions.
+    expect([...used].filter((key) => !en.includes(key))).toEqual([])
+    expect([...used].filter((key) => !fr.includes(key))).toEqual([])
+  })
+
+  // Three times the size of `api.*`, added by phase 9.6A and extended by nothing. Its two halves
+  // live in two packages: core's src names some as literals, septum's MAPPED table names the rest,
+  // and a typo in either compiles, passes its own unit test, and shows an operator a dotted key.
+  it('uses every common.refusal.* key, and declares every one it uses in both locales', () => {
+    const common = loadCoreCatalogs().get('common')
+    const en = [...(common?.get('en')?.keys() ?? [])].filter((k) => k.startsWith('refusal.'))
+    const fr = [...(common?.get('fr')?.keys() ?? [])].filter((k) => k.startsWith('refusal.'))
+    const mapped = matches(SEPTUM_CONFIG, /key: '(refusal\.[A-Za-z0-9.]+)'/g)
+    // §2.3 builds two keys as `${mapped.key}Exclusive`, which no literal scan can see. They are
+    // derived from the catalogue and each one's base must be a MAPPED key, so the concatenation
+    // is pinned from both ends instead of reported as an orphan.
+    const exclusive = en.filter((k) => k.endsWith('Exclusive')).sort()
+    const used = new Set([
+      ...matches(ALL_SOURCE, /'(refusal\.[A-Za-z0-9.]+)'/g), ...mapped, ...exclusive,
+    ])
+    // Anchors: a regex or a loader that stopped finding anything would pass every check below.
+    expect(en.length).toBeGreaterThan(25)
+    expect(mapped).toHaveLength(7)
+    expect(exclusive).toEqual(['refusal.config.tooBigExclusive', 'refusal.config.tooSmallExclusive'])
+    expect(exclusive.filter((k) => !mapped.includes(k.slice(0, -'Exclusive'.length)))).toEqual([])
+    // A key nothing names is dead weight the next reader trusts; a name with no key renders raw.
+    expect(en.filter((key) => !used.has(key))).toEqual([])
     expect([...used].filter((key) => !en.includes(key))).toEqual([])
     expect([...used].filter((key) => !fr.includes(key))).toEqual([])
   })

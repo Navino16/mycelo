@@ -1,8 +1,6 @@
 import type { ConfigIssue, TranslatableRef } from '@mycelo/septum'
+import { CORE_DOMAIN, SHARED_DOMAIN } from './core-catalogs.js'
 import type { Translator } from './translator.js'
-
-/** design §4: the one core-owned domain a spore may read without declaring it. */
-const SHARED_DOMAIN = 'common'
 
 /**
  * design §2.4: real depth is bounded by germination's DAG; this caps a ref built by hand
@@ -12,11 +10,24 @@ const SHARED_DOMAIN = 'common'
 const MAX_DEPTH = 8
 
 /**
+ * Which domains a nested ref may resolve in. A ref naming any other renders as its bare key,
+ * the same degradation as the depth cap (design §5.3).
+ */
+export type DomainGate = (domain: string) => boolean
+
+/**
+ * The route and log path renders for the operator, not back to the plugin, and the nested refs
+ * it meets are the ones `configIssueRefs` built in the producing spore's own domain. `core`
+ * alone stays closed, being closed to plugins by rule (design §3.1).
+ */
+const NOT_CORE: DomainGate = (domain) => domain !== CORE_DOMAIN
+
+/**
  * design §2.4: exact, and narrower than "looks like an object" — a plain object with string
  * `domain` and `key` fields only. No parameter this design produces has that shape, so a
  * collision must be authored deliberately.
  */
-function isRef(value: unknown): value is TranslatableRef {
+export function isRef(value: unknown): value is TranslatableRef {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
   const proto: unknown = Object.getPrototypeOf(value)
   if (proto !== Object.prototype && proto !== null) return false
@@ -24,38 +35,55 @@ function isRef(value: unknown): value is TranslatableRef {
   return typeof record['domain'] === 'string' && typeof record['key'] === 'string'
 }
 
+function nested(
+  translator: Translator, ref: TranslatableRef, locale: string, gate: DomainGate, depth: number,
+): string {
+  if (!gate(ref.domain)) return ref.key
+  return render(translator, ref, locale, gate, depth)
+}
+
 /**
  * design §2.4: a ref renders depth-first; an array renders element-wise and joins. The join stays
  * here because `IntlMessageFormat.format` returns an array for a non-primitive parameter, and
  * stringifying that prepends a comma. Measured 2026-09-04.
  */
-function resolveValue(translator: Translator, value: unknown, locale: string, depth: number): unknown {
-  if (isRef(value)) return render(translator, value, locale, depth + 1)
+function resolveValue(
+  translator: Translator, value: unknown, locale: string, gate: DomainGate, depth: number,
+): unknown {
+  if (isRef(value)) return nested(translator, value, locale, gate, depth + 1)
   if (Array.isArray(value)) {
     return (value as readonly unknown[])
-      .map((item) => (isRef(item) ? render(translator, item, locale, depth + 1) : String(item)))
+      .map((item) => (isRef(item) ? nested(translator, item, locale, gate, depth + 1) : String(item)))
       .join(', ')
   }
   return value
 }
 
-function resolveParams(
-  translator: Translator, params: Record<string, unknown>, locale: string, depth: number,
+/**
+ * Resolves every nested ref in a parameter bag before ICU sees it, and joins an array. Shared
+ * with `bindTranslate`, which passes its own `allowed` set as the gate: two resolvers would be
+ * two behaviours (design §2.4, §5.3).
+ */
+export function resolveParams(
+  translator: Translator, params: Record<string, unknown>, locale: string,
+  gate: DomainGate, depth = 0,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const [name, value] of Object.entries(params)) {
-    out[name] = resolveValue(translator, value, locale, depth)
+    out[name] = resolveValue(translator, value, locale, gate, depth)
   }
   return out
 }
 
-function render(translator: Translator, ref: TranslatableRef, locale: string, depth: number): string {
+function render(
+  translator: Translator, ref: TranslatableRef, locale: string, gate: DomainGate, depth: number,
+): string {
   if (depth > MAX_DEPTH) return ref.key
   // A plugin's own ref may carry `params: null` at runtime despite the type — untyped across
   // the plugin boundary, so `== null` catches it alongside `undefined`.
   const params = ref.params == null
     ? undefined
-    : resolveParams(translator, ref.params, locale, depth)
+    : resolveParams(translator, ref.params, locale, gate, depth)
   return translator.translate(ref.domain, ref.key, locale, params)
 }
 
@@ -67,7 +95,7 @@ function render(translator: Translator, ref: TranslatableRef, locale: string, de
 export function renderRefusal(
   translator: Translator, ref: TranslatableRef, locale: string,
 ): string {
-  return render(translator, ref, locale, 0)
+  return render(translator, ref, locale, NOT_CORE, 0)
 }
 
 /**
@@ -84,7 +112,7 @@ export function renderConfigIssue(
     // `== null` also catches a plugin's `params: null` at runtime, untyped at this boundary.
     const params = issue.params == null
       ? undefined
-      : resolveParams(translator, issue.params, locale, 0)
+      : resolveParams(translator, issue.params, locale, NOT_CORE)
     return translator.translate(domain, key, locale, params)
   }
   if (isRef(key) && key.domain === SHARED_DOMAIN) {
@@ -95,6 +123,7 @@ export function renderConfigIssue(
       translator,
       { domain: key.domain, key: key.key, ...(merged === undefined ? {} : { params: merged }) },
       locale,
+      NOT_CORE,
       0,
     )
   }
