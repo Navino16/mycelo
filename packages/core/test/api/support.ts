@@ -589,6 +589,38 @@ export const eitherOrSchema: SporeWriter = (sporesDir) => {
 }
 
 /**
+ * A `too_small` issue shaped as septum's `toConfigIssue()` builds one for a mapped Zod code
+ * (config.ts:69): `messageKey` is a `common` ref, so its render is locale-sensitive end to end —
+ * unlike every fixture above, whose issues are bare literals. Named for what it refuses, not for
+ * a real spore: `plex` would read as the published rhiza (task 9's `minPort`, same shape).
+ */
+export const minPortSchema: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'minport', {
+    'spore.yaml': 'kind: enzyme\nname: minport\nseptum: "^0.11"\n'
+      + 'commands:\n  - name: minport\n    description: Report the configured setting\n    code: handleConfigured\n',
+    'src/index.ts': `
+      export default {
+        configSchema: {
+          safeParse: (input) => (typeof input?.port === 'number' && input.port >= 1
+            ? { success: true, data: input }
+            : { success: false, error: { issues: [{
+                path: ['port'], message: 'port must be at least 1',
+                messageKey: { domain: 'common', key: 'refusal.config.tooSmall' },
+                params: { origin: 'number', minimum: 1 },
+              }] } }),
+          toJsonSchema: () => ({
+            type: 'object',
+            properties: { port: { type: 'number' } },
+            required: ['port'],
+          }),
+        },
+        create: () => ({ handlers: { handleConfigured: async () => {} } }),
+      }
+    `,
+  })
+}
+
+/**
  * Boots, runs the phase-2 germination `serve()` leaves pending, and completes the setup
  * wizard, so a route test starts already past both gates in `api/context.ts`.
  */

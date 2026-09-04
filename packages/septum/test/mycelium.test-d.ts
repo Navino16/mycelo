@@ -224,6 +224,7 @@ export function narrowsValue(r: OutcomeOf<Record<string, unknown>>): string {
 }
 
 // @ts-expect-error `refusal` is unreachable without narrowing
+// eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-member-access -- suppressing the type error above leaves this expression's type unresolvable to the type-aware rules
 export const noNarrowing = (r: Outcome): string => r.refusal.key
 
 declare const toggle: PluginsToggle

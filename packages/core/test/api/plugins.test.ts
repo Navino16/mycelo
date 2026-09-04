@@ -14,8 +14,8 @@ import { setAlias } from '../../src/rhizomorph/aliases.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
   bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configurable, configurableTwoFields,
-  cyclingPair, definedSchema, eitherOrSchema, mixedFieldSchema, noJsonSchema, twoPluginsTwoCommands, vault,
-  writeSpore,
+  cyclingPair, definedSchema, eitherOrSchema, minPortSchema, mixedFieldSchema, noJsonSchema,
+  twoPluginsTwoCommands, vault, writeSpore,
 } from './support.js'
 import type { LoggedIn, SporeWriter } from './support.js'
 
@@ -388,6 +388,25 @@ describe('PUT /api/plugins/:name/settings validates the values', () => {
     // ...while the fixture's own issue carries no messageKey, so it renders unlocalized either
     // way (design §5.3) — this is what makes the wrapper, not this content, the locale signal.
     expect(error.detail).toEqual([{ key: 'port', messages: ['expected a number'] }])
+  })
+
+  it('renders detail[].messages in the request locale, from the same code path', async () => {
+    booted = await bootAndLogin({ spores: minPortSchema })
+    const { app, cookie } = booted
+    const en = await app.inject({
+      method: 'PUT', url: '/api/plugins/minport/settings', headers: { cookie },
+      payload: { port: 0 },
+    })
+    const fr = await app.inject({
+      method: 'PUT', url: '/api/plugins/minport/settings', headers: { cookie, 'accept-language': 'fr' },
+      payload: { port: 0 },
+    })
+    // The discriminating fixture: a `common`-ref messageKey, so unlike `mixed`/`eitheror` above,
+    // the per-key content itself — not just the wrapper — differs by locale.
+    expect(en.json<{ error: { detail: readonly { key: string, messages: string[] }[] } }>().error.detail)
+      .toEqual([{ key: 'port', messages: ['must be at least 1'] }])
+    expect(fr.json<{ error: { detail: readonly { key: string, messages: string[] }[] } }>().error.detail)
+      .toEqual([{ key: 'port', messages: ['doit valoir au moins 1'] }])
   })
 
   it('accepts the same keys once every value parses', async () => {
