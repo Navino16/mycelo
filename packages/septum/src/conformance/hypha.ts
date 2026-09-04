@@ -24,6 +24,12 @@ export interface HyphaHarness {
    * implementation. Supply it when the method answers without one.
    */
   membershipGroupId?: string
+  /**
+   * Already-parsed catalogues, keyed by locale — parseManifest's convention, since the kit must not
+   * import `node:fs`. Supplying them lets the config check see a refusal key that resolves nowhere
+   * (design §6). Their own compilation is not checked here yet: that is the wider 9.7 item.
+   */
+  catalogs?: Record<string, unknown>
 }
 
 /** Returns the failures, so the same logic serves a describe() block or a bare assertion. */
@@ -48,7 +54,7 @@ export async function hyphaChecks(harness: HyphaHarness): Promise<string[]> {
   if (incompatible !== undefined) failures.push(`the manifest ${incompatible}`)
 
   failures.push(
-    ...configSchemaFailures(harness.module.configSchema, harness.validConfig, harness.invalidConfig),
+    ...configSchemaFailures(harness.module.configSchema, harness.validConfig, harness.invalidConfig, harness.catalogs),
   )
 
   let instance

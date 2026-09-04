@@ -1,6 +1,7 @@
 import { IntlMessageFormat } from 'intl-messageformat'
 import { septumIncompatibility } from '../compat.js'
 import { parseManifest } from '../manifest.js'
+import { flattenCatalogs } from './catalog-keys.js'
 import { configSchemaFailures } from './config-checks.js'
 import type { EnzymeModule } from '../enzyme.js'
 import type { EnzymeManifest } from '../manifest.js'
@@ -51,35 +52,14 @@ function declaredRhizas(manifest: EnzymeManifest): ReadonlySet<string> {
   return names
 }
 
-// Dotted keys, exactly as the core's catalog.ts flattens them: a catalogue key is a
-// single opaque string everywhere else, so the kit and the runtime must agree on what
-// one is. Returns the first non-string key found, or null.
-function flatten(node: unknown, prefix: string, out: Map<string, string>): string | null {
-  if (typeof node === 'string') {
-    out.set(prefix, node)
-    return null
-  }
-  if (typeof node !== 'object' || node === null || Array.isArray(node)) return prefix
-  for (const [name, child] of Object.entries(node)) {
-    const bad = flatten(child, prefix === '' ? name : `${prefix}.${name}`, out)
-    if (bad !== null) return bad
-  }
-  return null
-}
-
 function catalogFailures(
   catalogs: Record<string, unknown> | undefined, manifest: EnzymeManifest,
 ): string[] {
   if (catalogs === undefined) return []
   const failures: string[] = []
   const declared = new Set<string>()
-  for (const [locale, raw] of Object.entries(catalogs)) {
-    // An empty or comment-only file parses to null: catalog.ts treats that as a
-    // catalogue with no keys, not a fault, and the kit must agree.
-    if (raw === null || raw === undefined) continue
-    const flat = new Map<string, string>()
-    const badKey = flatten(raw, '', flat)
-    if (badKey !== null) {
+  for (const { locale, messages: flat, badKey } of flattenCatalogs(catalogs)) {
+    if (badKey !== undefined) {
       failures.push(`translations for '${locale}': key '${badKey}' is not a string`)
       continue
     }
@@ -220,7 +200,7 @@ export async function enzymeChecks(harness: EnzymeHarness): Promise<string[]> {
   }
 
   failures.push(
-    ...configSchemaFailures(harness.module.configSchema, harness.validConfig, harness.invalidConfig),
+    ...configSchemaFailures(harness.module.configSchema, harness.validConfig, harness.invalidConfig, harness.catalogs),
   )
 
   let instance

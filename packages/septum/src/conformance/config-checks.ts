@@ -1,3 +1,4 @@
+import { declaredCatalogKeys } from './catalog-keys.js'
 import type { ConfigSchema } from '../spore.js'
 
 /** A refusal the core can actually render: a non-empty array of `{ path, message }`. */
@@ -69,6 +70,7 @@ export function configSchemaFailures(
   schema: ConfigSchema<unknown> | undefined,
   validConfig: unknown,
   invalidConfig: unknown,
+  catalogs?: Record<string, unknown>,
 ): string[] {
   if (schema === undefined) return []
   const failures: string[] = []
@@ -101,10 +103,53 @@ export function configSchemaFailures(
   if (emit !== undefined && typeof emit !== 'function') {
     failures.push('configSchema.toJsonSchema is present but is not a function')
   }
+  failures.push(...unresolvableMessageKeys(schema, invalidConfig, catalogs))
   const secrets = declaredSecrets(schema)
   if (secrets.malformed !== undefined) failures.push(secrets.malformed)
   for (const key of undeclaredSecrets(schema, secrets.keys)) {
     failures.push(`configSchema.secrets names '${key}', which the schema does not declare`)
+  }
+  return failures
+}
+
+/**
+ * A `.refine()` whose key no supplied catalogue declares renders as a raw dotted key to an
+ * operator — the green-build-broken-execution class, and one phase 9.6 creates if nothing checks
+ * it (design §6).
+ *
+ * **Incomplete by construction.** Only the issues this corpus provokes can be seen: a rule that
+ * fires on a value the harness never supplies is not covered, and a plugin declaring no
+ * `invalidConfig` is not covered at all. Widening the corpus is not possible in general — a
+ * `.refine()` predicate is arbitrary code over arbitrary input.
+ */
+function unresolvableMessageKeys(
+  schema: ConfigSchema<unknown>,
+  invalidConfig: unknown,
+  catalogs: Record<string, unknown> | undefined,
+): string[] {
+  // Gated on both, like every check here: no catalogue supplied means the author is not claiming
+  // to translate, and the runtime germinates such a plugin.
+  if (catalogs === undefined || invalidConfig === undefined) return []
+  const declared = declaredCatalogKeys(catalogs)
+  if (declared.size === 0) return []
+  let parsed: ReturnType<ConfigSchema<unknown>['safeParse']>
+  try {
+    parsed = schema.safeParse(invalidConfig)
+  } catch {
+    return []
+  }
+  if (parsed.success) return []
+  const issues: unknown = member(parsed.error, 'issues')
+  if (!Array.isArray(issues)) return []
+  const failures: string[] = []
+  for (const issue of issues as readonly unknown[]) {
+    // Only a bare string is a key in this spore's own domain; a ref names `common`, which the core
+    // owns and the kit cannot see (design §5.3).
+    const key = member(issue, 'messageKey')
+    if (typeof key !== 'string' || key.length === 0) continue
+    if (!declared.has(key)) {
+      failures.push(`configSchema refuses with key '${key}', which no supplied catalogue declares`)
+    }
   }
   return failures
 }
