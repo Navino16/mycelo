@@ -1,16 +1,24 @@
 import { septumIncompatibility } from '@mycelo/septum'
-import type { ConfigSchema, SporeModule } from '@mycelo/septum'
+import type { ConfigSchema, SporeModule, TranslatableRef } from '@mycelo/septum'
 import { discover } from '../germination/discover.js'
 import { loadModule } from '../germination/load.js'
 import { isFailure, readManifest } from '../germination/manifest.js'
 import type { ManifestFailure, ReadManifest } from '../germination/manifest.js'
 import type { Db } from '../persistence/db.js'
-import { describeConfigError, describeThrown } from '../support/thrown.js'
-import { describeUndeclaredSecrets, undeclaredSecretKeys } from './plugins.js'
+import { describeThrown } from '../support/thrown.js'
+import { undeclaredSecretsRefusal, undeclaredSecretKeys } from './plugins.js'
 import { getInstall, listInstalls, readSettings, recordInstall, setEnabled } from './store.js'
 
 export interface EnableOk { ok: true }
-export interface EnableRefusal { ok: false, reason: string }
+export interface EnableRefusal { ok: false, refusal: TranslatableRef }
+
+/**
+ * design §4: every refusal the core authors lives in `common`, which bind.ts already opens to every
+ * spore without a declaration. No English twin — `common`'s own `en` is the English (design §2.2).
+ */
+function refuse(key: string, params?: Record<string, unknown>): EnableRefusal {
+  return { ok: false, refusal: { domain: 'common', key, ...(params === undefined ? {} : { params }) } }
+}
 
 /**
  * Records every spore present on disk that has no row yet. This phase's stand-in for
@@ -75,21 +83,25 @@ export async function loadSporeModule(
  * config-shaped dormancy cause germinate() has belongs here, not only safeParse's.
  */
 export async function enablePlugin(db: Db, sporesDirs: readonly string[], name: string): Promise<EnableOk | EnableRefusal> {
-  if (getInstall(db, name) === null) return { ok: false, reason: `plugin '${name}' is not installed` }
+  if (getInstall(db, name) === null) return refuse('refusal.plugin.notInstalled', { plugin: name })
   const found = findSpore(sporesDirs, name)
-  if (found === undefined) return { ok: false, reason: `no spore named '${name}' is present on disk` }
-  if (isFailure(found)) return { ok: false, reason: `spore '${name}' has an unreadable manifest: ${found.reason}` }
+  if (found === undefined) return refuse('refusal.plugin.notOnDisk', { plugin: name })
+  if (isFailure(found)) {
+    return refuse('refusal.plugin.unreadableManifest', { plugin: name, detail: found.reason })
+  }
   // germinate()'s verdict for this is dormancy, which for an enforcing inhibitor refuses all
   // traffic with no channel command left to undo it (design §10).
   const incompatible = septumIncompatibility(found.manifest.septum)
-  if (incompatible !== undefined) return { ok: false, reason: `spore '${name}' ${incompatible}` }
+  if (incompatible !== undefined) {
+    return refuse('refusal.plugin.septumIncompatible', { plugin: name, detail: incompatible })
+  }
   let module: SporeModule<unknown, unknown> | null
   try {
     // loadModule throws on a missing entry point, a default export with no create(), and
     // anything the spore itself throws at import. All three reach an operator from here.
     module = await loadModule(found)
   } catch (e) {
-    return { ok: false, reason: `spore '${name}' failed to load: ${describeThrown(e)}` }
+    return refuse('refusal.plugin.loadFailed', { plugin: name, detail: describeThrown(e) })
   }
   if (module?.configSchema !== undefined) {
     let parsed: ReturnType<ConfigSchema<unknown>['safeParse']>
@@ -99,18 +111,55 @@ export async function enablePlugin(db: Db, sporesDirs: readonly string[], name: 
       // predicate that does — and the declared return type says this one never rejects.
       parsed = module.configSchema.safeParse(readSettings(db, name))
     } catch (e) {
-      return { ok: false, reason: `configuration is incomplete: validating it threw: ${describeThrown(e)}` }
+      return refuse('refusal.config.validationThrew', { detail: describeThrown(e) })
     }
     if (!parsed.success) {
-      return { ok: false, reason: `configuration is incomplete: ${describeConfigError(parsed.error)}` }
+      // §2.4: the issues travel as refs and task 5's renderer resolves each one, because this
+      // function has no locale — it is called from a route and from the mycelium mount alike.
+      return refuse('refusal.config.incomplete', { issues: configIssueRefs(parsed.error, name) })
     }
     // safeParse cannot see this one, and germination's verdict for it is dormancy — which for
     // an enforcing inhibitor refuses all traffic, with no channel command left to undo it.
     const badSecrets = undeclaredSecretKeys(module.configSchema)
-    if (badSecrets.length > 0) {
-      return { ok: false, reason: describeUndeclaredSecrets(badSecrets) }
-    }
+    if (badSecrets.length > 0) return { ok: false, refusal: undeclaredSecretsRefusal(badSecrets) }
   }
   setEnabled(db, name, true)
   return { ok: true }
+}
+
+/**
+ * A plugin's issues as refs, so a caller holding a locale renders them. A bare `messageKey` names
+ * this spore's own domain; a `common` ref is passed through; anything else — including an issue
+ * with no key at all — degrades to its English `message` as a literal (design §5.2, §5.3).
+ */
+function configIssueRefs(error: unknown, domain: string): readonly TranslatableRef[] {
+  const issues: unknown = (error as { issues?: unknown } | null)?.issues
+  if (!Array.isArray(issues)) return []
+  const refs: TranslatableRef[] = []
+  for (const issue of issues as readonly unknown[]) {
+    const record = typeof issue === 'object' && issue !== null ? issue as Record<string, unknown> : {}
+    const key = record['messageKey']
+    const params = typeof record['params'] === 'object' && record['params'] !== null
+      ? record['params'] as Record<string, unknown>
+      : undefined
+    if (typeof key === 'string' && key.length > 0) {
+      refs.push({ domain, key, ...(params === undefined ? {} : { params }) })
+      continue
+    }
+    if (typeof key === 'object' && key !== null && (key as { domain?: unknown }).domain === 'common') {
+      const ref = key as TranslatableRef
+      const merged = { ...ref.params, ...params }
+      refs.push({
+        domain: 'common',
+        key: ref.key,
+        ...(Object.keys(merged).length === 0 ? {} : { params: merged }),
+      })
+      continue
+    }
+    // A literal renders as itself: translator.translate returns an absent key verbatim, and never
+    // through ICU, so a message containing a brace cannot fail to parse.
+    const message = typeof record['message'] === 'string' ? record['message'] : 'unspecified issue'
+    refs.push({ domain: 'common', key: message })
+  }
+  return refs
 }

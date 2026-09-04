@@ -104,7 +104,11 @@ it('enabling refuses while a required setting is missing, and carries the schema
   recordInstall(db, 'needs-config', 'enzyme')
   const result = await enablePlugin(db, [dir], 'needs-config')
   expect(result.ok).toBe(false)
-  if (!result.ok) expect(result.reason).toContain('url')
+  if (!result.ok) {
+    expect(result.refusal.key).toBe('refusal.config.incomplete')
+    const issues = result.refusal.params?.['issues'] as readonly { domain: string, key: string }[]
+    expect(issues[0]?.key).toContain('url')
+  }
   expect(getInstall(db, 'needs-config')?.enabled).toBe(false)
   close()
 })
@@ -154,7 +158,10 @@ it('enabling refuses a plugin whose secrets name a field the schema does not dec
   recordInstall(db, 'typo', 'enzyme')
   const result = await enablePlugin(db, [dir], 'typo')
   expect(result.ok).toBe(false)
-  if (!result.ok) expect(result.reason).toContain('apiKye')
+  if (!result.ok) {
+    expect(result.refusal.key).toBe('refusal.config.undeclaredSecrets')
+    expect(result.refusal.params?.['keys']).toEqual(["'apiKye'"])
+  }
   close()
 })
 
@@ -176,8 +183,8 @@ it('the refusal names every undeclared secret, not only the first', async () => 
   const result = await enablePlugin(db, [dir], 'typos')
   expect(result.ok).toBe(false)
   if (!result.ok) {
-    expect(result.reason).toContain('apiKye')
-    expect(result.reason).toContain('secrit')
+    expect(result.refusal.key).toBe('refusal.config.undeclaredSecrets')
+    expect(result.refusal.params?.['keys']).toEqual(["'apiKye'", "'secrit'"])
   }
   close()
 })
@@ -194,12 +201,124 @@ it('enabling accepts a plugin whose secrets name a declared field', async () => 
   close()
 })
 
+// Two issues, not one: a code that kept only the first would still pass a single-issue fixture.
+// Both carry a `common` ref, mirroring what toConfigIssue() emits for a real zod code.
+const NEEDS_TWO_FIELDS_MODULE = `
+  export default {
+    configSchema: { safeParse: () => ({
+      success: false,
+      error: { issues: [
+        { path: ['host'], message: 'host is required', messageKey: { domain: 'common', key: 'refusal.config.invalidType' }, params: { expected: 'string' } },
+        { path: ['port'], message: 'port is required', messageKey: { domain: 'common', key: 'refusal.config.invalidType' }, params: { expected: 'number' } },
+      ] },
+    }) },
+    create: () => ({ handlers: {} }),
+  }
+`
+
+function needsTwoFields(): void {
+  spore('needs-two-fields', {
+    'spore.yaml': 'kind: enzyme\nname: needs-two-fields\nseptum: "^0.11"\n'
+      + 'commands:\n  - name: needs-two-fields\n    description: x\n    respond: hi\n',
+    'src/index.ts': NEEDS_TWO_FIELDS_MODULE,
+  })
+}
+
+// A bare string messageKey, as toConfigIssue() emits for a zod `custom` code (a `.refine()`):
+// it names the producing plugin's own domain, never `common`.
+const REFINES_MODULE = `
+  export default {
+    configSchema: { safeParse: () => ({
+      success: false,
+      error: { issues: [
+        { path: ['path'], message: 'path must be relative', messageKey: 'config.path.relative' },
+      ] },
+    }) },
+    create: () => ({ handlers: {} }),
+  }
+`
+
+function refinesSpore(): void {
+  spore('refines', {
+    'spore.yaml': 'kind: enzyme\nname: refines\nseptum: "^0.11"\n'
+      + 'commands:\n  - name: refines\n    description: x\n    respond: hi\n',
+    'src/index.ts': REFINES_MODULE,
+  })
+}
+
+// A hand-written safeParse with no messageKey at all — the pre-0.12 shape, which degrades to
+// `message` rendered as a literal key.
+const HAND_ROLLED_MODULE = `
+  export default {
+    configSchema: { safeParse: () => ({
+      success: false,
+      error: { issues: [
+        { path: ['url'], message: 'url is required' },
+      ] },
+    }) },
+    create: () => ({ handlers: {} }),
+  }
+`
+
+function handRolled(): void {
+  spore('hand-rolled', {
+    'spore.yaml': 'kind: enzyme\nname: hand-rolled\nseptum: "^0.11"\n'
+      + 'commands:\n  - name: hand-rolled\n    description: x\n    respond: hi\n',
+    'src/index.ts': HAND_ROLLED_MODULE,
+  })
+}
+
+it('an uninstalled plugin is refused with a key, not a sentence', async () => {
+  const { db, close } = fresh()
+  const result = await enablePlugin(db, [dir], 'nope')
+  expect(result).toEqual({
+    ok: false,
+    refusal: { domain: 'common', key: 'refusal.plugin.notInstalled', params: { plugin: 'nope' } },
+  })
+  close()
+})
+
+it('an incomplete configuration carries every issue as a ref', async () => {
+  const { db, close } = fresh()
+  needsTwoFields()
+  recordInstall(db, 'needs-two-fields', 'enzyme')
+  const result = await enablePlugin(db, [dir], 'needs-two-fields')
+  if (result.ok) throw new Error('expected a refusal')
+  expect(result.refusal.key).toBe('refusal.config.incomplete')
+  const issues = result.refusal.params?.['issues'] as readonly { domain: string, key: string }[]
+  expect(issues).toHaveLength(2)
+  expect(issues.map((i) => i.domain)).toEqual(['common', 'common'])
+  close()
+})
+
+it("a plugin's own refine key keeps the plugin's domain, not common", async () => {
+  const { db, close } = fresh()
+  refinesSpore()
+  recordInstall(db, 'refines', 'enzyme')
+  const result = await enablePlugin(db, [dir], 'refines')
+  if (result.ok) throw new Error('expected a refusal')
+  const issues = result.refusal.params?.['issues'] as readonly { domain: string, key: string }[]
+  expect(issues[0]).toEqual({ domain: 'refines', key: 'config.path.relative' })
+  close()
+})
+
+it('an issue with no messageKey degrades to its English message as a literal', async () => {
+  const { db, close } = fresh()
+  handRolled()
+  recordInstall(db, 'hand-rolled', 'enzyme')
+  const result = await enablePlugin(db, [dir], 'hand-rolled')
+  if (result.ok) throw new Error('expected a refusal')
+  const issues = result.refusal.params?.['issues'] as readonly { domain: string, key: string }[]
+  expect(issues[0]).toEqual({ domain: 'common', key: 'url is required' })
+  close()
+})
+
 it('enabling refuses a plugin that is not installed', async () => {
   const { db, close } = fresh()
   needsConfig()
   const result = await enablePlugin(db, [dir], 'needs-config')
   expect(result.ok).toBe(false)
-  if (!result.ok) expect(result.reason).toContain('not installed')
+  if (!result.ok) expect(result.refusal.key).toBe('refusal.plugin.notInstalled')
   close()
 })
 
@@ -208,7 +327,7 @@ it('enabling refuses a plugin whose directory is absent from disk', async () => 
   recordInstall(db, 'ghost', 'enzyme')
   const result = await enablePlugin(db, [dir], 'ghost')
   expect(result.ok).toBe(false)
-  if (!result.ok) expect(result.reason).toContain('present on disk')
+  if (!result.ok) expect(result.refusal.key).toBe('refusal.plugin.notOnDisk')
   expect(getInstall(db, 'ghost')?.enabled).toBe(false)
   close()
 })
@@ -226,7 +345,10 @@ it('enabling refuses, rather than throwing, when the module throws at import', a
   recordInstall(db, 'boomspore', 'enzyme')
   const result = await enablePlugin(db, [dir], 'boomspore')
   expect(result.ok).toBe(false)
-  if (!result.ok) expect(result.reason).toContain('import explodes')
+  if (!result.ok) {
+    expect(result.refusal.key).toBe('refusal.plugin.loadFailed')
+    expect(result.refusal.params?.['detail']).toContain('import explodes')
+  }
   expect(getInstall(db, 'boomspore')?.enabled).toBe(false)
   close()
 })
@@ -240,7 +362,10 @@ it('enabling refuses, rather than throwing, when the spore has no entry point', 
   recordInstall(db, 'nocode', 'enzyme')
   const result = await enablePlugin(db, [dir], 'nocode')
   expect(result.ok).toBe(false)
-  if (!result.ok) expect(result.reason).toContain('no entry point')
+  if (!result.ok) {
+    expect(result.refusal.key).toBe('refusal.plugin.loadFailed')
+    expect(result.refusal.params?.['detail']).toContain('no entry point')
+  }
   close()
 })
 
@@ -254,7 +379,10 @@ it('enabling refuses, rather than throwing, when the default export has no creat
   recordInstall(db, 'nocreate', 'enzyme')
   const result = await enablePlugin(db, [dir], 'nocreate')
   expect(result.ok).toBe(false)
-  if (!result.ok) expect(result.reason).toContain('create()')
+  if (!result.ok) {
+    expect(result.refusal.key).toBe('refusal.plugin.loadFailed')
+    expect(result.refusal.params?.['detail']).toContain('create()')
+  }
   close()
 })
 
@@ -265,11 +393,12 @@ it('enabling names the manifest fault instead of claiming the spore is absent', 
   const result = await enablePlugin(db, [dir], 'brokenyaml')
   expect(result.ok).toBe(false)
   if (!result.ok) {
-    // A YAML typo told the operator the directory was missing: no path to the fix.
-    expect(result.reason).not.toContain('present on disk')
+    // A YAML typo must not be told the directory is missing: the key distinguishes them,
+    // where the old substring check only ruled out one wrong sentence.
+    expect(result.refusal.key).toBe('refusal.plugin.unreadableManifest')
     // 'septum' is the field this manifest omits. Asserting the word 'manifest' alone
     // passed with the guard removed, off a TypeError reading `manifest.kind`.
-    expect(result.reason).toContain("unreadable manifest: invalid manifest at 'septum'")
+    expect(result.refusal.params?.['detail']).toContain("invalid manifest at 'septum'")
   }
   close()
 })
@@ -370,7 +499,10 @@ describe('enablePlugin refuses rather than rejecting when validation itself thro
     recordInstall(db, 'throwspore', 'enzyme')
     const result = await enablePlugin(db, [dir], 'throwspore')
     expect(result.ok).toBe(false)
-    if (!result.ok) expect(result.reason).toContain('predicate exploded')
+    if (!result.ok) {
+      expect(result.refusal.key).toBe('refusal.config.validationThrew')
+      expect(result.refusal.params?.['detail']).toContain('predicate exploded')
+    }
     close()
   })
 
@@ -384,8 +516,8 @@ describe('enablePlugin refuses rather than rejecting when validation itself thro
     const result = await enablePlugin(db, [dir], 'needs-config')
     expect(result.ok).toBe(false)
     // Not merely refused: the ordinary "url is missing" refusal satisfies ok === false too,
-    // so only the reason distinguishes a caught throw from a rejected config.
-    if (!result.ok) expect(result.reason).toContain('validating it threw')
+    // so only the key distinguishes a caught throw from a rejected config.
+    if (!result.ok) expect(result.refusal.key).toBe('refusal.config.validationThrew')
     close()
   })
 })
@@ -435,8 +567,9 @@ it('refuses to enable a spore whose septum range excludes the running septum', a
     recordInstall(db, 'stale', 'enzyme')
     const result = await enablePlugin(db, [dir], 'stale')
     expect(result.ok).toBe(false)
-    expect(result.ok ? '' : result.reason).toContain('^0.9')
-    expect(result.ok ? '' : result.reason).toContain(SEPTUM_VERSION)
+    expect(result.ok ? '' : result.refusal.key).toBe('refusal.plugin.septumIncompatible')
+    expect(result.ok ? '' : result.refusal.params?.['detail']).toContain('^0.9')
+    expect(result.ok ? '' : result.refusal.params?.['detail']).toContain(SEPTUM_VERSION)
     // The positive beside the negative: the row must still be off.
     expect(getInstall(db, 'stale')?.enabled).toBe(false)
   } finally {
