@@ -169,6 +169,20 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
       .toEqual({ domain: 'common', key: 'refusal.role.builtin', params: { role: 'owner' } })
   })
 
+  // Every other deleteRole test in the suite is a refusal path, and the HTTP route calls
+  // authorization/roles.ts directly rather than the mount — so without this the mount line
+  // itself was exercised by nothing that could see its shape.
+  it('deletes a role through the mount, answering the outcome its contract publishes', async () => {
+    const db = fresh()
+    const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
+    const read = createMyceliumApi(emptyRegistry(), ['roles.read'], noSend, db, SPORES) as RolesRead
+    await succeeds(manage.createRole('guest', ['media.*']))
+    await succeeds(manage.deleteRole('guest'))
+    // The row is gone, so the test cannot pass on a deleteRole that answers success and deletes
+    // nothing — the same reasoning as `revoked` in the admin fixture's revoke test.
+    expect((await read.listRoles()).map((r) => r.name)).not.toContain('guest')
+  })
+
   it('refuses deleting a role that does not exist, naming it', async () => {
     const db = fresh()
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
