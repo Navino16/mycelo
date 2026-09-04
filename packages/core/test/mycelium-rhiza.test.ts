@@ -27,6 +27,7 @@ import type { Db } from '../src/persistence/db.js'
 import { principal } from '../src/persistence/schema.js'
 import { bundleOf } from './support/bundle.js'
 import { silentLogger as stubLogger } from './support/logger.js'
+import { refusalOf, succeeds, valueOf } from './support/outcome.js'
 import { rejectsWith } from './support/rejects.js'
 import { emptyRegistry } from './support/registry.js'
 
@@ -140,55 +141,61 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
     const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db, SPORES) as RolesAssign
     const read = createMyceliumApi(emptyRegistry(), ['roles.read'], noSend, db, SPORES) as RolesRead
-    await manage.createRole('guest', ['media.*'])
-    await assign.assignRole(p.id, 'guest')
+    await succeeds(manage.createRole('guest', ['media.*']))
+    await succeeds(assign.assignRole(p.id, 'guest'))
     expect(await read.rolesOf(p.id)).toEqual(['guest'])
-    await assign.revokeRole(p.id, 'guest')
+    await succeeds(assign.revokeRole(p.id, 'guest'))
     expect(await read.rolesOf(p.id)).toEqual([])
   })
 
-  it('rejects assigning a role that does not exist', async () => {
+  it('refuses assigning a role that does not exist, naming it in a key a spore can render', async () => {
     const db = fresh()
     const p = resolvePrincipal(db, { channel: 'console', externalId: 'bob' })
     const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db, SPORES) as RolesAssign
-    await rejectsWith(assign.assignRole(p.id, 'ghost'), /ghost/)
+    expect(await refusalOf(assign.assignRole(p.id, 'ghost')))
+      .toEqual({ domain: 'common', key: 'refusal.role.notFound', params: { role: 'ghost' } })
   })
 
   it('refuses to delete or rewrite a builtin role', async () => {
     const db = fresh()
     bootstrapIdentity(db, { owner: { channel: 'console', userId: 'alice' } })
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
-    await rejectsWith(manage.deleteRole('owner'), /builtin/)
-    await rejectsWith(manage.setRoleCommands('owner', ['media.*']), /builtin/)
+    expect(await refusalOf(manage.deleteRole('owner')))
+      .toEqual({ domain: 'common', key: 'refusal.role.builtin', params: { role: 'owner' } })
+    expect(await refusalOf(manage.setRoleCommands('owner', ['media.*'])))
+      .toEqual({ domain: 'common', key: 'refusal.role.builtin', params: { role: 'owner' } })
   })
 
-  it('rejects deleting a role that does not exist, naming it', async () => {
+  it('refuses deleting a role that does not exist, naming it', async () => {
     const db = fresh()
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
-    await rejectsWith(manage.deleteRole('typo'), /typo/)
+    expect(await refusalOf(manage.deleteRole('typo')))
+      .toEqual({ domain: 'common', key: 'refusal.role.notFound', params: { role: 'typo' } })
   })
 
   it('refuses to delete the configured default role', async () => {
     const db = fresh()
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES, { defaultRole: 'newcomer' }) as RolesManage
-    await manage.createRole('newcomer', [])
+    await succeeds(manage.createRole('newcomer', []))
     // Boot refuses this state with a StartupError; deleting into it at runtime must not
     // leave first contact throwing on every new sender.
-    await rejectsWith(manage.deleteRole('newcomer'), /default role/)
+    expect(await refusalOf(manage.deleteRole('newcomer')))
+      .toEqual({ domain: 'common', key: 'refusal.role.isDefault', params: { role: 'newcomer' } })
   })
 
-  it('rejects rewriting a role that does not exist, naming it', async () => {
+  it('refuses rewriting a role that does not exist, naming it', async () => {
     const db = fresh()
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
-    await rejectsWith(manage.setRoleCommands('typo', ['media.*']), /typo/)
+    expect(await refusalOf(manage.setRoleCommands('typo', ['media.*'])))
+      .toEqual({ domain: 'common', key: 'refusal.role.notFound', params: { role: 'typo' } })
   })
 
   it('replaces a role\'s patterns wholesale rather than appending', async () => {
     const db = fresh()
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
     const read = createMyceliumApi(emptyRegistry(), ['roles.read'], noSend, db, SPORES) as RolesRead
-    await manage.createRole('guest', ['media.*', 'admin.plugins'])
-    await manage.setRoleCommands('guest', ['media.movies'])
+    await succeeds(manage.createRole('guest', ['media.*', 'admin.plugins']))
+    await succeeds(manage.setRoleCommands('guest', ['media.movies']))
     expect((await read.listRoles()).find((r) => r.name === 'guest')?.patterns).toEqual(['media.movies'])
   })
 
@@ -208,8 +215,8 @@ describe('createMyceliumApi, the phase 4 scopes', () => {
     const p = resolvePrincipal(db, { channel: 'console', externalId: 'carol' })
     const api = createMyceliumApi(emptyRegistry(), ['principals.manage', 'principals.read'], noSend, db, SPORES) as
       PrincipalsManage & PrincipalsRead
-    await api.markReviewed(p.id)
-    await api.setDisplayName(p.id, 'Carol')
+    await succeeds(api.markReviewed(p.id))
+    await succeeds(api.setDisplayName(p.id, 'Carol'))
     expect((await api.getPrincipal(p.id))?.displayName).toBe('Carol')
     expect(db.select().from(principal).get()?.reviewedAt).toBeInstanceOf(Date)
   })
@@ -282,40 +289,61 @@ describe('createMyceliumApi, locale.manage', () => {
 
 // Curated diagnostics, not raw SQLite: /role-new answered "command 'role-new' failed" for
 // a duplicate name or a repeated pattern, and the three silent resolves named nothing.
-describe('rejections a caller can act on', () => {
-  it('rejects creating a role whose name is taken, or empty', async () => {
+describe('refusals a caller can act on', () => {
+  it('refuses creating a role whose name is taken, or empty', async () => {
     const db = fresh()
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
-    await manage.createRole('guest', ['media.*'])
-    await rejectsWith(manage.createRole('guest', ['admin.*']), /'guest' already exists/)
-    await rejectsWith(manage.createRole('', []), /cannot be empty/)
+    await succeeds(manage.createRole('guest', ['media.*']))
+    expect(await refusalOf(manage.createRole('guest', ['admin.*'])))
+      .toEqual({ domain: 'common', key: 'refusal.role.exists', params: { role: 'guest' } })
+    // No params at all for the one refusal that names nothing: an empty `params: {}` would
+    // read as a placeholder the catalogue forgot to fill.
+    expect(await refusalOf(manage.createRole('', [])))
+      .toEqual({ domain: 'common', key: 'refusal.role.nameEmpty' })
     expect(await (createMyceliumApi(emptyRegistry(), ['roles.read'], noSend, db, SPORES) as RolesRead).listRoles())
       .toHaveLength(1)
   })
 
-  it('rejects a pattern listed twice in one call, on create and on rewrite', async () => {
+  it('refuses a pattern listed twice in one call, on create and on rewrite, naming the pattern', async () => {
     const db = fresh()
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
-    await rejectsWith(manage.createRole('guest', ['media.*', 'media.*']), /'media.\*' is listed twice/)
-    await manage.createRole('guest', ['media.*'])
-    await rejectsWith(manage.setRoleCommands('guest', ['admin.*', 'admin.*']), /listed twice/)
+    expect(await refusalOf(manage.createRole('guest', ['media.*', 'media.*'])))
+      .toEqual({ domain: 'common', key: 'refusal.role.patternDuplicate', params: { pattern: 'media.*' } })
+    await succeeds(manage.createRole('guest', ['media.*']))
+    // Both calls, and a different pattern each: one shared mapper answering only for create
+    // would pass a test that rewrote the same pattern.
+    expect(await refusalOf(manage.setRoleCommands('guest', ['admin.*', 'admin.*'])))
+      .toEqual({ domain: 'common', key: 'refusal.role.patternDuplicate', params: { pattern: 'admin.*' } })
   })
 
-  it('rejects markReviewed, setDisplayName, assignRole and revokeRole for an unknown principal', async () => {
+  it('refuses markReviewed, setDisplayName, assignRole and revokeRole for an unknown principal', async () => {
     const db = fresh()
     bootstrapIdentity(db, { owner: { channel: 'console', userId: 'alice' } })
     const manage = createMyceliumApi(emptyRegistry(), ['principals.manage'], noSend, db, SPORES) as PrincipalsManage
     const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db, SPORES) as RolesAssign
-    await rejectsWith(manage.markReviewed('nobody'), /principal 'nobody' does not exist/)
-    await rejectsWith(manage.setDisplayName('nobody', 'X'), /principal 'nobody' does not exist/)
-    await rejectsWith(assign.assignRole('nobody', 'owner'), /principal 'nobody' does not exist/)
-    await rejectsWith(assign.revokeRole('nobody', 'owner'), /principal 'nobody' does not exist/)
+    const expected = { domain: 'common', key: 'refusal.person.notFound', params: { id: 'nobody' } }
+    // All four, not the first: each is its own mount line, and three of them wired to
+    // `toPromise` would still have passed a single-method assertion.
+    expect(await refusalOf(manage.markReviewed('nobody'))).toEqual(expected)
+    expect(await refusalOf(manage.setDisplayName('nobody', 'X'))).toEqual(expected)
+    expect(await refusalOf(assign.assignRole('nobody', 'owner'))).toEqual(expected)
+    expect(await refusalOf(assign.revokeRole('nobody', 'owner'))).toEqual(expected)
   })
 
   it('still reports an unknown role before an unknown principal, so the first fault named is the caller\'s', async () => {
     const db = fresh()
     const assign = createMyceliumApi(emptyRegistry(), ['roles.assign'], noSend, db, SPORES) as RolesAssign
-    await rejectsWith(assign.assignRole('nobody', 'ghost'), /role 'ghost'/)
+    expect(await refusalOf(assign.assignRole('nobody', 'ghost')))
+      .toEqual({ domain: 'common', key: 'refusal.role.notFound', params: { role: 'ghost' } })
+  })
+
+  // outcome()/outcomeOf() only convert a StoreRefusal: a SQLite fault reported as a refusal
+  // would send the operator after a role that was never the problem.
+  it('lets a fault that is not a store refusal reject, rather than dressing it as a refusal', async () => {
+    const { db } = openDatabase(':memory:')
+    // No migration, so the principal table does not exist and the very first statement throws.
+    const manage = createMyceliumApi(emptyRegistry(), ['principals.manage'], noSend, db, SPORES) as PrincipalsManage
+    await rejectsWith(manage.markReviewed('anyone'), /no such table/)
   })
 })
 
@@ -340,7 +368,7 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
     writeSetting(db, 'radarr', 'url', 'http://x', false)
     writeSetting(db, 'radarr', 'apiKey', 'sk-real-secret', true)
     const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, SPORES) as PluginsConfigure
-    const settings = await api.settings('radarr')
+    const settings = await valueOf(api.settings('radarr'))
     expect(settings['url']).toBe('http://x')
     expect(settings['apiKey']).not.toBe('sk-real-secret')
     expect(settings['apiKey']).toBe('••••')
@@ -350,8 +378,8 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
     const db = fresh()
     recordInstall(db, 'radarr', 'rhiza')
     const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, SPORES) as PluginsConfigure
-    await api.setSetting('radarr', 'url', 'http://y')
-    expect((await api.settings('radarr'))['url']).toBe('http://y')
+    await succeeds(api.setSetting('radarr', 'url', 'http://y'))
+    expect((await valueOf(api.settings('radarr')))['url']).toBe('http://y')
   })
 
   // writeSetting() rewrites is_secret too, so the naive call would un-redact a credential
@@ -361,13 +389,14 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
     recordInstall(db, 'radarr', 'rhiza')
     writeSetting(db, 'radarr', 'apiKey', 'sk-old', true)
     const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, SPORES) as PluginsConfigure
-    await api.setSetting('radarr', 'apiKey', 'sk-new')
-    expect((await api.settings('radarr'))['apiKey']).toBe('••••')
+    await succeeds(api.setSetting('radarr', 'apiKey', 'sk-new'))
+    expect((await valueOf(api.settings('radarr')))['apiKey']).toBe('••••')
   })
 
-  it('rejects setSetting for a plugin that is not installed', async () => {
+  it('refuses setSetting for a plugin that is not installed', async () => {
     const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, fresh(), SPORES) as PluginsConfigure
-    await rejectsWith(api.setSetting('ghost', 'url', 'x'), /'ghost' is not installed/)
+    expect(await refusalOf(api.setSetting('ghost', 'url', 'x')))
+      .toEqual({ domain: 'common', key: 'refusal.plugin.notInstalled', params: { plugin: 'ghost' } })
   })
 
   it('reports formSchema unavailable for a plugin that is not installed', async () => {
@@ -422,32 +451,42 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
     const db = fresh()
     recordInstall(db, 'ping', 'enzyme')
     const api = createMyceliumApi(emptyRegistry(), ['plugins.toggle'], noSend, db, SPORES) as PluginsToggle
-    await api.enable('ping')
+    await succeeds(api.enable('ping'))
     expect(getInstall(db, 'ping')?.enabled).toBe(true)
-    await api.disable('ping')
+    // toStrictEqual, and on a method whose contract returns nothing: `outcomeOf` wired here
+    // instead of `outcome` compiles and answers `{ ok: true, value: undefined }`, which is
+    // not what PluginsToggle publishes and which toEqual cannot see.
+    expect(await api.disable('ping')).toStrictEqual({ ok: true })
     expect(getInstall(db, 'ping')?.enabled).toBe(false)
   })
 
-  // enablePlugin() returns a refusal object; the published contract says enable() rejects,
-  // so a caller reading `undefined` as success is the defect this pins.
-  it('rejects enable with the refusal reason rather than resolving', async () => {
+  // enable() passes enablePlugin's own refusal through, so its key is task 7's, reused:
+  // enablePlugin and writeDeclaredSetting refuse the same thing and must say it once.
+  it('refuses enable with a key a spore can render, rather than resolving', async () => {
     const db = fresh()
     recordInstall(db, 'gate', 'inhibitor')
     const api = createMyceliumApi(emptyRegistry(), ['plugins.toggle'], noSend, db, SPORES) as PluginsToggle
-    await rejectsWith(api.enable('ghost'), /'ghost' is not installed/)
+    expect(await refusalOf(api.enable('ghost')))
+      .toEqual({ domain: 'common', key: 'refusal.plugin.notInstalled', params: { plugin: 'ghost' } })
     expect(getInstall(db, 'gate')?.enabled).toBe(false)
   })
 
-  it('rejects disable for a plugin that is not installed', async () => {
+  it('refuses disable for a plugin that is not installed', async () => {
     const api = createMyceliumApi(emptyRegistry(), ['plugins.toggle'], noSend, fresh(), SPORES) as PluginsToggle
-    await rejectsWith(api.disable('ghost'), /'ghost' is not installed/)
+    expect(await refusalOf(api.disable('ghost')))
+      .toEqual({ domain: 'common', key: 'refusal.plugin.notInstalled', params: { plugin: 'ghost' } })
   })
 
-  // setSetting, formSchema and enable all reject for an uninstalled plugin; settings()
+  // setSetting, formSchema and enable all refuse for an uninstalled plugin; settings()
   // answered {}, which a caller cannot tell from a real plugin holding no settings.
-  it('rejects settings for a plugin that is not installed', async () => {
+  it('refuses settings for a plugin that is not installed, with no value to misread', async () => {
     const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, fresh(), SPORES) as PluginsConfigure
-    await rejectsWith(api.settings('ghost'), /'ghost' is not installed/)
+    const result = await api.settings('ghost')
+    expect(result).toEqual({
+      ok: false,
+      refusal: { domain: 'common', key: 'refusal.plugin.notInstalled', params: { plugin: 'ghost' } },
+    })
+    expect('value' in result).toBe(false)
   })
 })
 
@@ -497,10 +536,14 @@ describe('setSetting against the keys the plugin declares', () => {
 
   it('rejects a key the published JSON Schema does not declare, and accepts one it does', async () => {
     await withSpore(CLOSED, async (api) => {
-      await rejectsWith(api.setSetting('declares', 'ur1', 'http://x'), /'declares' declares no setting 'ur1'/)
-      expect(await api.settings('declares')).toEqual({})
-      await api.setSetting('declares', 'url', 'http://x')
-      expect(await api.settings('declares')).toEqual({ url: 'http://x' })
+      expect(await refusalOf(api.setSetting('declares', 'ur1', 'http://x'))).toEqual({
+        domain: 'common',
+        key: 'refusal.plugin.settingUndeclared',
+        params: { plugin: 'declares', key: 'ur1' },
+      })
+      expect(await valueOf(api.settings('declares'))).toEqual({})
+      await succeeds(api.setSetting('declares', 'url', 'http://x'))
+      expect(await valueOf(api.settings('declares'))).toEqual({ url: 'http://x' })
     })
   })
 
@@ -511,8 +554,8 @@ describe('setSetting against the keys the plugin declares', () => {
     expect(LOOSE).toHaveProperty('additionalProperties')
     expect(CLOSED).not.toHaveProperty('additionalProperties')
     await withSpore(LOOSE, async (api) => {
-      await api.setSetting('declares', 'anything', 'x')
-      expect(await api.settings('declares')).toEqual({ anything: 'x' })
+      await succeeds(api.setSetting('declares', 'anything', 'x'))
+      expect(await valueOf(api.settings('declares'))).toEqual({ anything: 'x' })
     })
   })
 
@@ -520,7 +563,8 @@ describe('setSetting against the keys the plugin declares', () => {
     // z.strictObject emits additionalProperties: false, which says the opposite of `{}`.
     expect(STRICT).toHaveProperty('additionalProperties', false)
     await withSpore(STRICT, async (api) => {
-      await rejectsWith(api.setSetting('declares', 'ur1', 'x'), /declares no setting 'ur1'/)
+      expect((await refusalOf(api.setSetting('declares', 'ur1', 'x'))).key)
+        .toBe('refusal.plugin.settingUndeclared')
     })
   })
 
@@ -530,8 +574,8 @@ describe('setSetting against the keys the plugin declares', () => {
     const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, SPORES) as PluginsConfigure
     // gate builds its ConfigSchema by hand and emits no schema, so nothing here knows
     // which keys exist. The ledger records that half; it is not closed by this guard.
-    await api.setSetting('gate', 'group_id', 'flatmates')
-    expect(await api.settings('gate')).toEqual({ group_id: 'flatmates' })
+    await succeeds(api.setSetting('gate', 'group_id', 'flatmates'))
+    expect(await valueOf(api.settings('gate'))).toEqual({ group_id: 'flatmates' })
   })
 })
 

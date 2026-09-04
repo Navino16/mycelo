@@ -7,7 +7,7 @@ import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import type { Db } from '../../src/persistence/db.js'
 import { channelIdentity, principal, principalRole, role, roleCommand } from '../../src/persistence/schema.js'
 import { StartupError, bootstrapIdentity } from '../../src/identity/bootstrap.js'
-import { rejectsWith } from '../support/rejects.js'
+import { refusalOf, succeeds } from '../support/outcome.js'
 import { emptyRegistry } from '../support/registry.js'
 
 const noSend = async () => {}
@@ -107,14 +107,15 @@ describe('bootstrapIdentity', () => {
     const db = fresh()
     const manage = createMyceliumApi(emptyRegistry(), ['roles.manage'], noSend, db, SPORES) as RolesManage
     bootstrapIdentity(db, {})
-    await manage.createRole('owner', ['media.*'])
+    await succeeds(manage.createRole('owner', ['media.*']))
     expect(db.select().from(role).where(eq(role.name, 'owner')).get()?.builtin).toBe(false)
 
     bootstrapIdentity(db, { owner })
     expect(db.select().from(role).where(eq(role.name, 'owner')).get()?.builtin).toBe(true)
     // The guarantee design §2 makes: once builtin, neither call can undo it.
-    await rejectsWith(manage.deleteRole('owner'), /builtin/)
-    await rejectsWith(manage.setRoleCommands('owner', []), /builtin/)
+    const builtinRefusal = { domain: 'common', key: 'refusal.role.builtin', params: { role: 'owner' } }
+    expect(await refusalOf(manage.deleteRole('owner'))).toEqual(builtinRefusal)
+    expect(await refusalOf(manage.setRoleCommands('owner', []))).toEqual(builtinRefusal)
     // Repaired, not replaced: one row, and the wildcard sits alongside what was there.
     expect(db.select().from(role).all()).toHaveLength(1)
     const patterns = db.select({ p: roleCommand.pattern }).from(roleCommand).all().map((r) => r.p)

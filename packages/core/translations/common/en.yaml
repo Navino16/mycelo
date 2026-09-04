@@ -11,6 +11,16 @@ refusal:
     unreadableManifest: "spore ''{plugin}'' has an unreadable manifest: {detail}"
     septumIncompatible: "spore ''{plugin}'' {detail}"
     loadFailed: "spore ''{plugin}'' failed to load: {detail}"
+    settingUndeclared: "plugin ''{plugin}'' declares no setting ''{key}''"
+  role:
+    notFound: "role ''{role}'' does not exist"
+    exists: "role ''{role}'' already exists"
+    builtin: "role ''{role}'' is builtin and cannot be changed"
+    isDefault: "role ''{role}'' is the default role and cannot be deleted"
+    nameEmpty: "a role name cannot be empty"
+    patternDuplicate: "pattern ''{pattern}'' is listed twice"
+  person:
+    notFound: "no person with id ''{id}''"
   config:
     invalidType: "expected {expected}"
     tooSmall: "{origin, select, string{must be at least {minimum} characters long} array{must have at least {minimum} items} other{must be at least {minimum}}}"

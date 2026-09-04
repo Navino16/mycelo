@@ -54,7 +54,7 @@ export function createServer(options: ServerOptions): FastifyInstance {
       void reply.status(error.status).send({
         error: {
           code: error.code,
-          message: translator.translate('core', error.key, request.locale, error.params),
+          message: translator.translate(error.domain ?? 'core', error.key, request.locale, error.params),
           ...(error.detail === undefined ? {} : { detail: error.detail }),
         },
       })

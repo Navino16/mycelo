@@ -8,7 +8,7 @@ import {
   isReviewed, loadPrincipal, markReviewed, requirePrincipal, searchPrincipals, setDisplayName,
 } from '../../identity/people.js'
 import type { Db } from '../../persistence/db.js'
-import { notFound } from '../errors.js'
+import { notFoundRefusal } from '../errors.js'
 import { parseBody, parseQuery } from '../parse.js'
 
 /** Additive to septum's `Principal`, HTTP-only: the UI needs to know whether a person was reviewed. */
@@ -38,9 +38,11 @@ const patchSchema = z.object({
 const roleBodySchema = z.object({ role: z.string().min(1) })
 
 /** assignRole/revokeRole check the role before the principal, so a bad role wins the race. */
-function roleAssignmentError(e: unknown, id: string, roleName: string): never {
-  if (isRefusal(e, 'role-unknown')) throw notFound('api.roleNotFound', { role: roleName })
-  if (isRefusal(e, 'principal-unknown')) throw notFound('api.personNotFound', { id })
+function roleAssignmentError(e: unknown): never {
+  // The only two codes these calls raise, and both are 404s; anything else is a fault.
+  if (isRefusal(e, 'role-unknown') || isRefusal(e, 'principal-unknown')) {
+    throw notFoundRefusal(e.code, e.params)
+  }
   throw e
 }
 
@@ -63,7 +65,7 @@ export function registerPeopleRoutes(app: FastifyInstance, state: RuntimeState):
   app.get('/api/people/:id', (request) => {
     const { id } = request.params as { id: string }
     const person = loadPrincipal(state.db, id)
-    if (person === null) throw notFound('api.personNotFound', { id })
+    if (person === null) throw notFoundRefusal('principal-unknown', { id })
     return toDto(state.db, person)
   })
 
@@ -77,7 +79,7 @@ export function registerPeopleRoutes(app: FastifyInstance, state: RuntimeState):
       if (body.displayName !== undefined) setDisplayName(state.db, id, body.displayName)
       if (body.reviewed === true) markReviewed(state.db, id)
     } catch (e) {
-      if (isRefusal(e, 'principal-unknown')) throw notFound('api.personNotFound', { id })
+      if (isRefusal(e, 'principal-unknown')) throw notFoundRefusal(e.code, e.params)
       throw e
     }
     const updated = loadPrincipal(state.db, id)
@@ -87,13 +89,13 @@ export function registerPeopleRoutes(app: FastifyInstance, state: RuntimeState):
   app.post('/api/people/:id/roles', (request) => {
     const { id } = request.params as { id: string }
     const body = parseBody(roleBodySchema, request.body)
-    try { assignRole(state.db, id, body.role) } catch (e) { roleAssignmentError(e, id, body.role) }
+    try { assignRole(state.db, id, body.role) } catch (e) { roleAssignmentError(e) }
     return { ok: true }
   })
 
   app.delete('/api/people/:id/roles/:role', (request) => {
     const { id, role } = request.params as { id: string, role: string }
-    try { revokeRole(state.db, id, role) } catch (e) { roleAssignmentError(e, id, role) }
+    try { revokeRole(state.db, id, role) } catch (e) { roleAssignmentError(e) }
     return { ok: true }
   })
 }

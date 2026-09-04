@@ -11,6 +11,16 @@ refusal:
     unreadableManifest: "le manifeste du spore « {plugin} » est illisible : {detail}"
     septumIncompatible: "le spore « {plugin} » {detail}"
     loadFailed: "le chargement du spore « {plugin} » a échoué : {detail}"
+    settingUndeclared: "le plugin « {plugin} » ne déclare aucun réglage « {key} »"
+  role:
+    notFound: "le rôle « {role} » n''existe pas"
+    exists: "le rôle « {role} » existe déjà"
+    builtin: "le rôle « {role} » est intégré et ne peut pas être modifié"
+    isDefault: "le rôle « {role} » est le rôle par défaut et ne peut pas être supprimé"
+    nameEmpty: "un nom de rôle ne peut pas être vide"
+    patternDuplicate: "le motif « {pattern} » est listé deux fois"
+  person:
+    notFound: "aucune personne d''identifiant « {id} »"
   config:
     invalidType: "attend {expected}"
     tooSmall: "{origin, select, string{doit faire au moins {minimum} caractères} array{doit contenir au moins {minimum} éléments} other{doit valoir au moins {minimum}}}"

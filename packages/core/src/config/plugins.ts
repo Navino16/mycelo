@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import type { ConfigIssue, FormSchema, Manifest, PluginInfo, SporeKind, TranslatableRef } from '@mycelo/septum'
+import { StoreRefusal } from '../authorization/refusal.js'
 import { discover } from '../germination/discover.js'
 import { isFailure, readManifest } from '../germination/manifest.js'
 import type { Registry } from '../germination/registry.js'
@@ -207,7 +208,9 @@ export async function secretKeysOf(
 export function redactSecrets(db: Db, name: string): Record<string, unknown> {
   // Its three siblings on this interface reject for an unknown plugin; resolving {} here
   // read exactly like a real plugin holding no settings.
-  if (getInstall(db, name) === null) throw new Error(`plugin '${name}' is not installed`)
+  if (getInstall(db, name) === null) {
+    throw new StoreRefusal('plugin-not-installed', `plugin '${name}' is not installed`, { plugin: name })
+  }
   const rows = db.select().from(pluginSetting).where(eq(pluginSetting.pluginName, name)).all()
   const out: Record<string, unknown> = {}
   for (const row of rows) {
@@ -242,7 +245,9 @@ export async function writeDeclaredSetting(
 ): Promise<void> {
   const form = await formSchemaOf(db, sporesDirs, name)
   if (undeclaredKeys(form, [key]).length > 0) {
-    throw new Error(`plugin '${name}' declares no setting '${key}'`)
+    throw new StoreRefusal(
+      'setting-undeclared', `plugin '${name}' declares no setting '${key}'`, { plugin: name, key },
+    )
   }
   rewriteSetting(db, name, key, value, await secretKeysOf(db, sporesDirs, name))
 }

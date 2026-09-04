@@ -100,9 +100,13 @@ describe('API messages rendered through the translator', () => {
     // A rendered sentence, not the echoed field: the refusal itself must arrive in French
     // even though the header asked for English.
     const message = response.json<{ error: { message: string } }>().error.message
-    expect(message).not.toBe('api.personNotFound')
-    expect(message).toBe(state().translator.translate('core', 'api.personNotFound', 'fr', { id: 'no-such-person' }))
-    expect(message).not.toBe(state().translator.translate('core', 'api.personNotFound', 'en', { id: 'no-such-person' }))
+    // `common`, not `core`: the refusal a spore renders and the one an HTTP client reads are
+    // one catalogue entry since task 10, so the domain is part of what this pins.
+    expect(message).not.toBe('refusal.person.notFound')
+    const rendered = (locale: string): string =>
+      state().translator.translate('common', 'refusal.person.notFound', locale, { id: 'no-such-person' })
+    expect(message).toBe(rendered('fr'))
+    expect(message).not.toBe(rendered('en'))
   })
 
   it('renders the setup lock refusal, which is emitted before the session gate', async () => {

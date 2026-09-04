@@ -1,7 +1,18 @@
 import type {
-  ConversationsRead, EnzymeModule, LocaleManage, MessagesBroadcast, PluginsConfigure, PluginsRead,
-  PluginsToggle, PrincipalsRead, RestrictionsManage, RolesAssign, RolesManage, RolesRead,
+  ConversationsRead, EnzymeContext, EnzymeModule, LocaleManage, MessagesBroadcast, Outcome,
+  PluginsConfigure, PluginsRead, PluginsToggle, PrincipalsRead, RestrictionsManage, RolesAssign,
+  RolesManage, RolesRead,
 } from '@mycelo/septum'
+
+/**
+ * A mycelium refusal travels as data, so it is rendered through ctx.t and reaches the sender in
+ * their own language. An exception from one of these is a fault, and belongs to the bus.
+ */
+async function refused(ctx: EnzymeContext, result: Outcome): Promise<boolean> {
+  if (result.ok) return false
+  await ctx.reply({ text: ctx.t(result.refusal) })
+  return true
+}
 
 // JSON first, raw string as the fallback: a chat channel has no types, and Zod must receive
 // 8080 as a number while http://x is not valid JSON and has to stay a string.
@@ -41,14 +52,9 @@ export default {
           await ctx.reply({ text: `no identity '${who}' on channel '${invocation.message.channel}'` })
           return
         }
-        // The mycelium curates its own diagnostics ("role 'x' does not exist"); letting the
-        // throw reach the bus would replace them all with "command 'grant' failed".
-        try {
-          await ctx.rhiza<RolesAssign>('mycelium').assignRole(identity.id, role)
-        } catch (e) {
-          await ctx.reply({ text: (e as Error).message })
-          return
-        }
+        // The mycelium curates its own diagnostics ("role 'x' does not exist"); dropping the
+        // refusal would replace them all with a bare success line.
+        if (await refused(ctx, await ctx.rhiza<RolesAssign>('mycelium').assignRole(identity.id, role))) return
         await ctx.reply({ text: `granted '${role}' to ${who}` })
       },
       handleRevoke: async (invocation, ctx) => {
@@ -62,12 +68,7 @@ export default {
           await ctx.reply({ text: `no identity '${who}' on channel '${invocation.message.channel}'` })
           return
         }
-        try {
-          await ctx.rhiza<RolesAssign>('mycelium').revokeRole(identity.id, role)
-        } catch (e) {
-          await ctx.reply({ text: (e as Error).message })
-          return
-        }
+        if (await refused(ctx, await ctx.rhiza<RolesAssign>('mycelium').revokeRole(identity.id, role))) return
         await ctx.reply({ text: `revoked '${role}' from ${who}` })
       },
       // Only `name` is a declared arg spec, so bindArgs binds the whole remainder to it;
@@ -81,12 +82,7 @@ export default {
           await ctx.reply({ text: 'usage: role-new <name> [pattern...]' })
           return
         }
-        try {
-          await ctx.rhiza<RolesManage>('mycelium').createRole(name, patterns)
-        } catch (e) {
-          await ctx.reply({ text: (e as Error).message })
-          return
-        }
+        if (await refused(ctx, await ctx.rhiza<RolesManage>('mycelium').createRole(name, patterns))) return
         await ctx.reply({ text: `created role '${name}' with patterns: ${patterns.join(', ') || 'none'}` })
       },
       handlePluginList: async (_invocation, ctx) => {
@@ -96,44 +92,33 @@ export default {
       },
       handlePluginEnable: async (invocation, ctx) => {
         const mycelium = ctx.rhiza<PluginsToggle>('mycelium')
-        // The refusal reason is what tells the operator what to fix; swallowing it
-        // would leave nothing but "failed".
-        try {
-          await mycelium.enable(invocation.args['name'] ?? '')
-          await ctx.reply({ text: `enabled ${invocation.args['name'] ?? ''}` })
-        } catch (e) {
-          await ctx.reply({ text: (e as Error).message })
-        }
+        // The refusal is what tells the operator what to fix; dropping it would leave
+        // nothing but "enabled", for a plugin that was not.
+        const name = invocation.args['name'] ?? ''
+        if (await refused(ctx, await mycelium.enable(name))) return
+        await ctx.reply({ text: `enabled ${name}` })
       },
       handlePluginDisable: async (invocation, ctx) => {
         const mycelium = ctx.rhiza<PluginsToggle>('mycelium')
-        try {
-          await mycelium.disable(invocation.args['name'] ?? '')
-          await ctx.reply({ text: `disabled ${invocation.args['name'] ?? ''}` })
-        } catch (e) {
-          await ctx.reply({ text: (e as Error).message })
-        }
+        const name = invocation.args['name'] ?? ''
+        if (await refused(ctx, await mycelium.disable(name))) return
+        await ctx.reply({ text: `disabled ${name}` })
       },
       handlePluginSet: async (invocation, ctx) => {
         const mycelium = ctx.rhiza<PluginsConfigure>('mycelium')
         const { name, key, value } = invocation.args
-        try {
-          await mycelium.setSetting(name ?? '', key ?? '', coerce(value ?? ''))
-          await ctx.reply({ text: `set ${key ?? ''} on ${name ?? ''}` })
-        } catch (e) {
-          await ctx.reply({ text: (e as Error).message })
-        }
+        const result = await mycelium.setSetting(name ?? '', key ?? '', coerce(value ?? ''))
+        if (await refused(ctx, result)) return
+        await ctx.reply({ text: `set ${key ?? ''} on ${name ?? ''}` })
       },
       handlePluginConfig: async (invocation, ctx) => {
         const mycelium = ctx.rhiza<PluginsConfigure>('mycelium')
-        let settings: Record<string, unknown>
-        try {
-          settings = await mycelium.settings(invocation.args['name'] ?? '')
-        } catch (e) {
-          await ctx.reply({ text: (e as Error).message })
+        const result = await mycelium.settings(invocation.args['name'] ?? '')
+        if (!result.ok) {
+          await ctx.reply({ text: ctx.t(result.refusal) })
           return
         }
-        const entries = Object.entries(settings)
+        const entries = Object.entries(result.value)
         await ctx.reply({
           text: entries.length === 0 ? 'no settings' : entries.map(([k, v]) => `${k} = ${String(v)}`).join('\n'),
         })

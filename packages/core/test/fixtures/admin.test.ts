@@ -1,7 +1,7 @@
 import { resolve } from 'node:path'
 import { expect, it } from 'bun:test'
 import { MYCELIUM_SCOPES } from '@mycelo/septum'
-import type { EnzymeContext, Invocation, Translate } from '@mycelo/septum'
+import type { EnzymeContext, Invocation, Translate, TranslatableRef } from '@mycelo/septum'
 import { readManifest } from '../../src/germination/manifest.js'
 import module from '../../../../fixtures/admin/src/index.js'
 
@@ -49,7 +49,9 @@ function stubContext(
       if (c.text !== undefined) replies.push(c.text)
       return Promise.resolve()
     },
-    t: extra.t ?? ((key: string) => key),
+    // A ref renders as `domain/key`: a handler that dropped ctx.t and printed the object,
+    // or picked the wrong key, is visible without duplicating the catalogue here.
+    t: extra.t ?? ((key: string | TranslatableRef) => (typeof key === 'string' ? key : `${key.domain}/${key.key}`)),
     principal: extra.principal ?? { id: 'alice' },
   } as unknown as EnzymeContext
 }
@@ -57,7 +59,12 @@ function stubContext(
 it('plugin-set stores a bare number as a number and a bare word as a string', async () => {
   const written: Array<[string, string, unknown]> = []
   const ctx = stubContext(
-    { setSetting: (n: string, k: string, v: unknown) => { written.push([n, k, v]); return Promise.resolve() } },
+    {
+      setSetting: (n: string, k: string, v: unknown) => {
+        written.push([n, k, v])
+        return Promise.resolve({ ok: true })
+      },
+    },
     [],
   )
   const handlers = module.create().handlers
@@ -68,23 +75,26 @@ it('plugin-set stores a bare number as a number and a bare word as a string', as
   expect(written[1]).toEqual(['radarr', 'url', 'http://x'])
 })
 
-it('plugin-enable reports the refusal reason verbatim', async () => {
+it('plugin-enable renders the refusal through ctx.t rather than reporting success', async () => {
   const replies: string[] = []
   const ctx = stubContext(
-    { enable: () => Promise.reject(new Error('configuration is incomplete: url')) },
+    {
+      enable: () => Promise.resolve({
+        ok: false, refusal: { domain: 'common', key: 'refusal.config.incomplete' },
+      }),
+    },
     replies,
   )
   await module.create().handlers['handlePluginEnable']?.(invocation({ name: 'needs-config' }), ctx)
-  // Verbatim, not merely "contains": a swallowed or truncated reason leaves the operator
-  // with nothing to act on.
-  expect(replies[0]).toBe('configuration is incomplete: url')
+  // The refusal, not "enabled needs-config": a dropped `ok` check reads a refusal as success.
+  expect(replies).toEqual(['common/refusal.config.incomplete'])
 })
 
 it('plugin-disable reports success', async () => {
   const replies: string[] = []
   const disabled: string[] = []
   const ctx = stubContext(
-    { disable: (n: string) => { disabled.push(n); return Promise.resolve() } },
+    { disable: (n: string) => { disabled.push(n); return Promise.resolve({ ok: true }) } },
     replies,
   )
   await module.create().handlers['handlePluginDisable']?.(invocation({ name: 'radarr' }), ctx)
@@ -92,24 +102,32 @@ it('plugin-disable reports success', async () => {
   expect(replies[0]).toBe('disabled radarr')
 })
 
-it('plugin-disable reports the refusal reason verbatim, not "command failed"', async () => {
+it('plugin-disable renders the refusal, not "disabled ghost"', async () => {
   const replies: string[] = []
   const ctx = stubContext(
-    { disable: () => Promise.reject(new Error("plugin 'ghost' is not installed")) },
+    {
+      disable: () => Promise.resolve({
+        ok: false, refusal: { domain: 'common', key: 'refusal.plugin.notInstalled', params: { plugin: 'ghost' } },
+      }),
+    },
     replies,
   )
   await module.create().handlers['handlePluginDisable']?.(invocation({ name: 'ghost' }), ctx)
-  expect(replies[0]).toBe("plugin 'ghost' is not installed")
+  expect(replies).toEqual(['common/refusal.plugin.notInstalled'])
 })
 
-it('plugin-set reports the refusal reason verbatim, not "command failed"', async () => {
+it('plugin-set renders the refusal, not "set x on ghost"', async () => {
   const replies: string[] = []
   const ctx = stubContext(
-    { setSetting: () => Promise.reject(new Error("plugin 'ghost' is not installed")) },
+    {
+      setSetting: () => Promise.resolve({
+        ok: false, refusal: { domain: 'common', key: 'refusal.plugin.notInstalled', params: { plugin: 'ghost' } },
+      }),
+    },
     replies,
   )
   await module.create().handlers['handlePluginSet']?.(invocation({ name: 'ghost', key: 'x', value: '1' }), ctx)
-  expect(replies[0]).toBe("plugin 'ghost' is not installed")
+  expect(replies).toEqual(['common/refusal.plugin.notInstalled'])
 })
 
 it('plugin-list reports each plugin\'s kind and state, including a disabled plugin', async () => {
@@ -132,27 +150,32 @@ it('plugin-list reports each plugin\'s kind and state, including a disabled plug
 
 it('plugin-config reports no settings when there are none', async () => {
   const replies: string[] = []
-  const ctx = stubContext({ settings: () => Promise.resolve({}) }, replies)
+  const ctx = stubContext({ settings: () => Promise.resolve({ ok: true, value: {} }) }, replies)
   await module.create().handlers['handlePluginConfig']?.(invocation({ name: 'radarr' }), ctx)
   expect(replies[0]).toBe('no settings')
 })
 
-// settings() now rejects for an uninstalled plugin, so the one handler with no catch
-// would answer "command 'plugin-config' failed" instead of naming the plugin.
-it('plugin-config reports the refusal reason verbatim, not "command failed"', async () => {
+// settings() refuses for an uninstalled plugin, and its refusal arm carries no `value`:
+// a handler reading `result.value` regardless would print 'no settings' for a plugin
+// that does not exist.
+it('plugin-config renders the refusal, not "no settings"', async () => {
   const replies: string[] = []
   const ctx = stubContext(
-    { settings: () => Promise.reject(new Error("plugin 'ghost' is not installed")) },
+    {
+      settings: () => Promise.resolve({
+        ok: false, refusal: { domain: 'common', key: 'refusal.plugin.notInstalled', params: { plugin: 'ghost' } },
+      }),
+    },
     replies,
   )
   await module.create().handlers['handlePluginConfig']?.(invocation({ name: 'ghost' }), ctx)
-  expect(replies[0]).toBe("plugin 'ghost' is not installed")
+  expect(replies).toEqual(['common/refusal.plugin.notInstalled'])
 })
 
 it('plugin-config lists settings, secrets already redacted by the mycelium', async () => {
   const replies: string[] = []
   const ctx = stubContext(
-    { settings: () => Promise.resolve({ url: 'http://x', apiKey: '••••' }) },
+    { settings: () => Promise.resolve({ ok: true, value: { url: 'http://x', apiKey: '••••' } }) },
     replies,
   )
   await module.create().handlers['handlePluginConfig']?.(invocation({ name: 'radarr' }), ctx)

@@ -43,19 +43,29 @@ describe('the api lists nothing else pins', () => {
     expect([...used].filter((key) => !fr.includes(key))).toEqual([])
   })
 
-  it('maps every RefusalCode in a route, so none falls through to a 500', () => {
+  it('maps every RefusalCode a route can raise, so none falls through to a 500', () => {
     const union = /export type RefusalCode =([\s\S]*?)\n\n/.exec(read('authorization/refusal.ts'))?.[1] ?? ''
     const codes = matches(union, /'([a-z-]+)'/g)
-    expect(codes).toHaveLength(7)
+    expect(codes).toHaveLength(9)
     const mappers = read('api/routes/roles.ts') + read('api/routes/people.ts')
-    expect(codes.filter((code) => !mappers.includes(`isRefusal(e, '${code}')`))).toEqual([])
+    // The two plugin codes reach no route: requireInstalled refuses before setEnabled or
+    // redactSecrets can raise one, and no route calls writeDeclaredSetting — the settings route
+    // runs undeclaredKeys itself. Named rather than skipped, so a route that starts calling
+    // either function has to come back here.
+    const unreachable = ['plugin-not-installed', 'setting-undeclared']
+    expect(codes.filter((code) => unreachable.includes(code))).toEqual(unreachable)
+    expect(
+      codes.filter((code) => !unreachable.includes(code) && !mappers.includes(`isRefusal(e, '${code}')`)),
+    ).toEqual([])
   })
 
   it('answers with exactly the error codes spec §9 lists', () => {
     const fromErrors = matches(read('api/errors.ts'), /new ApiError\(\d+, '([a-z-]+)'/g)
     const handler = read('api/server.ts').split('\n').filter((line) => /^\s*code:/.test(line)).join('\n')
     const fromHandler = matches(handler, /'([a-z-]+)'/g)
-    expect(fromErrors).toHaveLength(6)
+    // Nine constructors, eight codes: the three `common`-domain refusal builders reuse
+    // validation, not-found and conflict rather than inventing a code of their own.
+    expect(fromErrors).toHaveLength(9)
     expect(fromHandler).toHaveLength(3)
     expect([...new Set([...fromErrors, ...fromHandler])].sort()).toEqual([
       'conflict', 'degraded', 'internal', 'not-found',

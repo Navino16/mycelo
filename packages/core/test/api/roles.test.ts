@@ -21,7 +21,7 @@ describe('/api/roles', () => {
     // Boot raises a StartupError for a missing defaultRole, so deleting into that state
     // would leave every first contact throwing until someone restarts and reads why.
     expect(response.json<{ error: { message: string } }>().error.message)
-      .toBe("role 'guest' is the configured default role and cannot be deleted")
+      .toBe("role 'guest' is the default role and cannot be deleted")
     const still = (
       await app.inject({ method: 'GET', url: '/api/roles', headers: { cookie } })
     ).json<{ name: string }[]>()
@@ -42,7 +42,7 @@ describe('/api/roles', () => {
     const { app, cookie } = booted
     const response = await app.inject({ method: 'DELETE', url: '/api/roles/ghost-role', headers: { cookie } })
     expect(response.statusCode).toBe(404)
-    expect(response.json<{ error: { message: string } }>().error.message).toBe("no role named 'ghost-role'")
+    expect(response.json<{ error: { message: string } }>().error.message).toBe("role 'ghost-role' does not exist")
   })
 
   it('creates a role with several patterns and reads them all back', async () => {
@@ -66,7 +66,7 @@ describe('/api/roles', () => {
     const { app, cookie } = booted
     const response = await app.inject({ method: 'GET', url: '/api/roles/ghost-role', headers: { cookie } })
     expect(response.statusCode).toBe(404)
-    expect(response.json<{ error: { message: string } }>().error.message).toBe("no role named 'ghost-role'")
+    expect(response.json<{ error: { message: string } }>().error.message).toBe("role 'ghost-role' does not exist")
   })
 
   it('conflicts creating a role that already exists, naming it', async () => {
@@ -87,7 +87,7 @@ describe('/api/roles', () => {
       payload: { name: 'guest', patterns: ['media.*', 'media.*'] },
     })
     expect(response.statusCode).toBe(400)
-    expect(response.json<{ error: { message: string } }>().error.message).toBe('a pattern is listed twice')
+    expect(response.json<{ error: { message: string } }>().error.message).toBe("pattern 'media.*' is listed twice")
     const roles = (
       await app.inject({ method: 'GET', url: '/api/roles', headers: { cookie } })
     ).json<{ name: string }[]>()
@@ -131,7 +131,7 @@ describe('/api/roles', () => {
       method: 'PUT', url: '/api/roles/ghost-role/commands', headers: { cookie }, payload: { patterns: [] },
     })
     expect(response.statusCode).toBe(404)
-    expect(response.json<{ error: { message: string } }>().error.message).toBe("no role named 'ghost-role'")
+    expect(response.json<{ error: { message: string } }>().error.message).toBe("role 'ghost-role' does not exist")
   })
 
   it('refuses duplicate patterns on rewrite, leaving the previous set untouched', async () => {
@@ -146,7 +146,10 @@ describe('/api/roles', () => {
       payload: { patterns: ['admin.whoami', 'admin.whoami'] },
     })
     expect(response.statusCode).toBe(400)
-    expect(response.json<{ error: { message: string } }>().error.message).toBe('a pattern is listed twice')
+    // The repeated pattern of *this* call, not the one the role already had: the sentence
+    // names which pattern only because the thrower fills the placeholder.
+    expect(response.json<{ error: { message: string } }>().error.message)
+      .toBe("pattern 'admin.whoami' is listed twice")
     const role = (
       await app.inject({ method: 'GET', url: '/api/roles/guest', headers: { cookie } })
     ).json<{ patterns: string[] }>()

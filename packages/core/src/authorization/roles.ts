@@ -20,14 +20,18 @@ export function findRole(db: Db, name: string): { id: string; builtin: boolean }
 
 export function assignRole(db: Db, principalId: string, roleName: string): void {
   const found = findRole(db, roleName)
-  if (found === undefined) throw new StoreRefusal('role-unknown', `role '${roleName}' does not exist`)
+  if (found === undefined) {
+    throw new StoreRefusal('role-unknown', `role '${roleName}' does not exist`, { role: roleName })
+  }
   requirePrincipal(db, principalId)
   db.insert(principalRole).values({ principalId, roleId: found.id }).onConflictDoNothing().run()
 }
 
 export function revokeRole(db: Db, principalId: string, roleName: string): void {
   const found = findRole(db, roleName)
-  if (found === undefined) throw new StoreRefusal('role-unknown', `role '${roleName}' does not exist`)
+  if (found === undefined) {
+    throw new StoreRefusal('role-unknown', `role '${roleName}' does not exist`, { role: roleName })
+  }
   requirePrincipal(db, principalId)
   db.delete(principalRole)
     .where(and(eq(principalRole.principalId, principalId), eq(principalRole.roleId, found.id)))
@@ -39,11 +43,11 @@ export function revokeRole(db: Db, principalId: string, roleName: string): void 
 export function createRole(db: Db, name: string, patterns: readonly string[]): void {
   if (name === '') throw new StoreRefusal('role-name-empty', 'a role name cannot be empty')
   if (findRole(db, name) !== undefined) {
-    throw new StoreRefusal('role-exists', `role '${name}' already exists`)
+    throw new StoreRefusal('role-exists', `role '${name}' already exists`, { role: name })
   }
   const duplicate = patterns.find((p, i) => patterns.indexOf(p) !== i)
   if (duplicate !== undefined) {
-    throw new StoreRefusal('pattern-duplicate', `pattern '${duplicate}' is listed twice`)
+    throw new StoreRefusal('pattern-duplicate', `pattern '${duplicate}' is listed twice`, { pattern: duplicate })
   }
   const id = crypto.randomUUID()
   db.transaction((tx) => {
@@ -54,13 +58,15 @@ export function createRole(db: Db, name: string, patterns: readonly string[]): v
 
 export function setRoleCommands(db: Db, name: string, patterns: readonly string[]): void {
   const found = findRole(db, name)
-  if (found === undefined) throw new StoreRefusal('role-unknown', `role '${name}' does not exist`)
+  if (found === undefined) {
+    throw new StoreRefusal('role-unknown', `role '${name}' does not exist`, { role: name })
+  }
   if (found.builtin) {
-    throw new StoreRefusal('role-builtin', `role '${name}' is builtin and cannot be rewritten`)
+    throw new StoreRefusal('role-builtin', `role '${name}' is builtin and cannot be rewritten`, { role: name })
   }
   const duplicate = patterns.find((p, i) => patterns.indexOf(p) !== i)
   if (duplicate !== undefined) {
-    throw new StoreRefusal('pattern-duplicate', `pattern '${duplicate}' is listed twice`)
+    throw new StoreRefusal('pattern-duplicate', `pattern '${duplicate}' is listed twice`, { pattern: duplicate })
   }
   db.transaction((tx) => {
     tx.delete(roleCommand).where(eq(roleCommand.roleId, found.id)).run()
@@ -70,15 +76,17 @@ export function setRoleCommands(db: Db, name: string, patterns: readonly string[
 
 export function deleteRole(db: Db, name: string, defaultRole: string | undefined): void {
   const found = findRole(db, name)
-  if (found === undefined) throw new StoreRefusal('role-unknown', `role '${name}' does not exist`)
+  if (found === undefined) {
+    throw new StoreRefusal('role-unknown', `role '${name}' does not exist`, { role: name })
+  }
   if (found.builtin) {
-    throw new StoreRefusal('role-builtin', `role '${name}' is builtin and cannot be deleted`)
+    throw new StoreRefusal('role-builtin', `role '${name}' is builtin and cannot be deleted`, { role: name })
   }
   // Boot raises a StartupError for a missing defaultRole; deleting into that state would
   // leave every first contact throwing until someone restarts and sees why.
   if (defaultRole !== undefined && name === defaultRole) {
     throw new StoreRefusal(
-      'role-is-default', `role '${name}' is the configured default role and cannot be deleted`,
+      'role-is-default', `role '${name}' is the configured default role and cannot be deleted`, { role: name },
     )
   }
   db.delete(role).where(eq(role.id, found.id)).run()
