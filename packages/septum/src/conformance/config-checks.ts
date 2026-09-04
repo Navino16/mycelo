@@ -117,9 +117,10 @@ export function configSchemaFailures(
  * operator — the green-build-broken-execution class, and one phase 9.6 creates if nothing checks
  * it (design §6).
  *
- * **Incomplete by construction.** Only the issues this corpus provokes can be seen: a rule that
- * fires on a value the harness never supplies is not covered, and a plugin declaring no
- * `invalidConfig` is not covered at all. Widening the corpus is not possible in general — a
+ * **Incomplete by construction.** The corpus is two probes: the empty object — what
+ * `readSettings` hands `safeParse` before any setting is ever written, so every plugin's first
+ * enable germinates against it — and the harness's own `invalidConfig`. A rule that fires on
+ * neither is not covered, and widening the corpus further is not possible in general: a
  * `.refine()` predicate is arbitrary code over arbitrary input.
  */
 function unresolvableMessageKeys(
@@ -127,29 +128,35 @@ function unresolvableMessageKeys(
   invalidConfig: unknown,
   catalogs: Record<string, unknown> | undefined,
 ): string[] {
-  // Gated on both, like every check here: no catalogue supplied means the author is not claiming
-  // to translate, and the runtime germinates such a plugin.
-  if (catalogs === undefined || invalidConfig === undefined) return []
+  // No catalogue supplied means the author is not claiming to translate, and the runtime
+  // germinates such a plugin — the empty-object probe runs regardless of invalidConfig.
+  if (catalogs === undefined) return []
   const declared = declaredCatalogKeys(catalogs)
+  // A `.refine()` returning a literal sentence carries that sentence as messageKey (custom code
+  // sets messageKey = message); with nothing declared the plugin isn't claiming to translate it,
+  // so reporting it would be a false positive — same guard as enzyme.ts's catalogFailures().
   if (declared.size === 0) return []
-  let parsed: ReturnType<ConfigSchema<unknown>['safeParse']>
-  try {
-    parsed = schema.safeParse(invalidConfig)
-  } catch {
-    return []
-  }
-  if (parsed.success) return []
-  const issues: unknown = member(parsed.error, 'issues')
-  if (!Array.isArray(issues)) return []
-  const failures: string[] = []
-  for (const issue of issues as readonly unknown[]) {
-    // Only a bare string is a key in this spore's own domain; a ref names `common`, which the core
-    // owns and the kit cannot see (design §5.3).
-    const key = member(issue, 'messageKey')
-    if (typeof key !== 'string' || key.length === 0) continue
-    if (!declared.has(key)) {
-      failures.push(`configSchema refuses with key '${key}', which no supplied catalogue declares`)
+  const probes: unknown[] = invalidConfig === undefined ? [{}] : [{}, invalidConfig]
+  const unresolved = new Set<string>()
+  for (const probe of probes) {
+    let parsed: ReturnType<ConfigSchema<unknown>['safeParse']>
+    try {
+      parsed = schema.safeParse(probe)
+    } catch {
+      continue
+    }
+    if (parsed.success) continue
+    const issues: unknown = member(parsed.error, 'issues')
+    if (!Array.isArray(issues)) continue
+    for (const issue of issues as readonly unknown[]) {
+      // Only a bare string is a key in this spore's own domain; a ref names `common`, which the
+      // core owns and the kit cannot see (design §5.3).
+      const key = member(issue, 'messageKey')
+      if (typeof key !== 'string' || key.length === 0) continue
+      if (!declared.has(key)) unresolved.add(key)
     }
   }
-  return failures
+  return [...unresolved].map(
+    (key) => `configSchema refuses with key '${key}', which no supplied catalogue declares`,
+  )
 }
