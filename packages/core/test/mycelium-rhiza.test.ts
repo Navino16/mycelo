@@ -17,7 +17,10 @@ import type { Registry } from '../src/germination/registry.js'
 import { MYCELIUM_SCOPES } from '@mycelo/septum'
 import type { MyceliumScope } from '@mycelo/septum'
 import { MOUNTABLE_SCOPES, resolve } from '../src/germination/anastomoses.js'
+import { loadCoreCatalogs } from '../src/i18n/core-catalogs.js'
 import { resolveLocale } from '../src/i18n/locale.js'
+import { renderRefusal } from '../src/i18n/refusal.js'
+import { createTranslator } from '../src/i18n/translator.js'
 import { createMyceliumApi } from '../src/mycelium-rhiza.js'
 import type { MyceliumApiOptions } from '../src/mycelium-rhiza.js'
 import type { SporangiumDriver } from '../src/sporangium/driver.js'
@@ -576,6 +579,26 @@ describe('setSetting against the keys the plugin declares', () => {
     // which keys exist. The ledger records that half; it is not closed by this guard.
     await succeeds(api.setSetting('gate', 'group_id', 'flatmates'))
     expect(await valueOf(api.settings('gate'))).toEqual({ group_id: 'flatmates' })
+  })
+
+  // The only two refusals no other suite renders against a real catalogue: the role and person
+  // keys reach a sentence through the roles, people, i18n and milestone tests, these two through
+  // nothing. A placeholder the thrower does not fill renders as a raw dotted key here, and the
+  // union-bag catalogue test stays green either way.
+  it('renders both plugin refusals as the sentences the shipped catalogues carry, in both locales', async () => {
+    const translator = createTranslator({
+      catalogs: loadCoreCatalogs(), defaultLocale: 'en', logger: stubLogger(),
+    })
+    const toggle = createMyceliumApi(emptyRegistry(), ['plugins.toggle'], noSend, fresh(), SPORES) as PluginsToggle
+    const notInstalled = await refusalOf(toggle.disable('ghost'))
+    expect(renderRefusal(translator, notInstalled, 'en')).toBe("plugin 'ghost' is not installed")
+    expect(renderRefusal(translator, notInstalled, 'fr')).toBe("le plugin « ghost » n'est pas installé")
+    await withSpore(CLOSED, async (api) => {
+      const undeclared = await refusalOf(api.setSetting('declares', 'ur1', 'x'))
+      expect(renderRefusal(translator, undeclared, 'en')).toBe("plugin 'declares' declares no setting 'ur1'")
+      expect(renderRefusal(translator, undeclared, 'fr'))
+        .toBe('le plugin « declares » ne déclare aucun réglage « ur1 »')
+    })
   })
 })
 

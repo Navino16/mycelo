@@ -48,10 +48,10 @@ describe('the api lists nothing else pins', () => {
     const codes = matches(union, /'([a-z-]+)'/g)
     expect(codes).toHaveLength(9)
     const mappers = read('api/routes/roles.ts') + read('api/routes/people.ts')
-    // The two plugin codes reach no route: requireInstalled refuses before setEnabled or
+    // The two plugin codes reach no route today: requireInstalled refuses before setEnabled or
     // redactSecrets can raise one, and no route calls writeDeclaredSetting — the settings route
-    // runs undeclaredKeys itself. Named rather than skipped, so a route that starts calling
-    // either function has to come back here.
+    // runs undeclaredKeys itself. The exemption is unconditional, so it records that fact rather
+    // than enforcing it.
     const unreachable = ['plugin-not-installed', 'setting-undeclared']
     expect(codes.filter((code) => unreachable.includes(code))).toEqual(unreachable)
     expect(

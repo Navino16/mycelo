@@ -50,7 +50,7 @@ describe('outcome', () => {
     expect(await outcome(() => { /* nothing to do */ })).toEqual({ ok: true })
   })
 
-  it('turns a StoreRefusal into a refusal, in common, carrying the thrower s params', async () => {
+  it("turns a StoreRefusal into a refusal, in common, carrying the thrower's params", async () => {
     const r = await outcome(() => {
       throw new StoreRefusal('role-unknown', "role 'ops' does not exist", { role: 'ops' })
     })

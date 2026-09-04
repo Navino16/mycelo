@@ -1,3 +1,4 @@
+import { expect } from 'bun:test'
 import type { Outcome, OutcomeOf, TranslatableRef } from '@mycelo/septum'
 
 /**
@@ -17,8 +18,13 @@ export async function valueOf<T>(promise: Promise<OutcomeOf<T>>): Promise<T> {
   return result.value
 }
 
-/** Asserts a method did its work: a silent `{ ok: false }` used to be a rejection a test could see. */
+/**
+ * Asserts a method did its work: a silent `{ ok: false }` used to be a rejection a test could see.
+ * The shape is exact, not just `ok`: a void mount line wired to `outcomeOf` instead of `outcome`
+ * compiles and answers `{ ok: true, value: undefined }`, which is not what the contract publishes.
+ */
 export async function succeeds(promise: Promise<Outcome>): Promise<void> {
   const result = await promise
   if (!result.ok) throw new Error(`expected success, but the call refused with '${result.refusal.key}'`)
+  expect(result).toStrictEqual({ ok: true })
 }

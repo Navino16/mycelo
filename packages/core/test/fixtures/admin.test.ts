@@ -130,6 +130,31 @@ it('plugin-set renders the refusal, not "set x on ghost"', async () => {
   expect(replies).toEqual(['common/refusal.plugin.notInstalled'])
 })
 
+// The seventh handler this contract change reached, and the one that appeared only on its
+// success path: a dropped `ok` check answers "revoked 'ghost' from bob" for a role nobody holds.
+it('revoke renders the refusal, not "revoked ghost from bob"', async () => {
+  const replies: string[] = []
+  const revoked: Array<[string, string]> = []
+  const ctx = stubContext(
+    {
+      findByIdentity: () => Promise.resolve({ id: 'p1' }),
+      revokeRole: (id: string, role: string) => {
+        revoked.push([id, role])
+        return Promise.resolve({
+          ok: false, refusal: { domain: 'common', key: 'refusal.role.notFound', params: { role } },
+        })
+      },
+    },
+    replies,
+  )
+  await module.create().handlers['handleRevoke']?.(
+    invocation({ role: 'ghost', who: 'bob' }, { channel: 'console' }), ctx,
+  )
+  // The call was made and the refusal came back from it, so this is not an early return.
+  expect(revoked).toEqual([['p1', 'ghost']])
+  expect(replies).toEqual(['common/refusal.role.notFound'])
+})
+
 it('plugin-list reports each plugin\'s kind and state, including a disabled plugin', async () => {
   const replies: string[] = []
   const ctx = stubContext(
