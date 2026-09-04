@@ -57,8 +57,8 @@ export function toConfigIssue(raw: z.core.$ZodIssue): ConfigIssue {
   const issue = raw as unknown as Record<string, unknown>
   const message = typeof issue['message'] === 'string' ? issue['message'] : 'unspecified issue'
   const base: ConfigIssue = { path: raw.path, message }
-  // A `.refine()` that set no `error` leaves zod's own sentence, which is not a key: emitting it as
-  // one would ask the catalogue for 'Invalid input' and render that same string back anyway.
+  // An empty error callback result would yield an empty key — guard against it by emitting
+  // no messageKey, so the catalogue is not consulted and `message` renders as-is.
   if (raw.code === 'custom') return message.length === 0 ? base : { ...base, messageKey: message }
   const mapped = MAPPED[raw.code]
   if (mapped === undefined) return base

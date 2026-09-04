@@ -59,9 +59,11 @@ test('every mapped zod code carries its common key and its parameters', () => {
     n: z.number().multipleOf(5),
     arr: z.array(z.string()).min(2),
     loose: z.number().gt(0),
+    cap: z.number().max(10),
+    ceiling: z.number().lt(0),
   }).strict())
   // The plural case, deliberately: a corpus of one proves the table exists, never that it maps.
-  expect(keysOf(cs, { port: 0, name: 'ab', url: 'plex:32400', mode: 'z', n: 3, arr: [], loose: 0, extra: 1 }))
+  expect(keysOf(cs, { port: 0, name: 'ab', url: 'plex:32400', mode: 'z', n: 3, arr: [], loose: 0, cap: 15, ceiling: 0, extra: 1 }))
     .toEqual([
       'common:refusal.config.invalidType',
       'common:refusal.config.tooSmall',
@@ -71,6 +73,8 @@ test('every mapped zod code carries its common key and its parameters', () => {
       'common:refusal.config.notMultipleOf',
       'common:refusal.config.tooSmall',
       'common:refusal.config.tooSmallExclusive',
+      'common:refusal.config.tooBig',
+      'common:refusal.config.tooBigExclusive',
       'common:refusal.config.unrecognizedKeys',
     ])
 })
@@ -83,6 +87,16 @@ test('origin is carried, so one key serves string, number and array', () => {
   if (r.success) throw new Error('expected a refusal')
   expect(r.error.issues.map((i) => i.params?.['origin'])).toEqual(['string', 'number', 'array'])
   expect(r.error.issues.map((i) => i.params?.['minimum'])).toEqual([3, 3, 3])
+})
+
+test('tooBig carries maximum (not minimum), so origin is pinned across types', () => {
+  const cs = defineConfig(z.object({
+    s: z.string().max(3), n: z.number().max(3), a: z.array(z.string()).max(3),
+  }))
+  const r = cs.safeParse({ s: 'four', n: 4, a: ['a', 'b', 'c', 'd'] })
+  if (r.success) throw new Error('expected a refusal')
+  expect(r.error.issues.map((i) => i.params?.['origin'])).toEqual(['string', 'number', 'array'])
+  expect(r.error.issues.map((i) => i.params?.['maximum'])).toEqual([3, 3, 3])
 })
 
 test("a refine's message is a key in the spore's own domain, not a common one", () => {
