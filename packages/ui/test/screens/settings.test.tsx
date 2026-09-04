@@ -316,7 +316,7 @@ describe('the generated settings form', () => {
         body: {
           error: {
             message: 'refused',
-            detail: [{ key: 'url', issues: [{ path: ['url'], message: 'must start with http:// or https://' }] }],
+            detail: [{ key: 'url', messages: ['must start with http:// or https://'] }],
           },
         },
       },
@@ -330,9 +330,10 @@ describe('the generated settings form', () => {
     expect(screen.queryByText('Something went wrong')).toBeNull()
   })
 
-  // Discriminates the `typeof m === 'string'` filter: a malformed issue with no message
-  // must not surface the literal word "undefined" beside a field the operator can read.
-  it('does not render "undefined" for a malformed issue with no message', async () => {
+  // Task 12: the server now sends whole sentences, so there is no message-less case of its
+  // own any more. What can still cross the wire malformed is a non-string entry in `messages`
+  // (a proxy, a version skew) — the filter must drop it, not render it literally.
+  it('filters a non-string entry out of messages, keeping the rest', async () => {
     mockVault({
       settings: { url: 'http://x', token: '••••' },
       putResult: {
@@ -340,7 +341,7 @@ describe('the generated settings form', () => {
         body: {
           error: {
             message: 'refused',
-            detail: [{ key: 'url', issues: [{ path: ['url'], message: 'must start with http://' }, { path: ['url'] }] }],
+            detail: [{ key: 'url', messages: ['must start with http://', 42] }],
           },
         },
       },
@@ -350,11 +351,53 @@ describe('the generated settings form', () => {
     await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    // Exact string match (not a substring regex): a stray '; ' from an unfiltered undefined
-    // entry would break this exact equality without ever spelling the word "undefined".
     await waitFor(() => {
       expect(screen.queryAllByText('must start with http://').length).toBeGreaterThan(0)
     })
+    expect(screen.queryByText('42')).toBeNull()
+  })
+
+  // The plural case: joining with '; ' collapsed two refusals on one field into one sentence.
+  // A test that would still pass keeping only `messages[0]` is not testing this.
+  it('shows every message on one key, not only the first', async () => {
+    mockVault({
+      settings: { url: 'http://x', token: '••••' },
+      putResult: {
+        status: 400,
+        body: {
+          error: {
+            message: 'refused',
+            detail: [{ key: 'url', messages: ['trop petit', 'doit être un multiple de 5'] }],
+          },
+        },
+      },
+    })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => { expect(screen.queryByText('trop petit')).not.toBeNull() })
+    expect(screen.getByText('doit être un multiple de 5')).toBeDefined()
+  })
+
+  // Defensive about the wire, not about a plugin any more: a proxy or a version skew can
+  // still deliver something that is not the array the client expects, and a thrown render
+  // would lose the operator's unsaved edits.
+  it('leaves the form usable when detail is not the shape the client expects', async () => {
+    const { calls } = mockVault({
+      settings: { url: 'http://x', token: '••••' },
+      putResult: { status: 400, body: { error: { message: 'refused', detail: 'not an array' } } },
+    })
+    renderSettings()
+
+    const url = await waitFor(() => screen.getByLabelText<HTMLInputElement>('URL'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
+
+    await screen.findByRole('alert')
+    fireEvent.change(url, { target: { value: 'http://y' } })
+    expect(url.value).toBe('http://y')
   })
 
   // Both halves. The first alone passes for a switch that is always off; the second alone
@@ -464,13 +507,21 @@ describe('the generated settings form', () => {
     }
   })
 
+  // Task 12: the sentence is the shipped `refusal.config.incomplete` rendering (renderRefusal
+  // joins each zod issue's own `message`, with no path prefix) — not the hand-built
+  // "field: required" phrasing the fixture carried before task 11 shipped it server-side.
   it('renders the refusal naming the missing field when enabling fails', async () => {
     mockVault({
       detail: DISABLED,
       settings: { url: 'http://x', token: '••••' },
       enableResult: {
         status: 400,
-        body: { error: { message: 'refused', detail: 'configuration is incomplete: token: field required' } },
+        body: {
+          error: {
+            message: 'refused',
+            detail: 'configuration is incomplete: Invalid input: expected string, received undefined',
+          },
+        },
       },
     })
     renderSettings()
@@ -478,7 +529,10 @@ describe('the generated settings form', () => {
     await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
     fireEvent.click(screen.getByRole('switch'))
 
-    await waitFor(() => { expect(screen.getByText('configuration is incomplete: token: field required')).toBeDefined() })
+    await waitFor(() => {
+      expect(screen.getByText('configuration is incomplete: Invalid input: expected string, received undefined'))
+        .toBeDefined()
+    })
   })
 
   // The other half of R1's boundary: enabling a plugin is not a destructive action, so its
@@ -506,7 +560,7 @@ describe('the generated settings form', () => {
       settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' },
       putResult: {
         status: 400,
-        body: { error: { message: 'refused', detail: [{ key: 'url', issues: [{ message: 'not a URL' }] }] } },
+        body: { error: { message: 'refused', detail: [{ key: 'url', messages: ['not a URL'] }] } },
       },
     })
     renderSettings()
@@ -646,7 +700,7 @@ describe("the generated form's page frame", () => {
         body: {
           error: {
             message: 'refused',
-            detail: [{ key: 'url', issues: [{ path: ['url'], message: 'must start with http://' }] }],
+            detail: [{ key: 'url', messages: ['must start with http://'] }],
           },
         },
       },
@@ -700,7 +754,7 @@ describe("the generated form's page frame", () => {
         body: {
           error: {
             message: 'refused',
-            detail: [{ key: 'url', issues: [{ path: ['url'], message: 'must start with http://' }] }],
+            detail: [{ key: 'url', messages: ['must start with http://'] }],
           },
         },
       },

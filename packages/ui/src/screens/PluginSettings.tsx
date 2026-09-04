@@ -38,25 +38,17 @@ function isPlainObject(value: unknown): value is Settings {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-interface Rejection { key: string, message: string }
+interface Rejection { key: string, messages: readonly string[] }
 
-/** The plugin's own issues, whatever shape they carried (plugins.ts's SettingRejection). */
-function issueMessages(issues: unknown): readonly string[] {
-  const list = readArray<unknown>(issues)
-  if (list === undefined) return []
-  return list
-    .map((issue) => (isPlainObject(issue) ? issue.message : undefined))
-    .filter((m): m is string => typeof m === 'string')
-}
-
+/** The server renders (design §3), so this only checks the shape it was handed. */
 function readRejections(detail: unknown): readonly Rejection[] {
   const list = readArray<unknown>(detail)
   if (list === undefined) return []
   const out: Rejection[] = []
   for (const item of list) {
     if (!isPlainObject(item) || typeof item.key !== 'string') continue
-    const message = issueMessages(item.issues).join('; ')
-    if (message !== '') out.push({ key: item.key, message })
+    const messages = readArray<unknown>(item.messages)?.filter((m): m is string => typeof m === 'string')
+    if (messages !== undefined && messages.length > 0) out.push({ key: item.key, messages })
   }
   return out
 }
@@ -366,7 +358,9 @@ export function PluginSettings(): React.JSX.Element {
     } catch (e) {
       const rejections = e instanceof ApiError ? readRejections(e.detail) : []
       if (rejections.length > 0) {
-        setExtraErrors(Object.fromEntries(rejections.map((r) => [r.key, { __errors: [r.message] }])))
+        setExtraErrors(Object.fromEntries(
+          rejections.map((r) => [r.key, { __errors: [...r.messages] }]),
+        ))
         setRejectedCount(rejections.length)
       } else {
         setSaveError(e instanceof ApiError ? e.message : t('error.generic'))
