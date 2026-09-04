@@ -167,9 +167,26 @@ describe('/api/plugins', () => {
     const body = response.json<{ error: { message: string, detail: string } }>()
     // Rendered text: the message itself, not only detail, must be the real sentence.
     expect(body.error.message).toBe("plugin 'needs-config' could not be enabled")
-    // The plural case: an error built from issues[0] would pass a one-field fixture.
-    expect(body.error.detail).toContain('url')
-    expect(body.error.detail).toContain('token')
+    // Rendered here (task 11), through the same `refusal.config.incomplete` catalogue entry as
+    // the locale test below. The repeated sentence, not a field name, is the plural signal: an
+    // error built from issues[0] would render it only once.
+    expect(body.error.detail).toBe('configuration is incomplete: missing required field, missing required field')
+  })
+
+  it('renders that same refusal in the request locale, and differently in each', async () => {
+    booted = await bootAndLogin({ spores: configurableTwoFields })
+    const { app, cookie } = booted
+    const en = await app.inject({
+      method: 'POST', url: '/api/plugins/needs-config/enable', headers: { cookie },
+    })
+    const fr = await app.inject({
+      method: 'POST', url: '/api/plugins/needs-config/enable', headers: { cookie, 'accept-language': 'fr' },
+    })
+    // The discriminating fixture: without a second locale, a hardcoded French string would pass.
+    expect(en.json<{ error: { detail: string } }>().error.detail)
+      .toBe('configuration is incomplete: missing required field, missing required field')
+    expect(fr.json<{ error: { detail: string } }>().error.detail)
+      .toBe('la configuration est incomplète : missing required field, missing required field')
   })
 
   it('serves a JSON Schema a form generator can use', async () => {
@@ -347,12 +364,30 @@ describe('PUT /api/plugins/:name/settings validates the values', () => {
     const error = refused.json<{ error: { code: string, message: string, detail: unknown } }>().error
     expect(error.code).toBe('validation')
     expect(error.message).toBe("plugin 'mixed' rejected the value given for: port")
-    // §9: detail carries the plugin's own issues, so a form can highlight the field.
-    expect(error.detail).toEqual([{ key: 'port', issues: [{ path: ['port'], message: 'expected a number' }] }])
+    // §9: detail carries the plugin's own issues, so a form can highlight the field. Rendered
+    // here (task 11): the fixture's issue carries no messageKey, so it falls back to its literal
+    // English message unlocalized (design §5.3).
+    expect(error.detail).toEqual([{ key: 'port', messages: ['expected a number'] }])
     // All-or-nothing: the sound key travelled in the same body and must not have landed.
     expect((await app.inject({
       method: 'GET', url: '/api/plugins/mixed/settings', headers: { cookie },
     })).json<Record<string, unknown>>()).toEqual({})
+  })
+
+  it('threads the request locale into rejectedSettings without changing a keyless message', async () => {
+    booted = await bootAndLogin({ spores: mixedFieldSchema })
+    const { app, cookie } = booted
+    const refused = await app.inject({
+      method: 'PUT', url: '/api/plugins/mixed/settings', headers: { cookie, 'accept-language': 'fr' },
+      payload: { port: 'not-a-number', label: 'fine' },
+    })
+    expect(refused.statusCode).toBe(400)
+    const error = refused.json<{ error: { message: string, detail: unknown } }>().error
+    // The wrapper is rendered in French, proving `request.locale` reached the call...
+    expect(error.message).toBe("le plugin « mixed » a refusé la valeur fournie pour : port")
+    // ...while the fixture's own issue carries no messageKey, so it renders unlocalized either
+    // way (design §5.3) — this is what makes the wrapper, not this content, the locale signal.
+    expect(error.detail).toEqual([{ key: 'port', messages: ['expected a number'] }])
   })
 
   it('accepts the same keys once every value parses', async () => {
@@ -394,8 +429,8 @@ describe('PUT /api/plugins/:name/settings validates the values', () => {
     const error = refused.json<{ error: { message: string, detail: unknown } }>().error
     expect(error.message).toBe("plugin 'eitheror' rejected the value given for: socket, tcp")
     expect(error.detail).toEqual([
-      { key: 'socket', issues: [{ path: [], message: 'socket or tcp, not both' }] },
-      { key: 'tcp', issues: [{ path: [], message: 'socket or tcp, not both' }] },
+      { key: 'socket', messages: ['socket or tcp, not both'] },
+      { key: 'tcp', messages: ['socket or tcp, not both'] },
     ])
     expect((await app.inject({
       method: 'GET', url: '/api/plugins/eitheror/settings', headers: { cookie },

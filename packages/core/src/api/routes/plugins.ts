@@ -16,6 +16,7 @@ import { badRequest, notFound } from '../errors.js'
 import { parseBody } from '../parse.js'
 import { AliasRefused, clearAlias, setAlias } from '../../rhizomorph/aliases.js'
 import { describeThrown } from '../../support/thrown.js'
+import { renderRefusal } from '../../i18n/refusal.js'
 
 export interface PluginDto {
   name: string
@@ -143,7 +144,15 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     // never a throw, so an exception reaching here is a genuine fault and must not be
     // relabelled a client mistake (task 10's review, Important 3, applied here too).
     const result = await enablePlugin(state.db, state.config.discoveryDirs, name)
-    if (!result.ok) throw badRequest('api.pluginEnableRefused', { plugin: name }, result.reason)
+    if (!result.ok) {
+      // The rendered sentence, not the ref: §3 — the server holds the locale, so nothing on the
+      // wire needs resolving, and a client showing `detail` has a sentence to show.
+      throw badRequest(
+        'api.pluginEnableRefused',
+        { plugin: name },
+        renderRefusal(state.translator, result.refusal, request.locale),
+      )
+    }
     return { ok: true, restartRequired: state.germination.status === 'germinated' }
   })
 
@@ -216,7 +225,9 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     }
     // Declared is not valid: without this an enabled plugin takes a value that makes it
     // dormant at the next boot, which is the failure enablePlugin() exists to prevent (§8).
-    const rejected = await rejectedSettings(state.db, state.config.discoveryDirs, name, body)
+    const rejected = await rejectedSettings(
+      state.db, state.config.discoveryDirs, name, body, state.translator, request.locale,
+    )
     if (rejected.length > 0) {
       const rejectedKeys = rejected.map((r) => r.key).join(', ')
       throw badRequest('api.pluginSettingInvalid', { plugin: name, keys: rejectedKeys }, rejected)
