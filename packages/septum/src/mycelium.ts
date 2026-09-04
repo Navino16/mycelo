@@ -1,5 +1,5 @@
 import type { FormSchema } from './config.js'
-import type { HealthStatus, Principal, PushTarget } from './context.js'
+import type { HealthStatus, Principal, PushTarget, TranslatableRef } from './context.js'
 import type { SporeKind } from './manifest.js'
 import type { OutgoingContent } from './message.js'
 
@@ -94,10 +94,10 @@ export interface PrincipalsRead {
 }
 
 export interface PrincipalsManage {
-  /** Rejects when the principal does not exist. */
-  markReviewed(id: string): Promise<void>
-  /** Rejects when the principal does not exist. */
-  setDisplayName(id: string, displayName: string): Promise<void>
+  /** Refuses when the principal does not exist. */
+  markReviewed(id: string): Promise<Outcome>
+  /** Refuses when the principal does not exist. */
+  setDisplayName(id: string, displayName: string): Promise<Outcome>
 }
 
 export interface RolesRead {
@@ -107,40 +107,56 @@ export interface RolesRead {
 }
 
 export interface RolesAssign {
-  /** Rejects when the principal or the role does not exist. Assigning twice is a no-op. */
-  assignRole(principalId: string, roleName: string): Promise<void>
-  /** Rejects when the principal or the role does not exist. Revoking one not held is a no-op. */
-  revokeRole(principalId: string, roleName: string): Promise<void>
+  /** Refuses when the principal or the role does not exist. Assigning twice is a no-op. */
+  assignRole(principalId: string, roleName: string): Promise<Outcome>
+  /** Refuses when the principal or the role does not exist. Revoking one not held is a no-op. */
+  revokeRole(principalId: string, roleName: string): Promise<Outcome>
 }
 
 export interface RolesManage {
-  /** Rejects when the name is empty, already taken, or a pattern is repeated. */
-  createRole(name: string, patterns: readonly string[]): Promise<void>
-  /** Replaces the patterns wholesale. Rejects when the role does not exist, is `builtin`, or a pattern is repeated. */
-  setRoleCommands(name: string, patterns: readonly string[]): Promise<void>
-  /** Rejects when the role does not exist or is `builtin`. */
-  deleteRole(name: string): Promise<void>
+  /** Refuses when the name is empty, already taken, or a pattern is repeated. */
+  createRole(name: string, patterns: readonly string[]): Promise<Outcome>
+  /** Replaces the patterns wholesale. Refuses when the role does not exist, is `builtin`, or a pattern is repeated. */
+  setRoleCommands(name: string, patterns: readonly string[]): Promise<Outcome>
+  /** Refuses when the role does not exist or is `builtin`. */
+  deleteRole(name: string): Promise<Outcome>
 }
 
+/**
+ * §2.2: a mycelium refusal travels as data, never as an English sentence. A discriminated result
+ * rather than a typed error class because `mycelo-spores/tools/bundle.ts` calls `Bun.build` with no
+ * `external`, so septum is bundled into every spore and `instanceof` across that boundary is false.
+ */
+export interface Refusal {
+  readonly ok: false
+  readonly refusal: TranslatableRef
+}
+
+/** A method that refused, or did its work and returns nothing. */
+export type Outcome = { readonly ok: true } | Refusal
+
+/** A method that refused, or returns a value. `value` says what; an intersection only implies it. */
+export type OutcomeOf<T> = { readonly ok: true, readonly value: T } | Refusal
+
 export interface PluginsToggle {
-  /** Rejects when the stored settings fail the plugin's own configSchema, quoting what it reported. */
-  enable(name: string): Promise<void>
-  /** Rejects when the plugin is not installed. */
-  disable(name: string): Promise<void>
+  /** Refuses when the stored settings fail the plugin's own configSchema, quoting what it reported. */
+  enable(name: string): Promise<Outcome>
+  /** Refuses when the plugin is not installed. */
+  disable(name: string): Promise<Outcome>
 }
 
 export interface PluginsConfigure {
   /**
-   * Rejects when the plugin is not installed. Secret values come back as the literal
+   * Refuses when the plugin is not installed. Secret values come back as the literal
    * string '••••', never the value itself.
    */
-  settings(name: string): Promise<Record<string, unknown>>
+  settings(name: string): Promise<OutcomeOf<Record<string, unknown>>>
   /**
-   * Rejects when the plugin is not installed, and when it publishes a JSON Schema that
+   * Refuses when the plugin is not installed, and when it publishes a JSON Schema that
    * neither declares the key nor allows additional properties — such a key would be
    * dropped at validation for a loose schema, or rejected outright by a strict one.
    */
-  setSetting(name: string, key: string, value: unknown): Promise<void>
+  setSetting(name: string, key: string, value: unknown): Promise<Outcome>
   /** Resolves an `available: false` FormSchema rather than rejecting, whatever went wrong. */
   formSchema(name: string): Promise<FormSchema>
 }

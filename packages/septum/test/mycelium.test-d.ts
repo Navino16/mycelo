@@ -8,6 +8,8 @@ import type {
   MessagesBroadcast,
   MessagesSend,
   MyceliumScope,
+  Outcome,
+  OutcomeOf,
   PluginsConfigure,
   PluginsRead,
   PluginsToggle,
@@ -86,8 +88,8 @@ export const principalsRead: PrincipalsRead = {
 }
 
 export const principalsManage: PrincipalsManage = {
-  markReviewed: () => Promise.resolve(),
-  setDisplayName: () => Promise.resolve(),
+  markReviewed: () => Promise.resolve({ ok: true }),
+  setDisplayName: () => Promise.resolve({ ok: true }),
 }
 
 export const rolesRead: RolesRead = {
@@ -96,24 +98,24 @@ export const rolesRead: RolesRead = {
 }
 
 export const rolesAssign: RolesAssign = {
-  assignRole: () => Promise.resolve(),
-  revokeRole: () => Promise.resolve(),
+  assignRole: () => Promise.resolve({ ok: true }),
+  revokeRole: () => Promise.resolve({ ok: true }),
 }
 
 export const rolesManage: RolesManage = {
-  createRole: () => Promise.resolve(),
-  setRoleCommands: () => Promise.resolve(),
-  deleteRole: () => Promise.resolve(),
+  createRole: () => Promise.resolve({ ok: true }),
+  setRoleCommands: () => Promise.resolve({ ok: true }),
+  deleteRole: () => Promise.resolve({ ok: true }),
 }
 
 export const pluginsToggle: PluginsToggle = {
-  enable: () => Promise.resolve(),
-  disable: () => Promise.resolve(),
+  enable: () => Promise.resolve({ ok: true }),
+  disable: () => Promise.resolve({ ok: true }),
 }
 
 export const pluginsConfigure: PluginsConfigure = {
-  settings: () => Promise.resolve({ url: 'http://x', apiKey: '••••' }),
-  setSetting: () => Promise.resolve(),
+  settings: () => Promise.resolve({ ok: true, value: { url: 'http://x', apiKey: '••••' } }),
+  setSetting: () => Promise.resolve({ ok: true }),
   formSchema: () => Promise.resolve({ available: true, schema: { type: 'object' } }),
 }
 
@@ -210,3 +212,23 @@ const missingRequired: CommandInfo = {
   args: [{ name: 'title', description: 'Title' }],
 }
 void noArgs; void withArgs; void missingRequired
+
+// Narrowing on `ok` is the whole point: without it the caller cannot reach `refusal` at all,
+// which is what makes the English branch unreachable rather than merely discouraged.
+export function narrows(r: Outcome): string {
+  return r.ok ? 'done' : r.refusal.key
+}
+
+export function narrowsValue(r: OutcomeOf<Record<string, unknown>>): string {
+  return r.ok ? Object.keys(r.value).join(',') : r.refusal.key
+}
+
+// @ts-expect-error `refusal` is unreachable without narrowing
+export const noNarrowing = (r: Outcome): string => r.refusal.key
+
+declare const toggle: PluginsToggle
+declare const configure: PluginsConfigure
+// @ts-expect-error enable() no longer resolves void
+export const oldShape: Promise<void> = toggle.enable('plex')
+// @ts-expect-error settings() no longer resolves the record directly
+export const oldSettings: Promise<Record<string, unknown>> = configure.settings('plex')
