@@ -35,6 +35,9 @@ const translator = createTranslator({
       en: { 'refusal.config.tooSmall': 'must be at least {minimum}', 'refusal.deep': 'level: {cause}' },
     },
     plex: { fr: { 'config.path.relative': 'le chemin doit être absolu' } },
+    // Present with real text on purpose: a `core` catalogue that resolved nothing would make the
+    // nested-domain gate below pass whether the gate exists or not.
+    core: { fr: { 'api.internalError': 'erreur interne du serveur' } },
   }),
 })
 
@@ -80,6 +83,15 @@ test('a plain object that is not a ref reaches ICU untouched', () => {
   // translate `{ notARef: 1 }` and render a raw key.
   expect(renderRefusal(translator, { domain: 'common', key: 'refusal.deep', params: { cause: { notARef: 1 } } }, 'fr'))
     .toContain('[object Object]')
+})
+
+test('a nested ref naming core renders as its bare key, never core\'s own text', () => {
+  // §3.1: `core` is closed to plugins, and a plugin's issue params reach this renderer verbatim.
+  // The top-level messageKey rule is pinned below; this is the nested one the resolver added.
+  expect(renderRefusal(translator, {
+    domain: 'common', key: 'refusal.deep',
+    params: { cause: { domain: 'core', key: 'api.internalError' } },
+  }, 'fr')).toBe('niveau : api.internalError')
 })
 
 test('depth is capped, and the cap renders rather than throwing', () => {
