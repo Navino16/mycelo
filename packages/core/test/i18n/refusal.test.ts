@@ -119,3 +119,17 @@ test('no messageKey renders message, which is the pre-0.12 behaviour', () => {
   expect(renderConfigIssue(translator, { path: ['p'], message: 'Too small: expected' }, 'plex', 'fr'))
     .toBe('Too small: expected')
 })
+
+test('renderRefusal does not throw on a ref carrying params: null', () => {
+  // params is untyped across the plugin boundary; a plugin's own ref may set it to null.
+  expect(renderRefusal(translator, {
+    domain: 'plex', key: 'config.path.relative', params: null as unknown as Record<string, unknown>,
+  }, 'fr')).toBe('le chemin doit être absolu')
+})
+
+test('renderConfigIssue does not throw on a string-key issue carrying params: null', () => {
+  expect(renderConfigIssue(translator, {
+    path: ['p'], message: 'EN', messageKey: 'config.path.relative',
+    params: null as unknown as Record<string, unknown>,
+  }, 'plex', 'fr')).toBe('le chemin doit être absolu')
+})

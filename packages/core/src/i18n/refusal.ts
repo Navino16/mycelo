@@ -5,18 +5,16 @@ import type { Translator } from './translator.js'
 const SHARED_DOMAIN = 'common'
 
 /**
- * design §2.4. Germination's resolution is a DAG — resolve() refuses a cycle before any of this
- * runs — so the real depth is the topological one. The cap guards a ref built by hand elsewhere,
- * and it renders rather than throwing: a stack overflow while answering a request is worse than
- * an outermost sentence whose {cause} shows the innermost key.
+ * design §2.4: real depth is bounded by germination's DAG; this caps a ref built by hand
+ * elsewhere. The cap renders rather than throwing — an innermost key beats a stack overflow
+ * mid-request.
  */
 const MAX_DEPTH = 8
 
 /**
- * design §2.4: exact, and deliberately narrower than "looks like an object". No parameter this
- * design produces carries a string `domain` and a string `key` — the mapping table emits
- * `expected`, `origin`, `minimum`, `maximum`, `format`, `values`, `divisor`, `keys` — so a
- * collision has to be authored deliberately.
+ * design §2.4: exact, and narrower than "looks like an object" — a plain object with string
+ * `domain` and `key` fields only. No parameter this design produces has that shape, so a
+ * collision must be authored deliberately.
  */
 function isRef(value: unknown): value is TranslatableRef {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
@@ -27,10 +25,9 @@ function isRef(value: unknown): value is TranslatableRef {
 }
 
 /**
- * A ref renders; an array is rendered element-wise and joined. The join is here and not left to
- * ICU because `IntlMessageFormat.format` returns an **array** when any parameter is not a
- * primitive, and stringifying that prepends a comma — `{values}` with `['a','b']` renders
- * `", a, b"`. Measured 2026-09-04.
+ * design §2.4: a ref renders depth-first; an array renders element-wise and joins. The join stays
+ * here because `IntlMessageFormat.format` returns an array for a non-primitive parameter, and
+ * stringifying that prepends a comma. Measured 2026-09-04.
  */
 function resolveValue(translator: Translator, value: unknown, locale: string, depth: number): unknown {
   if (isRef(value)) return render(translator, value, locale, depth + 1)
@@ -54,7 +51,9 @@ function resolveParams(
 
 function render(translator: Translator, ref: TranslatableRef, locale: string, depth: number): string {
   if (depth > MAX_DEPTH) return ref.key
-  const params = ref.params === undefined
+  // A plugin's own ref may carry `params: null` at runtime despite the type — untyped across
+  // the plugin boundary, so `== null` catches it alongside `undefined`.
+  const params = ref.params == null
     ? undefined
     : resolveParams(translator, ref.params, locale, depth)
   return translator.translate(ref.domain, ref.key, locale, params)
@@ -72,11 +71,9 @@ export function renderRefusal(
 }
 
 /**
- * design §5.3. A bare `messageKey` resolves in the producing spore's own domain; a ref is honoured
- * only for `common`. Any other domain — `core` included, and a spore the plugin genuinely declares
- * in `requires` — falls back to `message`: the code rendering a config refusal runs in a route or
- * in germination with no `bindTranslate` binding at hand, so honouring an arbitrary domain here
- * would hand a plugin a read channel that binding refuses it elsewhere.
+ * design §5.3: a bare key resolves in the producing spore's own domain; a ref is honoured only
+ * for `common`. Any other domain falls back to `message` — this code has no `bindTranslate`
+ * binding to enforce `requires` with.
  */
 export function renderConfigIssue(
   translator: Translator, issue: ConfigIssue, domain: string, locale: string,
@@ -84,7 +81,8 @@ export function renderConfigIssue(
   const key = issue.messageKey
   if (typeof key === 'string' && key.length > 0) {
     // Through resolveParams too, or a plugin's array parameter bypasses the join above.
-    const params = issue.params === undefined
+    // `== null` also catches a plugin's `params: null` at runtime, untyped at this boundary.
+    const params = issue.params == null
       ? undefined
       : resolveParams(translator, issue.params, locale, 0)
     return translator.translate(domain, key, locale, params)
