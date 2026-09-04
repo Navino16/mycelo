@@ -2,8 +2,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
+import type { Logger } from '@mycelo/septum'
 import { readSettings, recordInstall, writeSetting } from '../../src/config/store.js'
-import { listPlugins, redactSecrets, rejectedSettings, writeDeclaredSetting } from '../../src/config/plugins.js'
+import {
+  listPlugins, redactSecrets, rejectedSettings, undeclaredSecretsRefusal, writeDeclaredSetting,
+} from '../../src/config/plugins.js'
 import { REDACTED } from '../../src/support/redaction.js'
 import type { Db } from '../../src/persistence/db.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
@@ -11,8 +14,13 @@ import type { Registry } from '../../src/germination/registry.js'
 import { addSource, listSources, seedOfficialSource } from '../../src/sporangium/sources.js'
 import { describeConfigError } from '../../src/support/thrown.js'
 import { emptyRegistry } from '../support/registry.js'
+import { loadCoreCatalogs } from '../../src/i18n/core-catalogs.js'
+import { createTranslator } from '../../src/i18n/translator.js'
 
 const SPORES = [resolve(import.meta.dirname, '../../../../fixtures')]
+
+const silent: Logger = { info() {}, warn() {}, error() {}, debug() {}, child: () => silent }
+const translator = createTranslator({ defaultLocale: 'en', logger: silent, catalogs: loadCoreCatalogs() })
 
 function fresh(): { db: Db, close: () => void } {
   const p = openDatabase(':memory:')
@@ -30,9 +38,58 @@ afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
 it('a rejected value is reported once the schema carries a declared issue', async () => {
   const { db, close } = fresh()
   recordInstall(db, 'gate', 'inhibitor')
-  const rejected = await rejectedSettings(db, SPORES, 'gate', { channel: '' })
-  expect(rejected).toEqual([{ key: 'channel', issues: [{ path: ['channel'], message: "gate config needs a non-empty 'channel'" }] }])
+  const rejected = await rejectedSettings(db, SPORES, 'gate', { channel: '' }, translator, 'en')
+  expect(rejected).toEqual([{ key: 'channel', messages: ["gate config needs a non-empty 'channel'"] }])
   close()
+})
+
+// Named for what it refuses, not for a real spore: a fixture called `plex` would read as that
+// published rhiza. Duck-typed like the fixtures below — a spore under /tmp cannot resolve zod —
+// but its issue carries a messageKey ref shaped the way septum's toConfigIssue builds one
+// (config.ts:69), so this is the first proof the renderer and the catalogues meet in practice.
+function minPort(): void {
+  mkdirSync(join(dir, 'minport', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'minport', 'spore.yaml'),
+    'kind: enzyme\nname: minport\nseptum: "^0.11"\n'
+      + 'commands:\n  - name: minport\n    description: x\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(
+    join(dir, 'minport', 'src/index.ts'),
+    'export default {\n'
+      + '  configSchema: {\n'
+      + '    safeParse: (input) => (typeof input?.port === "number" && input.port >= 1\n'
+      + '      ? { success: true, data: input }\n'
+      + '      : { success: false, error: { issues: [{\n'
+      + '          path: ["port"], message: "port must be at least 1",\n'
+      + '          messageKey: { domain: "common", key: "refusal.config.tooSmall" },\n'
+      + '          params: { origin: "number", minimum: 1 },\n'
+      + '        }] } }),\n'
+      + '  },\n'
+      + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+      + '}\n',
+    'utf8',
+  )
+}
+
+it('a rejection carries rendered sentences, not the plugin\'s issue objects', async () => {
+  const { db, close } = fresh()
+  minPort()
+  recordInstall(db, 'minport', 'enzyme')
+  const rejected = await rejectedSettings(db, [dir], 'minport', { port: 0 }, translator, 'fr')
+  expect(rejected).toEqual([{ key: 'port', messages: ['doit valoir au moins 1'] }])
+  close()
+})
+
+it('undeclaredSecretsRefusal carries the count its plural needs', () => {
+  expect(undeclaredSecretsRefusal(['token'])).toEqual({
+    domain: 'common',
+    key: 'refusal.config.undeclaredSecrets',
+    params: { count: 1, keys: ["'token'"] },
+  })
+  // The plural case: a count the message's `one` branch does not match.
+  expect(undeclaredSecretsRefusal(['a', 'b']).params?.['count']).toBe(2)
 })
 
 // Duck-typed like the fixtures in lifecycle.test.ts: a spore in a temporary directory
@@ -65,8 +122,8 @@ it('a hand-written ConfigSchema with no shape still gets per-value validation', 
   const { db, close } = fresh()
   handwritten()
   recordInstall(db, 'handwritten', 'enzyme')
-  const rejected = await rejectedSettings(db, [dir], 'handwritten', { port: 'nope' })
-  expect(rejected).toEqual([{ key: 'port', issues: [{ path: ['port'], message: 'expected a number' }] }])
+  const rejected = await rejectedSettings(db, [dir], 'handwritten', { port: 'nope' }, translator, 'en')
+  expect(rejected).toEqual([{ key: 'port', messages: ['expected a number'] }])
   close()
 })
 
@@ -99,10 +156,10 @@ it('reports a whole-object refusal against every key the request carried', async
   const { db, close } = fresh()
   eitherOr()
   recordInstall(db, 'eitheror', 'enzyme')
-  const rejected = await rejectedSettings(db, [dir], 'eitheror', { socket: '/tmp/s', tcp: '1:2' })
+  const rejected = await rejectedSettings(db, [dir], 'eitheror', { socket: '/tmp/s', tcp: '1:2' }, translator, 'en')
   expect(rejected).toEqual([
-    { key: 'socket', issues: [{ path: [], message: 'socket or tcp, not both' }] },
-    { key: 'tcp', issues: [{ path: [], message: 'socket or tcp, not both' }] },
+    { key: 'socket', messages: ['socket or tcp, not both'] },
+    { key: 'tcp', messages: ['socket or tcp, not both'] },
   ])
   close()
 })
@@ -111,7 +168,7 @@ it('leaves a partial write accepted when the whole-object rule it would break is
   const { db, close } = fresh()
   eitherOr()
   recordInstall(db, 'eitheror', 'enzyme')
-  expect(await rejectedSettings(db, [dir], 'eitheror', { socket: '/tmp/s' })).toEqual([])
+  expect(await rejectedSettings(db, [dir], 'eitheror', { socket: '/tmp/s' }, translator, 'en')).toEqual([])
   close()
 })
 
@@ -145,13 +202,14 @@ it('reads an issue with no usable path the way enablePlugin does, against every 
   const { db, close } = fresh()
   pathless()
   recordInstall(db, 'pathless', 'enzyme')
-  const rejected = await rejectedSettings(db, [dir], 'pathless', { a: 1, b: 2 })
+  const rejected = await rejectedSettings(db, [dir], 'pathless', { a: 1, b: 2 }, translator, 'en')
+  const messages = ['the whole thing is wrong', 'so is this']
+  expect(rejected).toEqual([{ key: 'a', messages }, { key: 'b', messages }])
+  // The same two issues through the other reader, which has always treated them this way.
   const issues = [
     { message: 'the whole thing is wrong' },
     { path: 'notanarray', message: 'so is this' },
   ]
-  expect(rejected).toEqual([{ key: 'a', issues }, { key: 'b', issues }])
-  // The same two issues through the other reader, which has always treated them this way.
   expect(describeConfigError({ issues })).toBe('the whole thing is wrong; so is this')
   close()
 })

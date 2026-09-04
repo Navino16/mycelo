@@ -1,15 +1,17 @@
 import { and, eq } from 'drizzle-orm'
-import type { FormSchema, Manifest, PluginInfo, SporeKind } from '@mycelo/septum'
+import type { ConfigIssue, FormSchema, Manifest, PluginInfo, SporeKind, TranslatableRef } from '@mycelo/septum'
 import { discover } from '../germination/discover.js'
 import { isFailure, readManifest } from '../germination/manifest.js'
 import type { Registry } from '../germination/registry.js'
+import type { Translator } from '../i18n/translator.js'
+import { renderConfigIssue } from '../i18n/refusal.js'
 import type { Db } from '../persistence/db.js'
 import { pluginSetting } from '../persistence/schema.js'
 import { listSources } from '../sporangium/sources.js'
 import { REDACTED } from '../support/redaction.js'
 import { describeThrown } from '../support/thrown.js'
 import { formSchemaFor } from './jsonschema.js'
-import { enablePlugin, findSpore, loadSporeModule } from './lifecycle.js'
+import { findSpore, loadSporeModule } from './lifecycle.js'
 import { listAliases } from '../rhizomorph/aliases.js'
 import { getInstall, listInstalls, writeSetting } from './store.js'
 
@@ -126,13 +128,6 @@ export function manifestFactsByName(
   return facts
 }
 
-// The published contract says enable() rejects; enablePlugin() returns a refusal object,
-// so the reason has to be re-thrown or a caller would read `undefined` as success.
-export async function enableOrThrow(db: Db, sporesDirs: readonly string[], name: string): Promise<void> {
-  const result = await enablePlugin(db, sporesDirs, name)
-  if (!result.ok) throw new Error(result.reason)
-}
-
 // loadSporeModule() propagates whatever the spore throws at import; formSchema() resolves
 // a FormSchema, so every fault becomes its available: false branch rather than a rejection.
 export async function formSchemaOf(db: Db, sporesDirs: readonly string[], name: string): Promise<FormSchema> {
@@ -175,6 +170,19 @@ export function describeUndeclaredSecrets(keys: readonly string[]): string {
   const named = keys.map((k) => `'${k}'`).join(', ')
   const noun = keys.length === 1 ? 'a secret' : 'secrets'
   return `configuration declares ${noun} ${named} the schema does not have`
+}
+
+/**
+ * The same verdict as `describeUndeclaredSecrets`, as a ref. Both exist only until the companion
+ * plan migrates germination's dormancy reasons — `refusal.config.undeclaredSecrets` carries the
+ * `count` its own plural needs, so the two cannot spell the verdict differently.
+ */
+export function undeclaredSecretsRefusal(keys: readonly string[]): TranslatableRef {
+  return {
+    domain: 'common',
+    key: 'refusal.config.undeclaredSecrets',
+    params: { count: keys.length, keys: keys.map((k) => `'${k}'`) },
+  }
 }
 
 /**
@@ -241,8 +249,8 @@ export async function writeDeclaredSetting(
 
 export interface SettingRejection {
   key: string
-  /** The plugin's own issues, whatever shape they carried. */
-  issues: unknown
+  /** Rendered in the caller's locale (design §3): the wire carries sentences, not structure. */
+  messages: readonly string[]
 }
 
 /** A member read from an object the plugin built: never an instance check, and a getter is code. */
@@ -282,7 +290,7 @@ function issuePath(issue: unknown): unknown[] {
  * so it is attributed to every key the request carried — the object it refuses is exactly that set.
  */
 function objectRejections(
-  configSchema: unknown, values: Record<string, unknown>,
+  configSchema: unknown, values: Record<string, unknown>, render: (issue: unknown) => string,
 ): readonly SettingRejection[] {
   const result = parseWith(configSchema, values)
   if (result === undefined || result.ok) return []
@@ -292,9 +300,30 @@ function objectRejections(
   const rejections: SettingRejection[] = []
   for (const key of Object.keys(values)) {
     const own = (issues as unknown[]).filter((issue) => issuePath(issue)[0] === key)
-    if (own.length + wholeObject.length > 0) rejections.push({ key, issues: [...own, ...wholeObject] })
+    const mine = [...own, ...wholeObject]
+    if (mine.length > 0) rejections.push({ key, messages: mine.map(render) })
   }
   return rejections
+}
+
+/**
+ * An issue read across the plugin boundary, narrowed to what renderConfigIssue needs. Never a cast
+ * alone: `message` can be absent or of any type in a plugin's hand-written safeParse.
+ */
+function asConfigIssue(issue: unknown): ConfigIssue {
+  const record = typeof issue === 'object' && issue !== null ? issue as Record<string, unknown> : {}
+  const key = record['messageKey']
+  const params = record['params']
+  return {
+    path: Array.isArray(record['path']) ? record['path'] as readonly PropertyKey[] : [],
+    message: typeof record['message'] === 'string' ? record['message'] : 'unspecified issue',
+    ...(typeof key === 'string' || (typeof key === 'object' && key !== null)
+      ? { messageKey: key as ConfigIssue['messageKey'] }
+      : {}),
+    ...(typeof params === 'object' && params !== null
+      ? { params: params as Record<string, unknown> }
+      : {}),
+  }
 }
 
 /**
@@ -303,6 +332,7 @@ function objectRejections(
  */
 export async function rejectedSettings(
   db: Db, sporesDirs: readonly string[], name: string, values: Record<string, unknown>,
+  translator: Translator, locale: string,
 ): Promise<readonly SettingRejection[]> {
   if (getInstall(db, name) === null) return []
   let module: Awaited<ReturnType<typeof loadSporeModule>>
@@ -311,7 +341,10 @@ export async function rejectedSettings(
   } catch {
     return []
   }
-  return objectRejections(module?.configSchema, values)
+  // Rendered here, not on the wire: the route holds the locale and the plugin's domain is its
+  // own name, so nothing downstream has to duck-type an issue again (design §3).
+  return objectRejections(module?.configSchema, values, (issue) =>
+    renderConfigIssue(translator, asConfigIssue(issue), name, locale))
 }
 
 // Promote, never demote. writeSetting() rewrites is_secret too, so carrying the row's flag
