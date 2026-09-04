@@ -5,6 +5,12 @@ cancelled: "cancelled"
 error: "error"
 unknown: "unknown"
 refusal:
+  plugin:
+    notInstalled: "plugin ''{plugin}'' is not installed"
+    notOnDisk: "no spore named ''{plugin}'' is present on disk"
+    unreadableManifest: "spore ''{plugin}'' has an unreadable manifest: {detail}"
+    septumIncompatible: "spore ''{plugin}'' {detail}"
+    loadFailed: "spore ''{plugin}'' failed to load: {detail}"
   config:
     invalidType: "expected {expected}"
     tooSmall: "{origin, select, string{must be at least {minimum} characters long} array{must have at least {minimum} items} other{must be at least {minimum}}}"
@@ -15,3 +21,6 @@ refusal:
     invalidValue: "must be one of: {values}"
     notMultipleOf: "must be a multiple of {divisor}"
     unrecognizedKeys: "declares no setting named: {keys}"
+    incomplete: "configuration is incomplete: {issues}"
+    validationThrew: "configuration is incomplete: validating it threw: {detail}"
+    undeclaredSecrets: "configuration declares {count, plural, one{a secret} other{secrets}} {keys} the schema does not have"

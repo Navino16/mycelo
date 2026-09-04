@@ -5,6 +5,12 @@ cancelled: "annulé"
 error: "erreur"
 unknown: "inconnu"
 refusal:
+  plugin:
+    notInstalled: "le plugin « {plugin} » n''est pas installé"
+    notOnDisk: "aucun spore nommé « {plugin} » n''est présent sur le disque"
+    unreadableManifest: "le manifeste du spore « {plugin} » est illisible : {detail}"
+    septumIncompatible: "le spore « {plugin} » {detail}"
+    loadFailed: "le chargement du spore « {plugin} » a échoué : {detail}"
   config:
     invalidType: "attend {expected}"
     tooSmall: "{origin, select, string{doit faire au moins {minimum} caractères} array{doit contenir au moins {minimum} éléments} other{doit valoir au moins {minimum}}}"
@@ -15,3 +21,6 @@ refusal:
     invalidValue: "doit valoir l''une de ces valeurs : {values}"
     notMultipleOf: "doit être un multiple de {divisor}"
     unrecognizedKeys: "ne déclare aucun réglage nommé : {keys}"
+    incomplete: "la configuration est incomplète : {issues}"
+    validationThrew: "la configuration est incomplète : sa validation a levé une erreur : {detail}"
+    undeclaredSecrets: "la configuration déclare {count, plural, one{un secret} other{des secrets}} {keys} que le schéma ne possède pas"
