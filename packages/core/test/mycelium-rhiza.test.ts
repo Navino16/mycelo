@@ -53,7 +53,7 @@ function fresh(): Db {
 const registry = {
   hyphae: [], rhizas: [], inhibitors: [],
   dormant: [{ name: 'broken', refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' } }],
-  enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^0.11',
+  enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^0.12',
     commands: [{ name: 'movies', description: 'x', code: 'h' }] }, instance: null }],
   routes: new Map(),
 } as unknown as Registry
@@ -90,7 +90,7 @@ it('omits kind for a dormant plugin rather than inventing one, since none was ev
 it('lists a germinated inhibitor with an empty command list', () => {
   const withInhibitor = {
     ...registry,
-    inhibitors: [{ name: 'gate', manifest: { kind: 'inhibitor', name: 'gate', septum: '^0.11', enforcing: true } }],
+    inhibitors: [{ name: 'gate', manifest: { kind: 'inhibitor', name: 'gate', septum: '^0.12', enforcing: true } }],
   } as unknown as Registry
   const api = createMyceliumApi(withInhibitor, ['plugins.read'], stubSend, fresh(), SPORES) as PluginsRead
   expect(api.listPlugins()).toContainEqual({ name: 'gate', kind: 'inhibitor', commands: [], state: 'germinated', enabled: true })
@@ -261,7 +261,7 @@ describe('MOUNTABLE_SCOPES against what createMyceliumApi actually mounts', () =
       const r = resolve([{
         location: { directory: 'user', manifestPath: 'user/spore.yaml' },
         manifest: {
-          kind: 'enzyme', name: 'user', septum: '^0.11',
+          kind: 'enzyme', name: 'user', septum: '^0.12',
           commands: [{ name: 'user', description: 'x', respond: 'hi' }],
           requires: [{ rhiza: 'mycelium', scopes: [scope] }],
         },
@@ -444,7 +444,7 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
       mkdirSync(join(dir, 'boomspore', 'src'), { recursive: true })
       writeFileSync(
         join(dir, 'boomspore', 'spore.yaml'),
-        'kind: enzyme\nname: boomspore\nseptum: "^0.11"\n'
+        'kind: enzyme\nname: boomspore\nseptum: "^0.12"\n'
           + 'commands:\n  - name: boom\n    description: x\n    code: handleBoom\n',
         'utf8',
       )
@@ -522,7 +522,7 @@ describe('setSetting against the keys the plugin declares', () => {
     mkdirSync(join(dir, 'declares', 'src'), { recursive: true })
     writeFileSync(
       join(dir, 'declares', 'spore.yaml'),
-      'kind: enzyme\nname: declares\nseptum: "^0.11"\n'
+      'kind: enzyme\nname: declares\nseptum: "^0.12"\n'
         + 'commands:\n  - name: declares\n    description: x\n    code: handleIt\n',
       'utf8',
     )
@@ -773,7 +773,7 @@ describe('commands.read', () => {
 })
 
 describe('sources.manage', () => {
-  const MANIFEST = 'kind: rhiza\nname: radarr\nseptum: "^0.11"\nrequires:\n  - rhiza: plex\n'
+  const MANIFEST = 'kind: rhiza\nname: radarr\nseptum: "^0.12"\nrequires:\n  - rhiza: plex\n'
 
   function sourcesApi(db: Db, options: MyceliumApiOptions = {}): SourcesManage {
     return createMyceliumApi(emptyRegistry(), ['sources.manage'], noSend, db, SPORES, options) as SourcesManage
@@ -853,7 +853,7 @@ describe('sources.manage', () => {
       list: () => Promise.resolve([{ name: 'radarr', strain: '0.2.0' }]),
       strains: () => Promise.resolve(['0.2.0']),
       detail: () => Promise.resolve({
-        name: 'radarr', kind: 'rhiza' as const, description: '', septum: '^0.11',
+        name: 'radarr', kind: 'rhiza' as const, description: '', septum: '^0.12',
         demands: { requires: [], scopes: [], externals: [], commands: [] },
       }),
       fetch: (_name, strain) => Promise.resolve({ tarball, strain }),
