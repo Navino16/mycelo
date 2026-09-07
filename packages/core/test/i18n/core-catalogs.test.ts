@@ -204,4 +204,15 @@ describe('the dormancy refusal keys', () => {
       }
     })
   }
+
+  // SCOPE_PHASE is empty since phase 5, so no fixture reaches scopeLaterPhase: this asserts the
+  // key renders with the parameters its site passes, which is all a test can reach from outside.
+  it('renders scopeLaterPhase with the parameters its site passes', () => {
+    for (const locale of ['en', 'fr']) {
+      const rendered = String(catalogs.get('common')?.get(locale)
+        ?.get('refusal.germination.scopeLaterPhase')?.format({ scope: 'x', phase: 12 }))
+      expect(rendered).toContain('12')
+      expect(rendered).not.toContain('{')
+    }
+  })
 })

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 import { MYCELIUM_SCOPES, parseManifest } from '@mycelo/septum'
 import { CycleError, MOUNTABLE_SCOPES, resolve } from '../../src/germination/anastomoses.js'
+import { SHARED_DOMAIN } from '../../src/i18n/core-catalogs.js'
 import type { ReadManifest } from '../../src/germination/manifest.js'
 
 function read(raw: Record<string, unknown>): ReadManifest {
@@ -173,6 +174,51 @@ describe('resolve', () => {
     expect(names(r)).toEqual(['mock'])
     expect(r.dormant[0]?.reason).toContain('already claimed')
   })
+
+  // design §2.4: the cause travels as a ref, so `renderRefusal` translates the quoted half too.
+  // A string here is the bilingual sentence §1 exists to refuse.
+  it('carries the cause as a nested ref, not as a rendered sentence', () => {
+    const resolution = resolve([rhiza('broken', [{ rhiza: 'gone' }]), enzyme('dependent', [{ rhiza: 'broken' }])])
+    const dependent = resolution.dormant.find((d) => d.name === 'dependent')
+    expect(dependent?.refusal?.key).toBe('refusal.germination.dependencyDormant')
+    expect(dependent?.refusal?.params?.['rhiza']).toBe('broken')
+    const cause = dependent?.refusal?.params?.['cause']
+    expect(cause).toEqual({
+      domain: SHARED_DOMAIN,
+      key: 'refusal.germination.requiredRhizaMissing',
+      params: { rhiza: 'gone' },
+    })
+  })
+
+  it('names the alternatives when no any_of member is installed', () => {
+    const resolution = resolve([enzyme('picky', [{ any_of: [{ rhiza: 'radarr' }, { rhiza: 'sonarr' }] }])])
+    expect(resolution.dormant[0]?.refusal?.key).toBe('refusal.germination.anyOfNoneInstalled')
+    // Both, not the first: a list collapsed to one element is design §8's survivor 1.
+    expect(resolution.dormant[0]?.refusal?.params?.['alternatives']).toBe("'radarr', 'sonarr'")
+  })
+
+  it('distinguishes a missing rhiza from one of the wrong kind', () => {
+    const resolution = resolve([
+      enzyme('wrong', [{ rhiza: 'notarhiza' }]),
+      enzyme('notarhiza'),
+      enzyme('absent', [{ rhiza: 'nowhere' }]),
+    ])
+    expect(resolution.dormant.find((d) => d.name === 'wrong')?.refusal)
+      .toEqual({
+        domain: SHARED_DOMAIN, key: 'refusal.germination.requiredRhizaWrongKind',
+        params: { rhiza: 'notarhiza', kind: 'enzyme' },
+      })
+    expect(resolution.dormant.find((d) => d.name === 'absent')?.refusal?.key)
+      .toBe('refusal.germination.requiredRhizaMissing')
+  })
+
+  it('refuses the reserved name and a duplicate with their own keys', () => {
+    const reserved = resolve([rhiza('mycelium')])
+    expect(reserved.dormant[0]?.refusal)
+      .toEqual({ domain: SHARED_DOMAIN, key: 'refusal.germination.reservedName' })
+    // No params at all: the name is always 'mycelium', so interpolating it says nothing.
+    expect('params' in (reserved.dormant[0]?.refusal ?? {})).toBe(false)
+  })
 })
 
 // The pair phase 4 broke: two correct halves, no test comparing them. Held in both
@@ -199,6 +245,10 @@ describe('MOUNTABLE_SCOPES against MYCELIUM_SCOPES', () => {
     expect(r.order).toEqual([])
     expect(r.dormant[0]?.reason).toContain("scope 'future.scope'")
     expect(r.dormant[0]?.reason).not.toContain('phase 5')
+    expect(r.dormant[0]?.refusal).toEqual({
+      domain: SHARED_DOMAIN, key: 'refusal.germination.scopeNotMounted',
+      params: { scope: 'future.scope' },
+    })
   })
 
   it('a scope with no SCOPE_PHASE entry does not claim a phase', () => {
@@ -214,5 +264,11 @@ describe('MOUNTABLE_SCOPES against MYCELIUM_SCOPES', () => {
     }] as unknown as Parameters<typeof resolve>[0])
     expect(r.dormant[0]?.reason).not.toContain('phase')
     expect(r.dormant[0]?.reason).toContain('does not mount')
+    // scopeNotMounted rather than scopeLaterPhase is the proof no phase is announced —
+    // stronger than not.toContain('phase'), which could pass by accident.
+    expect(r.dormant[0]?.refusal).toEqual({
+      domain: SHARED_DOMAIN, key: 'refusal.germination.scopeNotMounted',
+      params: { scope: 'another.scope' },
+    })
   })
 })
