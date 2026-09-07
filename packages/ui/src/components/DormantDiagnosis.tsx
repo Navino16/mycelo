@@ -6,30 +6,48 @@ import type { StringKey } from '../../locales/en.ts'
 export interface Diagnosis { title: StringKey, action?: { to: string, label: StringKey } }
 
 /**
- * One `reason` string per cause; the first match wins. A command collision aborts the whole
- * germination, so "already claimed by" (anastomoses.ts) never reaches one plugin's `reason`.
- * Exported: the Overview's attention rows take their action from the same classifier.
- *
- * Classification is on the **prefix** (ruling F14): the core states the outermost cause first
- * and quotes the inner one verbatim after it, so a dependency reason contains its dependency's
- * own `configuration rejected:` text and an unanchored config test claims every one of them.
+ * design §2.2: the wire carries a rendered sentence for display and its key for this. A
+ * classifier reading the sentence answered `other` for every locale but English (plan
+ * correction 2) — the prefix rule the old comment described was English grammar, not data.
  */
-export function diagnose(name: string, reason: string): Diagnosis {
-  if (/^requires /i.test(reason)) return { title: 'dormant.dependency' }
-  if (/^configuration (rejected|is incomplete)/i.test(reason)) {
-    return { title: 'dormant.config', action: { to: `/plugins/${name}/settings`, label: 'dormant.fixConfig' } }
-  }
-  if (/septum|range|version/i.test(reason)) return { title: 'dormant.version' }
-  if (/not installed|any_of|dependency/i.test(reason)) return { title: 'dormant.dependency' }
-  if (/already claimed/i.test(reason)) {
-    return { title: 'dormant.collision', action: { to: '/plugins', label: 'dormant.setAlias' } }
-  }
-  return { title: 'dormant.other' }
+export const BY_KEY: Record<string, Diagnosis['title']> = {
+  'refusal.config.incomplete': 'dormant.config',
+  'refusal.config.undeclaredSecrets': 'dormant.config',
+  'refusal.config.validationThrew': 'dormant.config',
+  'refusal.plugin.septumIncompatible': 'dormant.version',
+  'refusal.germination.dependencyDormant': 'dormant.dependency',
+  'refusal.germination.anyOfDependencyDormant': 'dormant.dependency',
+  'refusal.germination.anyOfNoneInstalled': 'dormant.dependency',
+  'refusal.germination.requiredRhizaMissing': 'dormant.dependency',
+  'refusal.germination.requiredRhizaWrongKind': 'dormant.dependency',
+  'refusal.germination.scopeNotMounted': 'dormant.dependency',
+  'refusal.germination.scopeLaterPhase': 'dormant.dependency',
+  'refusal.germination.duplicateName': 'dormant.collision',
+  'refusal.germination.reservedName': 'dormant.collision',
+  'refusal.germination.reservedDomain': 'dormant.collision',
 }
 
-export function DormantDiagnosis({ name, reason }: { name: string, reason: string }): React.JSX.Element {
+/**
+ * Exported: the Overview's attention rows take their action from the same classifier. A key
+ * not in the table — every `shape.ts` and `startup` verdict among others — is `dormant.other`,
+ * which is what the table lists rather than derives (plan correction 2).
+ */
+export function diagnose(name: string, reasonKey: string | undefined): Diagnosis {
+  const title = (reasonKey === undefined ? undefined : BY_KEY[reasonKey]) ?? 'dormant.other'
+  if (title === 'dormant.config') {
+    return { title, action: { to: `/plugins/${name}/settings`, label: 'dormant.fixConfig' } }
+  }
+  if (title === 'dormant.collision') {
+    return { title, action: { to: '/plugins', label: 'dormant.setAlias' } }
+  }
+  return { title }
+}
+
+export function DormantDiagnosis(
+  { name, reason, reasonKey }: { name: string, reason: string, reasonKey?: string },
+): React.JSX.Element {
   const t = useT()
-  const { title, action } = diagnose(name, reason)
+  const { title, action } = diagnose(name, reasonKey)
   // Amber, never crit: design note 2j gives red to the mute bot alone, and a dormant plugin
   // is one plugin's failure rather than a substrate that refuses every message.
   const { text, bg, border } = TONE_CLASSES.warn

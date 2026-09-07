@@ -22,6 +22,8 @@ export interface PluginDto {
   commands: readonly string[]
   state: PluginState
   reason?: string
+  /** The refusal's catalogue key, for `diagnose` — classification must not read the sentence. */
+  reasonKey?: string
   enabled: boolean
   source?: string
   strain?: string
@@ -81,7 +83,7 @@ export interface RhizaHealth {
 export interface RuntimeHealth {
   mode: 'germinated' | 'degraded'
   failure?: GerminationFailure
-  dormant: readonly { name: string, reason: string }[]
+  dormant: readonly { name: string, reason: string, reasonKey?: string }[]
   /** Any one entry means the bot refuses all traffic on every channel (design §7). */
   enforcingBlocked: readonly string[]
   rhizas: readonly RhizaHealth[]

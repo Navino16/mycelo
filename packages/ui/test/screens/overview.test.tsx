@@ -676,8 +676,14 @@ describe('what needs attention', () => {
   const BUSY_HEALTH: RuntimeHealth = {
     ...GERMINATED,
     dormant: [
-      { name: 'radarr', reason: 'Configuration rejected: api_key returned 401 Unauthorized.' },
-      { name: 'radarr-search', reason: 'Requires rhiza-radarr >=2.0.0; installed 1.8.4.' },
+      {
+        name: 'radarr', reason: 'Configuration rejected: api_key returned 401 Unauthorized.',
+        reasonKey: 'refusal.config.incomplete',
+      },
+      {
+        name: 'radarr-search', reason: 'Requires rhiza-radarr >=2.0.0; installed 1.8.4.',
+        reasonKey: 'refusal.germination.requiredRhizaMissing',
+      },
     ],
     rhizas: [
       { rhiza: 'jellyfin', status: { state: 'unreachable', detail: 'No answer at 10.0.0.14:8096', checkedAt: 'x' } },
@@ -798,13 +804,18 @@ describe('what needs attention', () => {
   // settings action; its version bucket carries none, and the row must follow it either way.
   it('takes each row action from DormantDiagnosis, bucket for bucket', async () => {
     const config = 'Configuration rejected: api_key returned 401.'
+    const configKey = 'refusal.config.incomplete'
     const version = 'Strain 0.6.2 requires core >=1.0.0; this substrate runs 0.9.3.'
-    expect(diagnose('radarr', config).action?.label).toBe('dormant.fixConfig')
-    expect(diagnose('matrix', version).action).toBeUndefined()
+    const versionKey = 'refusal.plugin.septumIncompatible'
+    expect(diagnose('radarr', configKey).action?.label).toBe('dormant.fixConfig')
+    expect(diagnose('matrix', versionKey).action).toBeUndefined()
 
     await withHealth({
       ...GERMINATED,
-      dormant: [{ name: 'radarr', reason: config }, { name: 'matrix', reason: version }],
+      dormant: [
+        { name: 'radarr', reason: config, reasonKey: configKey },
+        { name: 'matrix', reason: version, reasonKey: versionKey },
+      ],
     }, BUSY)
 
     expect(screen.getByRole('link', { name: 'Fix its settings' }).getAttribute('href'))
