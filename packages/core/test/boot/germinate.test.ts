@@ -160,6 +160,33 @@ describe('phase 2 germination', () => {
     expect(served.state.translator.translate('core', 'command.unknown', 'en', { command: 'x' }))
       .not.toBe('command.unknown')
   })
+
+  // germinate()'s renderer argument defaults to the bare key, and germinate.test.ts exercises
+  // both branches by calling it directly — which leaves the boot seam itself asserted by
+  // nothing: dropping the argument here, or passing a bag-stripping renderer, kept the whole
+  // suite green.
+  it('logs each dormancy as a sentence at the configured locale, never as its own dotted key', async () => {
+    spore('orphan', {
+      'spore.yaml': [
+        'kind: enzyme', 'name: orphan', 'septum: "^0.11"',
+        'requires:', '  - rhiza: nowhere',
+        'commands:', '  - name: hi', '    description: x', '    respond: hi', '',
+      ].join('\n'),
+    })
+    const file = join(dir, 'mycelo.yaml')
+    writeFileSync(file, 'spores: ./spores\ndatabase: ./mycelo.db\ndefaultLocale: fr\n', 'utf8')
+    const served = serve(file)
+    closeDb = served.closeDb
+    const { logger, warnings, warnMeta } = spyLogger()
+    await germinatePhase(served.state, logger)
+    const dormancy = warnings.indexOf("spore 'orphan' is dormant")
+    expect(dormancy).toBeGreaterThanOrEqual(0)
+    const reason = warnMeta[dormancy]?.['reason']
+    expect(reason).not.toMatch(/^refusal\./)
+    // The parameter and the locale too, not only the sentence: a renderer handed a ref with no
+    // bag renders the bare key, and one handed the wrong locale renders the wrong language.
+    expect(reason).toBe("requiert le rhiza \u00ab nowhere \u00bb, qui n'est pas install\u00e9")
+  })
 })
 
 describe('warnUninhabitableOwner', () => {
