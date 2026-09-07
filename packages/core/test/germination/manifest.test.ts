@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { discover } from '../../src/germination/discover.js'
-import { isFailure, manifestFailureReason, readManifest } from '../../src/germination/manifest.js'
+import { isFailure, manifestFailureFault, manifestFailureReason, readManifest } from '../../src/germination/manifest.js'
 
 let dir: string
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'mycelo-man-')) })
@@ -38,7 +38,11 @@ it('reports a schema violation with the offending field', () => {
   // identical whichever required string field is missing, so the field name has to
   // come from the path, not the message — this is what distinguishes the assertion
   // from one that would pass against any generic schema-violation reason.
-  if (isFailure(read)) expect(read.reason).toContain("'name'")
+  if (isFailure(read)) {
+    expect(read.reason).toContain("'name'")
+    expect(read.refusal.key).toBe('refusal.germination.invalidManifest')
+    expect(read.refusal.params?.['path']).toBe('name')
+  }
 })
 
 it('names the path for a lookalike error that is not an instance of this core\'s ManifestError', () => {
@@ -47,4 +51,37 @@ it('names the path for a lookalike error that is not an instance of this core\'s
   }
   const reason = manifestFailureReason(new OtherManifestError('bad', 'requires.0.scopes.0'))
   expect(reason).toBe("invalid manifest at 'requires.0.scopes.0': bad")
+})
+
+it('refuses unreadable YAML with the plugin refusal key, naming the directory', () => {
+  spore('broken', 'kind: [unclosed\n')
+  const failure = readManifest(discover([dir])[0]!)
+  expect(isFailure(failure)).toBe(true)
+  if (!isFailure(failure)) return
+  expect(failure.refusal.key).toBe('refusal.plugin.unreadableManifest')
+  // The directory, because no validated name exists at this point in the lifecycle.
+  expect(failure.refusal.params?.['plugin']).toBe('broken')
+  const detail = String(failure.refusal.params?.['detail'])
+  expect(detail.length).toBeGreaterThan(0)
+  // Ties the ref to the sentence rather than to the parser's wording, which is not ours.
+  expect(failure.reason).toBe(`cannot read spore.yaml: ${detail}`)
+})
+
+it("names the manifest path when Zod's issue carries one", () => {
+  const failure = manifestFailureFault({ path: 'kind', message: 'Invalid input' })
+  expect(failure.refusal.key).toBe('refusal.germination.invalidManifest')
+  expect(failure.refusal.params).toEqual({ path: 'kind', detail: 'Invalid input' })
+})
+
+// The ternary's else branch, and the only one of the three with no wrapping sentence today.
+it('falls back to the no-path key when the issue carries no path', () => {
+  const failure = manifestFailureFault(new Error('Invalid input'))
+  expect(failure.refusal.key).toBe('refusal.germination.invalidManifestNoPath')
+  expect(failure.refusal.params).toEqual({ detail: 'Invalid input' })
+})
+
+// The interval's own risk: a ref built and never read is this project's recurring mutation.
+it('keeps reason and refusal saying the same thing', () => {
+  const failure = manifestFailureFault({ path: 'kind', message: 'Invalid input' })
+  expect(failure.message).toBe("invalid manifest at 'kind': Invalid input")
 })

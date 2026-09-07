@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs'
 import { parse as parseYaml } from 'yaml'
 import { parseManifest } from '@mycelo/septum'
-import type { Manifest } from '@mycelo/septum'
+import type { Manifest, TranslatableRef } from '@mycelo/septum'
 import type { SporeLocation } from './discover.js'
+import { fault } from './fault.js'
+import type { Fault } from './fault.js'
 
 export interface ReadManifest {
   location: SporeLocation
@@ -13,6 +15,8 @@ export interface ReadManifest {
 export interface ManifestFailure {
   location: SporeLocation
   reason: string
+  /** design §2.2. Renders at the request's locale on /api/plugins, at the default in the log. */
+  refusal: TranslatableRef
   /**
    * True only when the unvalidated YAML literally declares an enforcing inhibitor, so
    * design §7 can still refuse all traffic for one whose manifest never parsed.
@@ -32,9 +36,16 @@ function declaresEnforcingInhibitor(raw: unknown): boolean {
 // received undefined"), identical for any missing string field, so .path is what lets
 // an author find the offending line. Duck-typed, never instanceof, matching load.ts
 // and shape.ts: nothing here should assume this error came from this core's own copy.
-export function manifestFailureReason(e: unknown): string {
+export function manifestFailureFault(e: unknown): Fault {
   const path = (e as { path?: unknown }).path
-  return typeof path === 'string' ? `invalid manifest at '${path}': ${(e as Error).message}` : (e as Error).message
+  const detail = (e as Error).message
+  return typeof path === 'string'
+    ? fault(`invalid manifest at '${path}': ${detail}`, 'refusal.germination.invalidManifest', { path, detail })
+    : fault(detail, 'refusal.germination.invalidManifestNoPath', { detail })
+}
+
+export function manifestFailureReason(e: unknown): string {
+  return manifestFailureFault(e).message
 }
 
 export function readManifest(location: SporeLocation): ReadManifest | ManifestFailure {
@@ -44,12 +55,22 @@ export function readManifest(location: SporeLocation): ReadManifest | ManifestFa
   } catch (e) {
     // Unreadable YAML yields no fields at all, so an enforcing inhibitor cannot be
     // recognised here — the only case design §7 cannot cover.
-    return { location, reason: `cannot read spore.yaml: ${(e as Error).message}`, enforcingInhibitor: false }
+    const detail = (e as Error).message
+    const f = fault(
+      `cannot read spore.yaml: ${detail}`,
+      'refusal.plugin.unreadableManifest',
+      { plugin: location.directory, detail },
+    )
+    return { location, reason: f.message, refusal: f.refusal, enforcingInhibitor: false }
   }
   try {
     return { location, manifest: parseManifest(raw) }
   } catch (e) {
-    return { location, reason: manifestFailureReason(e), enforcingInhibitor: declaresEnforcingInhibitor(raw) }
+    const f = manifestFailureFault(e)
+    return {
+      location, reason: f.message, refusal: f.refusal,
+      enforcingInhibitor: declaresEnforcingInhibitor(raw),
+    }
   }
 }
 
