@@ -1,5 +1,47 @@
 # @mycelo/septum
 
+## 0.12.0
+
+### Added
+- `ConfigIssue.messageKey?: string | TranslatableRef` and `ConfigIssue.params?: Record<string,
+  unknown>` (design §5.2–§5.3). `defineConfig` now populates both: a `.refine()`/`.check()` issue's
+  own `message` is copied into `messageKey` verbatim, read in the declaring spore's own domain;
+  every other Zod issue code (`invalid_type`, `too_small`, `too_big`, `invalid_format`,
+  `invalid_value`, `not_multiple_of`, `unrecognized_keys`) takes a `common`-domain key instead, with
+  `params` carrying what that key interpolates. An issue whose code matches neither gets no
+  `messageKey` — `message` alone, exactly as every release before this one produced. `message`
+  itself is unchanged: it is what an operator's log prints, since a translated log cannot be
+  grepped.
+- `toConfigIssue(raw: z.core.$ZodIssue): ConfigIssue`, the mapping above, exported so a hand-rolled
+  `ConfigSchema` built directly on Zod issues can reuse it instead of reimplementing it.
+- `Refusal`, `Outcome` and `OutcomeOf<T>` — the discriminated result the eleven methods below now
+  resolve with. Not a typed error class: `mycelo-spores`' bundler has no `external`, so septum ships
+  inside every spore and `instanceof` across that boundary is always false.
+- `catalogs?: Record<string, unknown>` on `HyphaHarness`, `InhibitorHarness` and `RhizaHarness`
+  (`EnzymeHarness` already had it). Passing it makes the shared config-schema check flag a
+  `.refine()`/`.check()` `messageKey` that resolves in none of the supplied catalogues — the check
+  `enzymeChecks` already applied, now shared by all four kits.
+
+### Changed
+- **`PrincipalsManage.markReviewed`/`setDisplayName`, `RolesAssign.assignRole`/`revokeRole`,
+  `RolesManage.createRole`/`setRoleCommands`/`deleteRole`, `PluginsToggle.enable`/`disable` and
+  `PluginsConfigure.settings`/`setSetting` resolve `Promise<Outcome>` (`settings`:
+  `Promise<OutcomeOf<Record<string, unknown>>>`) instead of rejecting.** Every fault these
+  methods' doc comments already named — an unknown principal or role, a `builtin` role given to
+  `deleteRole` or `setRoleCommands`, an empty/taken name or repeated pattern given to `createRole`,
+  a plugin not installed, a config that fails its own schema — now comes back as `{ ok: false,
+  refusal: TranslatableRef }` rather than a thrown rejection. **Breaking** for a caller that
+  `await`s one of these eleven methods expecting the promise itself to reject. Nothing else on the
+  mycelium rhiza changed shape: `RestrictionsManage`, `LocaleManage`, `SourcesManage` and
+  `PluginsConfigure.formSchema` still reject or resolve exactly as before.
+
+### Removed
+- **`PluginInfo.reason`**, the authored English dormancy sentence. Replaced by `refusal?:
+  TranslatableRef` (design §2.2): the core now renders the dormancy sentence at the reader's
+  locale before it reaches an API response, so a spore reading `listPlugins()` sees a ref to
+  resolve itself, never English text. No shipped fixture reads `reason`, so nothing in this tree
+  breaks; a third-party spore reading it needs `refusal` instead.
+
 ## 0.11.0
 
 ### Added
