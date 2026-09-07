@@ -166,3 +166,42 @@ describe('assertCoreCatalogs', () => {
     expect(() => { assertCoreCatalogs(new Map(), 'en') }).toThrow(StartupError)
   })
 })
+
+// The literal key list, which `api/pins.test.ts` cannot give: it pins the catalogue against the
+// sources in both directions, so it proves each key is named somewhere — not that these 27 exist.
+const GERMINATION_KEYS = [
+  'anyOfDependencyDormant', 'anyOfNoneInstalled', 'capabilityUndeclared',
+  'capabilityUnimplemented', 'catalogFailed', 'createMissingMethods', 'createNotObject',
+  'dependencyDormant', 'duplicateName', 'enzymeNoHandlersObject', 'handlersMissing',
+  'inhibitorNoInspect', 'invalidManifest', 'invalidManifestNoPath', 'methodNotCallable',
+  'moduleCreateThrew', 'requiredRhizaMissing', 'requiredRhizaWrongKind', 'reservedDomain',
+  'reservedName', 'rhizaNoApi', 'scopeLaterPhase', 'scopeNotMounted', 'startStopMismatch',
+] as const
+
+const STARTUP_KEYS = ['hyphaConnectFailed', 'hyphaListenFailed', 'startFailed'] as const
+
+describe('the dormancy refusal keys', () => {
+  for (const [prefix, expected] of [
+    ['refusal.germination.', GERMINATION_KEYS],
+    ['refusal.startup.', STARTUP_KEYS],
+  ] as const) {
+    it(`carries every '${prefix}' key in en and in fr`, () => {
+      for (const locale of ['en', 'fr']) {
+        const messages = catalogs.get('common')?.get(locale)
+        for (const key of expected) {
+          expect(messages?.has(`${prefix}${key}`)).toBe(true)
+        }
+      }
+    })
+
+    it(`declares no '${prefix}' key this plan does not name`, () => {
+      const known = new Set<string>(expected)
+      for (const messages of catalogs.get('common')?.values() ?? []) {
+        const found = [...messages.keys()]
+          .filter((key) => key.startsWith(prefix))
+          .map((key) => key.slice(prefix.length))
+        expect(found.filter((key) => !known.has(key))).toEqual([])
+      }
+    })
+  }
+})
