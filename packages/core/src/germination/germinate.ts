@@ -137,18 +137,22 @@ export async function germinate(
       goDormant(dormancyRefusal('refusal.germination.reservedDomain', { plugin: manifest.name }))
       continue
     }
-    const cause = [...spore.mandatory].find((name) => failed.has(name))
-    if (cause !== undefined) {
-      const causeRef = failed.get(cause)
+    // Name and ref together, narrowed in one step: read separately, `cause` is a string whose
+    // ref is `TranslatableRef | undefined`, and a bag omitting `cause` renders the bare key.
+    const failure = [...spore.mandatory]
+      .map((name) => [name, failed.get(name)] as const)
+      .find((entry): entry is readonly [string, TranslatableRef] => entry[1] !== undefined)
+    if (failure !== undefined) {
+      const [cause, causeRef] = failure
       const anyOf = spore.anyOf.find((choice) => choice.chosen === cause)
       // No re-collapse (design §2.2); if the cause was an any_of choice, the refusal
       // names the untried alternatives alongside it.
       const listed = anyOf?.alternatives.map((n) => `'${n}'`).join(', ')
-      goDormant(anyOf !== undefined && causeRef !== undefined
+      goDormant(anyOf !== undefined
         ? dormancyRefusal('refusal.germination.anyOfDependencyDormant',
           { alternatives: listed, chosen: cause, cause: causeRef })
         : dormancyRefusal('refusal.germination.dependencyDormant',
-          { rhiza: cause, ...(causeRef === undefined ? {} : { cause: causeRef }) }))
+          { rhiza: cause, cause: causeRef }))
       continue
     }
     // An optional dependency that turned out dormant is not this spore's problem (core
@@ -176,10 +180,9 @@ export async function germinate(
           const parsed = module.configSchema.safeParse(declared)
           if (!parsed.success) {
             const detail = describeConfigError(parsed.error)
-            // `issues`, not `detail`: that is the parameter the shipped `refusal.config.incomplete`
-            // message interpolates, and a ref whose bag misses it renders as its bare key.
-            goDormant(dormancyRefusal('refusal.config.incomplete',
-              { plugin: manifest.name, issues: detail }))
+            // `issues` is the only name the shipped `refusal.config.incomplete` message
+            // interpolates; REFUSAL_PARAMS is what now rejects a bag that drifts from it.
+            goDormant(dormancyRefusal('refusal.config.incomplete', { issues: detail }))
             continue
           }
           const badSecrets = undeclaredSecretKeys(module.configSchema)

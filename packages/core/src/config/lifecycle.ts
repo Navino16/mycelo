@@ -5,6 +5,8 @@ import { loadModule } from '../germination/load.js'
 import { isFailure, readManifest } from '../germination/manifest.js'
 import type { ManifestFailure, ReadManifest } from '../germination/manifest.js'
 import { SHARED_DOMAIN } from '../i18n/core-catalogs.js'
+import type { RefusalArgs, RefusalKey } from '../i18n/refusal-keys.js'
+import { refusalRef } from '../i18n/refusal-keys.js'
 import { isRef } from '../i18n/refusal.js'
 import type { Db } from '../persistence/db.js'
 import { describeThrown } from '../support/thrown.js'
@@ -18,8 +20,8 @@ export interface EnableRefusal { ok: false, refusal: TranslatableRef }
  * design §4: every refusal the core authors lives in `common`, which bind.ts already opens to every
  * spore without a declaration. No English twin — `common`'s own `en` is the English (design §2.2).
  */
-function refuse(key: string, params?: Record<string, unknown>): EnableRefusal {
-  return { ok: false, refusal: { domain: SHARED_DOMAIN, key, ...(params === undefined ? {} : { params }) } }
+function refuse<K extends RefusalKey>(key: K, ...params: RefusalArgs<K>): EnableRefusal {
+  return { ok: false, refusal: refusalRef(key, ...params) }
 }
 
 /**
@@ -174,7 +176,7 @@ function configIssueRefs(error: unknown, domain: string): readonly TranslatableR
     const ref = issueRef(record, domain)
     refs.push(field.length === 0
       ? ref
-      : { domain: SHARED_DOMAIN, key: 'refusal.config.issueAt', params: { field, cause: ref } })
+      : refusalRef('refusal.config.issueAt', { field, cause: ref }))
   }
   return refs
 }

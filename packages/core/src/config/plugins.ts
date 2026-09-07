@@ -4,7 +4,7 @@ import { StoreRefusal } from '../authorization/refusal.js'
 import { discover } from '../germination/discover.js'
 import { isFailure, readManifest } from '../germination/manifest.js'
 import type { Registry } from '../germination/registry.js'
-import { SHARED_DOMAIN } from '../i18n/core-catalogs.js'
+import { refusalRef } from '../i18n/refusal-keys.js'
 import { renderConfigIssue } from '../i18n/refusal.js'
 import type { Translator } from '../i18n/translator.js'
 import type { Db } from '../persistence/db.js'
@@ -92,11 +92,7 @@ export function listPlugins(registry: Registry, sporesDirs: readonly string[], d
       return [{
         ...base,
         state: 'dormant' as const,
-        refusal: {
-          domain: SHARED_DOMAIN,
-          key: 'refusal.plugin.notOnDisk',
-          params: { plugin: install.name },
-        },
+        refusal: refusalRef('refusal.plugin.notOnDisk', { plugin: install.name }),
         enabled: true,
       }]
     })
@@ -172,11 +168,9 @@ export function undeclaredSecretKeys(configSchema: unknown): readonly string[] {
 
 /** The undeclared-secret verdict, for both `enablePlugin` and germination's own dormancy. */
 export function undeclaredSecretsRefusal(keys: readonly string[]): TranslatableRef {
-  return {
-    domain: SHARED_DOMAIN,
-    key: 'refusal.config.undeclaredSecrets',
-    params: { count: keys.length, keys: keys.map((k) => `'${k}'`) },
-  }
+  return refusalRef('refusal.config.undeclaredSecrets', {
+    count: keys.length, keys: keys.map((k) => `'${k}'`),
+  })
 }
 
 /**

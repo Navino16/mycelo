@@ -2,12 +2,13 @@ import type { Outcome, OutcomeOf, TranslatableRef } from '@mycelo/septum'
 import type { RefusalCode } from './authorization/refusal.js'
 import { isRefusal } from './authorization/refusal.js'
 import { SHARED_DOMAIN } from './i18n/core-catalogs.js'
+import type { RefusalKey } from './i18n/refusal-keys.js'
 
 /**
  * `Record<RefusalCode, string>` and not a partial one: a code added to `RefusalCode` without a key
  * here must not compile, or the mount hands a spore a raw code the day that code first fires.
  */
-const KEYS: Record<RefusalCode, string> = {
+const KEYS: Record<RefusalCode, RefusalKey> = {
   'role-unknown': 'refusal.role.notFound',
   'role-exists': 'refusal.role.exists',
   'role-builtin': 'refusal.role.builtin',
@@ -19,7 +20,7 @@ const KEYS: Record<RefusalCode, string> = {
   'setting-undeclared': 'refusal.plugin.settingUndeclared',
 }
 
-export function refusalKeyOf(code: RefusalCode): string {
+export function refusalKeyOf(code: RefusalCode): RefusalKey {
   return KEYS[code]
 }
 

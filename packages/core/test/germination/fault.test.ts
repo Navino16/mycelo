@@ -10,8 +10,8 @@ it('builds a ref in the shared domain', () => {
 
 // An empty `params` is not the same value as an absent one: `render` branches on
 // `params == null`, and every existing ref assertion in this repo is written with toEqual.
-it('omits params entirely when none are given', () => {
-  expect('params' in dormancyRefusal('k')).toBe(false)
+it('omits params entirely when the key takes none', () => {
+  expect('params' in dormancyRefusal('refusal.germination.startStopMismatch')).toBe(false)
 })
 
 it('carries params through untouched, including a nested ref', () => {

@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'bun:test'
 import type { RefusalCode } from '../src/authorization/refusal.js'
+import type { RefusalKey } from '../src/i18n/refusal-keys.js'
 import { StoreRefusal } from '../src/authorization/refusal.js'
 import { loadCoreCatalogs } from '../src/i18n/core-catalogs.js'
 import { outcome, outcomeOf, refusalKeyOf } from '../src/mycelium-refusal.js'
 
 /**
  * The map, spelled out independently of the implementation: `satisfies` makes a code added to
- * `RefusalCode` without an entry here fail to compile, and comparing the values catches two
- * codes' keys swapped, which a "every key is distinct" assertion cannot see.
+ * `RefusalCode` without an entry here fail to compile — and, against `RefusalKey`, an entry
+ * naming a key the shipped catalogue does not carry. Comparing the values catches two codes'
+ * keys swapped, which a "every key is distinct" assertion cannot see.
  */
 const EXPECTED = {
   'role-unknown': 'refusal.role.notFound',
@@ -19,7 +21,7 @@ const EXPECTED = {
   'principal-unknown': 'refusal.person.notFound',
   'plugin-not-installed': 'refusal.plugin.notInstalled',
   'setting-undeclared': 'refusal.plugin.settingUndeclared',
-} satisfies Record<RefusalCode, string>
+} as const satisfies Record<RefusalCode, RefusalKey>
 
 const CODES = Object.keys(EXPECTED) as RefusalCode[]
 

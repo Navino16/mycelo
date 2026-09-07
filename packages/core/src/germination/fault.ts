@@ -1,10 +1,5 @@
-import type { TranslatableRef } from '@mycelo/septum'
-import { SHARED_DOMAIN } from '../i18n/core-catalogs.js'
-
 /**
- * Every dormancy refusal resolves in `common`: germination has no spore binding to enforce
- * `requires` with, and design §5.3 accepts no other domain there.
+ * Germination's name for the shared builder. The key union and the per-key parameter names live
+ * in `i18n/refusal-keys.ts`, which the config routes build refusals from too.
  */
-export function dormancyRefusal(key: string, params?: Record<string, unknown>): TranslatableRef {
-  return { domain: SHARED_DOMAIN, key, ...(params === undefined ? {} : { params }) }
-}
+export { refusalRef as dormancyRefusal } from '../i18n/refusal-keys.js'

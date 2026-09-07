@@ -607,8 +607,10 @@ it('leaves a spore dormant, with the reason, when its config is rejected', async
   expect(registry.rhizas).toEqual([])
   expect(registry.dormant[0]?.refusal?.key).toBe('refusal.config.incomplete')
   expect(registry.dormant[0]?.refusal?.domain).toBe(SHARED_DOMAIN)
-  expect(registry.dormant[0]?.refusal?.params?.['plugin']).toBe('confrhiza')
   expect(String(registry.dormant[0]?.refusal?.params?.['issues'])).toContain('token must be a string')
+  // `issues` and nothing else: the shipped message interpolates only that, and the `plugin`
+  // this used to assert was a name no locale ever read.
+  expect(Object.keys(registry.dormant[0]?.refusal?.params ?? {})).toEqual(['issues'])
 })
 
 it('rejects a spore whose config key is absent entirely, rather than passing undefined', async () => {
