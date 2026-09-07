@@ -5,9 +5,10 @@ import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { defineConfig, SEPTUM_VERSION, type ConfigSchema, type EnzymeContext, type Logger } from '@mycelo/septum'
 import { enzymeChecks, type EnzymeHarness } from '@mycelo/septum/conformance'
 import { z } from 'zod'
-import { undeclaredSecretKeys } from '../../src/config/plugins.js'
+import { undeclaredSecretKeys, undeclaredSecretsRefusal } from '../../src/config/plugins.js'
 import { germinate } from '../../src/germination/germinate.js'
 import { CollisionError } from '../../src/germination/registry.js'
+import { SHARED_DOMAIN } from '../../src/i18n/core-catalogs.js'
 import { createLogger } from '../../src/support/logger.js'
 
 /** Records every warn() call instead of printing it, so a test can inspect them. */
@@ -113,6 +114,10 @@ it('refuses all traffic when an enforcing inhibitor throws in create()', async (
   const registry = await germinate([dir], createLogger())
   expect(registry.inhibitors).toEqual([])
   expect(registry.brokenEnforcing).toEqual(['throwcreategate'])
+  expect(registry.dormant[0]?.refusal).toEqual({
+    domain: SHARED_DOMAIN, key: 'refusal.germination.moduleCreateThrew',
+    params: { detail: 'create explodes' },
+  })
 })
 
 it('refuses all traffic when an enforcing inhibitor has a dormant mandatory dependency', async () => {
@@ -226,6 +231,16 @@ it('makes a dependent dormant when a MANDATORY dependency fails to load, never i
   expect(registry.enzymes).toEqual([])
   expect(registry.dormant.find((d) => d.name === 'needs-it')?.reason)
     .toContain("requires rhiza 'broken-rhiza', which is dormant")
+  expect(registry.dormant.find((d) => d.name === 'needs-it')?.refusal).toEqual({
+    domain: SHARED_DOMAIN, key: 'refusal.germination.dependencyDormant',
+    params: {
+      rhiza: 'broken-rhiza',
+      cause: {
+        domain: SHARED_DOMAIN, key: 'refusal.germination.moduleCreateThrew',
+        params: { detail: 'module explodes' },
+      },
+    },
+  })
   expect(existsSync(marker)).toBe(false)
 })
 
@@ -261,6 +276,16 @@ it('does not fall back to a healthy any_of alternative when the chosen one fails
   expect(registry.dormant.find((d) => d.name === 'picks-one')?.reason).toBe(
     "requires one of rhiza 'alpha', 'beta'; 'alpha' was chosen and is dormant: alpha explodes",
   )
+  expect(registry.dormant.find((d) => d.name === 'picks-one')?.refusal).toEqual({
+    domain: SHARED_DOMAIN, key: 'refusal.germination.anyOfDependencyDormant',
+    params: {
+      alternatives: "'alpha', 'beta'", chosen: 'alpha',
+      cause: {
+        domain: SHARED_DOMAIN, key: 'refusal.germination.moduleCreateThrew',
+        params: { detail: 'alpha explodes' },
+      },
+    },
+  })
 })
 
 // ruling F9: a dormant spore has no manifest in the registry, so /api/graph could draw no
@@ -558,6 +583,10 @@ it('leaves a spore dormant, with the reason, when its config is rejected', async
   const registry = await germinate([dir], createLogger(), { confrhiza: { token: 42 } })
   expect(registry.rhizas).toEqual([])
   expect(registry.dormant[0]?.reason).toContain('token must be a string')
+  expect(registry.dormant[0]?.refusal?.key).toBe('refusal.config.incomplete')
+  expect(registry.dormant[0]?.refusal?.domain).toBe(SHARED_DOMAIN)
+  expect(registry.dormant[0]?.refusal?.params?.['plugin']).toBe('confrhiza')
+  expect(String(registry.dormant[0]?.refusal?.params?.['detail'])).toContain('token must be a string')
 })
 
 it('rejects a spore whose config key is absent entirely, rather than passing undefined', async () => {
@@ -605,6 +634,7 @@ it('a spore declaring a secret its schema does not have is dormant, and the reas
   expect(entry).toBeDefined()
   expect(entry?.reason).toContain('apiKye')
   expect(entry?.reason).toContain('declares a secret')
+  expect(entry?.refusal).toEqual(undeclaredSecretsRefusal(['apiKye']))
 })
 
 // The cardinality case: `undeclaredSecretKeys` reduced to its first element survives every
@@ -621,6 +651,7 @@ it('a spore declaring two undeclared secrets is dormant, and the reason names bo
   expect(entry?.reason).toContain('apiKye')
   expect(entry?.reason).toContain('secrit')
   expect(entry?.reason).toContain('declares secrets')
+  expect(entry?.refusal).toEqual(undeclaredSecretsRefusal(['apiKye', 'secrit']))
 })
 
 it('a spore whose secret names a declared field germinates', async () => {
@@ -735,9 +766,16 @@ it('makes a spore dormant when one of its catalogues does not compile, naming fi
   })
   const registry = await germinate([dir], createLogger())
   expect(registry.enzymes).toHaveLength(0)
-  const reason = registry.dormant.find((d) => d.name === 'greeter')?.reason ?? ''
+  const dormant = registry.dormant.find((d) => d.name === 'greeter')
+  const reason = dormant?.reason ?? ''
   expect(reason).toContain('es.yaml')
   expect(reason).toContain('ready')
+  expect(dormant?.refusal?.key).toBe('refusal.germination.catalogFailed')
+  expect(dormant?.refusal?.domain).toBe(SHARED_DOMAIN)
+  // The parser's own words survive as a parameter, so an operator can still grep the fault.
+  const detail = String(dormant?.refusal?.params?.['detail'])
+  expect(detail).toContain('es.yaml')
+  expect(detail).toContain('ready')
 })
 
 it('drops a dormant spore\'s catalogue instead of keeping it from before the failure', async () => {
@@ -785,6 +823,9 @@ it('refuses a spore that claims a reserved domain name', async () => {
     // Both, not one: a guard written against a single literal is the cardinality mutation
     // phase 5.5's campaign kept surviving.
     expect(registry.dormant.find((d) => d.name === reserved)?.reason).toContain('reserved')
+    expect(registry.dormant.find((d) => d.name === reserved)?.refusal).toEqual({
+      domain: SHARED_DOMAIN, key: 'refusal.germination.reservedDomain', params: { plugin: reserved },
+    })
   }
 })
 
@@ -805,6 +846,12 @@ it('leaves a spore dormant when its septum range excludes the running septum, na
   const dormant = registry.dormant.find((d) => d.name === 'stale')
   expect(dormant?.reason).toContain('^0.9')
   expect(dormant?.reason).toContain(SEPTUM_VERSION)
+  expect(dormant?.refusal?.key).toBe('refusal.plugin.septumIncompatible')
+  expect(dormant?.refusal?.domain).toBe(SHARED_DOMAIN)
+  expect(dormant?.refusal?.params?.['plugin']).toBe('stale')
+  const detail = String(dormant?.refusal?.params?.['detail'])
+  expect(detail).toContain('^0.9')
+  expect(detail).toContain(SEPTUM_VERSION)
 })
 
 it('germinates a spore whose septum range covers the running septum', async () => {
