@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import type { MyceliumScope, SporeKind } from '@mycelo/septum'
+import type { MyceliumScope, SporeKind, TranslatableRef } from '@mycelo/septum'
 import type { RuntimeState } from '../../boot/state.js'
 import { enablePlugin } from '../../config/lifecycle.js'
 import {
@@ -28,7 +28,11 @@ export interface PluginDto {
    */
   commands: readonly string[]
   state: 'germinated' | 'dormant' | 'disabled' | 'pending' | 'unknown'
-  reason?: string
+  /**
+   * The dormancy verdict, unrendered. Task 9 renders it at the request's locale; until then
+   * this route carries no sentence at all (design §2.2).
+   */
+  refusal?: TranslatableRef
   /** From the install row, which can disagree with `state` until the next germination. */
   enabled: boolean
   /**
@@ -97,7 +101,7 @@ function pluginsOf(state: RuntimeState): readonly PluginDto[] {
       commands: info.commands.length > 0 ? info.commands : fact?.commands ?? [],
       ...(fact?.description === undefined ? {} : { description: fact.description }),
       state: info.state,
-      ...(info.reason === undefined ? {} : { reason: info.reason }),
+      ...(info.refusal === undefined ? {} : { refusal: info.refusal }),
       enabled: installs.get(info.name)?.enabled ?? info.enabled,
       ...(info.source === undefined ? {} : { source: info.source }),
       ...(info.strain === undefined ? {} : { strain: info.strain }),

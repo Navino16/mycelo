@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { discover } from '../../src/germination/discover.js'
-import { isFailure, manifestFailureFault, manifestFailureReason, readManifest } from '../../src/germination/manifest.js'
+import { isFailure, manifestFailureReason, manifestFailureRefusal, readManifest } from '../../src/germination/manifest.js'
 
 let dir: string
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'mycelo-man-')) })
@@ -68,20 +68,22 @@ it('refuses unreadable YAML with the plugin refusal key, naming the directory', 
 })
 
 it("names the manifest path when Zod's issue carries one", () => {
-  const failure = manifestFailureFault({ path: 'kind', message: 'Invalid input' })
-  expect(failure.refusal.key).toBe('refusal.germination.invalidManifest')
-  expect(failure.refusal.params).toEqual({ path: 'kind', detail: 'Invalid input' })
+  const refusal = manifestFailureRefusal({ path: 'kind', message: 'Invalid input' })
+  expect(refusal.key).toBe('refusal.germination.invalidManifest')
+  expect(refusal.params).toEqual({ path: 'kind', detail: 'Invalid input' })
 })
 
 // The ternary's else branch, and the only one of the three with no wrapping sentence today.
 it('falls back to the no-path key when the issue carries no path', () => {
-  const failure = manifestFailureFault(new Error('Invalid input'))
-  expect(failure.refusal.key).toBe('refusal.germination.invalidManifestNoPath')
-  expect(failure.refusal.params).toEqual({ detail: 'Invalid input' })
+  const refusal = manifestFailureRefusal(new Error('Invalid input'))
+  expect(refusal.key).toBe('refusal.germination.invalidManifestNoPath')
+  expect(refusal.params).toEqual({ detail: 'Invalid input' })
 })
 
-// The interval's own risk: a ref built and never read is this project's recurring mutation.
+// `reason` survives for inoculate alone (ruling R8-a), so nothing but this holds the two
+// spellings of one verdict together — and the path is what the ref would silently drop.
 it('keeps reason and refusal saying the same thing', () => {
-  const failure = manifestFailureFault({ path: 'kind', message: 'Invalid input' })
-  expect(failure.message).toBe("invalid manifest at 'kind': Invalid input")
+  const e = { path: 'kind', message: 'Invalid input' }
+  expect(manifestFailureReason(e)).toBe("invalid manifest at 'kind': Invalid input")
+  expect(manifestFailureRefusal(e).params).toEqual({ path: 'kind', detail: 'Invalid input' })
 })

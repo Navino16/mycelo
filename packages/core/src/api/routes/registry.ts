@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import type { SporeKind } from '@mycelo/septum'
+import type { SporeKind, TranslatableRef } from '@mycelo/septum'
 import type { RuntimeState } from '../../boot/state.js'
 import { listInstalls } from '../../config/store.js'
 import { targetName } from '../../germination/anastomoses.js'
@@ -45,7 +45,10 @@ export interface GraphNode {
    * its live health state wins, which is what the Overview reads off /api/health (ruling F11).
    */
   state: 'germinated' | 'dormant' | 'degraded' | 'unreachable'
+  /** A rhiza's live health detail, never a dormancy verdict — that travels as `refusal`. */
   reason?: string
+  /** design §2.2, unrendered until task 9. Absent for a node that is not dormant. */
+  refusal?: TranslatableRef
 }
 
 // germinate.ts makes a spore named 'core' dormant rather than refusing it, so the synthetic
@@ -140,7 +143,7 @@ function nodesOf(
       name: d.name,
       ...(recordedKind.has(d.name) ? { kind: recordedKind.get(d.name) } : {}),
       state: 'dormant',
-      reason: d.reason,
+      refusal: d.refusal,
     })),
   ]
 }

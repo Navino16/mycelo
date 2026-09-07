@@ -242,7 +242,10 @@ it('plugin-list reports each plugin\'s kind and state, including a disabled plug
     {
       listPlugins: () => [
         { name: 'radarr', kind: 'rhiza', commands: [], state: 'germinated', enabled: true },
-        { name: 'broken', commands: [], state: 'dormant', reason: 'manifest did not parse', enabled: true },
+        {
+          name: 'broken', commands: [], state: 'dormant', enabled: true,
+          refusal: { domain: 'common', key: 'refusal.plugin.unreadableManifest' },
+        },
         { name: 'sonarr', kind: 'rhiza', commands: [], state: 'disabled', enabled: false },
       ],
     },

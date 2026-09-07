@@ -2,7 +2,7 @@ import type { Logger, MyceliumScope } from '@mycelo/septum'
 import { createAdmissionChain, createInhibitorContext } from '../admission/chain.js'
 import type { AdmissionChain } from '../admission/chain.js'
 import { createMembershipCache } from '../admission/membership.js'
-import { fault } from '../germination/fault.js'
+import { dormancyRefusal } from '../germination/fault.js'
 import { buildRoutes } from '../germination/registry.js'
 import { listAliases } from '../rhizomorph/aliases.js'
 import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor, GerminatedRhiza, Registry } from '../germination/registry.js'
@@ -67,9 +67,10 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
       connectedHyphae.push(hypha)
     } catch (e) {
       logger.warn(`hypha '${hypha.name}' failed to connect and is dormant`, { reason: (e as Error).message })
-      const f = fault((e as Error).message, 'refusal.startup.hyphaConnectFailed',
-        { detail: (e as Error).message })
-      dormant.push({ name: hypha.name, reason: f.message, refusal: f.refusal })
+      dormant.push({
+        name: hypha.name,
+        refusal: dormancyRefusal('refusal.startup.hyphaConnectFailed', { detail: (e as Error).message }),
+      })
     }
   }
 
@@ -119,9 +120,10 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
           startedRhizas.push(rhiza)
         } catch (e) {
           logger.warn(`rhiza '${rhiza.name}' failed to start and is dormant`, { reason: (e as Error).message })
-          const f = fault((e as Error).message, 'refusal.startup.startFailed',
-            { detail: (e as Error).message })
-          dormant.push({ name: rhiza.name, reason: f.message, refusal: f.refusal })
+          dormant.push({
+            name: rhiza.name,
+            refusal: dormancyRefusal('refusal.startup.startFailed', { detail: (e as Error).message }),
+          })
         }
         continue
       }
@@ -150,9 +152,10 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
         startedEnzymes.push(enzyme)
       } catch (e) {
         logger.warn(`enzyme '${enzyme.name}' failed to start and is dormant`, { reason: (e as Error).message })
-        const f = fault((e as Error).message, 'refusal.startup.startFailed',
-          { detail: (e as Error).message })
-        dormant.push({ name: enzyme.name, reason: f.message, refusal: f.refusal })
+        dormant.push({
+          name: enzyme.name,
+          refusal: dormancyRefusal('refusal.startup.startFailed', { detail: (e as Error).message }),
+        })
       }
     }
 
@@ -170,16 +173,18 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
         await inhibitor.instance.start?.(ctx)
         startedInhibitors.push(inhibitor)
       } catch (e) {
-        const f = fault((e as Error).message, 'refusal.startup.startFailed',
-          { detail: (e as Error).message })
-        dormant.push({ name: inhibitor.name, reason: f.message, refusal: f.refusal })
+        const detail = (e as Error).message
+        dormant.push({
+          name: inhibitor.name,
+          refusal: dormancyRefusal('refusal.startup.startFailed', { detail }),
+        })
         if (inhibitor.manifest.enforcing) {
           // Design §7: an enforcing inhibitor that never started refuses everything,
           // rather than leaving the channel it guarded wide open.
           brokenEnforcing.push(inhibitor.name)
-          logger.error(`enforcing inhibitor '${inhibitor.name}' failed to start: all traffic is refused`, { reason: f.message })
+          logger.error(`enforcing inhibitor '${inhibitor.name}' failed to start: all traffic is refused`, { reason: detail })
         } else {
-          logger.warn(`inhibitor '${inhibitor.name}' failed to start and is dormant`, { reason: f.message })
+          logger.warn(`inhibitor '${inhibitor.name}' failed to start and is dormant`, { reason: detail })
         }
       }
     }
@@ -267,9 +272,10 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
         listening.push(hypha)
       } catch (e) {
         logger.warn(`hypha '${hypha.name}' failed to listen and is dormant`, { reason: (e as Error).message })
-        const f = fault((e as Error).message, 'refusal.startup.hyphaListenFailed',
-          { detail: (e as Error).message })
-        dormant.push({ name: hypha.name, reason: f.message, refusal: f.refusal })
+        dormant.push({
+          name: hypha.name,
+          refusal: dormancyRefusal('refusal.startup.hyphaListenFailed', { detail: (e as Error).message }),
+        })
       }
     }
     reportedHyphae = listening

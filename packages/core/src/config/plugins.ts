@@ -70,8 +70,7 @@ export function listPlugins(registry: Registry, sporesDirs: readonly string[], d
     ...(recordedKind.has(d.name) ? { kind: recordedKind.get(d.name) } : {}),
     commands: [],
     state: 'dormant' as const,
-    reason: d.reason,
-    ...(d.refusal === undefined ? {} : { refusal: d.refusal }),
+    refusal: d.refusal,
     enabled: true,
     ...from(d.name),
   }))
@@ -93,7 +92,6 @@ export function listPlugins(registry: Registry, sporesDirs: readonly string[], d
       return [{
         ...base,
         state: 'dormant' as const,
-        reason: `no spore named '${install.name}' is present on disk`,
         refusal: {
           domain: SHARED_DOMAIN,
           key: 'refusal.plugin.notOnDisk',
@@ -172,19 +170,7 @@ export function undeclaredSecretKeys(configSchema: unknown): readonly string[] {
   return undeclaredKeys(formSchemaFor(configSchema), keys)
 }
 
-// Germination's dormancy reason, which is still an English string until the companion plan
-// migrates it. Pinned byte-for-byte against `refusal.config.undeclaredSecrets`'s own `en`
-// rendering by plugins.test.ts, so the two spellings of one verdict cannot drift.
-export function describeUndeclaredSecrets(keys: readonly string[]): string {
-  const named = keys.map((k) => `'${k}'`).join(', ')
-  const noun = keys.length === 1 ? 'a secret' : 'secrets'
-  return `configuration declares ${noun} ${named} the schema does not have`
-}
-
-/**
- * The same verdict as `describeUndeclaredSecrets`, as a ref, for `enablePlugin`. Both exist only
- * until the companion plan migrates germination's dormancy reasons.
- */
+/** The undeclared-secret verdict, for both `enablePlugin` and germination's own dormancy. */
 export function undeclaredSecretsRefusal(keys: readonly string[]): TranslatableRef {
   return {
     domain: SHARED_DOMAIN,

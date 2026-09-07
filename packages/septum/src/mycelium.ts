@@ -42,8 +42,6 @@ export interface PluginInfo {
    * from its own start() sees itself.
    */
   state: 'germinated' | 'dormant' | 'disabled' | 'pending'
-  /** Present only when dormant. */
-  reason?: string
   /** Present only when dormant. design §2.2; renders at the reader's locale. */
   refusal?: TranslatableRef
   /**

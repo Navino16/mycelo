@@ -18,7 +18,7 @@ export async function aggregateHealth(registry: Registry): Promise<readonly Rhiz
 export interface RuntimeHealth {
   mode: 'germinated' | 'degraded'
   failure?: GerminationFailure
-  dormant: readonly { name: string, reason: string, refusal?: TranslatableRef }[]
+  dormant: readonly { name: string, refusal: TranslatableRef }[]
   /** Kept apart from `dormant`: any one of these refuses all traffic (design §7). */
   enforcingBlocked: readonly string[]
   rhizas: readonly RhizaHealth[]
@@ -37,11 +37,7 @@ export async function aggregateRuntimeHealth(germination: Germination): Promise<
   const { registry, admission } = germination.mycelium
   return {
     mode: 'germinated',
-    dormant: registry.dormant.map((d) => ({
-      name: d.name,
-      reason: d.reason,
-      ...(d.refusal === undefined ? {} : { refusal: d.refusal }),
-    })),
+    dormant: registry.dormant.map((d) => ({ name: d.name, refusal: d.refusal })),
     enforcingBlocked: registry.brokenEnforcing,
     rhizas: await aggregateHealth(registry),
     blockedSinceBoot: admission.blockedSinceBoot(),

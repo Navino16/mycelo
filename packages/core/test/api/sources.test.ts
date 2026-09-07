@@ -477,7 +477,7 @@ describe('POST /api/sources/:id/inoculate', () => {
     const after = (await app.inject({ method: 'GET', url: '/api/plugins', headers: { cookie } })).json<PluginGroups>()
     // Enabled but not yet germinated, so listPlugins omits it — the limitation phase 5
     // recorded. What must never happen is a spore sitting on disk reported as absent from it.
-    expect(after.enzyme.filter((p) => p.name === 'radarr' && p.reason !== undefined)).toEqual([])
+    expect(after.enzyme.filter((p) => p.name === 'radarr' && p.refusal !== undefined)).toEqual([])
   })
 
   it('carries every warning inoculate produced, not the first of them', async () => {

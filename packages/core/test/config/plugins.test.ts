@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it } from 'bun:test'
 import type { Logger } from '@mycelo/septum'
 import { readSettings, recordInstall, writeSetting } from '../../src/config/store.js'
 import {
-  describeUndeclaredSecrets, listPlugins, redactSecrets, rejectedSettings, undeclaredSecretsRefusal,
+  listPlugins, redactSecrets, rejectedSettings, undeclaredSecretsRefusal,
   writeDeclaredSetting,
 } from '../../src/config/plugins.js'
 import { REDACTED } from '../../src/support/redaction.js'
@@ -93,14 +93,13 @@ it('undeclaredSecretsRefusal carries the count its plural needs', () => {
   expect(undeclaredSecretsRefusal(['a', 'b']).params?.['count']).toBe(2)
 })
 
-// The two spellings of one verdict, byte for byte: germination still builds the English by hand
-// while enablePlugin renders the catalogue, and nothing else holds them together until the
-// companion plan migrates the dormancy reasons. Both counts, or the plural halves drift alone.
-it('spells the undeclared-secret verdict identically by hand and through the catalogue', () => {
-  for (const keys of [['token'], ['a', 'b']]) {
-    expect(renderRefusal(translator, undeclaredSecretsRefusal(keys), 'en'))
-      .toBe(describeUndeclaredSecrets(keys))
-  }
+// Both counts: the plural halves of an ICU `{count, plural, ...}` drift alone, and this is the
+// only place either branch is rendered against the English it is supposed to read as.
+it('renders both counts of the undeclared-secret verdict', () => {
+  expect(renderRefusal(translator, undeclaredSecretsRefusal(['token']), 'en'))
+    .toBe("configuration declares a secret 'token' the schema does not have")
+  expect(renderRefusal(translator, undeclaredSecretsRefusal(['a', 'b']), 'en'))
+    .toBe("configuration declares secrets 'a', 'b' the schema does not have")
 })
 
 // Installed under a real catalogue domain's own name, so a bare-string messageKey resolves
@@ -445,7 +444,7 @@ it('carries provenance onto a germinated and a dormant entry, each from its own 
   const registry = {
     ...emptyRegistry(),
     enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^0.11', commands: [] } }],
-    dormant: [{ name: 'broken', reason: 'create() returned no api' }],
+    dormant: [{ name: 'broken', refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' } }],
   } as unknown as Registry
   const infos = listPlugins(registry, [], db)
   const media = infos.find((p) => p.name === 'media')
@@ -463,8 +462,8 @@ it('gives a dormant entry the kind its install row recorded, and none when there
   const registry = {
     ...emptyRegistry(),
     dormant: [
-      { name: 'plex', reason: 'configuration rejected: url: expected string' },
-      { name: 'garbled', reason: 'cannot read spore.yaml' },
+      { name: 'plex', refusal: { domain: 'common', key: 'refusal.config.incomplete' } },
+      { name: 'garbled', refusal: { domain: 'common', key: 'refusal.plugin.unreadableManifest' } },
     ],
   } as unknown as Registry
   const infos = listPlugins(registry, [], db)
@@ -477,7 +476,7 @@ it('carries the dormancy refusal through to PluginInfo', () => {
   const registry = {
     ...emptyRegistry(),
     dormant: [{
-      name: 'broken', reason: 'create() returned no inspect()',
+      name: 'broken',
       refusal: { domain: 'common', key: 'refusal.germination.inhibitorNoInspect' },
     }],
   } as unknown as Registry

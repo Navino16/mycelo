@@ -3,8 +3,7 @@ import { parse as parseYaml } from 'yaml'
 import { parseManifest } from '@mycelo/septum'
 import type { Manifest, TranslatableRef } from '@mycelo/septum'
 import type { SporeLocation } from './discover.js'
-import { fault } from './fault.js'
-import type { Fault } from './fault.js'
+import { dormancyRefusal } from './fault.js'
 
 export interface ReadManifest {
   location: SporeLocation
@@ -14,6 +13,7 @@ export interface ReadManifest {
 /** A spore that could not be read. Dormant, never fatal (spec §8). */
 export interface ManifestFailure {
   location: SporeLocation
+  /** English, for `inoculate`'s install refusals alone — every dormancy surface reads `refusal`. */
   reason: string
   /** design §2.2. Renders at the request's locale on /api/plugins, at the default in the log. */
   refusal: TranslatableRef
@@ -36,16 +36,27 @@ function declaresEnforcingInhibitor(raw: unknown): boolean {
 // received undefined"), identical for any missing string field, so .path is what lets
 // an author find the offending line. Duck-typed, never instanceof, matching load.ts
 // and shape.ts: nothing here should assume this error came from this core's own copy.
-export function manifestFailureFault(e: unknown): Fault {
+function manifestPath(e: unknown): string | undefined {
   const path = (e as { path?: unknown }).path
-  const detail = (e as Error).message
-  return typeof path === 'string'
-    ? fault(`invalid manifest at '${path}': ${detail}`, 'refusal.germination.invalidManifest', { path, detail })
-    : fault(detail, 'refusal.germination.invalidManifestNoPath', { detail })
+  return typeof path === 'string' ? path : undefined
 }
 
+/**
+ * The English sentence, kept because `sporangium/inoculate.ts` has no translator and no
+ * locale, and an install refusal is not this phase's subject (ruling R8-a).
+ */
 export function manifestFailureReason(e: unknown): string {
-  return manifestFailureFault(e).message
+  const path = manifestPath(e)
+  const detail = (e as Error).message
+  return path === undefined ? detail : `invalid manifest at '${path}': ${detail}`
+}
+
+export function manifestFailureRefusal(e: unknown): TranslatableRef {
+  const path = manifestPath(e)
+  const detail = (e as Error).message
+  return path === undefined
+    ? dormancyRefusal('refusal.germination.invalidManifestNoPath', { detail })
+    : dormancyRefusal('refusal.germination.invalidManifest', { path, detail })
 }
 
 export function readManifest(location: SporeLocation): ReadManifest | ManifestFailure {
@@ -56,24 +67,25 @@ export function readManifest(location: SporeLocation): ReadManifest | ManifestFa
     // Unreadable YAML yields no fields at all, so an enforcing inhibitor cannot be
     // recognised here — the only case design §7 cannot cover.
     const detail = (e as Error).message
-    const f = fault(
-      `cannot read spore.yaml: ${detail}`,
-      'refusal.plugin.unreadableManifest',
-      { plugin: location.directory, detail },
-    )
-    return { location, reason: f.message, refusal: f.refusal, enforcingInhibitor: false }
+    return {
+      location,
+      reason: `cannot read spore.yaml: ${detail}`,
+      refusal: dormancyRefusal('refusal.plugin.unreadableManifest', {
+        plugin: location.directory, detail,
+      }),
+      enforcingInhibitor: false,
+    }
   }
   try {
     return { location, manifest: parseManifest(raw) }
   } catch (e) {
-    const f = manifestFailureFault(e)
     return {
-      location, reason: f.message, refusal: f.refusal,
+      location, reason: manifestFailureReason(e), refusal: manifestFailureRefusal(e),
       enforcingInhibitor: declaresEnforcingInhibitor(raw),
     }
   }
 }
 
 export function isFailure(r: ReadManifest | ManifestFailure): r is ManifestFailure {
-  return 'reason' in r
+  return 'refusal' in r
 }

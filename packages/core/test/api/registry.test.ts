@@ -127,7 +127,10 @@ describe('/api/graph', () => {
     const broken = body.nodes.find((n) => n.name === 'brokenyaml')
     expect(broken).toMatchObject({ state: 'dormant' })
     expect(broken?.kind).toBeUndefined()
-    expect(broken?.reason).toBeDefined()
+    // The verdict travels unrendered until task 9 mounts the renderer on this route, and the
+    // offending field is what makes it actionable at all.
+    expect(broken?.refusal?.key).toBe('refusal.germination.invalidManifest')
+    expect(broken?.refusal?.params?.['path']).toBe('septum')
   })
 
   // needs-config parses and then refuses its empty configuration: the commonest dormancy of a
@@ -138,7 +141,7 @@ describe('/api/graph', () => {
     const body = (await app.inject({ method: 'GET', url: '/api/graph', headers: { cookie } })).json<GraphDto>()
     const node = body.nodes.find((n) => n.name === 'needs-config')
     expect(node).toMatchObject({ kind: 'enzyme', state: 'dormant' })
-    expect(node?.reason).toContain('configuration')
+    expect(node?.refusal?.key).toBe('refusal.config.incomplete')
   })
 
   it('tells a mandatory dependency edge from an optional one, and dedupes a target reached twice', async () => {

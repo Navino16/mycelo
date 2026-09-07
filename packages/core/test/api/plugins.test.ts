@@ -71,6 +71,13 @@ describe('/api/plugins', () => {
     // Not vanished, and not miscategorised into a kind it never validated as.
     expect(broken).toMatchObject({ state: 'dormant' })
     expect(broken?.kind).toBeUndefined()
+    // The dormancy verdict, unrendered until task 9 mounts the renderer here. Without this the
+    // route could drop the field entirely and only the SPA would notice.
+    expect(broken?.refusal).toEqual({
+      domain: 'common',
+      key: 'refusal.germination.invalidManifest',
+      params: { path: 'septum', detail: 'Invalid input: expected string, received undefined' },
+    })
   })
 
   it('reports the sporangium label and the strain of an installed spore, and neither for a local one', async () => {

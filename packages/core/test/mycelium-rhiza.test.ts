@@ -51,7 +51,8 @@ function fresh(): Db {
 }
 
 const registry = {
-  hyphae: [], rhizas: [], inhibitors: [], dormant: [{ name: 'broken', reason: 'create() returned no api' }],
+  hyphae: [], rhizas: [], inhibitors: [],
+  dormant: [{ name: 'broken', refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' } }],
   enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^0.11',
     commands: [{ name: 'movies', description: 'x', code: 'h' }] }, instance: null }],
   routes: new Map(),
@@ -68,11 +69,14 @@ it('does not mount listPlugins when plugins.read is not granted', () => {
   expect('listPlugins' in createMyceliumApi(registry, ['health.read'], stubSend, fresh(), SPORES)).toBe(false)
 })
 
-it('lists germinated and dormant plugins with their reasons', () => {
+it('lists germinated and dormant plugins with their refusals', () => {
   const api = createMyceliumApi(registry, ['plugins.read'], stubSend, fresh(), SPORES) as PluginsRead
   expect(api.listPlugins()).toEqual([
     { name: 'media', kind: 'enzyme', commands: ['movies'], state: 'germinated', enabled: true },
-    { name: 'broken', commands: [], state: 'dormant', reason: 'create() returned no api', enabled: true },
+    {
+      name: 'broken', commands: [], state: 'dormant', enabled: true,
+      refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' },
+    },
   ])
 })
 
@@ -628,7 +632,7 @@ describe('an install with no spore on disk', () => {
     const api = createMyceliumApi(emptyRegistry(), ['plugins.read'], noSend, db, SPORES) as PluginsRead
     expect(api.listPlugins()).toContainEqual({
       name: 'vanished', kind: 'rhiza', commands: [],
-      state: 'dormant', reason: "no spore named 'vanished' is present on disk", enabled: true,
+      state: 'dormant', enabled: true,
       refusal: { domain: 'common', key: 'refusal.plugin.notOnDisk', params: { plugin: 'vanished' } },
     })
   })

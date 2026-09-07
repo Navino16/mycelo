@@ -109,7 +109,9 @@ it('keeps other hyphae starting when one throws in connect(), and marks it dorma
 
   const { registry } = await bootstrap(configFile)
   expect(registry.hyphae.map((h) => h.name)).toEqual(['good'])
-  expect(registry.dormant.find((d) => d.name === 'bad')?.reason).toContain('boom')
+  expect(registry.dormant.find((d) => d.name === 'bad')?.refusal).toEqual({
+    domain: 'common', key: 'refusal.startup.hyphaConnectFailed', params: { detail: 'boom' },
+  })
 })
 
 it('keeps other hyphae listening when one throws in listen(), and marks it dormant', async () => {
@@ -144,7 +146,11 @@ it('keeps other hyphae listening when one throws in listen(), and marks it dorma
 
   const { registry } = await bootstrap(configFile)
   expect(registry.hyphae.map((h) => h.name)).toEqual(['good'])
-  expect(registry.dormant.find((d) => d.name === 'bad')?.reason).toContain('boom')
+  // hyphaListenFailed, not hyphaConnectFailed: the two share a `detail` and only the key
+  // tells an operator which half of startup broke.
+  expect(registry.dormant.find((d) => d.name === 'bad')?.refusal).toEqual({
+    domain: 'common', key: 'refusal.startup.hyphaListenFailed', params: { detail: 'boom' },
+  })
 })
 
 it('starts a rhiza before the enzyme that requires it, so ctx.rhiza() sees it already started', async () => {
@@ -314,7 +320,9 @@ it('sends an enzyme dormant and removes it from the routing table when start() t
 
   const { registry } = await bootstrap(configFile)
   expect(registry.enzymes).toEqual([])
-  expect(registry.dormant.find((d) => d.name === 'exploder')?.reason).toContain('kaboom')
+  expect(registry.dormant.find((d) => d.name === 'exploder')?.refusal).toEqual({
+    domain: 'common', key: 'refusal.startup.startFailed', params: { detail: 'kaboom' },
+  })
   expect(registry.routes.has('boom')).toBe(false)
 })
 
@@ -522,7 +530,8 @@ it("keeps the mycelium's plugin list consistent with bootstrap()'s own registry 
 
   const { registry, bus } = await bootstrap(configFile)
   expect(registry.hyphae.map((h) => h.name)).toEqual(['good'])
-  expect(registry.dormant.find((d) => d.name === 'bad')?.reason).toContain('boom')
+  expect(registry.dormant.find((d) => d.name === 'bad')?.refusal?.key)
+    .toBe('refusal.startup.hyphaListenFailed')
 
   await bus.deliver('good', message('good', '/probe'))
   const admin = registry.enzymes.find((e) => e.name === 'admin')
@@ -533,7 +542,7 @@ it("keeps the mycelium's plugin list consistent with bootstrap()'s own registry 
     { name: 'good', kind: 'hypha', commands: [], state: 'germinated', enabled: true },
     { name: 'admin', kind: 'enzyme', commands: ['probe'], state: 'germinated', enabled: true },
     {
-      name: 'bad', kind: 'hypha', commands: [], state: 'dormant', reason: 'boom', enabled: true,
+      name: 'bad', kind: 'hypha', commands: [], state: 'dormant', enabled: true,
       refusal: { domain: 'common', key: 'refusal.startup.hyphaListenFailed', params: { detail: 'boom' } },
     },
   ])
@@ -591,7 +600,9 @@ it("keeps the mycelium's plugin list consistent when an inhibitor's start() thro
 
   const { registry, bus } = await bootstrap(configFile)
   expect(registry.inhibitors).toEqual([])
-  expect(registry.dormant.find((d) => d.name === 'softgate')?.reason).toContain('gate cannot start')
+  expect(registry.dormant.find((d) => d.name === 'softgate')?.refusal).toEqual({
+    domain: 'common', key: 'refusal.startup.startFailed', params: { detail: 'gate cannot start' },
+  })
 
   await bus.deliver('good', message('good', '/probe'))
   const admin = registry.enzymes.find((e) => e.name === 'admin')
@@ -599,8 +610,7 @@ it("keeps the mycelium's plugin list consistent when an inhibitor's start() thro
   const listed = observed.plugins as Record<string, unknown>[]
   expect(listed.filter((p) => p.name === 'softgate')).toEqual([
     {
-      name: 'softgate', kind: 'inhibitor', commands: [], state: 'dormant', reason: 'gate cannot start',
-      enabled: true,
+      name: 'softgate', kind: 'inhibitor', commands: [], state: 'dormant', enabled: true,
       refusal: { domain: 'common', key: 'refusal.startup.startFailed', params: { detail: 'gate cannot start' } },
     },
   ])
@@ -679,7 +689,9 @@ it("names a failed start(), not a missing installation, when ctx.rhiza() reaches
   const { registry } = await bootstrap(configFile)
   // The cascade is deliberately not implemented (deferred): 'user' still starts and
   // is not marked dormant even though its mandatory dependency failed.
-  expect(registry.dormant.find((d) => d.name === 'latefail')?.reason).toContain('boom')
+  expect(registry.dormant.find((d) => d.name === 'latefail')?.refusal).toEqual({
+    domain: 'common', key: 'refusal.startup.startFailed', params: { detail: 'boom' },
+  })
   expect(registry.enzymes.map((e) => e.name)).toEqual(['user'])
 
   const user = registry.enzymes.find((e) => e.name === 'user')
@@ -769,7 +781,9 @@ it('refuses all traffic when an enforcing inhibitor throws in start() — the st
 
   const { registry, admission } = await bootstrap(configFile)
   expect(registry.inhibitors).toEqual([])
-  expect(registry.dormant.find((d) => d.name === 'throwgate')?.reason).toContain('boom')
+  expect(registry.dormant.find((d) => d.name === 'throwgate')?.refusal).toEqual({
+    domain: 'common', key: 'refusal.startup.startFailed', params: { detail: 'boom' },
+  })
   expect((await admission.admit(message('console', '/ping'))).allow).toBe(false)
 })
 
@@ -788,7 +802,10 @@ it('refuses all traffic when an enforcing inhibitor is dormant from a rejected c
 
   const { registry, admission } = await bootstrap(configFile)
   expect(registry.inhibitors).toEqual([])
-  expect(registry.dormant.find((d) => d.name === 'badconfiggate')?.reason).toContain('groupId')
+  const gate = registry.dormant.find((d) => d.name === 'badconfiggate')?.refusal
+  expect(gate?.key).toBe('refusal.config.incomplete')
+  // The offending field by name: without it this passes on any config rejection at all.
+  expect(String(gate?.params?.['issues'])).toContain('groupId')
   expect((await admission.admit(message('console', '/ping'))).allow).toBe(false)
 })
 

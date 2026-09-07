@@ -1,8 +1,7 @@
-import type { MyceliumScope, Requirement } from '@mycelo/septum'
+import type { MyceliumScope, Requirement, TranslatableRef } from '@mycelo/septum'
 import type { Dormant } from './registry.js'
 import type { ReadManifest } from './manifest.js'
-import { fault } from './fault.js'
-import type { Fault } from './fault.js'
+import { dormancyRefusal } from './fault.js'
 
 export const MOUNTABLE_SCOPES: readonly MyceliumScope[] = [
   'plugins.read', 'plugins.toggle', 'plugins.configure', 'health.read', 'messages.send',
@@ -67,7 +66,7 @@ interface Evaluated {
   // mycelium always resolves and belongs in ctx.has(), but declares nothing itself and
   // so is never a graph edge (core spec §6, last paragraph) — tracked separately from edges.
   usesMycelium: boolean
-  dormantFault?: Fault
+  dormantRefusal?: TranslatableRef
 }
 
 const FAILED: Evaluated = { edges: [], mandatoryEdges: [], anyOf: [], scopes: [], usesMycelium: false }
@@ -93,8 +92,8 @@ function evaluate(requires: readonly Requirement[], candidates: ReadonlyMap<stri
         const listed = alternatives.map((n) => `'${n}'`).join(', ')
         return {
           ...FAILED,
-          dormantFault: fault(`requires one of rhiza ${listed} — none is installed`,
-            'refusal.germination.anyOfNoneInstalled', { alternatives: listed }),
+          dormantRefusal: dormancyRefusal('refusal.germination.anyOfNoneInstalled',
+            { alternatives: listed }),
         }
       }
       if (chosen === 'mycelium') {
@@ -116,13 +115,11 @@ function evaluate(requires: readonly Requirement[], candidates: ReadonlyMap<stri
       if (!requirement.optional) mandatoryEdges.push(name)
     } else if (!requirement.optional) {
       const candidate = candidates.get(name)
-      const dormantFault = candidate === undefined
-        ? fault(`requires rhiza '${name}', which is not installed`,
-          'refusal.germination.requiredRhizaMissing', { rhiza: name })
-        : fault(`requires rhiza '${name}', which is kind '${candidate.manifest.kind}', not a rhiza`,
-          'refusal.germination.requiredRhizaWrongKind',
+      const dormantRefusal = candidate === undefined
+        ? dormancyRefusal('refusal.germination.requiredRhizaMissing', { rhiza: name })
+        : dormancyRefusal('refusal.germination.requiredRhizaWrongKind',
           { rhiza: name, kind: candidate.manifest.kind })
-      return { ...FAILED, dormantFault }
+      return { ...FAILED, dormantRefusal }
     }
   }
 
@@ -134,12 +131,10 @@ function evaluate(requires: readonly Requirement[], candidates: ReadonlyMap<stri
         // Two keys rather than one with a {when} parameter: a single key would leave half
         // the sentence in the language of whoever wrote SCOPE_PHASE (design §1).
         const phase = SCOPE_PHASE[scope]
-        const dormantFault = phase === undefined
-          ? fault(`requires mycelium scope '${scope}', which this core does not mount`,
-            'refusal.germination.scopeNotMounted', { scope })
-          : fault(`requires mycelium scope '${scope}', which arrives in phase ${String(phase)}`,
-            'refusal.germination.scopeLaterPhase', { scope, phase })
-        return { ...FAILED, dormantFault }
+        const dormantRefusal = phase === undefined
+          ? dormancyRefusal('refusal.germination.scopeNotMounted', { scope })
+          : dormancyRefusal('refusal.germination.scopeLaterPhase', { scope, phase })
+        return { ...FAILED, dormantRefusal }
       }
       scopes.push(scope)
     }
@@ -197,18 +192,16 @@ export function resolve(reads: readonly ReadManifest[]): Resolution {
     // shadow every `rhiza: mycelium` requirement, which still resolves to the core and
     // produces no edge — this module is the only place that knows the name is implicit.
     if (name === 'mycelium') {
-      const f = fault("the name 'mycelium' is reserved for the core", 'refusal.germination.reservedName')
-      dormant.push({ name, reason: f.message, refusal: f.refusal })
+      dormant.push({ name, refusal: dormancyRefusal('refusal.germination.reservedName') })
       continue
     }
     const claimant = candidates.get(name)
     if (claimant !== undefined) {
-      const f = fault(
-        `name '${name}' is already claimed by the spore at '${claimant.location.directory}' (duplicate at '${read.location.directory}')`,
-        'refusal.germination.duplicateName',
-        { plugin: name, claimant: claimant.location.directory, duplicate: read.location.directory },
-      )
-      dormant.push({ name, reason: f.message, refusal: f.refusal })
+      dormant.push({
+        name,
+        refusal: dormancyRefusal('refusal.germination.duplicateName',
+          { plugin: name, claimant: claimant.location.directory, duplicate: read.location.directory }),
+      })
       continue
     }
     candidates.set(name, read)
@@ -216,14 +209,14 @@ export function resolve(reads: readonly ReadManifest[]): Resolution {
 
   // Steps 2-4: any_of collapse, mandatory targets, scopes — per candidate, in that
   // priority, against the candidate pool alone.
-  const primaryReasons = new Map<string, Fault>()
+  const primaryReasons = new Map<string, TranslatableRef>()
   const anyOfChoices = new Map<string, readonly AnyOfChoice[]>()
   const alive = new Map<string, AliveNode>()
   for (const [name, read] of candidates) {
     const evaluated = evaluate(read.manifest.requires ?? [], candidates)
     anyOfChoices.set(name, evaluated.anyOf)
-    if (evaluated.dormantFault !== undefined) {
-      primaryReasons.set(name, evaluated.dormantFault)
+    if (evaluated.dormantRefusal !== undefined) {
+      primaryReasons.set(name, evaluated.dormantRefusal)
       continue
     }
     alive.set(name, {
@@ -246,15 +239,12 @@ export function resolve(reads: readonly ReadManifest[]): Resolution {
       if (reasons.has(name)) continue
       const cause = node.mandatoryEdges.find((dep) => reasons.has(dep))
       if (cause !== undefined) {
-        const causeFault = reasons.get(cause)
-        if (causeFault === undefined) continue
-        // design §2.4: the cause travels as a ref, so the reader's locale reaches the
-        // quoted half too. `message` keeps the English the log and the old tests read.
-        reasons.set(name, fault(
-          `requires rhiza '${cause}', which is dormant: ${causeFault.message}`,
-          'refusal.germination.dependencyDormant',
-          { rhiza: cause, cause: causeFault.refusal },
-        ))
+        const causeRef = reasons.get(cause)
+        if (causeRef === undefined) continue
+        // design §2.4: the cause travels as a nested ref, so the reader's locale reaches the
+        // quoted half too rather than arriving in whatever language built the inner sentence.
+        reasons.set(name, dormancyRefusal('refusal.germination.dependencyDormant',
+          { rhiza: cause, cause: causeRef }))
         changed = true
       }
     }
@@ -262,11 +252,11 @@ export function resolve(reads: readonly ReadManifest[]): Resolution {
 
   const survivors = new Map<string, AliveNode>()
   for (const [name, node] of alive) {
-    const f = reasons.get(name)
-    if (f !== undefined) dormant.push({ name, reason: f.message, refusal: f.refusal })
+    const refusal = reasons.get(name)
+    if (refusal !== undefined) dormant.push({ name, refusal })
     else survivors.set(name, node)
   }
-  for (const [name, f] of primaryReasons) dormant.push({ name, reason: f.message, refusal: f.refusal })
+  for (const [name, refusal] of primaryReasons) dormant.push({ name, refusal })
 
   // Steps 6-7: cycle detection and topological order, over survivors only — an edge
   // to a dormant optional dependency is simply dropped, not a cycle participant.

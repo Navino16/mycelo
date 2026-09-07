@@ -52,12 +52,8 @@ export interface DormantRequirement {
 
 export interface Dormant {
   name: string
-  reason: string
-  /**
-   * design §2.2. Optional only for the length of this migration: task 8 makes it required and
-   * deletes `reason`.
-   */
-  refusal?: TranslatableRef
+  /** design §2.2: the whole verdict, so every surface renders it at its reader's locale. */
+  refusal: TranslatableRef
   /**
    * The targets its manifest declared, absent when the manifest never parsed. A dormant spore
    * has no manifest here and no `resolved`, so this is the only record of the dependency that

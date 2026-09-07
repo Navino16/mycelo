@@ -34,7 +34,10 @@ describe('resolve', () => {
   it('leaves a spore dormant when a mandatory rhiza is not installed', () => {
     const r = resolve([enzyme('media', [{ rhiza: 'absent' }])])
     expect(names(r)).toEqual([])
-    expect(r.dormant[0]?.reason).toBe("requires rhiza 'absent', which is not installed")
+    expect(r.dormant[0]?.refusal).toEqual({
+      domain: SHARED_DOMAIN, key: 'refusal.germination.requiredRhizaMissing',
+      params: { rhiza: 'absent' },
+    })
   })
 
   it('germinates when an optional rhiza is absent, and has() will say false', () => {
@@ -51,7 +54,11 @@ describe('resolve', () => {
 
   it('leaves a spore dormant when no any_of alternative is installed', () => {
     const r = resolve([enzyme('media', [{ any_of: [{ rhiza: 'a' }, { rhiza: 'b' }] }])])
-    expect(r.dormant[0]?.reason).toBe("requires one of rhiza 'a', 'b' — none is installed")
+    // Both alternatives, not the first: a list collapsed to one element is design §8's survivor 1.
+    expect(r.dormant[0]?.refusal).toEqual({
+      domain: SHARED_DOMAIN, key: 'refusal.germination.anyOfNoneInstalled',
+      params: { alternatives: "'a', 'b'" },
+    })
   })
 
   it('splits a semver range off a target name, in a plain requirement and an any_of alternative', () => {
@@ -72,7 +79,16 @@ describe('resolve', () => {
     ])
     expect(names(r)).not.toContain('media')
     const media = r.dormant.find((d) => d.name === 'media')
-    expect(media?.reason).toBe("requires rhiza 'plex', which is dormant: requires rhiza 'absent', which is not installed")
+    expect(media?.refusal).toEqual({
+      domain: SHARED_DOMAIN, key: 'refusal.germination.dependencyDormant',
+      params: {
+        rhiza: 'plex',
+        cause: {
+          domain: SHARED_DOMAIN, key: 'refusal.germination.requiredRhizaMissing',
+          params: { rhiza: 'absent' },
+        },
+      },
+    })
   })
 
   // ruling F9: /api/graph draws the dependency that broke, so a dormant spore must keep the
@@ -92,7 +108,17 @@ describe('resolve', () => {
     const r = resolve([enzyme('top', [{ rhiza: 'middle' }]), rhiza('middle', [{ rhiza: 'absent' }])])
     expect(names(r)).toEqual([])
     const top = r.dormant.find((d) => d.name === 'top')
-    expect(top?.reason).toBe("requires rhiza 'middle', which is dormant: requires rhiza 'absent', which is not installed")
+    // The proximate cause, nested: 'middle' names 'absent', and 'top' names 'middle'.
+    expect(top?.refusal).toEqual({
+      domain: SHARED_DOMAIN, key: 'refusal.germination.dependencyDormant',
+      params: {
+        rhiza: 'middle',
+        cause: {
+          domain: SHARED_DOMAIN, key: 'refusal.germination.requiredRhizaMissing',
+          params: { rhiza: 'absent' },
+        },
+      },
+    })
   })
 
   // Only a rhiza can be the target of a rhiza: requirement (spec §6), so a cycle over
@@ -148,7 +174,8 @@ describe('resolve', () => {
     expect(names(r)).toEqual(['user'])
     expect(r.order[0]?.resolved.has('mycelium')).toBe(true)
     const claimant = r.dormant.find((d) => d.name === 'mycelium')
-    expect(claimant?.reason).toBe("the name 'mycelium' is reserved for the core")
+    expect(claimant?.refusal)
+      .toEqual({ domain: SHARED_DOMAIN, key: 'refusal.germination.reservedName' })
   })
 
   it('reports has() false for an optional dependency that is installed but dormant', () => {
@@ -166,13 +193,29 @@ describe('resolve', () => {
     // one that goes dormant for naming an enzyme where a rhiza: requirement needs a rhiza.
     expect(names(r)).toEqual(['ping'])
     const user = r.dormant.find((d) => d.name === 'user')
-    expect(user?.reason).toBe("requires rhiza 'ping', which is kind 'enzyme', not a rhiza")
+    expect(user?.refusal).toEqual({
+      domain: SHARED_DOMAIN, key: 'refusal.germination.requiredRhizaWrongKind',
+      params: { rhiza: 'ping', kind: 'enzyme' },
+    })
   })
 
   it('makes the second spore claiming a name dormant', () => {
-    const r = resolve([rhiza('mock'), rhiza('mock')])
+    // Distinct directories, unlike `rhiza()`'s: with both called 'mock' the refusal could
+    // swap claimant for duplicate and nothing would notice.
+    const at = (directory: string): ReadManifest => ({
+      location: {
+        path: `/spores/${directory}`, directory,
+        manifestPath: `/spores/${directory}/spore.yaml`,
+      },
+      manifest: parseManifest({ kind: 'rhiza', name: 'mock', septum: '^0.11' }),
+    })
+    const r = resolve([at('first-copy'), at('second-copy')])
     expect(names(r)).toEqual(['mock'])
-    expect(r.dormant[0]?.reason).toContain('already claimed')
+    // Nothing else in the tree pins duplicateName's parameters.
+    expect(r.dormant[0]?.refusal).toEqual({
+      domain: SHARED_DOMAIN, key: 'refusal.germination.duplicateName',
+      params: { plugin: 'mock', claimant: 'first-copy', duplicate: 'second-copy' },
+    })
   })
 
   // design §2.4: the cause travels as a ref, so `renderRefusal` translates the quoted half too.
@@ -243,8 +286,7 @@ describe('MOUNTABLE_SCOPES against MYCELIUM_SCOPES', () => {
       },
     }] as unknown as Parameters<typeof resolve>[0])
     expect(r.order).toEqual([])
-    expect(r.dormant[0]?.reason).toContain("scope 'future.scope'")
-    expect(r.dormant[0]?.reason).not.toContain('phase 5')
+    // Names the scope and claims no phase, both stronger here than a toContain pair.
     expect(r.dormant[0]?.refusal).toEqual({
       domain: SHARED_DOMAIN, key: 'refusal.germination.scopeNotMounted',
       params: { scope: 'future.scope' },
@@ -262,10 +304,8 @@ describe('MOUNTABLE_SCOPES against MYCELIUM_SCOPES', () => {
         requires: [{ rhiza: 'mycelium', scopes: ['another.scope'] }],
       },
     }] as unknown as Parameters<typeof resolve>[0])
-    expect(r.dormant[0]?.reason).not.toContain('phase')
-    expect(r.dormant[0]?.reason).toContain('does not mount')
-    // scopeNotMounted rather than scopeLaterPhase is the proof no phase is announced —
-    // stronger than not.toContain('phase'), which could pass by accident.
+    // scopeNotMounted rather than scopeLaterPhase is the proof no phase is announced,
+    // and `params` holding the scope alone is the proof none is interpolated.
     expect(r.dormant[0]?.refusal).toEqual({
       domain: SHARED_DOMAIN, key: 'refusal.germination.scopeNotMounted',
       params: { scope: 'another.scope' },
