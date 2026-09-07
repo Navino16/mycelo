@@ -188,30 +188,31 @@ export async function germinate(
         }
         instance = module.create()
         if (manifest.kind === 'hypha') {
-          const problem = hyphaShapeError(instance, manifest.kind) ?? capabilityShapeError(instance as Record<string, unknown>, manifest)
-          if (problem !== null) {
+          const problem = (hyphaShapeError(instance, manifest.kind)
+            ?? capabilityShapeError(instance as Record<string, unknown>, manifest))?.message
+          if (problem !== undefined) {
             dormant.push({ name: manifest.name, reason: problem })
             failed.set(manifest.name, problem)
             continue
           }
         } else if (manifest.kind === 'rhiza') {
-          const problem = rhizaShapeError(instance)
-          if (problem !== null) {
+          const problem = rhizaShapeError(instance)?.message
+          if (problem !== undefined) {
             dormant.push({ name: manifest.name, reason: problem })
             failed.set(manifest.name, problem)
             continue
           }
         } else if (manifest.kind === 'inhibitor') {
-          const problem = inhibitorShapeError(instance)
-          if (problem !== null) {
+          const problem = inhibitorShapeError(instance)?.message
+          if (problem !== undefined) {
             dormant.push({ name: manifest.name, reason: problem })
             failed.set(manifest.name, problem)
             markBroken()
             continue
           }
         } else {
-          const problem = enzymeShapeError(instance, manifest.commands)
-          if (problem !== null) {
+          const problem = enzymeShapeError(instance, manifest.commands)?.message
+          if (problem !== undefined) {
             dormant.push({ name: manifest.name, reason: problem })
             failed.set(manifest.name, problem)
             continue

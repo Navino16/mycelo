@@ -1,9 +1,11 @@
 import { expect, it } from 'bun:test'
 import type { CommandSpec, Enzyme, HyphaManifest } from '@mycelo/septum'
+import { SHARED_DOMAIN } from '../../src/i18n/core-catalogs.js'
 import {
   capabilityShapeError,
   enzymeShapeError,
   hyphaShapeError,
+  inhibitorShapeError,
   rhizaShapeError,
   unreferencedHandlers,
 } from '../../src/germination/shape.js'
@@ -16,12 +18,14 @@ function manifest(capabilities: HyphaManifest['capabilities']): HyphaManifest {
 }
 
 it('hyphaShapeError refuses a non-object instance', () => {
-  expect(hyphaShapeError(null, 'hypha')).toContain('expected an object')
-  expect(hyphaShapeError('nope', 'hypha')).toContain('expected an object')
+  expect(hyphaShapeError(null, 'hypha')?.refusal.key).toBe('refusal.germination.createNotObject')
+  expect(hyphaShapeError('nope', 'hypha')?.refusal.key).toBe('refusal.germination.createNotObject')
 })
 
 it('hyphaShapeError names every missing method', () => {
-  expect(hyphaShapeError({}, 'hypha')).toBe('create() returned no connect, listen, stop, send')
+  const f = hyphaShapeError({}, 'hypha')
+  expect(f?.refusal.key).toBe('refusal.germination.createMissingMethods')
+  expect(f?.refusal.params).toEqual({ missing: 'connect, listen, stop, send' })
 })
 
 it('hyphaShapeError accepts an instance with all four methods', () => {
@@ -30,12 +34,14 @@ it('hyphaShapeError accepts an instance with all four methods', () => {
 })
 
 it('capabilityShapeError refuses a declared capability with no matching method', () => {
-  expect(capabilityShapeError({}, manifest(['group_membership']))).toContain('no listGroupMembers()')
+  expect(capabilityShapeError({}, manifest(['group_membership']))?.refusal.key)
+    .toBe('refusal.germination.capabilityUnimplemented')
 })
 
 it('capabilityShapeError refuses an implemented method with no declared capability', () => {
   const instance = { listGroupMembers: async () => [] }
-  expect(capabilityShapeError(instance, manifest([]))).toContain('does not declare group_membership')
+  expect(capabilityShapeError(instance, manifest([]))?.refusal.key)
+    .toBe('refusal.germination.capabilityUndeclared')
 })
 
 it('capabilityShapeError accepts a capability and its method declared together', () => {
@@ -48,15 +54,17 @@ it('capabilityShapeError accepts neither declared nor implemented', () => {
 })
 
 it('enzymeShapeError refuses a non-object instance', () => {
-  expect(enzymeShapeError(null, [])).toContain('expected an object')
+  expect(enzymeShapeError(null, [])?.refusal.key).toBe('refusal.germination.createNotObject')
 })
 
 it('enzymeShapeError refuses an instance with no handlers object', () => {
-  expect(enzymeShapeError({}, [code('go')])).toBe('create() returned no handlers object')
+  expect(enzymeShapeError({}, [code('go')])?.refusal.key).toBe('refusal.germination.enzymeNoHandlersObject')
 })
 
 it('enzymeShapeError names a command whose handler is missing', () => {
-  expect(enzymeShapeError({ handlers: {} }, [code('go', 'handleGo')])).toBe('handlers has no function for: handleGo')
+  const f = enzymeShapeError({ handlers: {} }, [code('go', 'handleGo')])
+  expect(f?.refusal.key).toBe('refusal.germination.handlersMissing')
+  expect(f?.refusal.params).toEqual({ missing: 'handleGo' })
 })
 
 it('enzymeShapeError ignores respond: commands, which need no handler', () => {
@@ -65,7 +73,7 @@ it('enzymeShapeError ignores respond: commands, which need no handler', () => {
 
 it('enzymeShapeError refuses start() with no stop()', () => {
   const instance = { handlers: { go: async () => {} }, start: async () => {} }
-  expect(enzymeShapeError(instance, [code('go')])).toBe('start() and stop() must be both present or both absent')
+  expect(enzymeShapeError(instance, [code('go')])?.refusal.key).toBe('refusal.germination.startStopMismatch')
 })
 
 it('enzymeShapeError accepts start() and stop() paired', () => {
@@ -84,19 +92,77 @@ it('unreferencedHandlers names nothing when every handler is referenced', () => 
 })
 
 it('rhizaShapeError refuses a non-object instance', () => {
-  expect(rhizaShapeError(null)).toContain('expected an object')
+  expect(rhizaShapeError(null)?.refusal.key).toBe('refusal.germination.createNotObject')
 })
 
 it('rhizaShapeError names every missing method', () => {
-  expect(rhizaShapeError({})).toBe('create() returned no start, stop, health')
+  const f = rhizaShapeError({})
+  expect(f?.refusal.key).toBe('refusal.germination.createMissingMethods')
+  expect(f?.refusal.params).toEqual({ missing: 'start, stop, health' })
 })
 
 it('rhizaShapeError refuses an instance with no api', () => {
   const instance = { start: async () => {}, stop: async () => {}, health: async () => 'healthy' }
-  expect(rhizaShapeError(instance)).toContain('no api')
+  expect(rhizaShapeError(instance)?.refusal.key).toBe('refusal.germination.rhizaNoApi')
 })
 
 it('rhizaShapeError accepts a fully-shaped instance', () => {
   const instance = { start: async () => {}, stop: async () => {}, health: async () => 'healthy', api: {} }
   expect(rhizaShapeError(instance)).toBeNull()
+})
+
+it('names every missing rhiza method, not only the first', () => {
+  const f = rhizaShapeError({ start: () => {} })
+  expect(f?.refusal.key).toBe('refusal.germination.createMissingMethods')
+  expect(f?.refusal.params).toEqual({ missing: 'stop, health' })
+})
+
+it('names every missing handler, not only the first', () => {
+  const f = enzymeShapeError({ handlers: {} }, [code('go'), code('stop')])
+  expect(f?.refusal.key).toBe('refusal.germination.handlersMissing')
+  expect(f?.refusal.params).toEqual({ missing: 'go, stop' })
+})
+
+it('reports a non-object create() with what it actually returned', () => {
+  expect(rhizaShapeError(null)?.refusal).toEqual({
+    domain: SHARED_DOMAIN, key: 'refusal.germination.createNotObject', params: { got: 'null' },
+  })
+  expect(hyphaShapeError(42, 'hypha')?.refusal.params).toEqual({ got: '42' })
+  expect(enzymeShapeError(undefined, [])?.refusal.params).toEqual({ got: 'undefined' })
+  expect(inhibitorShapeError('x')?.refusal.params).toEqual({ got: 'x' })
+})
+
+it('distinguishes the two group_membership directions', () => {
+  expect(capabilityShapeError({}, manifest(['group_membership']))?.refusal.key)
+    .toBe('refusal.germination.capabilityUnimplemented')
+  expect(capabilityShapeError({ listGroupMembers: () => [] }, manifest([]))?.refusal.key)
+    .toBe('refusal.germination.capabilityUndeclared')
+})
+
+it('names the uncallable method rather than reporting a generic mismatch', () => {
+  const f = inhibitorShapeError({ inspect: () => {}, start: 'no', stop: 'no' })
+  expect(f?.refusal.key).toBe('refusal.germination.methodNotCallable')
+  expect(f?.refusal.params).toEqual({ method: 'start' })
+})
+
+it('inhibitorShapeError refuses an instance with no inspect()', () => {
+  expect(inhibitorShapeError({})?.refusal.key).toBe('refusal.germination.inhibitorNoInspect')
+})
+
+it('inhibitorShapeError refuses start() with no stop()', () => {
+  const instance = { inspect: () => {}, start: async () => {} }
+  expect(inhibitorShapeError(instance)?.refusal.key).toBe('refusal.germination.startStopMismatch')
+})
+
+it('inhibitorShapeError accepts a fully-shaped instance', () => {
+  const instance = { inspect: () => {}, start: async () => {}, stop: async () => {} }
+  expect(inhibitorShapeError(instance)).toBeNull()
+})
+
+it('keeps the message identical to what it authored before the migration', () => {
+  expect(rhizaShapeError({ start: () => {} })?.message)
+    .toBe('create() returned no stop, health')
+  const instance = { start: async () => {}, stop: async () => {}, health: async () => 'healthy' }
+  expect(rhizaShapeError(instance)?.message)
+    .toBe('create() returned no api — enzymes would resolve undefined through ctx.rhiza()')
 })
