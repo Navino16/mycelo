@@ -2,15 +2,20 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { SEPTUM_VERSION, type PluginsRead } from '@mycelo/septum'
+import { SEPTUM_VERSION, type Logger, type PluginsRead } from '@mycelo/septum'
 import { getInstall, listInstalls, recordInstall, setEnabled, writeSetting } from '../../src/config/store.js'
 import { enablePlugin, syncInstalls } from '../../src/config/lifecycle.js'
 import { germinate } from '../../src/germination/germinate.js'
+import { loadCoreCatalogs } from '../../src/i18n/core-catalogs.js'
+import { renderRefusal } from '../../src/i18n/refusal.js'
+import { createTranslator } from '../../src/i18n/translator.js'
 import { createMyceliumApi } from '../../src/mycelium-rhiza.js'
 import type { Db } from '../../src/persistence/db.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import { pluginSetting } from '../../src/persistence/schema.js'
 import { createLogger } from '../../src/support/logger.js'
+
+const silentLogger: Logger = { debug() {}, info() {}, warn() {}, error() {}, child: () => silentLogger }
 
 const SPORES = [resolve(import.meta.dirname, '../../../../fixtures')]
 
@@ -487,10 +492,28 @@ it('enabling names the manifest fault instead of claiming the spore is absent', 
   if (!result.ok) {
     // A YAML typo must not be told the directory is missing: the key distinguishes them,
     // where the old substring check only ruled out one wrong sentence.
-    expect(result.refusal.key).toBe('refusal.plugin.unreadableManifest')
+    expect(result.refusal.key).toBe('refusal.germination.invalidManifest')
     // 'septum' is the field this manifest omits. Asserting the word 'manifest' alone
     // passed with the guard removed, off a TypeError reading `manifest.kind`.
-    expect(result.refusal.params?.['detail']).toContain("invalid manifest at 'septum'")
+    expect(result.refusal.params?.['path']).toBe('septum')
+  }
+  close()
+})
+
+// The fix for the bilingual, self-duplicating sentence the milestone measured: rebuilding
+// `unreadableManifest` from `found.reason` doubled its own claim in English and French.
+it('a broken manifest renders in French with no leftover English wrapper', async () => {
+  const { db, close } = fresh()
+  spore('brokenyaml', { 'spore.yaml': 'kind: enzyme\nname: brokenyaml\n' })
+  recordInstall(db, 'brokenyaml', 'enzyme')
+  const result = await enablePlugin(db, [dir], 'brokenyaml')
+  expect(result.ok).toBe(false)
+  if (!result.ok) {
+    const translator = createTranslator({ defaultLocale: 'en', logger: silentLogger, catalogs: loadCoreCatalogs() })
+    const rendered = renderRefusal(translator, result.refusal, 'fr')
+    expect(rendered).toContain('manifeste invalide')
+    expect(rendered).not.toContain('unreadable')
+    expect(rendered).not.toContain('invalid manifest')
   }
   close()
 })

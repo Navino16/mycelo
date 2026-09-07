@@ -199,6 +199,15 @@ const dormant: PluginInfo = {
 const dormantRefusal: TranslatableRef | undefined = dormant.refusal
 void dormantRefusal
 
+// `reason` was removed from PluginInfo this phase; `refusal` is the only cause a reader gets.
+const noReason: PluginInfo = {
+  name: 'x', kind: 'rhiza', commands: [], state: 'dormant', enabled: true,
+  refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' },
+  // @ts-expect-error `reason` is not a field of PluginInfo
+  reason: 'x',
+}
+void noReason
+
 declare const locales: LocaleManage
 export const _h: readonly string[] = locales.availableLocales()
 export const _i: Promise<void> = locales.setPrincipalLocale('p1', 'fr')

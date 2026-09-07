@@ -91,7 +91,9 @@ export async function enablePlugin(db: Db, sporesDirs: readonly string[], name: 
   const found = findSpore(sporesDirs, name)
   if (found === undefined) return refuse('refusal.plugin.notOnDisk', { plugin: name })
   if (isFailure(found)) {
-    return refuse('refusal.plugin.unreadableManifest', { plugin: name, detail: found.reason })
+    // found.refusal is already the exact nested-manifest ref (task 2); rebuilding it from
+    // found.reason here produced a bilingual, self-duplicating sentence.
+    return { ok: false, refusal: found.refusal }
   }
   // germinate()'s verdict for this is dormancy, which for an enforcing inhibitor refuses all
   // traffic with no channel command left to undo it (design §10).

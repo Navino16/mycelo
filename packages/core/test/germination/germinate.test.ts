@@ -916,8 +916,7 @@ it('logs the bare refusal key when no renderer is passed, and the rendered sente
 
 // The defect this task's own renderer exposed: `refusal.config.incomplete` was built with a
 // `detail` parameter while the shipped message interpolates `issues`, so the most common
-// dormancy of all logged as a bare dotted key. A producer's bag is not covered by
-// core-catalogs.test.ts, which renders every key against a bag derived from the message.
+// dormancy logged as a bare dotted key. `core-catalogs.test.ts`'s REFUSAL_PARAMS suite pins this now.
 it('renders every dormancy it logs as a sentence, never as its own dotted key', async () => {
   spore('badconf', {
     'spore.yaml': 'kind: rhiza\nname: badconf\nseptum: "^0.12"\n',
