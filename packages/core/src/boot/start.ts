@@ -2,6 +2,7 @@ import type { Logger, MyceliumScope } from '@mycelo/septum'
 import { createAdmissionChain, createInhibitorContext } from '../admission/chain.js'
 import type { AdmissionChain } from '../admission/chain.js'
 import { createMembershipCache } from '../admission/membership.js'
+import { fault } from '../germination/fault.js'
 import { buildRoutes } from '../germination/registry.js'
 import { listAliases } from '../rhizomorph/aliases.js'
 import type { Dormant, GerminatedEnzyme, GerminatedHypha, GerminatedInhibitor, GerminatedRhiza, Registry } from '../germination/registry.js'
@@ -66,7 +67,9 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
       connectedHyphae.push(hypha)
     } catch (e) {
       logger.warn(`hypha '${hypha.name}' failed to connect and is dormant`, { reason: (e as Error).message })
-      dormant.push({ name: hypha.name, reason: (e as Error).message })
+      const f = fault((e as Error).message, 'refusal.startup.hyphaConnectFailed',
+        { detail: (e as Error).message })
+      dormant.push({ name: hypha.name, reason: f.message, refusal: f.refusal })
     }
   }
 
@@ -116,7 +119,9 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
           startedRhizas.push(rhiza)
         } catch (e) {
           logger.warn(`rhiza '${rhiza.name}' failed to start and is dormant`, { reason: (e as Error).message })
-          dormant.push({ name: rhiza.name, reason: (e as Error).message })
+          const f = fault((e as Error).message, 'refusal.startup.startFailed',
+            { detail: (e as Error).message })
+          dormant.push({ name: rhiza.name, reason: f.message, refusal: f.refusal })
         }
         continue
       }
@@ -145,7 +150,9 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
         startedEnzymes.push(enzyme)
       } catch (e) {
         logger.warn(`enzyme '${enzyme.name}' failed to start and is dormant`, { reason: (e as Error).message })
-        dormant.push({ name: enzyme.name, reason: (e as Error).message })
+        const f = fault((e as Error).message, 'refusal.startup.startFailed',
+          { detail: (e as Error).message })
+        dormant.push({ name: enzyme.name, reason: f.message, refusal: f.refusal })
       }
     }
 
@@ -163,15 +170,16 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
         await inhibitor.instance.start?.(ctx)
         startedInhibitors.push(inhibitor)
       } catch (e) {
-        const reason = (e as Error).message
-        dormant.push({ name: inhibitor.name, reason })
+        const f = fault((e as Error).message, 'refusal.startup.startFailed',
+          { detail: (e as Error).message })
+        dormant.push({ name: inhibitor.name, reason: f.message, refusal: f.refusal })
         if (inhibitor.manifest.enforcing) {
           // Design §7: an enforcing inhibitor that never started refuses everything,
           // rather than leaving the channel it guarded wide open.
           brokenEnforcing.push(inhibitor.name)
-          logger.error(`enforcing inhibitor '${inhibitor.name}' failed to start: all traffic is refused`, { reason })
+          logger.error(`enforcing inhibitor '${inhibitor.name}' failed to start: all traffic is refused`, { reason: f.message })
         } else {
-          logger.warn(`inhibitor '${inhibitor.name}' failed to start and is dormant`, { reason })
+          logger.warn(`inhibitor '${inhibitor.name}' failed to start and is dormant`, { reason: f.message })
         }
       }
     }
@@ -259,7 +267,9 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
         listening.push(hypha)
       } catch (e) {
         logger.warn(`hypha '${hypha.name}' failed to listen and is dormant`, { reason: (e as Error).message })
-        dormant.push({ name: hypha.name, reason: (e as Error).message })
+        const f = fault((e as Error).message, 'refusal.startup.hyphaListenFailed',
+          { detail: (e as Error).message })
+        dormant.push({ name: hypha.name, reason: f.message, refusal: f.refusal })
       }
     }
     reportedHyphae = listening
