@@ -154,7 +154,7 @@ export function PluginDetail(): React.JSX.Element {
       {panel === 'diagnosis' && (
         <div className="space-y-4">
           {dormant && plugin.reason !== undefined && (
-            <DormantDiagnosis name={plugin.name} reason={plugin.reason} />
+            <DormantDiagnosis name={plugin.name} reason={plugin.reason} reasonKey={plugin.reasonKey} />
           )}
 
           {dormant && declared.length > 0 && (

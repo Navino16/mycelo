@@ -9,6 +9,7 @@ import { germinate } from '../germination/germinate.js'
 import type { Registry } from '../germination/registry.js'
 import type { Catalogs } from '../i18n/catalog.js'
 import { loadCoreCatalogs } from '../i18n/core-catalogs.js'
+import { renderRefusal } from '../i18n/refusal.js'
 import { createTranslator } from '../i18n/translator.js'
 import { sweepStaging } from '../sporangium/inoculate.js'
 import { seedOfficialSource, upsertLocalSource } from '../sporangium/sources.js'
@@ -66,8 +67,11 @@ export async function germinatePhase(state: RuntimeState, logger: Logger): Promi
     // discover() tolerates an absent root, but germinate() warns about one — and before the
     // first inoculate the managed root legitimately does not exist.
     const configured = new Set(config.sporesDirs)
+    // serve.ts asserted the core catalogues before this, so ruling R7's renderer answers a
+    // sentence rather than the bare key it degrades to (design §2.2).
     const registry = await germinate(
       discoveryDirs.filter((dir) => configured.has(dir) || existsSync(dir)), logger, settings, db,
+      (refusal) => renderRefusal(state.translator, refusal, config.defaultLocale),
     )
     // Spore-first would let a plugin shadow the core's own domain; germination already
     // refuses those two names, so the order here is belt and braces.

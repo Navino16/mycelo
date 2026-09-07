@@ -201,7 +201,7 @@ describe('POST /api/people/:id/roles and DELETE /api/people/:id/roles/:role', ()
       method: 'POST', url: '/api/people/grant-target/roles', headers: { cookie }, payload: { role: 'ghost-role' },
     })
     expect(response.statusCode).toBe(404)
-    expect(response.json<{ error: { message: string } }>().error.message).toBe("no role named 'ghost-role'")
+    expect(response.json<{ error: { message: string } }>().error.message).toBe("role 'ghost-role' does not exist")
   })
 
   it('404s granting a real role to an unknown person, naming the person', async () => {
@@ -245,7 +245,7 @@ describe('POST /api/people/:id/roles and DELETE /api/people/:id/roles/:role', ()
       method: 'DELETE', url: '/api/people/revoke-target/roles/ghost-role', headers: { cookie },
     })
     expect(response.statusCode).toBe(404)
-    expect(response.json<{ error: { message: string } }>().error.message).toBe("no role named 'ghost-role'")
+    expect(response.json<{ error: { message: string } }>().error.message).toBe("role 'ghost-role' does not exist")
   })
 
   it('names the role, not the person, when both are unknown at once', async () => {
@@ -257,7 +257,7 @@ describe('POST /api/people/:id/roles and DELETE /api/people/:id/roles/:role', ()
       method: 'POST', url: '/api/people/ghost/roles', headers: { cookie }, payload: { role: 'ghost-role' },
     })
     expect(response.statusCode).toBe(404)
-    expect(response.json<{ error: { message: string } }>().error.message).toBe("no role named 'ghost-role'")
+    expect(response.json<{ error: { message: string } }>().error.message).toBe("role 'ghost-role' does not exist")
   })
 
   it('does not relabel a genuine store fault as a 404', async () => {

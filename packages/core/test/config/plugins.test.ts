@@ -2,8 +2,12 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, expect, it } from 'bun:test'
+import type { Logger } from '@mycelo/septum'
 import { readSettings, recordInstall, writeSetting } from '../../src/config/store.js'
-import { listPlugins, redactSecrets, rejectedSettings, writeDeclaredSetting } from '../../src/config/plugins.js'
+import {
+  listPlugins, redactSecrets, rejectedSettings, undeclaredSecretsRefusal,
+  writeDeclaredSetting,
+} from '../../src/config/plugins.js'
 import { REDACTED } from '../../src/support/redaction.js'
 import type { Db } from '../../src/persistence/db.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
@@ -11,8 +15,14 @@ import type { Registry } from '../../src/germination/registry.js'
 import { addSource, listSources, seedOfficialSource } from '../../src/sporangium/sources.js'
 import { describeConfigError } from '../../src/support/thrown.js'
 import { emptyRegistry } from '../support/registry.js'
+import { loadCoreCatalogs } from '../../src/i18n/core-catalogs.js'
+import { renderRefusal } from '../../src/i18n/refusal.js'
+import { createTranslator } from '../../src/i18n/translator.js'
 
 const SPORES = [resolve(import.meta.dirname, '../../../../fixtures')]
+
+const silent: Logger = { info() {}, warn() {}, error() {}, debug() {}, child: () => silent }
+const translator = createTranslator({ defaultLocale: 'en', logger: silent, catalogs: loadCoreCatalogs() })
 
 function fresh(): { db: Db, close: () => void } {
   const p = openDatabase(':memory:')
@@ -30,8 +40,101 @@ afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
 it('a rejected value is reported once the schema carries a declared issue', async () => {
   const { db, close } = fresh()
   recordInstall(db, 'gate', 'inhibitor')
-  const rejected = await rejectedSettings(db, SPORES, 'gate', { channel: '' })
-  expect(rejected).toEqual([{ key: 'channel', issues: [{ path: ['channel'], message: "gate config needs a non-empty 'channel'" }] }])
+  const rejected = await rejectedSettings(db, SPORES, 'gate', { channel: '' }, translator, 'en')
+  expect(rejected).toEqual([{ key: 'channel', messages: ["gate config needs a non-empty 'channel'"] }])
+  close()
+})
+
+// Named for what it refuses, not for a real spore: a fixture called `plex` would read as that
+// published rhiza. Its messageKey is a ref, shaped the way septum's toConfigIssue builds one for
+// a mapped `too_small` issue (config.ts:69).
+function minPort(): void {
+  mkdirSync(join(dir, 'minport', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'minport', 'spore.yaml'),
+    'kind: enzyme\nname: minport\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: minport\n    description: x\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(
+    join(dir, 'minport', 'src/index.ts'),
+    'export default {\n'
+      + '  configSchema: {\n'
+      + '    safeParse: (input) => (typeof input?.port === "number" && input.port >= 1\n'
+      + '      ? { success: true, data: input }\n'
+      + '      : { success: false, error: { issues: [{\n'
+      + '          path: ["port"], message: "port must be at least 1",\n'
+      + '          messageKey: { domain: "common", key: "refusal.config.tooSmall" },\n'
+      + '          params: { origin: "number", minimum: 1 },\n'
+      + '        }] } }),\n'
+      + '  },\n'
+      + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+      + '}\n',
+    'utf8',
+  )
+}
+
+it('a rejection carries rendered sentences, not the plugin\'s issue objects', async () => {
+  const { db, close } = fresh()
+  minPort()
+  recordInstall(db, 'minport', 'enzyme')
+  const rejected = await rejectedSettings(db, [dir], 'minport', { port: 0 }, translator, 'fr')
+  expect(rejected).toEqual([{ key: 'port', messages: ['doit valoir au moins 1'] }])
+  close()
+})
+
+it('undeclaredSecretsRefusal carries the count its plural needs', () => {
+  expect(undeclaredSecretsRefusal(['token'])).toEqual({
+    domain: 'common',
+    key: 'refusal.config.undeclaredSecrets',
+    params: { count: 1, keys: ["'token'"] },
+  })
+  // The plural case: a count the message's `one` branch does not match.
+  expect(undeclaredSecretsRefusal(['a', 'b']).params?.['count']).toBe(2)
+})
+
+// Both counts: the plural halves of an ICU `{count, plural, ...}` drift alone, and this is the
+// only place either branch is rendered against the English it is supposed to read as.
+it('renders both counts of the undeclared-secret verdict', () => {
+  expect(renderRefusal(translator, undeclaredSecretsRefusal(['token']), 'en'))
+    .toBe("configuration declares a secret 'token' the schema does not have")
+  expect(renderRefusal(translator, undeclaredSecretsRefusal(['a', 'b']), 'en'))
+    .toBe("configuration declares secrets 'a', 'b' the schema does not have")
+})
+
+// Installed under a real catalogue domain's own name, so a bare-string messageKey resolves
+// through the shipped `common` catalogue instead of falling back — the only way to pin that
+// rejectedSettings threads its `name` argument into renderConfigIssue's `domain` parameter.
+function ownDomainName(): void {
+  mkdirSync(join(dir, 'common', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'common', 'spore.yaml'),
+    'kind: enzyme\nname: common\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: common\n    description: x\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(
+    join(dir, 'common', 'src/index.ts'),
+    'export default {\n'
+      + '  configSchema: {\n'
+      + '    safeParse: () => ({ success: false, error: { issues: [{\n'
+      + '      path: ["address"], message: "not a valid email",\n'
+      + '      messageKey: "refusal.config.invalidFormat",\n'
+      + '      params: { format: "email" },\n'
+      + '    }] } }),\n'
+      + '  },\n'
+      + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+      + '}\n',
+    'utf8',
+  )
+}
+
+it('renders a bare-string messageKey through the plugin name as domain', async () => {
+  const { db, close } = fresh()
+  ownDomainName()
+  recordInstall(db, 'common', 'enzyme')
+  const rejected = await rejectedSettings(db, [dir], 'common', { address: 'x' }, translator, 'fr')
+  expect(rejected).toEqual([{ key: 'address', messages: ["n'est pas un email valide"] }])
   close()
 })
 
@@ -41,7 +144,7 @@ function handwritten(): void {
   mkdirSync(join(dir, 'handwritten', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'handwritten', 'spore.yaml'),
-    'kind: enzyme\nname: handwritten\nseptum: "^0.11"\n'
+    'kind: enzyme\nname: handwritten\nseptum: "^0.12"\n'
       + 'commands:\n  - name: handwritten\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -65,8 +168,8 @@ it('a hand-written ConfigSchema with no shape still gets per-value validation', 
   const { db, close } = fresh()
   handwritten()
   recordInstall(db, 'handwritten', 'enzyme')
-  const rejected = await rejectedSettings(db, [dir], 'handwritten', { port: 'nope' })
-  expect(rejected).toEqual([{ key: 'port', issues: [{ path: ['port'], message: 'expected a number' }] }])
+  const rejected = await rejectedSettings(db, [dir], 'handwritten', { port: 'nope' }, translator, 'en')
+  expect(rejected).toEqual([{ key: 'port', messages: ['expected a number'] }])
   close()
 })
 
@@ -77,7 +180,7 @@ function eitherOr(): void {
   mkdirSync(join(dir, 'eitheror', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'eitheror', 'spore.yaml'),
-    'kind: enzyme\nname: eitheror\nseptum: "^0.11"\n'
+    'kind: enzyme\nname: eitheror\nseptum: "^0.12"\n'
       + 'commands:\n  - name: eitheror\n    description: command.eitheror.description\n    code: handleIt\n',
     'utf8',
   )
@@ -99,10 +202,10 @@ it('reports a whole-object refusal against every key the request carried', async
   const { db, close } = fresh()
   eitherOr()
   recordInstall(db, 'eitheror', 'enzyme')
-  const rejected = await rejectedSettings(db, [dir], 'eitheror', { socket: '/tmp/s', tcp: '1:2' })
+  const rejected = await rejectedSettings(db, [dir], 'eitheror', { socket: '/tmp/s', tcp: '1:2' }, translator, 'en')
   expect(rejected).toEqual([
-    { key: 'socket', issues: [{ path: [], message: 'socket or tcp, not both' }] },
-    { key: 'tcp', issues: [{ path: [], message: 'socket or tcp, not both' }] },
+    { key: 'socket', messages: ['socket or tcp, not both'] },
+    { key: 'tcp', messages: ['socket or tcp, not both'] },
   ])
   close()
 })
@@ -111,7 +214,7 @@ it('leaves a partial write accepted when the whole-object rule it would break is
   const { db, close } = fresh()
   eitherOr()
   recordInstall(db, 'eitheror', 'enzyme')
-  expect(await rejectedSettings(db, [dir], 'eitheror', { socket: '/tmp/s' })).toEqual([])
+  expect(await rejectedSettings(db, [dir], 'eitheror', { socket: '/tmp/s' }, translator, 'en')).toEqual([])
   close()
 })
 
@@ -122,7 +225,7 @@ function pathless(): void {
   mkdirSync(join(dir, 'pathless', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'pathless', 'spore.yaml'),
-    'kind: enzyme\nname: pathless\nseptum: "^0.11"\n'
+    'kind: enzyme\nname: pathless\nseptum: "^0.12"\n'
       + 'commands:\n  - name: pathless\n    description: command.pathless.description\n    code: handleIt\n',
     'utf8',
   )
@@ -145,13 +248,14 @@ it('reads an issue with no usable path the way enablePlugin does, against every 
   const { db, close } = fresh()
   pathless()
   recordInstall(db, 'pathless', 'enzyme')
-  const rejected = await rejectedSettings(db, [dir], 'pathless', { a: 1, b: 2 })
+  const rejected = await rejectedSettings(db, [dir], 'pathless', { a: 1, b: 2 }, translator, 'en')
+  const messages = ['the whole thing is wrong', 'so is this']
+  expect(rejected).toEqual([{ key: 'a', messages }, { key: 'b', messages }])
+  // The same two issues through the other reader, which has always treated them this way.
   const issues = [
     { message: 'the whole thing is wrong' },
     { path: 'notanarray', message: 'so is this' },
   ]
-  expect(rejected).toEqual([{ key: 'a', issues }, { key: 'b', issues }])
-  // The same two issues through the other reader, which has always treated them this way.
   expect(describeConfigError({ issues })).toBe('the whole thing is wrong; so is this')
   close()
 })
@@ -175,7 +279,7 @@ function vault(): void {
   mkdirSync(join(dir, 'vault', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'vault', 'spore.yaml'),
-    'kind: enzyme\nname: vault\nseptum: "^0.11"\n'
+    'kind: enzyme\nname: vault\nseptum: "^0.12"\n'
       + 'commands:\n  - name: vault\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -198,7 +302,7 @@ function twin(): void {
   mkdirSync(join(dir, 'twin', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'twin', 'spore.yaml'),
-    'kind: enzyme\nname: twin\nseptum: "^0.11"\n'
+    'kind: enzyme\nname: twin\nseptum: "^0.12"\n'
       + 'commands:\n  - name: twin\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -278,7 +382,7 @@ it('a value written while the plugin throws at import is stored in the clear (kn
   mkdirSync(join(dir, 'boomvault', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'boomvault', 'spore.yaml'),
-    'kind: enzyme\nname: boomvault\nseptum: "^0.11"\n'
+    'kind: enzyme\nname: boomvault\nseptum: "^0.12"\n'
       + 'commands:\n  - name: boomvault\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -339,8 +443,8 @@ it('carries provenance onto a germinated and a dormant entry, each from its own 
   recordInstall(db, 'broken', 'rhiza', true, { sourceId: third.id, strain: '2.3.4' })
   const registry = {
     ...emptyRegistry(),
-    enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^0.11', commands: [] } }],
-    dormant: [{ name: 'broken', reason: 'create() returned no api' }],
+    enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^0.12', commands: [] } }],
+    dormant: [{ name: 'broken', refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' } }],
   } as unknown as Registry
   const infos = listPlugins(registry, [], db)
   const media = infos.find((p) => p.name === 'media')
@@ -358,13 +462,38 @@ it('gives a dormant entry the kind its install row recorded, and none when there
   const registry = {
     ...emptyRegistry(),
     dormant: [
-      { name: 'plex', reason: 'configuration rejected: url: expected string' },
-      { name: 'garbled', reason: 'cannot read spore.yaml' },
+      { name: 'plex', refusal: { domain: 'common', key: 'refusal.config.incomplete' } },
+      { name: 'garbled', refusal: { domain: 'common', key: 'refusal.plugin.unreadableManifest' } },
     ],
   } as unknown as Registry
   const infos = listPlugins(registry, [], db)
   expect(infos.find((p) => p.name === 'plex')?.kind).toBe('rhiza')
   expect(infos.find((p) => p.name === 'garbled')?.kind).toBeUndefined()
+  close()
+})
+
+it('carries the dormancy refusal through to PluginInfo', () => {
+  const registry = {
+    ...emptyRegistry(),
+    dormant: [{
+      name: 'broken',
+      refusal: { domain: 'common', key: 'refusal.germination.inhibitorNoInspect' },
+    }],
+  } as unknown as Registry
+  const info = listPlugins(registry, []).find((p) => p.name === 'broken')
+  expect(info?.refusal).toEqual({ domain: 'common', key: 'refusal.germination.inhibitorNoInspect' })
+})
+
+// Correction 7's site: the row survives so the operator can recover it, and it is the one
+// dormancy verdict `Dormant` never carries — the spore is not in the registry at all.
+it('answers the notOnDisk refusal for an install row whose directory has gone', () => {
+  const { db, close } = fresh()
+  recordInstall(db, 'vanished', 'rhiza', true)
+  const info = listPlugins(emptyRegistry(), [], db).find((p) => p.name === 'vanished')
+  expect(info?.state).toBe('dormant')
+  expect(info?.refusal).toEqual({
+    domain: 'common', key: 'refusal.plugin.notOnDisk', params: { plugin: 'vanished' },
+  })
   close()
 })
 
@@ -381,7 +510,7 @@ it('carries provenance onto a germinated hypha, rhiza and inhibitor, each from i
   const entries = kinds.map(([name, kind, label, strain]) => {
     const s = addSource(db, { label, driver: 'github', location: `https://example/${name}` })
     recordInstall(db, name, kind, true, { sourceId: s.id, strain })
-    return { name, manifest: { kind, name, septum: '^0.11' } }
+    return { name, manifest: { kind, name, septum: '^0.12' } }
   })
   const registry = {
     ...emptyRegistry(),

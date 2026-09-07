@@ -65,7 +65,7 @@ async function bootWith(
   owner: { channel: string; userId: string },
 ): Promise<{ warnings: string[]; infos: string[]; warnMeta: (Record<string, unknown> | undefined)[] }> {
   spore('console', {
-    'spore.yaml': 'kind: hypha\nname: console\nseptum: "^0.11"\n',
+    'spore.yaml': 'kind: hypha\nname: console\nseptum: "^0.12"\n',
     'src/index.ts': `export default { create: () => ({ ${HYPHA_BODY} }) }\n`,
   })
   const file = join(dir, 'mycelo.yaml')
@@ -89,7 +89,7 @@ async function bootWith(
 function cyclingPair(): void {
   for (const [self, other] of [['alpha', 'beta'], ['beta', 'alpha']] as const) {
     spore(self, {
-      'spore.yaml': `kind: rhiza\nname: ${self}\nseptum: "^0.11"\nrequires:\n  - rhiza: ${other}\n`,
+      'spore.yaml': `kind: rhiza\nname: ${self}\nseptum: "^0.12"\nrequires:\n  - rhiza: ${other}\n`,
     })
   }
 }
@@ -113,7 +113,7 @@ describe('phase 2 germination', () => {
   it('degrades on a command collision instead of throwing', async () => {
     for (const name of ['alpha', 'beta']) {
       spore(name, {
-        'spore.yaml': `kind: enzyme\nname: ${name}\nseptum: "^0.11"\ncommands:\n  - name: ping\n    description: ping\n    respond: ${name}.reply\n`,
+        'spore.yaml': `kind: enzyme\nname: ${name}\nseptum: "^0.12"\ncommands:\n  - name: ping\n    description: ping\n    respond: ${name}.reply\n`,
       })
     }
     const served = serve(config())
@@ -137,7 +137,7 @@ describe('phase 2 germination', () => {
 
   it('germinates when nothing is fatal', async () => {
     spore('good', {
-      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.11"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
+      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.12"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
     })
     const served = serve(config())
     closeDb = served.closeDb
@@ -148,7 +148,7 @@ describe('phase 2 germination', () => {
 
   it('replaces the phase-1 translator with one carrying the spore catalogues', async () => {
     spore('good', {
-      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.11"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
+      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.12"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
       'translations/en.yaml': 'greet: hello from good\n',
     })
     const served = serve(config())
@@ -159,6 +159,33 @@ describe('phase 2 germination', () => {
     // The core's own domain must survive the merge, or every refusal renders as a key.
     expect(served.state.translator.translate('core', 'command.unknown', 'en', { command: 'x' }))
       .not.toBe('command.unknown')
+  })
+
+  // germinate()'s renderer argument defaults to the bare key, and germinate.test.ts exercises
+  // both branches by calling it directly — which leaves the boot seam itself asserted by
+  // nothing: dropping the argument here, or passing a bag-stripping renderer, kept the whole
+  // suite green.
+  it('logs each dormancy as a sentence at the configured locale, never as its own dotted key', async () => {
+    spore('orphan', {
+      'spore.yaml': [
+        'kind: enzyme', 'name: orphan', 'septum: "^0.12"',
+        'requires:', '  - rhiza: nowhere',
+        'commands:', '  - name: hi', '    description: x', '    respond: hi', '',
+      ].join('\n'),
+    })
+    const file = join(dir, 'mycelo.yaml')
+    writeFileSync(file, 'spores: ./spores\ndatabase: ./mycelo.db\ndefaultLocale: fr\n', 'utf8')
+    const served = serve(file)
+    closeDb = served.closeDb
+    const { logger, warnings, warnMeta } = spyLogger()
+    await germinatePhase(served.state, logger)
+    const dormancy = warnings.indexOf("spore 'orphan' is dormant")
+    expect(dormancy).toBeGreaterThanOrEqual(0)
+    const reason = warnMeta[dormancy]?.['reason']
+    expect(reason).not.toMatch(/^refusal\./)
+    // The parameter and the locale too, not only the sentence: a renderer handed a ref with no
+    // bag renders the bare key, and one handed the wrong locale renders the wrong language.
+    expect(reason).toBe("requiert le rhiza \u00ab nowhere \u00bb, qui n'est pas install\u00e9")
   })
 })
 
@@ -194,7 +221,7 @@ describe('retryGermination', () => {
 
   it('refuses when the runtime is not degraded', async () => {
     spore('good', {
-      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.11"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
+      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.12"\ncommands:\n  - name: good\n    description: good\n    respond: good.reply\n',
     })
     const served = serve(config())
     closeDb = served.closeDb
@@ -255,7 +282,7 @@ describe('the managed root', () => {
   it('germinates a spore no configured root lists', async () => {
     root('elsewhere')
     spore('installed', {
-      'spore.yaml': 'kind: enzyme\nname: installed\nseptum: "^0.11"\ncommands:\n  - name: installed\n    description: x\n    respond: installed.reply\n',
+      'spore.yaml': 'kind: enzyme\nname: installed\nseptum: "^0.12"\ncommands:\n  - name: installed\n    description: x\n    respond: installed.reply\n',
     })
     const served = serve(config(['./elsewhere']))
     closeDb = served.closeDb
@@ -267,7 +294,7 @@ describe('the managed root', () => {
 
   it('is not discovered twice when a configured root already names it', async () => {
     spore('good', {
-      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.11"\ncommands:\n  - name: good\n    description: x\n    respond: good.reply\n',
+      'spore.yaml': 'kind: enzyme\nname: good\nseptum: "^0.12"\ncommands:\n  - name: good\n    description: x\n    respond: good.reply\n',
     })
     // `spores: ./spores` and `database: ./mycelo.db` is the ordinary layout, and it puts
     // both roots on the same directory: unguarded, assertNoCollisions refuses the boot.
@@ -283,7 +310,7 @@ describe('the managed root', () => {
     // The managed root is a root like any other, and design §4.2 refuses a duplicate directory
     // across all of them — pinned across the managed root, not only across configured ones.
     root('elsewhere')
-    const manifest = 'kind: enzyme\nname: dup\nseptum: "^0.11"\ncommands:\n  - name: dup\n    description: x\n    respond: dup.reply\n'
+    const manifest = 'kind: enzyme\nname: dup\nseptum: "^0.12"\ncommands:\n  - name: dup\n    description: x\n    respond: dup.reply\n'
     mkdirSync(join(dir, 'elsewhere', 'dup'), { recursive: true })
     writeFileSync(join(dir, 'elsewhere', 'dup', 'spore.yaml'), manifest, 'utf8')
     spore('dup', { 'spore.yaml': manifest })
@@ -318,7 +345,7 @@ describe('the managed root', () => {
     // `available: false` for a spore that is installed and running.
     root('elsewhere')
     spore('installed', {
-      'spore.yaml': 'kind: enzyme\nname: installed\nseptum: "^0.11"\n'
+      'spore.yaml': 'kind: enzyme\nname: installed\nseptum: "^0.12"\n'
         + 'commands:\n  - name: installed\n    description: x\n    code: handleInstalled\n',
       'index.js': `
         export default {
@@ -333,7 +360,7 @@ describe('the managed root', () => {
     const probeFile = join(dir, 'probe.json')
     mkdirSync(join(dir, 'elsewhere', 'prober'), { recursive: true })
     writeFileSync(join(dir, 'elsewhere', 'prober', 'spore.yaml'),
-      'kind: enzyme\nname: prober\nseptum: "^0.11"\n'
+      'kind: enzyme\nname: prober\nseptum: "^0.12"\n'
       + 'commands:\n  - name: probe\n    description: x\n    code: handleProbe\n'
       + 'requires:\n  - rhiza: mycelium\n    scopes: [plugins.configure]\n', 'utf8')
     writeFileSync(join(dir, 'elsewhere', 'prober', 'index.js'), `

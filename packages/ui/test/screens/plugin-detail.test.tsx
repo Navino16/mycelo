@@ -152,6 +152,7 @@ describe('the plugin detail screen', () => {
       ...DETAIL,
       state: 'dormant',
       reason: "requires rhiza 'plex', which is not installed",
+      reasonKey: 'refusal.germination.requiredRhizaMissing',
       mounted: undefined,
     })
     renderDetail()
@@ -178,6 +179,7 @@ const DORMANT: PluginDetailDto = {
   strain: '3.1.0',
   description: 'Search and add films from a conversation',
   reason: "requires rhiza 'plex', which is not installed",
+  reasonKey: 'refusal.germination.requiredRhizaMissing',
   demands: {
     requires: [{ targets: ['plex'], anyOf: false, optional: false, scopes: [] }],
     scopes: ['health.read'],

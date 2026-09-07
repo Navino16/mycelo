@@ -6,7 +6,7 @@ function enzymeRequiring(requires: readonly unknown[]): ReturnType<typeof parseM
   return parseManifest({
     kind: 'enzyme',
     name: 'consenter',
-    septum: '^0.11',
+    septum: '^0.12',
     commands: [{ name: 'consent', description: 'command.consent.description', respond: 'reply.consent' }],
     requires,
   })

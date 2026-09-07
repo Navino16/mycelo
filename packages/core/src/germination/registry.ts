@@ -1,4 +1,4 @@
-import type { CommandSpec, Enzyme, Hypha, Inhibitor, Manifest, MyceliumScope, Rhiza } from '@mycelo/septum'
+import type { CommandSpec, Enzyme, Hypha, Inhibitor, Manifest, MyceliumScope, Rhiza, TranslatableRef } from '@mycelo/septum'
 import type { Catalogs } from '../i18n/catalog.js'
 
 export interface GerminatedHypha {
@@ -52,7 +52,8 @@ export interface DormantRequirement {
 
 export interface Dormant {
   name: string
-  reason: string
+  /** design §2.2: the whole verdict, so every surface renders it at its reader's locale. */
+  refusal: TranslatableRef
   /**
    * The targets its manifest declared, absent when the manifest never parsed. A dormant spore
    * has no manifest here and no `resolved`, so this is the only record of the dependency that

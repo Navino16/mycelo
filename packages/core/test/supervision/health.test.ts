@@ -32,7 +32,10 @@ describe('aggregateRuntimeHealth', () => {
       status: 'germinated' as const,
       mycelium: {
         registry: registry({
-          dormant: [{ name: 'a', reason: 'boom' }, { name: 'b', reason: 'bang' }],
+          dormant: [
+            { name: 'a', refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' } },
+            { name: 'b', refusal: { domain: 'common', key: 'refusal.germination.inhibitorNoInspect' } },
+          ],
         }),
         ...NO_ADMISSION,
       },
@@ -40,7 +43,10 @@ describe('aggregateRuntimeHealth', () => {
     const health = await aggregateRuntimeHealth(germination)
     // The plural case: phase 5.5's mutation campaign found a set collapsed to its last
     // element surviving a whole suite built on single-element fixtures.
-    expect(health.dormant.map((d) => d.name)).toEqual(['a', 'b'])
+    expect(health.dormant.map((d) => [d.name, d.refusal.key])).toEqual([
+      ['a', 'refusal.germination.rhizaNoApi'],
+      ['b', 'refusal.germination.inhibitorNoInspect'],
+    ])
   })
 
   it('keeps enforcingBlocked separate from dormant', async () => {
@@ -48,7 +54,10 @@ describe('aggregateRuntimeHealth', () => {
       status: 'germinated' as const,
       mycelium: {
         registry: registry({
-          dormant: [{ name: 'other', reason: 'boom' }],
+          dormant: [{
+            name: 'other',
+            refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' },
+          }],
           brokenEnforcing: ['gate'],
         }),
         ...NO_ADMISSION,
@@ -58,7 +67,10 @@ describe('aggregateRuntimeHealth', () => {
     // Disjoint fixture values: a swap between the two source fields must be distinguishable,
     // not merely absent from dormant (spec §11).
     expect(health.enforcingBlocked).toEqual(['gate'])
-    expect(health.dormant).toEqual([{ name: 'other', reason: 'boom' }])
+    expect(health.dormant).toEqual([{
+      name: 'other',
+      refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' },
+    }])
   })
 
   // The plural case for enforcingBlocked, the sibling of the dormant one above. Phase 5.5's
@@ -107,6 +119,23 @@ describe('aggregateRuntimeHealth', () => {
     const health = await aggregateRuntimeHealth(germination)
     expect(health.rhizas.map((r) => [r.rhiza, r.status.state, r.status.detail]))
       .toEqual([['boom', 'unreachable', 'socket closed'], ['fine', 'healthy', undefined]])
+  })
+
+  it('carries the refusal beside each dormant entry', async () => {
+    const germination = {
+      status: 'germinated' as const,
+      mycelium: {
+        registry: registry({
+          dormant: [{
+            name: 'broken',
+            refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' },
+          }],
+        }),
+        ...NO_ADMISSION,
+      },
+    } as unknown as Germination
+    const health = await aggregateRuntimeHealth(germination)
+    expect(health.dormant[0]?.refusal.key).toBe('refusal.germination.rhizaNoApi')
   })
 
   it('answers starting as degraded rather than inventing a third mode', async () => {

@@ -8,6 +8,9 @@ import type {
   MessagesBroadcast,
   MessagesSend,
   MyceliumScope,
+  Outcome,
+  OutcomeOf,
+  PluginInfo,
   PluginsConfigure,
   PluginsRead,
   PluginsToggle,
@@ -86,8 +89,8 @@ export const principalsRead: PrincipalsRead = {
 }
 
 export const principalsManage: PrincipalsManage = {
-  markReviewed: () => Promise.resolve(),
-  setDisplayName: () => Promise.resolve(),
+  markReviewed: () => Promise.resolve({ ok: true }),
+  setDisplayName: () => Promise.resolve({ ok: true }),
 }
 
 export const rolesRead: RolesRead = {
@@ -96,24 +99,24 @@ export const rolesRead: RolesRead = {
 }
 
 export const rolesAssign: RolesAssign = {
-  assignRole: () => Promise.resolve(),
-  revokeRole: () => Promise.resolve(),
+  assignRole: () => Promise.resolve({ ok: true }),
+  revokeRole: () => Promise.resolve({ ok: true }),
 }
 
 export const rolesManage: RolesManage = {
-  createRole: () => Promise.resolve(),
-  setRoleCommands: () => Promise.resolve(),
-  deleteRole: () => Promise.resolve(),
+  createRole: () => Promise.resolve({ ok: true }),
+  setRoleCommands: () => Promise.resolve({ ok: true }),
+  deleteRole: () => Promise.resolve({ ok: true }),
 }
 
 export const pluginsToggle: PluginsToggle = {
-  enable: () => Promise.resolve(),
-  disable: () => Promise.resolve(),
+  enable: () => Promise.resolve({ ok: true }),
+  disable: () => Promise.resolve({ ok: true }),
 }
 
 export const pluginsConfigure: PluginsConfigure = {
-  settings: () => Promise.resolve({ url: 'http://x', apiKey: '••••' }),
-  setSetting: () => Promise.resolve(),
+  settings: () => Promise.resolve({ ok: true, value: { url: 'http://x', apiKey: '••••' } }),
+  setSetting: () => Promise.resolve({ ok: true }),
   formSchema: () => Promise.resolve({ available: true, schema: { type: 'object' } }),
 }
 
@@ -188,6 +191,23 @@ export const _g: string = inhibitor.t('refused')
 // A ref's params are optional.
 export const _ref: TranslatableRef = { domain: 'mock', key: 'lookup.unknown' }
 
+// PluginInfo.refusal: present only when dormant, and only the ref, no rendering (task 9).
+const dormant: PluginInfo = {
+  name: 'x', kind: 'rhiza', commands: [], state: 'dormant', enabled: true,
+  refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' },
+}
+const dormantRefusal: TranslatableRef | undefined = dormant.refusal
+void dormantRefusal
+
+// `reason` was removed from PluginInfo this phase; `refusal` is the only cause a reader gets.
+const noReason: PluginInfo = {
+  name: 'x', kind: 'rhiza', commands: [], state: 'dormant', enabled: true,
+  refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' },
+  // @ts-expect-error `reason` is not a field of PluginInfo
+  reason: 'x',
+}
+void noReason
+
 declare const locales: LocaleManage
 export const _h: readonly string[] = locales.availableLocales()
 export const _i: Promise<void> = locales.setPrincipalLocale('p1', 'fr')
@@ -210,3 +230,24 @@ const missingRequired: CommandInfo = {
   args: [{ name: 'title', description: 'Title' }],
 }
 void noArgs; void withArgs; void missingRequired
+
+// Narrowing on `ok` is the whole point: without it the caller cannot reach `refusal` at all,
+// which is what makes the English branch unreachable rather than merely discouraged.
+export function narrows(r: Outcome): string {
+  return r.ok ? 'done' : r.refusal.key
+}
+
+export function narrowsValue(r: OutcomeOf<Record<string, unknown>>): string {
+  return r.ok ? Object.keys(r.value).join(',') : r.refusal.key
+}
+
+// @ts-expect-error `refusal` is unreachable without narrowing
+// eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-member-access -- suppressing the type error above leaves this expression's type unresolvable to the type-aware rules
+export const noNarrowing = (r: Outcome): string => r.refusal.key
+
+declare const toggle: PluginsToggle
+declare const configure: PluginsConfigure
+// @ts-expect-error enable() no longer resolves void
+export const oldShape: Promise<void> = toggle.enable('plex')
+// @ts-expect-error settings() no longer resolves the record directly
+export const oldSettings: Promise<Record<string, unknown>> = configure.settings('plex')

@@ -13,7 +13,7 @@ import { createLogger } from '../../src/support/logger.js'
 // A respond-only enzyme ships no module at all (phase 2's routing decision), so it needs
 // neither @mycelo/septum nor zod — which a /tmp directory could not resolve anyway.
 const GREETER = [
-  'kind: enzyme', 'name: greeter', 'septum: "^0.11"',
+  'kind: enzyme', 'name: greeter', 'septum: "^0.12"',
   'commands:', '  - name: hello', '    description: command.hello.description',
   '    respond: reply.hello', '',
 ].join('\n')

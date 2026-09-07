@@ -30,7 +30,7 @@ describe('healthPillState', () => {
   // design note 2j: mute is the one red condition, so nothing else may produce it.
   it('is mute for a blocked enforcing inhibitor and for nothing else', () => {
     expect(healthPillState({ ...OK, enforcingBlocked: ['gate'] }, false).state).toBe('mute')
-    expect(healthPillState({ ...OK, dormant: [{ name: 'radarr', reason: 'x' }] }, false).state).toBe('degraded')
+    expect(healthPillState({ ...OK, dormant: [{ name: 'radarr', reason: 'x', reasonKey: 'refusal.germination.createNotObject' }] }, false).state).toBe('degraded')
     expect(healthPillState({ ...OK, mode: 'degraded' }, false).state).toBe('degraded')
     expect(healthPillState(OK, true).state).toBe('offline')
   })
@@ -54,7 +54,7 @@ describe('healthPillState', () => {
   it('counts dormant plugins and unhealthy rhizas together, not one of the two', () => {
     const { issues } = healthPillState({
       ...OK,
-      dormant: [{ name: 'a', reason: 'x' }, { name: 'b', reason: 'y' }],
+      dormant: [{ name: 'a', reason: 'x', reasonKey: 'refusal.germination.createNotObject' }, { name: 'b', reason: 'y', reasonKey: 'refusal.startup.startFailed' }],
       rhizas: [
         { rhiza: 'ok', status: { state: 'healthy', checkedAt: '2026-01-01' } },
         { rhiza: 'down', status: { state: 'unreachable', checkedAt: '2026-01-01' } },
@@ -68,7 +68,7 @@ describe('healthPillState', () => {
   // the bot is mute". It still carries the count, or task 16's takeover has nothing to recount from.
   it('stays mute when the bot is degraded too, and keeps the issue count', () => {
     const { state, issues } = healthPillState(
-      { ...OK, mode: 'degraded', enforcingBlocked: ['gate'], dormant: [{ name: 'a', reason: 'x' }] }, false,
+      { ...OK, mode: 'degraded', enforcingBlocked: ['gate'], dormant: [{ name: 'a', reason: 'x', reasonKey: 'refusal.germination.createNotObject' }] }, false,
     )
 
     expect(state).toBe('mute')
@@ -78,14 +78,14 @@ describe('healthPillState', () => {
 
 describe('the pill', () => {
   it('names the count when there is more than one issue', () => {
-    pill({ ...OK, dormant: [{ name: 'a', reason: 'x' }, { name: 'b', reason: 'y' }] })
+    pill({ ...OK, dormant: [{ name: 'a', reason: 'x', reasonKey: 'refusal.germination.createNotObject' }, { name: 'b', reason: 'y', reasonKey: 'refusal.startup.startFailed' }] })
 
     expect(screen.getByText('Degraded · 2 issues')).toBeDefined()
   })
 
   // One issue through a plural sentence reads "1 issues"; the count is the commonest value.
   it('says one issue in the singular', () => {
-    pill({ ...OK, dormant: [{ name: 'a', reason: 'x' }] })
+    pill({ ...OK, dormant: [{ name: 'a', reason: 'x', reasonKey: 'refusal.germination.createNotObject' }] })
 
     expect(screen.getByText('Degraded · 1 issue')).toBeDefined()
   })
@@ -104,7 +104,7 @@ describe('the pill', () => {
   })
 
   it('keeps every other state a tint, not a fill', () => {
-    pill({ ...OK, dormant: [{ name: 'a', reason: 'x' }] })
+    pill({ ...OK, dormant: [{ name: 'a', reason: 'x', reasonKey: 'refusal.germination.createNotObject' }] })
     const status = screen.getByRole('status')
 
     expect(status.className).toContain(TONE_CLASSES.warn.bg)

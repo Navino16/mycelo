@@ -1,7 +1,22 @@
+import type { TranslatableRef } from './context.js'
+
 export interface ConfigIssue {
   /** Where in the settings object the refusal applies. Empty for a whole-object refusal. */
   readonly path: readonly PropertyKey[]
+  /**
+   * English, and what the operator's log reads: a translated log cannot be grepped. Also the
+   * fallback for an issue with no key, which is the pre-0.12 rendering unchanged (§5.2).
+   */
   readonly message: string
+  /**
+   * A key in the producing spore's own domain, or a ref — honoured only for `common` (§5.3).
+   *
+   * Not named `key`: zod's `$ZodIssueInvalidElement` carries `key: unknown`, so that name makes a
+   * raw ZodError stop satisfying ConfigError, which spore.test-d.ts asserts and every
+   * hand-written safeParse relies on.
+   */
+  readonly messageKey?: string | TranslatableRef
+  readonly params?: Record<string, unknown>
 }
 
 export interface ConfigError {

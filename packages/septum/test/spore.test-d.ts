@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import type { ConfigError, ConfigSchema } from '../src/spore.js'
+import type { ConfigError, ConfigIssue, ConfigSchema } from '../src/spore.js'
+import type { TranslatableRef } from '../src/context.js'
 
 // Checked by `tsc -p tsconfig.spec.json`, never by bun test: `import type` is erased, so a
 // runtime assertion cannot make this claim.
@@ -31,3 +32,20 @@ export const wrongShape: ConfigSchema<{ apiKey: string }> = {
   // @ts-expect-error — secrets is a list of key names, not a boolean flag per field.
   secrets: { apiKey: true },
 }
+
+// A bare string is a key in the producing spore's own domain.
+export const ownDomain: ConfigIssue = { path: ['port'], message: 'Too small', messageKey: 'config.port.range' }
+
+// A ref names a domain explicitly. `common` is the only one the core will honour (§5.3), but the
+// type does not encode that: the guard is a runtime one, because a plugin's value is data.
+const ref: TranslatableRef = { domain: 'common', key: 'refusal.config.tooSmall', params: { minimum: 1 } }
+export const refDomain: ConfigIssue = { path: [], message: 'Too small', messageKey: ref, params: { minimum: 1 } }
+
+// `message` stays required: it is the log's only carrier, and the fallback for no key at all.
+// @ts-expect-error message is required
+export const noMessage: ConfigIssue = { path: [], messageKey: 'x' }
+
+// The regression this member's NAME exists to prevent. zod's $ZodIssueInvalidElement carries
+// `key: unknown`, so naming the member `key` makes a raw ZodError stop satisfying ConfigError —
+// which the assertion at the top of this file, and every hand-written safeParse, relies on.
+export const stillAssignable = (e: import('zod').ZodError): import('../src/spore.js').ConfigError => e

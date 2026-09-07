@@ -14,8 +14,8 @@ import { setAlias } from '../../src/rhizomorph/aliases.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
   bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configurable, configurableTwoFields,
-  cyclingPair, definedSchema, eitherOrSchema, mixedFieldSchema, noJsonSchema, twoPluginsTwoCommands, vault,
-  writeSpore,
+  cyclingPair, definedSchema, eitherOrSchema, minPortSchema, mixedFieldSchema, noJsonSchema,
+  twoPluginsTwoCommands, vault, writeSpore,
 } from './support.js'
 import type { LoggedIn, SporeWriter } from './support.js'
 
@@ -71,6 +71,27 @@ describe('/api/plugins', () => {
     // Not vanished, and not miscategorised into a kind it never validated as.
     expect(broken).toMatchObject({ state: 'dormant' })
     expect(broken?.kind).toBeUndefined()
+    expect(broken?.reason)
+      .toBe("invalid manifest at 'septum': Invalid input: expected string, received undefined")
+    expect(broken?.reasonKey).toBe('refusal.germination.invalidManifest')
+  })
+
+  it('renders a dormant plugin reason in the request locale, and differently in each', async () => {
+    booted = await bootAndLogin({ spores: brokenManifest })
+    const { app, cookie } = booted
+    const en = (await app.inject({
+      method: 'GET', url: '/api/plugins', headers: { cookie, 'accept-language': 'en' },
+    })).json<PluginGroups>()
+    const fr = (await app.inject({
+      method: 'GET', url: '/api/plugins', headers: { cookie, 'accept-language': 'fr' },
+    })).json<PluginGroups>()
+    const enReason = en.unknown.find((p) => p.name === 'brokenyaml')?.reason
+    const frReason = fr.unknown.find((p) => p.name === 'brokenyaml')?.reason
+    expect(frReason)
+      .toBe("manifeste invalide à « septum » : Invalid input: expected string, received undefined")
+    // Both locales, not one: a route rendering at the default locale would pass a
+    // single-locale assertion and answer English to every reader (design §3).
+    expect(frReason).not.toBe(enReason)
   })
 
   it('reports the sporangium label and the strain of an installed spore, and neither for a local one', async () => {
@@ -167,9 +188,30 @@ describe('/api/plugins', () => {
     const body = response.json<{ error: { message: string, detail: string } }>()
     // Rendered text: the message itself, not only detail, must be the real sentence.
     expect(body.error.message).toBe("plugin 'needs-config' could not be enabled")
-    // The plural case: an error built from issues[0] would pass a one-field fixture.
+    // Both field names, through `refusal.config.issueAt`'s nesting (§2.4): an implementation
+    // that dropped the issue's path renders two identical clauses naming nothing, and one built
+    // from issues[0] renders one clause.
     expect(body.error.detail).toContain('url')
     expect(body.error.detail).toContain('token')
+    expect(body.error.detail)
+      .toBe('configuration is incomplete: url: missing required field, token: missing required field')
+  })
+
+  it('renders that same refusal in the request locale, and differently in each', async () => {
+    booted = await bootAndLogin({ spores: configurableTwoFields })
+    const { app, cookie } = booted
+    const en = await app.inject({
+      method: 'POST', url: '/api/plugins/needs-config/enable', headers: { cookie },
+    })
+    const fr = await app.inject({
+      method: 'POST', url: '/api/plugins/needs-config/enable', headers: { cookie, 'accept-language': 'fr' },
+    })
+    // The discriminating fixture: without a second locale, a hardcoded French string would pass.
+    expect(en.json<{ error: { detail: string } }>().error.detail)
+      .toBe('configuration is incomplete: url: missing required field, token: missing required field')
+    // The French joiner too: `issueAt` carries its own typography per locale.
+    expect(fr.json<{ error: { detail: string } }>().error.detail)
+      .toBe('la configuration est incomplète : url : missing required field, token : missing required field')
   })
 
   it('serves a JSON Schema a form generator can use', async () => {
@@ -222,7 +264,9 @@ describe('/api/plugins', () => {
     expect(body.error.detail).toEqual(['bogus', 'alsoBogus'])
     // The message still names them too, in order — this is what item 2's rendered-text
     // rule pins for this key.
-    expect(body.error.message).toBe("plugin 'needs-config' declares no setting named: bogus, alsoBogus")
+    // The `common` wording the mycelium's own refusal uses, plural branch included: the route
+    // no longer carries a `core` twin of this verdict.
+    expect(body.error.message).toBe("plugin 'needs-config' declares no settings: bogus, alsoBogus")
     // The whole write is refused: a partial write would leave 'url' recorded.
     expect(served.state.db.select().from(pluginSetting).all()).toEqual([])
   })
@@ -321,7 +365,7 @@ describe('/api/plugins', () => {
     expect(refused.statusCode).toBe(400)
     expect(refused.json<{ error: { message: string, detail: string[] } }>().error).toMatchObject({
       code: 'validation',
-      message: "plugin 'strict' declares no setting named: nope",
+      message: "plugin 'strict' declares no setting: nope",
       detail: ['nope'],
     })
     // Not simply refusing everything: the declared key still writes.
@@ -347,12 +391,49 @@ describe('PUT /api/plugins/:name/settings validates the values', () => {
     const error = refused.json<{ error: { code: string, message: string, detail: unknown } }>().error
     expect(error.code).toBe('validation')
     expect(error.message).toBe("plugin 'mixed' rejected the value given for: port")
-    // §9: detail carries the plugin's own issues, so a form can highlight the field.
-    expect(error.detail).toEqual([{ key: 'port', issues: [{ path: ['port'], message: 'expected a number' }] }])
+    // §9: detail carries the plugin's own issues, so a form can highlight the field. Rendered
+    // here (task 11): the fixture's issue carries no messageKey, so it falls back to its literal
+    // English message unlocalized (design §5.3).
+    expect(error.detail).toEqual([{ key: 'port', messages: ['expected a number'] }])
     // All-or-nothing: the sound key travelled in the same body and must not have landed.
     expect((await app.inject({
       method: 'GET', url: '/api/plugins/mixed/settings', headers: { cookie },
     })).json<Record<string, unknown>>()).toEqual({})
+  })
+
+  it('threads the request locale into rejectedSettings without changing a keyless message', async () => {
+    booted = await bootAndLogin({ spores: mixedFieldSchema })
+    const { app, cookie } = booted
+    const refused = await app.inject({
+      method: 'PUT', url: '/api/plugins/mixed/settings', headers: { cookie, 'accept-language': 'fr' },
+      payload: { port: 'not-a-number', label: 'fine' },
+    })
+    expect(refused.statusCode).toBe(400)
+    const error = refused.json<{ error: { message: string, detail: unknown } }>().error
+    // The wrapper is rendered in French, proving `request.locale` reached the call...
+    expect(error.message).toBe("le plugin « mixed » a refusé la valeur fournie pour : port")
+    // ...while the fixture's own issue carries no messageKey, so it renders unlocalized either
+    // way (design §5.3) — this is what makes the wrapper, not this content, the locale signal.
+    expect(error.detail).toEqual([{ key: 'port', messages: ['expected a number'] }])
+  })
+
+  it('renders detail[].messages in the request locale, from the same code path', async () => {
+    booted = await bootAndLogin({ spores: minPortSchema })
+    const { app, cookie } = booted
+    const en = await app.inject({
+      method: 'PUT', url: '/api/plugins/minport/settings', headers: { cookie },
+      payload: { port: 0 },
+    })
+    const fr = await app.inject({
+      method: 'PUT', url: '/api/plugins/minport/settings', headers: { cookie, 'accept-language': 'fr' },
+      payload: { port: 0 },
+    })
+    // The discriminating fixture: a `common`-ref messageKey, so unlike `mixed`/`eitheror` above,
+    // the per-key content itself — not just the wrapper — differs by locale.
+    expect(en.json<{ error: { detail: readonly { key: string, messages: string[] }[] } }>().error.detail)
+      .toEqual([{ key: 'port', messages: ['must be at least 1'] }])
+    expect(fr.json<{ error: { detail: readonly { key: string, messages: string[] }[] } }>().error.detail)
+      .toEqual([{ key: 'port', messages: ['doit valoir au moins 1'] }])
   })
 
   it('accepts the same keys once every value parses', async () => {
@@ -394,8 +475,8 @@ describe('PUT /api/plugins/:name/settings validates the values', () => {
     const error = refused.json<{ error: { message: string, detail: unknown } }>().error
     expect(error.message).toBe("plugin 'eitheror' rejected the value given for: socket, tcp")
     expect(error.detail).toEqual([
-      { key: 'socket', issues: [{ path: [], message: 'socket or tcp, not both' }] },
-      { key: 'tcp', issues: [{ path: [], message: 'socket or tcp, not both' }] },
+      { key: 'socket', messages: ['socket or tcp, not both'] },
+      { key: 'tcp', messages: ['socket or tcp, not both'] },
     ])
     expect((await app.inject({
       method: 'GET', url: '/api/plugins/eitheror/settings', headers: { cookie },
@@ -426,7 +507,7 @@ describe('PUT /api/plugins/:name/settings validates the values', () => {
  * fails open rather than closed when it cannot find the module (design §9, §12).
  */
 describe('a spore installed into the managed root', () => {
-  const MANIFEST = 'kind: enzyme\nname: keyring\nseptum: "^0.11"\n'
+  const MANIFEST = 'kind: enzyme\nname: keyring\nseptum: "^0.12"\n'
     + 'commands:\n  - name: keyring\n    description: Report the configured setting\n    code: handleConfigured\n'
 
   const MODULE = `
@@ -456,7 +537,7 @@ describe('a spore installed into the managed root', () => {
       list: () => Promise.resolve([{ name: 'keyring', strain: '0.2.0' }]),
       strains: () => Promise.resolve(['0.2.0']),
       detail: () => Promise.resolve({
-        name: 'keyring', kind: 'enzyme' as const, description: '', septum: '^0.11',
+        name: 'keyring', kind: 'enzyme' as const, description: '', septum: '^0.12',
         demands: { requires: [], scopes: [], externals: [], commands: [] },
       }),
       fetch: (_name: string, strain: string) => Promise.resolve({ tarball, strain }),
@@ -583,7 +664,7 @@ describe('a spore installed into the managed root', () => {
 const scopedInhibitor: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'watcher', {
     'spore.yaml': [
-      'kind: inhibitor', 'name: watcher', 'septum: "^0.11"', 'enforcing: false',
+      'kind: inhibitor', 'name: watcher', 'septum: "^0.12"', 'enforcing: false',
       'requires:', '  - rhiza: mycelium', '    scopes: [principals.read]', '',
     ].join('\n'),
     'src/index.ts': `
@@ -673,7 +754,7 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     booted = await bootAndLogin({
       spores: (dir) => {
         writeSpore(dir, 'greeter', {
-          'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^0.11"\n'
+          'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^0.12"\n'
             + 'description: Greets a new sender\n'
             + 'commands:\n  - name: hello\n    description: command.hello.description\n    respond: hello.text\n',
           'translations/en.yaml': 'command:\n  hello:\n    description: Say hello\nhello:\n  text: Hi\n',
@@ -695,7 +776,7 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     booted = await bootAndLogin({
       spores: (dir) => {
         writeSpore(dir, 'orphan', {
-          'spore.yaml': 'kind: enzyme\nname: orphan\nseptum: "^0.11"\n'
+          'spore.yaml': 'kind: enzyme\nname: orphan\nseptum: "^0.12"\n'
             + 'description: Needs a rhiza nobody installed\n'
             + 'commands:\n'
             + '  - name: first\n    description: command.first.description\n    respond: first.text\n'
@@ -725,7 +806,7 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     booted = await bootAndLogin({
       spores: (dir) => {
         writeSpore(dir, 'greeter2', {
-          'spore.yaml': 'kind: enzyme\nname: greeter2\nseptum: "^0.11"\n'
+          'spore.yaml': 'kind: enzyme\nname: greeter2\nseptum: "^0.12"\n'
             + 'commands:\n  - name: hello\n    description: command.hello.description\n    respond: hello.text\n',
           'translations/en.yaml': 'command:\n  hello:\n    description: Say hello\nhello:\n  text: Hi\n',
         })
@@ -750,7 +831,7 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
       spores: (dir) => {
         sporeDir = join(dir, 'drifter')
         writeSpore(dir, 'drifter', {
-          'spore.yaml': 'kind: enzyme\nname: drifter\nseptum: "^0.11"\n'
+          'spore.yaml': 'kind: enzyme\nname: drifter\nseptum: "^0.12"\n'
             + 'description: What germination read\n'
             + 'commands:\n  - name: drift\n    description: command.drift.description\n    respond: drift.text\n',
           'translations/en.yaml': 'command:\n  drift:\n    description: Drift\ndrift:\n  text: d\n',
@@ -760,7 +841,7 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     const { app, cookie } = booted
     writeFileSync(
       join(sporeDir, 'spore.yaml'),
-      'kind: enzyme\nname: drifter\nseptum: "^0.11"\ndescription: Edited after boot\n'
+      'kind: enzyme\nname: drifter\nseptum: "^0.12"\ndescription: Edited after boot\n'
       + 'commands:\n  - name: drift\n    description: command.drift.description\n    respond: drift.text\n',
     )
 
@@ -784,14 +865,14 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     booted = await bootAndLogin({
       spores: (dir) => {
         writeSpore(dir, 'greeter', {
-          'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^0.11"\ncommands:\n'
+          'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^0.12"\ncommands:\n'
             + '  - name: hello\n    description: command.hello.description\n    respond: hello.text\n'
             + '  - name: farewell\n    description: command.farewell.description\n    respond: farewell.text\n',
           'translations/en.yaml': 'command:\n  hello:\n    description: Say hello\n'
             + '  farewell:\n    description: Say goodbye\nhello:\n  text: Hi\nfarewell:\n  text: Bye\n',
         })
-        writeSpore(dir, 'silent', { 'spore.yaml': 'kind: rhiza\nname: silent\nseptum: "^0.11"\n' })
-        writeSpore(dir, 'commandless', { 'spore.yaml': 'kind: enzyme\nname: commandless\nseptum: "^0.11"\n' })
+        writeSpore(dir, 'silent', { 'spore.yaml': 'kind: rhiza\nname: silent\nseptum: "^0.12"\n' })
+        writeSpore(dir, 'commandless', { 'spore.yaml': 'kind: enzyme\nname: commandless\nseptum: "^0.12"\n' })
       },
     })
     const { app, cookie } = booted

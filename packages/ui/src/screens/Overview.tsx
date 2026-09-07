@@ -139,7 +139,7 @@ export function Overview(): React.JSX.Element {
     return () => { clearInterval(timer) }
   }, [health])
 
-  const dormant = readArray<{ name: string, reason: string }>(health?.dormant)
+  const dormant = readArray<{ name: string, reason: string, reasonKey?: string }>(health?.dormant)
   const enforcingBlocked = readArray<string>(health?.enforcingBlocked)
   const rhizas = readArray<RhizaHealth>(health?.rhizas)
   // status is HealthStatus, not a bare string (api/types.ts): a 'degraded' or 'unreachable'
@@ -363,13 +363,13 @@ function rolesNote(t: Translate, defaultRole: string | null | undefined): string
 
 function attentionRows(
   t: Translate,
-  dormant: readonly { name: string, reason: string }[],
+  dormant: readonly { name: string, reason: string, reasonKey?: string }[],
   rhizas: readonly RhizaHealth[],
   stats: PluginStats | undefined,
 ): readonly AttentionRow[] {
   const plugins: readonly AttentionRow[] = dormant.map((d) => {
     // One classifier for the whole SPA: the row action is DormantDiagnosis's own verdict.
-    const { action } = diagnose(d.name, d.reason)
+    const { action } = diagnose(d.name, d.reasonKey)
     return {
       name: d.name,
       // health.dormant carries no kind; /api/plugins does.

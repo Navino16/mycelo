@@ -25,8 +25,9 @@ import { availableCommands } from './authorization/available.js'
 import {
   assignRole, createRole, deleteRole, listRoles, revokeRole, setRoleCommands,
 } from './authorization/roles.js'
+import { enablePlugin } from './config/lifecycle.js'
 import {
-  enableOrThrow, formSchemaOf, listPlugins, redactSecrets, writeDeclaredSetting,
+  formSchemaOf, listPlugins, redactSecrets, writeDeclaredSetting,
 } from './config/plugins.js'
 import { setEnabled } from './config/store.js'
 import {
@@ -46,6 +47,7 @@ import {
 import { inoculate } from './sporangium/inoculate.js'
 import type { DriverFactory } from './sporangium/driver.js'
 import { addSource, deleteSource, listSources, updateSource } from './sporangium/sources.js'
+import { outcome, outcomeOf } from './mycelium-refusal.js'
 import { describeThrown } from './support/thrown.js'
 
 // Defers the call into .then() so a throwing driver rejects the returned promise
@@ -132,29 +134,31 @@ export function createMyceliumApi(
     api.findByIdentity = (channel, externalId) => toPromise(() => findByIdentity(db, channel, externalId))
   }
   if (granted.has('principals.manage')) {
-    api.markReviewed = (id) => toPromise(() => markReviewed(db, id))
-    api.setDisplayName = (id, name) => toPromise(() => setDisplayName(db, id, name))
+    api.markReviewed = (id) => outcome(() => { markReviewed(db, id) })
+    api.setDisplayName = (id, name) => outcome(() => { setDisplayName(db, id, name) })
   }
   if (granted.has('roles.read')) {
     api.listRoles = () => toPromise(() => listRoles(db))
     api.rolesOf = (id) => toPromise(() => rolesOf(db, id))
   }
   if (granted.has('roles.assign')) {
-    api.assignRole = (p, r) => toPromise(() => assignRole(db, p, r))
-    api.revokeRole = (p, r) => toPromise(() => revokeRole(db, p, r))
+    api.assignRole = (p, r) => outcome(() => { assignRole(db, p, r) })
+    api.revokeRole = (p, r) => outcome(() => { revokeRole(db, p, r) })
   }
   if (granted.has('roles.manage')) {
-    api.createRole = (name, patterns) => toPromise(() => createRole(db, name, patterns))
-    api.setRoleCommands = (name, patterns) => toPromise(() => setRoleCommands(db, name, patterns))
-    api.deleteRole = (name) => toPromise(() => deleteRole(db, name, defaultRole))
+    api.createRole = (name, patterns) => outcome(() => { createRole(db, name, patterns) })
+    api.setRoleCommands = (name, patterns) => outcome(() => { setRoleCommands(db, name, patterns) })
+    api.deleteRole = (name) => outcome(() => { deleteRole(db, name, defaultRole) })
   }
   if (granted.has('plugins.toggle')) {
-    api.enable = (name) => enableOrThrow(db, sporesDirs, name)
-    api.disable = (name) => toPromise(() => { setEnabled(db, name, false) })
+    // enablePlugin's own result is already an Outcome, refusal ref included: enableOrThrow existed
+    // only to flatten it into an Error for the old contract, and task 9 deleted it.
+    api.enable = (name) => enablePlugin(db, sporesDirs, name)
+    api.disable = (name) => outcome(() => { setEnabled(db, name, false) })
   }
   if (granted.has('plugins.configure')) {
-    api.settings = (name) => toPromise(() => redactSecrets(db, name))
-    api.setSetting = (name, key, value) => writeDeclaredSetting(db, sporesDirs, name, key, value)
+    api.settings = (name) => outcomeOf(() => redactSecrets(db, name))
+    api.setSetting = (name, key, value) => outcome(() => writeDeclaredSetting(db, sporesDirs, name, key, value))
     api.formSchema = (name) => formSchemaOf(db, sporesDirs, name)
   }
   if (granted.has('restrictions.manage')) {

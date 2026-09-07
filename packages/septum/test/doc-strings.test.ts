@@ -109,3 +109,54 @@ describe('the rejection buckets the docs enumerate match what the matcher does',
     })
   }
 })
+
+/**
+ * The other stale-doc class 0.12.0 found: eleven mycelium methods stopped rejecting and started
+ * resolving `Outcome`/`OutcomeOf`, and the README's own prose still called them a rejection.
+ * Kept in sync by hand with mycelium.ts — a method moved onto or off this list without a matching
+ * README fix is exactly what this describe block exists to catch. Scoped to the one paragraph that
+ * documents mycelium's failure behaviour, not the whole file: an unrelated "rejects" elsewhere —
+ * `inoculate`'s, the conformance kit's — must not produce a false failure.
+ */
+describe('the mycelium scope paragraph never calls an Outcome-returning method a rejection', () => {
+  const OUTCOME_METHODS = [
+    'markReviewed', 'setDisplayName', 'assignRole', 'revokeRole',
+    'createRole', 'setRoleCommands', 'deleteRole', 'enable', 'disable', 'settings', 'setSetting',
+  ] as const
+
+  function mountProse(): string {
+    const readme = read('README.md')
+    const start = readme.indexOf('`listPlugins()` and `availableLocales()` alone are synchronous')
+    const end = readme.indexOf('```yaml\nrequires:\n  - rhiza: mycelium')
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    return readme.slice(start, end)
+  }
+
+  /** A backticked mention of `name`, called or bare: `` `name( `` or `` `name` ``. */
+  function mentions(prose: string, name: string): number[] {
+    const pattern = new RegExp('`' + name + '(?=[`(])', 'g')
+    return [...prose.matchAll(pattern)].map((m) => m.index)
+  }
+
+  it('names every Outcome-returning method', () => {
+    const prose = mountProse()
+    const missing = OUTCOME_METHODS.filter((name) => mentions(prose, name).length === 0)
+    expect(missing).toEqual([])
+  })
+
+  it('never says one of them rejects, other than to deny it', () => {
+    const prose = mountProse()
+    const stale = OUTCOME_METHODS.filter((name) =>
+      mentions(prose, name).some((at) => {
+        const rest = prose.slice(at, at + 200)
+        const rejectAt = rest.search(/reject/i)
+        if (rejectAt === -1) return false
+        const before = rest.slice(Math.max(0, rejectAt - 6), rejectAt)
+        // "never reject(s)" is the one truthful way left to pair the word with these methods.
+        return !/never\s+$/i.test(before)
+      }),
+    )
+    expect(stale).toEqual([])
+  })
+})

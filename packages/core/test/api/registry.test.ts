@@ -127,7 +127,9 @@ describe('/api/graph', () => {
     const broken = body.nodes.find((n) => n.name === 'brokenyaml')
     expect(broken).toMatchObject({ state: 'dormant' })
     expect(broken?.kind).toBeUndefined()
-    expect(broken?.reason).toBeDefined()
+    // The verdict rendered at the request locale (task 9), the offending path included.
+    expect(broken?.reason)
+      .toBe("invalid manifest at 'septum': Invalid input: expected string, received undefined")
   })
 
   // needs-config parses and then refuses its empty configuration: the commonest dormancy of a
@@ -138,7 +140,27 @@ describe('/api/graph', () => {
     const body = (await app.inject({ method: 'GET', url: '/api/graph', headers: { cookie } })).json<GraphDto>()
     const node = body.nodes.find((n) => n.name === 'needs-config')
     expect(node).toMatchObject({ kind: 'enzyme', state: 'dormant' })
-    expect(node?.reason).toContain('configuration')
+    expect(node?.reason).toBe('configuration is incomplete: token: missing required field')
+  })
+
+  it('renders a dormant node reason in the request locale, and differently in each', async () => {
+    booted = await bootAndLogin({ spores: configurable })
+    const { app, cookie } = booted
+    const en = (await app.inject({
+      method: 'GET', url: '/api/graph', headers: { cookie, 'accept-language': 'en' },
+    })).json<GraphDto>()
+    const fr = (await app.inject({
+      method: 'GET', url: '/api/graph', headers: { cookie, 'accept-language': 'fr' },
+    })).json<GraphDto>()
+    const enReason = en.nodes.find((n) => n.name === 'needs-config')?.reason
+    const frReason = fr.nodes.find((n) => n.name === 'needs-config')?.reason
+    // `describeConfigError` bakes the field/message detail in one fixed format at germination
+    // time (support/thrown.ts) — only the wrapping sentence is locale-sensitive here, unlike
+    // `POST /enable`'s live-rendered `issueAt` (plugins.test.ts).
+    expect(frReason).toBe('la configuration est incomplète : token: missing required field')
+    // Both locales, not one: a route rendering at the default locale would pass a
+    // single-locale assertion and answer English to every reader (design §3).
+    expect(frReason).not.toBe(enReason)
   })
 
   it('tells a mandatory dependency edge from an optional one, and dedupes a target reached twice', async () => {
@@ -283,7 +305,7 @@ describe('the synthetic core node', () => {
   it('answers exactly one node named core when a dormant spore claims the name', async () => {
     booted = await bootAndLogin({
       spores: (dir) => {
-        writeSpore(dir, 'core', { 'spore.yaml': 'kind: rhiza\nname: core\nseptum: "^0.11"\n' })
+        writeSpore(dir, 'core', { 'spore.yaml': 'kind: rhiza\nname: core\nseptum: "^0.12"\n' })
       },
     })
     const { app, cookie } = booted
@@ -304,7 +326,7 @@ describe('the synthetic core node', () => {
     booted = await bootAndLogin({
       spores: (dir) => {
         writeSpore(dir, 'reader', {
-          'spore.yaml': 'kind: enzyme\nname: reader\nseptum: "^0.11"\n'
+          'spore.yaml': 'kind: enzyme\nname: reader\nseptum: "^0.12"\n'
             + 'commands:\n  - name: who\n    description: command.who.description\n    respond: who.text\n'
             + 'requires:\n  - rhiza: mycelium\n    scopes: [principals.read]\n',
           'translations/en.yaml': 'command:\n  who:\n    description: Who\nwho:\n  text: ok\n',

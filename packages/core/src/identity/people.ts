@@ -55,7 +55,9 @@ export function findByIdentity(db: Db, channel: string, externalId: string): Pri
 // published contract says these reject rather than resolve for an id nobody holds.
 export function requirePrincipal(db: Db, id: string): void {
   const row = db.select({ id: principal.id }).from(principal).where(eq(principal.id, id)).get()
-  if (row === undefined) throw new StoreRefusal('principal-unknown', `principal '${id}' does not exist`)
+  if (row === undefined) {
+    throw new StoreRefusal('principal-unknown', `principal '${id}' does not exist`, { id })
+  }
 }
 
 export function markReviewed(db: Db, id: string): void {

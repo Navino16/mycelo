@@ -47,7 +47,7 @@ async function addThirdParty(b: LoggedIn, label: string): Promise<SporangiumSour
 }
 
 const MANIFEST = (name: string): string =>
-  `kind: enzyme\nname: ${name}\nseptum: "^0.11"\n`
+  `kind: enzyme\nname: ${name}\nseptum: "^0.12"\n`
   + `commands:\n  - name: ${name}\n    description: x\n    respond: ${name}.reply\n`
   // `needy` is the two-warning case: third-party *and* an unsatisfied mandatory requirement.
   + (name === 'needy' ? 'requires:\n  - rhiza: absent-connector\n' : '')
@@ -73,7 +73,7 @@ async function fakeSporangium(offers: Record<string, readonly string[]>): Promis
       .map(([name, strains]): SporeOffer => ({ name, strain: strains[0] ?? '0.0.0' }))),
     strains: (name) => Promise.resolve(strainsOf(name)),
     detail: (name, strain) => Promise.resolve({
-      name, kind: 'enzyme' as const, description: `${name} at ${strain}`, septum: '^0.11',
+      name, kind: 'enzyme' as const, description: `${name} at ${strain}`, septum: '^0.12',
       demands: { requires: [], scopes: [], externals: [], commands: [] },
     }),
     fetch: (name, strain) => {
@@ -362,7 +362,7 @@ describe('browsing a sporangium', () => {
         list: () => Promise.resolve([]),
         strains: (name) => { reached += 1; return Promise.resolve(name === 'radarr' ? ['0.2.0'] : []) },
         detail: (name, strain) => Promise.resolve({
-          name, kind: 'enzyme' as const, description: '', septum: '^0.11' + strain.slice(0, 0),
+          name, kind: 'enzyme' as const, description: '', septum: '^0.12' + strain.slice(0, 0),
           demands: { requires: [], scopes: [], externals: [], commands: [] },
         }),
         fetch: () => Promise.reject(new Error('unused')),
@@ -477,7 +477,7 @@ describe('POST /api/sources/:id/inoculate', () => {
     const after = (await app.inject({ method: 'GET', url: '/api/plugins', headers: { cookie } })).json<PluginGroups>()
     // Enabled but not yet germinated, so listPlugins omits it — the limitation phase 5
     // recorded. What must never happen is a spore sitting on disk reported as absent from it.
-    expect(after.enzyme.filter((p) => p.name === 'radarr' && p.reason !== undefined)).toEqual([])
+    expect(after.enzyme.filter((p) => p.name === 'radarr' && p.reasonKey !== undefined)).toEqual([])
   })
 
   it('carries every warning inoculate produced, not the first of them', async () => {

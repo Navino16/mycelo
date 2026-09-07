@@ -12,10 +12,11 @@ import { findSpore } from '../../config/lifecycle.js'
 import { demandsOf } from '../../germination/requirements.js'
 import type { SporeDemands } from '../../germination/requirements.js'
 import { isFailure } from '../../germination/manifest.js'
-import { badRequest, notFound } from '../errors.js'
+import { badRequest, badRequestRefusal, notFound } from '../errors.js'
 import { parseBody } from '../parse.js'
 import { AliasRefused, clearAlias, setAlias } from '../../rhizomorph/aliases.js'
 import { describeThrown } from '../../support/thrown.js'
+import { renderRefusal } from '../../i18n/refusal.js'
 
 export interface PluginDto {
   name: string
@@ -27,7 +28,13 @@ export interface PluginDto {
    */
   commands: readonly string[]
   state: 'germinated' | 'dormant' | 'disabled' | 'pending' | 'unknown'
+  /** The dormancy verdict, rendered at the request's locale (design §2.2, §3). */
   reason?: string
+  /**
+   * The refusal's catalogue key, for the SPA's `diagnose` — classification must not read a
+   * translated sentence (plan correction 2, ruling R1).
+   */
+  reasonKey?: string
   /** From the install row, which can disagree with `state` until the next germination. */
   enabled: boolean
   /**
@@ -68,7 +75,7 @@ function groupByKind(plugins: readonly PluginDto[]): PluginGroups {
   return groups
 }
 
-function pluginsOf(state: RuntimeState): readonly PluginDto[] {
+function pluginsOf(state: RuntimeState, locale: string): readonly PluginDto[] {
   const installs = new Map(listInstalls(state.db).map((i) => [i.name, i]))
   const provenance = provenanceByName(state.db)
   if (state.germination.status !== 'germinated') {
@@ -96,7 +103,10 @@ function pluginsOf(state: RuntimeState): readonly PluginDto[] {
       commands: info.commands.length > 0 ? info.commands : fact?.commands ?? [],
       ...(fact?.description === undefined ? {} : { description: fact.description }),
       state: info.state,
-      ...(info.reason === undefined ? {} : { reason: info.reason }),
+      ...(info.refusal === undefined ? {} : {
+        reason: renderRefusal(state.translator, info.refusal, locale),
+        reasonKey: info.refusal.key,
+      }),
       enabled: installs.get(info.name)?.enabled ?? info.enabled,
       ...(info.source === undefined ? {} : { source: info.source }),
       ...(info.strain === undefined ? {} : { strain: info.strain }),
@@ -121,11 +131,11 @@ function mountedScopesOf(state: RuntimeState, name: string): readonly MyceliumSc
 const aliasSchema = z.object({ alias: z.string().min(1) })
 
 export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState): void {
-  app.get('/api/plugins', () => groupByKind(pluginsOf(state)))
+  app.get('/api/plugins', (request) => groupByKind(pluginsOf(state, request.locale)))
 
   app.get('/api/plugins/:name', (request): PluginDetailDto => {
     const { name } = request.params as { name: string }
-    const found = pluginsOf(state).find((p) => p.name === name)
+    const found = pluginsOf(state, request.locale).find((p) => p.name === name)
     if (found === undefined) throw notFound('api.pluginNotFound', { plugin: name })
     const read = findSpore(state.config.discoveryDirs, name)
     const mounted = mountedScopesOf(state, name)
@@ -143,7 +153,15 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     // never a throw, so an exception reaching here is a genuine fault and must not be
     // relabelled a client mistake (task 10's review, Important 3, applied here too).
     const result = await enablePlugin(state.db, state.config.discoveryDirs, name)
-    if (!result.ok) throw badRequest('api.pluginEnableRefused', { plugin: name }, result.reason)
+    if (!result.ok) {
+      // The rendered sentence, not the ref: §3 — the server holds the locale, so nothing on the
+      // wire needs resolving, and a client showing `detail` has a sentence to show.
+      throw badRequest(
+        'api.pluginEnableRefused',
+        { plugin: name },
+        renderRefusal(state.translator, result.refusal, request.locale),
+      )
+    }
     return { ok: true, restartRequired: state.germination.status === 'germinated' }
   })
 
@@ -210,13 +228,20 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     const form = await formSchemaOf(state.db, state.config.discoveryDirs, name)
     const bad = undeclaredKeys(form, keys)
     if (bad.length > 0) {
-      // detail carries the structure (§9): a form wanting to highlight fields would
+      // One wording for this verdict, shared with the mycelium's own `setting-undeclared`
+      // refusal (§4). detail keeps the structure: a form wanting to highlight fields would
       // otherwise have to parse the localized sentence back apart.
-      throw badRequest('api.pluginSettingUndeclared', { plugin: name, keys: bad.join(', ') }, bad)
+      throw badRequestRefusal(
+        'setting-undeclared',
+        { plugin: name, count: bad.length, keys: bad.join(', ') },
+        bad,
+      )
     }
     // Declared is not valid: without this an enabled plugin takes a value that makes it
     // dormant at the next boot, which is the failure enablePlugin() exists to prevent (§8).
-    const rejected = await rejectedSettings(state.db, state.config.discoveryDirs, name, body)
+    const rejected = await rejectedSettings(
+      state.db, state.config.discoveryDirs, name, body, state.translator, request.locale,
+    )
     if (rejected.length > 0) {
       const rejectedKeys = rejected.map((r) => r.key).join(', ')
       throw badRequest('api.pluginSettingInvalid', { plugin: name, keys: rejectedKeys }, rejected)

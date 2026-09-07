@@ -1,16 +1,18 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { septumIncompatibility } from '@mycelo/septum'
-import type { Enzyme, Hypha, Inhibitor, Logger, Manifest, Rhiza } from '@mycelo/septum'
-import { describeUndeclaredSecrets, undeclaredSecretKeys } from '../config/plugins.js'
+import type { Enzyme, Hypha, Inhibitor, Logger, Manifest, Rhiza, TranslatableRef } from '@mycelo/septum'
+import { undeclaredSecretKeys, undeclaredSecretsRefusal } from '../config/plugins.js'
 import { getInstall } from '../config/store.js'
 import { loadCatalogs } from '../i18n/catalog.js'
+import { CORE_DOMAIN, SHARED_DOMAIN } from '../i18n/core-catalogs.js'
 import type { LocaleMessages } from '../i18n/catalog.js'
 import type { Db } from '../persistence/db.js'
 import { describeConfigError } from '../support/thrown.js'
 import { resolve, targetName } from './anastomoses.js'
 import type { AnyOfChoice } from './anastomoses.js'
 import { discover } from './discover.js'
+import { dormancyRefusal } from './fault.js'
 import { loadModule } from './load.js'
 import { isFailure, readManifest } from './manifest.js'
 import type { ReadManifest } from './manifest.js'
@@ -46,7 +48,7 @@ function dormantRequirements(
 
 /**
  * Walks the spores directory, resolves dependencies, then loads only the survivors in
- * topological order. A spore that fails goes dormant with a reason; only a command
+ * topological order. A spore that fails goes dormant with a refusal ref; only a command
  * collision halts the whole phase (spec §8). CycleError propagates out untouched.
  */
 export async function germinate(
@@ -54,6 +56,11 @@ export async function germinate(
   logger: Logger,
   pluginConfig: Readonly<Record<string, unknown>> = {},
   db?: Db,
+  /**
+   * Renders a dormancy refusal for the log, at the default locale (ruling R7). Defaults to
+   * the bare key, so germination itself stays ignorant of catalogues.
+   */
+  renderReason: (refusal: TranslatableRef) => string = (refusal) => refusal.key,
 ): Promise<Registry> {
   // A missing directory and a missing config file both resolve quietly to defaults
   // (spec-compliant on their own), but their combination — run from the wrong cwd —
@@ -80,7 +87,7 @@ export async function germinate(
       // enforcing inhibitor refuses all traffic, and admission runs before parsing — so
       // /plugin-disable cannot undo what it says it already did.
       if (db !== undefined && getInstall(db, location.directory)?.enabled === false) continue
-      dormant.push({ name: location.directory, reason: read.reason })
+      dormant.push({ name: location.directory, refusal: read.refusal })
       // No validated name to report: the directory is all a failed manifest leaves.
       if (read.enforcingInhibitor) brokenEnforcing.push(location.directory)
     } else {
@@ -103,7 +110,7 @@ export async function germinate(
   // Names that went dormant during this walk — resolve() cannot see a module-load or
   // shape failure, so a dependent's `mandatory`/`resolved` sets may still name one that
   // just failed.
-  const failed = new Map<string, string>()
+  const failed = new Map<string, TranslatableRef>()
   const catalogs = new Map<string, LocaleMessages>()
 
   for (const spore of resolution.order) {
@@ -111,36 +118,41 @@ export async function germinate(
     const markBroken = (): void => {
       if (manifest.kind === 'inhibitor' && manifest.enforcing) brokenEnforcing.push(manifest.name)
     }
+    const goDormant = (refusal: TranslatableRef): void => {
+      dormant.push({ name: manifest.name, refusal })
+      failed.set(manifest.name, refusal)
+      markBroken()
+    }
     // design §10: refused here as well as at inoculate, because a spore installed by an
     // older core, or dropped into a local root by hand, never went through inoculate.
     const incompatible = septumIncompatibility(manifest.septum)
     if (incompatible !== undefined) {
-      const reason = `spore '${manifest.name}' ${incompatible}`
-      dormant.push({ name: manifest.name, reason })
-      failed.set(manifest.name, reason)
-      markBroken()
+      goDormant(dormancyRefusal('refusal.plugin.septumIncompatible',
+        { plugin: manifest.name, detail: incompatible }))
       continue
     }
     // design §3: the runtime owns these two domains, and a spore taking either would
     // replace the bot's own refusal sentences.
-    if (manifest.name === 'core' || manifest.name === 'common') {
-      const reason = `'${manifest.name}' is a reserved translation domain`
-      dormant.push({ name: manifest.name, reason })
-      failed.set(manifest.name, reason)
-      markBroken()
+    if (manifest.name === CORE_DOMAIN || manifest.name === SHARED_DOMAIN) {
+      goDormant(dormancyRefusal('refusal.germination.reservedDomain', { plugin: manifest.name }))
       continue
     }
-    const cause = [...spore.mandatory].find((name) => failed.has(name))
-    if (cause !== undefined) {
-      // No re-collapse (design §2.2); if the cause was an any_of choice, the message
-      // names the untried alternatives alongside it.
+    // Name and ref together, narrowed in one step: read separately, `cause` is a string whose
+    // ref is `TranslatableRef | undefined`, and a bag omitting `cause` renders the bare key.
+    const failure = [...spore.mandatory]
+      .map((name) => [name, failed.get(name)] as const)
+      .find((entry): entry is readonly [string, TranslatableRef] => entry[1] !== undefined)
+    if (failure !== undefined) {
+      const [cause, causeRef] = failure
       const anyOf = spore.anyOf.find((choice) => choice.chosen === cause)
-      const reason = anyOf !== undefined
-        ? `requires one of rhiza ${anyOf.alternatives.map((n) => `'${n}'`).join(', ')}; '${cause}' was chosen and is dormant: ${failed.get(cause)}`
-        : `requires rhiza '${cause}', which is dormant: ${failed.get(cause)}`
-      dormant.push({ name: manifest.name, reason })
-      failed.set(manifest.name, reason)
-      markBroken()
+      // No re-collapse (design §2.2); if the cause was an any_of choice, the refusal
+      // names the untried alternatives alongside it.
+      const listed = anyOf?.alternatives.map((n) => `'${n}'`).join(', ')
+      goDormant(anyOf !== undefined
+        ? dormancyRefusal('refusal.germination.anyOfDependencyDormant',
+          { alternatives: listed, chosen: cause, cause: causeRef })
+        : dormancyRefusal('refusal.germination.dependencyDormant',
+          { rhiza: cause, cause: causeRef }))
       continue
     }
     // An optional dependency that turned out dormant is not this spore's problem (core
@@ -153,10 +165,8 @@ export async function germinate(
     try {
       catalog = loadCatalogs(join(spore.read.location.path, 'translations'))
     } catch (e) {
-      const reason = (e as Error).message
-      dormant.push({ name: manifest.name, reason })
-      failed.set(manifest.name, reason)
-      markBroken()
+      const detail = (e as Error).message
+      goDormant(dormancyRefusal('refusal.germination.catalogFailed', { detail }))
       continue
     }
     try {
@@ -169,52 +179,33 @@ export async function germinate(
           // Duck-typed, never instanceof: a spore is bundled with its own copy of Zod.
           const parsed = module.configSchema.safeParse(declared)
           if (!parsed.success) {
-            const reason = `configuration rejected: ${describeConfigError(parsed.error)}`
-            dormant.push({ name: manifest.name, reason })
-            failed.set(manifest.name, reason)
-            markBroken()
+            const detail = describeConfigError(parsed.error)
+            // `issues` is the only name the shipped `refusal.config.incomplete` message
+            // interpolates; REFUSAL_PARAMS is what now rejects a bag that drifts from it.
+            goDormant(dormancyRefusal('refusal.config.incomplete', { issues: detail }))
             continue
           }
           const badSecrets = undeclaredSecretKeys(module.configSchema)
           if (badSecrets.length > 0) {
-            const reason = describeUndeclaredSecrets(badSecrets)
-            dormant.push({ name: manifest.name, reason })
-            failed.set(manifest.name, reason)
-            markBroken()
+            goDormant(undeclaredSecretsRefusal(badSecrets))
             continue
           }
           config = parsed.data
         }
         instance = module.create()
         if (manifest.kind === 'hypha') {
-          const problem = hyphaShapeError(instance, manifest.kind) ?? capabilityShapeError(instance as Record<string, unknown>, manifest)
-          if (problem !== null) {
-            dormant.push({ name: manifest.name, reason: problem })
-            failed.set(manifest.name, problem)
-            continue
-          }
+          const problem = hyphaShapeError(instance, manifest.kind)
+            ?? capabilityShapeError(instance as Record<string, unknown>, manifest)
+          if (problem !== null) { goDormant(problem); continue }
         } else if (manifest.kind === 'rhiza') {
           const problem = rhizaShapeError(instance)
-          if (problem !== null) {
-            dormant.push({ name: manifest.name, reason: problem })
-            failed.set(manifest.name, problem)
-            continue
-          }
+          if (problem !== null) { goDormant(problem); continue }
         } else if (manifest.kind === 'inhibitor') {
           const problem = inhibitorShapeError(instance)
-          if (problem !== null) {
-            dormant.push({ name: manifest.name, reason: problem })
-            failed.set(manifest.name, problem)
-            markBroken()
-            continue
-          }
+          if (problem !== null) { goDormant(problem); continue }
         } else {
           const problem = enzymeShapeError(instance, manifest.commands)
-          if (problem !== null) {
-            dormant.push({ name: manifest.name, reason: problem })
-            failed.set(manifest.name, problem)
-            continue
-          }
+          if (problem !== null) { goDormant(problem); continue }
           const enzyme = instance as Enzyme
           const unreferenced = unreferencedHandlers(enzyme, manifest.commands)
           const handlerCount = Object.keys(enzyme.handlers).length
@@ -250,14 +241,12 @@ export async function germinate(
         })
       }
     } catch (e) {
-      const reason = (e as Error).message
-      dormant.push({ name: manifest.name, reason })
-      failed.set(manifest.name, reason)
-      markBroken()
+      const detail = (e as Error).message
+      goDormant(dormancyRefusal('refusal.germination.moduleCreateThrew', { detail }))
     }
   }
 
-  for (const d of dormant) logger.warn(`spore '${d.name}' is dormant`, { reason: d.reason })
+  for (const d of dormant) logger.warn(`spore '${d.name}' is dormant`, { reason: renderReason(d.refusal) })
   if (hyphae.length === 0 && enzymes.length === 0) {
     logger.warn('germination produced zero spores: no channel and no command will ever answer')
   }

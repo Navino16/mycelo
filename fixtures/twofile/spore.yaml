@@ -1,6 +1,6 @@
 kind: enzyme
 name: twofile
-septum: "^0.11"
+septum: "^0.12"
 description: A plugin in two files, unbundled. Test fixture, never distributed.
 commands:
   - name: two

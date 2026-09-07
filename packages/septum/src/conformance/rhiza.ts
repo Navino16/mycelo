@@ -13,6 +13,12 @@ export interface RhizaHarness {
   module: RhizaModule<unknown, unknown>
   validConfig?: unknown
   invalidConfig?: unknown
+  /**
+   * Already-parsed catalogues, keyed by locale — parseManifest's convention, since the kit must not
+   * import `node:fs`. Supplying them lets the config check see a refusal key that resolves nowhere
+   * (design §6). Their own compilation is not checked here yet: that is the wider 9.7 item.
+   */
+  catalogs?: Record<string, unknown>
 }
 
 /**
@@ -39,7 +45,7 @@ export async function rhizaChecks(harness: RhizaHarness): Promise<string[]> {
   if (incompatible !== undefined) failures.push(`the manifest ${incompatible}`)
 
   failures.push(
-    ...configSchemaFailures(harness.module.configSchema, harness.validConfig, harness.invalidConfig),
+    ...configSchemaFailures(harness.module.configSchema, harness.validConfig, harness.invalidConfig, harness.catalogs),
   )
 
   let instance: Rhiza<unknown, unknown>

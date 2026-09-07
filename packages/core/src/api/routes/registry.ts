@@ -5,6 +5,8 @@ import { listInstalls } from '../../config/store.js'
 import { targetName } from '../../germination/anastomoses.js'
 import type { Dormant, GerminatedEnzyme, GerminatedInhibitor, Registry } from '../../germination/registry.js'
 import { aggregateHealth } from '../../supervision/health.js'
+import { renderRefusal } from '../../i18n/refusal.js'
+import type { Translator } from '../../i18n/translator.js'
 
 export interface CommandDto {
   plugin: string
@@ -45,6 +47,11 @@ export interface GraphNode {
    * its live health state wins, which is what the Overview reads off /api/health (ruling F11).
    */
   state: 'germinated' | 'dormant' | 'degraded' | 'unreachable'
+  /**
+   * A rhiza's live health detail (`state` degraded/unreachable, ruling F11), or the rendered
+   * dormancy verdict (`state` dormant, design §2.2) — never both. No `reasonKey` here, unlike
+   * the other two DTOs: no consumer classifies on this field (plan defect 21).
+   */
   reason?: string
 }
 
@@ -118,6 +125,8 @@ function nodesOf(
   registry: Registry,
   recordedKind: ReadonlyMap<string, SporeKind>,
   unhealthy: ReadonlyMap<string, { state: 'degraded' | 'unreachable', detail?: string }>,
+  translator: Translator,
+  locale: string,
 ): readonly GraphNode[] {
   return [
     { name: CORE_NODE, state: 'germinated' },
@@ -140,7 +149,7 @@ function nodesOf(
       name: d.name,
       ...(recordedKind.has(d.name) ? { kind: recordedKind.get(d.name) } : {}),
       state: 'dormant',
-      reason: d.reason,
+      reason: renderRefusal(translator, d.refusal, locale),
     })),
   ]
 }
@@ -162,7 +171,7 @@ export function registerRegistryRoutes(app: FastifyInstance, state: RuntimeState
     return groupByPlugin(commands)
   })
 
-  app.get('/api/graph', async (): Promise<GraphDto> => {
+  app.get('/api/graph', async (request): Promise<GraphDto> => {
     if (state.germination.status !== 'germinated') return { nodes: [], edges: [] }
     const { registry } = state.germination.mycelium
     // The same probe /api/health runs, so both screens read one verdict per fetch — the graph
@@ -176,7 +185,7 @@ export function registerRegistryRoutes(app: FastifyInstance, state: RuntimeState
         ...(h.status.detail === undefined ? {} : { detail: h.status.detail }),
       }]))
     const recordedKind = new Map(listInstalls(state.db).map((i) => [i.name, i.kind as SporeKind]))
-    const nodes = nodesOf(registry, recordedKind, unhealthy)
+    const nodes = nodesOf(registry, recordedKind, unhealthy, state.translator, request.locale)
     const placed = new Set(nodes.map((n) => n.name))
     const edges = [
       ...[...registry.enzymes, ...registry.inhibitors].flatMap(edgesOf),

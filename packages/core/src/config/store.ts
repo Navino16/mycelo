@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import type { Db } from '../persistence/db.js'
 import { pluginInstall, pluginSetting } from '../persistence/schema.js'
+import { StoreRefusal } from '../authorization/refusal.js'
 
 export interface InstalledPlugin {
   name: string
@@ -47,7 +48,9 @@ export function removeInstall(db: Db, name: string): void {
 }
 
 export function setEnabled(db: Db, name: string, enabled: boolean): void {
-  if (getInstall(db, name) === null) throw new Error(`plugin '${name}' is not installed`)
+  if (getInstall(db, name) === null) {
+    throw new StoreRefusal('plugin-not-installed', `plugin '${name}' is not installed`, { plugin: name })
+  }
   db.update(pluginInstall).set({ enabled }).where(eq(pluginInstall.name, name)).run()
 }
 
@@ -66,7 +69,9 @@ export function readSettings(db: Db, name: string): Record<string, unknown> {
 // Takes is_secret raw and rewrites it on conflict. config/plugins.ts's rewriteSetting holds the
 // invariants — promote-never-demote and the redaction-mask guard — so a new caller belongs there.
 export function writeSetting(db: Db, name: string, key: string, value: unknown, isSecret: boolean): void {
-  if (getInstall(db, name) === null) throw new Error(`plugin '${name}' is not installed`)
+  if (getInstall(db, name) === null) {
+    throw new StoreRefusal('plugin-not-installed', `plugin '${name}' is not installed`, { plugin: name })
+  }
   db.insert(pluginSetting)
     .values({ pluginName: name, key, value: JSON.stringify(value), isSecret })
     .onConflictDoUpdate({

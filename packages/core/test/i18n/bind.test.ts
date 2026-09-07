@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import type { TranslatableRef } from '@mycelo/septum'
 import type { Translator } from '../../src/i18n/translator.js'
 import { bindTranslate } from '../../src/i18n/bind.js'
 
@@ -69,6 +70,51 @@ describe('bindTranslate', () => {
     // Even with 'core' somehow in the allowed set: the runtime's messages change without
     // notice for plugin authors (design §3.1).
     expect(() => t({ domain: 'core', key: 'command.denied' })).toThrow("translation domain 'core' is not declared")
+  })
+
+  it('renders a nested ref before ICU sees it, in a declared domain', () => {
+    const translator = spy()
+    const t = bindTranslate({
+      translator, domain: 'media', allowed: new Set(['mock']), localeOf: () => 'en',
+    })
+    t({ domain: 'common', key: 'a', params: { cause: { domain: 'mock', key: 'why' } } })
+    // The rendered sentence, not the object: without resolution ICU is handed a non-primitive
+    // and the parameter reaches the reader as '[object Object]'.
+    expect(translator.calls[1]).toBe('common|a|en|{"cause":"mock:why"}')
+  })
+
+  it('joins an array parameter, refs and primitives alike', () => {
+    const translator = spy()
+    const t = bindTranslate({ translator, domain: 'media', allowed: new Set(), localeOf: () => 'en' })
+    t('listed', { issues: [{ domain: 'common', key: 'one' }, { domain: 'common', key: 'two' }], plain: ['a', 'b'] })
+    // Joined here, never in ICU: IntlMessageFormat.format returns an array for a non-primitive
+    // parameter, and stringifying that prepends a comma.
+    expect(translator.calls[2]).toBe('media|listed|en|{"issues":"common:one, common:two","plain":"a, b"}')
+  })
+
+  it('renders a nested ref of an undeclared domain as its bare key, without throwing', () => {
+    const translator = spy()
+    const t = bindTranslate({ translator, domain: 'media', allowed: new Set(['mock']), localeOf: () => 'en' })
+    // §5.3: `allowed` is the authority for a nested ref too, or a crafted ref would let one
+    // spore read another's catalogue through a path nothing audits. Both the undeclared domain
+    // and `core` — a gate testing only one of the two is half a gate.
+    t({ domain: 'common', key: 'a', params: { third: { domain: 'radarr', key: 'secret' } } })
+    expect(translator.calls[0]).toBe('common|a|en|{"third":"secret"}')
+    const closed = bindTranslate({
+      translator, domain: 'media', allowed: new Set(['core']), localeOf: () => 'en',
+    })
+    closed({ domain: 'common', key: 'a', params: { third: { domain: 'core', key: 'api.internalError' } } })
+    expect(translator.calls[1]).toBe('common|a|en|{"third":"api.internalError"}')
+  })
+
+  it('caps the depth of a self-referential ref rather than overflowing', () => {
+    const translator = spy()
+    const t = bindTranslate({ translator, domain: 'media', allowed: new Set(), localeOf: () => 'en' })
+    const ref: TranslatableRef = { domain: 'media', key: 'loop' }
+    ref.params = { cause: ref }
+    // A plugin can hand ctx.t a cycle; the cap must render rather than kill the bus.
+    expect(t(ref)).toBe('media:loop')
+    expect(translator.calls.length).toBe(9)
   })
 
   it("merges a ref's own params with the call's, the call winning", () => {

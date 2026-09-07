@@ -1,8 +1,12 @@
 import { resolve } from 'node:path'
 import { expect, it } from 'bun:test'
 import { MYCELIUM_SCOPES } from '@mycelo/septum'
-import type { EnzymeContext, Invocation, Translate } from '@mycelo/septum'
+import type { EnzymeContext, Invocation, Logger, Translate, TranslatableRef } from '@mycelo/septum'
 import { readManifest } from '../../src/germination/manifest.js'
+import { undeclaredSecretsRefusal } from '../../src/config/plugins.js'
+import { bindTranslate } from '../../src/i18n/bind.js'
+import { loadCoreCatalogs } from '../../src/i18n/core-catalogs.js'
+import { createTranslator } from '../../src/i18n/translator.js'
 import module from '../../../../fixtures/admin/src/index.js'
 
 function invocation(args: Record<string, string>, message: Partial<Invocation['message']> = {}): Invocation {
@@ -49,7 +53,9 @@ function stubContext(
       if (c.text !== undefined) replies.push(c.text)
       return Promise.resolve()
     },
-    t: extra.t ?? ((key: string) => key),
+    // A ref renders as `domain/key`: a handler that dropped ctx.t and printed the object,
+    // or picked the wrong key, is visible without duplicating the catalogue here.
+    t: extra.t ?? ((key: string | TranslatableRef) => (typeof key === 'string' ? key : `${key.domain}/${key.key}`)),
     principal: extra.principal ?? { id: 'alice' },
   } as unknown as EnzymeContext
 }
@@ -57,7 +63,12 @@ function stubContext(
 it('plugin-set stores a bare number as a number and a bare word as a string', async () => {
   const written: Array<[string, string, unknown]> = []
   const ctx = stubContext(
-    { setSetting: (n: string, k: string, v: unknown) => { written.push([n, k, v]); return Promise.resolve() } },
+    {
+      setSetting: (n: string, k: string, v: unknown) => {
+        written.push([n, k, v])
+        return Promise.resolve({ ok: true })
+      },
+    },
     [],
   )
   const handlers = module.create().handlers
@@ -68,23 +79,103 @@ it('plugin-set stores a bare number as a number and a bare word as a string', as
   expect(written[1]).toEqual(['radarr', 'url', 'http://x'])
 })
 
-it('plugin-enable reports the refusal reason verbatim', async () => {
+it('plugin-enable renders the refusal through ctx.t rather than reporting success', async () => {
   const replies: string[] = []
   const ctx = stubContext(
-    { enable: () => Promise.reject(new Error('configuration is incomplete: url')) },
+    {
+      enable: () => Promise.resolve({
+        ok: false, refusal: { domain: 'common', key: 'refusal.config.incomplete' },
+      }),
+    },
     replies,
   )
   await module.create().handlers['handlePluginEnable']?.(invocation({ name: 'needs-config' }), ctx)
-  // Verbatim, not merely "contains": a swallowed or truncated reason leaves the operator
-  // with nothing to act on.
-  expect(replies[0]).toBe('configuration is incomplete: url')
+  // The refusal, not "enabled needs-config": a dropped `ok` check reads a refusal as success.
+  expect(replies).toEqual(['common/refusal.config.incomplete'])
+})
+
+const silent: Logger = { info() {}, warn() {}, error() {}, debug() {}, child: () => silent }
+
+/**
+ * The real binding over the shipped catalogues: the stub `t` above renders `domain/key` and can
+ * therefore never see a parameter. Design §3 assigns the channel surface to `ctx.t`, so this is
+ * the one place the flagship refusal's own sentence is measured.
+ */
+function realT(locale: string): Translate {
+  return bindTranslate({
+    translator: createTranslator({ defaultLocale: 'en', logger: silent, catalogs: loadCoreCatalogs() }),
+    domain: 'admin',
+    allowed: new Set(),
+    localeOf: () => locale,
+  })
+}
+
+/** Exactly what enablePlugin builds: two issues, each wrapped in `issueAt` by its path (§2.4). */
+const INCOMPLETE: TranslatableRef = {
+  domain: 'common',
+  key: 'refusal.config.incomplete',
+  params: {
+    issues: [
+      {
+        domain: 'common',
+        key: 'refusal.config.issueAt',
+        params: {
+          field: 'url',
+          cause: { domain: 'common', key: 'refusal.config.invalidType', params: { expected: 'string' } },
+        },
+      },
+      {
+        domain: 'common',
+        key: 'refusal.config.issueAt',
+        params: {
+          field: 'port',
+          cause: { domain: 'common', key: 'refusal.config.tooSmall', params: { origin: 'number', minimum: 1 } },
+        },
+      },
+    ],
+  },
+}
+
+it('renders an incomplete-configuration refusal through the real ctx.t, in both locales', async () => {
+  const rendered: Record<string, string> = {}
+  for (const locale of ['en', 'fr']) {
+    const replies: string[] = []
+    const ctx = stubContext(
+      { enable: () => Promise.resolve({ ok: false, refusal: INCOMPLETE }) },
+      replies,
+      { t: realT(locale) },
+    )
+    await module.create().handlers['handlePluginEnable']?.(invocation({ name: 'needs-config' }), ctx)
+    rendered[locale] = replies[0] ?? ''
+  }
+  // Both locales, and the whole sentence: an array of refs left unresolved renders
+  // ',[object Object],[object Object]' with no assertion on the nested half able to see it.
+  expect(rendered['en'])
+    .toBe('configuration is incomplete: url: expected string, port: must be at least 1')
+  expect(rendered['fr'])
+    .toBe('la configuration est incomplète : url : attend string, port : doit valoir au moins 1')
+})
+
+it('renders an undeclared-secret refusal through the real ctx.t, joining its keys', async () => {
+  const replies: string[] = []
+  const ctx = stubContext(
+    { enable: () => Promise.resolve({ ok: false, refusal: undeclaredSecretsRefusal(['token', 'apiKey']) }) },
+    replies,
+    { t: realT('fr') },
+  )
+  await module.create().handlers['handlePluginEnable']?.(invocation({ name: 'vault' }), ctx)
+  // Two keys, so the plural branch and the join are both exercised: a bare array reaches ICU
+  // as a non-primitive and comes back with a leading comma.
+  expect(replies[0]).toBe(
+    "la configuration déclare des secrets 'token', 'apiKey' que le schéma ne possède pas",
+  )
 })
 
 it('plugin-disable reports success', async () => {
   const replies: string[] = []
   const disabled: string[] = []
   const ctx = stubContext(
-    { disable: (n: string) => { disabled.push(n); return Promise.resolve() } },
+    { disable: (n: string) => { disabled.push(n); return Promise.resolve({ ok: true }) } },
     replies,
   )
   await module.create().handlers['handlePluginDisable']?.(invocation({ name: 'radarr' }), ctx)
@@ -92,24 +183,57 @@ it('plugin-disable reports success', async () => {
   expect(replies[0]).toBe('disabled radarr')
 })
 
-it('plugin-disable reports the refusal reason verbatim, not "command failed"', async () => {
+it('plugin-disable renders the refusal, not "disabled ghost"', async () => {
   const replies: string[] = []
   const ctx = stubContext(
-    { disable: () => Promise.reject(new Error("plugin 'ghost' is not installed")) },
+    {
+      disable: () => Promise.resolve({
+        ok: false, refusal: { domain: 'common', key: 'refusal.plugin.notInstalled', params: { plugin: 'ghost' } },
+      }),
+    },
     replies,
   )
   await module.create().handlers['handlePluginDisable']?.(invocation({ name: 'ghost' }), ctx)
-  expect(replies[0]).toBe("plugin 'ghost' is not installed")
+  expect(replies).toEqual(['common/refusal.plugin.notInstalled'])
 })
 
-it('plugin-set reports the refusal reason verbatim, not "command failed"', async () => {
+it('plugin-set renders the refusal, not "set x on ghost"', async () => {
   const replies: string[] = []
   const ctx = stubContext(
-    { setSetting: () => Promise.reject(new Error("plugin 'ghost' is not installed")) },
+    {
+      setSetting: () => Promise.resolve({
+        ok: false, refusal: { domain: 'common', key: 'refusal.plugin.notInstalled', params: { plugin: 'ghost' } },
+      }),
+    },
     replies,
   )
   await module.create().handlers['handlePluginSet']?.(invocation({ name: 'ghost', key: 'x', value: '1' }), ctx)
-  expect(replies[0]).toBe("plugin 'ghost' is not installed")
+  expect(replies).toEqual(['common/refusal.plugin.notInstalled'])
+})
+
+// The seventh handler this contract change reached, and the one that appeared only on its
+// success path: a dropped `ok` check answers "revoked 'ghost' from bob" for a role nobody holds.
+it('revoke renders the refusal, not "revoked ghost from bob"', async () => {
+  const replies: string[] = []
+  const revoked: Array<[string, string]> = []
+  const ctx = stubContext(
+    {
+      findByIdentity: () => Promise.resolve({ id: 'p1' }),
+      revokeRole: (id: string, role: string) => {
+        revoked.push([id, role])
+        return Promise.resolve({
+          ok: false, refusal: { domain: 'common', key: 'refusal.role.notFound', params: { role } },
+        })
+      },
+    },
+    replies,
+  )
+  await module.create().handlers['handleRevoke']?.(
+    invocation({ role: 'ghost', who: 'bob' }, { channel: 'console' }), ctx,
+  )
+  // The call was made and the refusal came back from it, so this is not an early return.
+  expect(revoked).toEqual([['p1', 'ghost']])
+  expect(replies).toEqual(['common/refusal.role.notFound'])
 })
 
 it('plugin-list reports each plugin\'s kind and state, including a disabled plugin', async () => {
@@ -118,7 +242,10 @@ it('plugin-list reports each plugin\'s kind and state, including a disabled plug
     {
       listPlugins: () => [
         { name: 'radarr', kind: 'rhiza', commands: [], state: 'germinated', enabled: true },
-        { name: 'broken', commands: [], state: 'dormant', reason: 'manifest did not parse', enabled: true },
+        {
+          name: 'broken', commands: [], state: 'dormant', enabled: true,
+          refusal: { domain: 'common', key: 'refusal.plugin.unreadableManifest' },
+        },
         { name: 'sonarr', kind: 'rhiza', commands: [], state: 'disabled', enabled: false },
       ],
     },
@@ -132,27 +259,32 @@ it('plugin-list reports each plugin\'s kind and state, including a disabled plug
 
 it('plugin-config reports no settings when there are none', async () => {
   const replies: string[] = []
-  const ctx = stubContext({ settings: () => Promise.resolve({}) }, replies)
+  const ctx = stubContext({ settings: () => Promise.resolve({ ok: true, value: {} }) }, replies)
   await module.create().handlers['handlePluginConfig']?.(invocation({ name: 'radarr' }), ctx)
   expect(replies[0]).toBe('no settings')
 })
 
-// settings() now rejects for an uninstalled plugin, so the one handler with no catch
-// would answer "command 'plugin-config' failed" instead of naming the plugin.
-it('plugin-config reports the refusal reason verbatim, not "command failed"', async () => {
+// settings() refuses for an uninstalled plugin, and its refusal arm carries no `value`:
+// a handler reading `result.value` regardless would print 'no settings' for a plugin
+// that does not exist.
+it('plugin-config renders the refusal, not "no settings"', async () => {
   const replies: string[] = []
   const ctx = stubContext(
-    { settings: () => Promise.reject(new Error("plugin 'ghost' is not installed")) },
+    {
+      settings: () => Promise.resolve({
+        ok: false, refusal: { domain: 'common', key: 'refusal.plugin.notInstalled', params: { plugin: 'ghost' } },
+      }),
+    },
     replies,
   )
   await module.create().handlers['handlePluginConfig']?.(invocation({ name: 'ghost' }), ctx)
-  expect(replies[0]).toBe("plugin 'ghost' is not installed")
+  expect(replies).toEqual(['common/refusal.plugin.notInstalled'])
 })
 
 it('plugin-config lists settings, secrets already redacted by the mycelium', async () => {
   const replies: string[] = []
   const ctx = stubContext(
-    { settings: () => Promise.resolve({ url: 'http://x', apiKey: '••••' }) },
+    { settings: () => Promise.resolve({ ok: true, value: { url: 'http://x', apiKey: '••••' } }) },
     replies,
   )
   await module.create().handlers['handlePluginConfig']?.(invocation({ name: 'radarr' }), ctx)

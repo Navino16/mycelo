@@ -16,6 +16,12 @@ export interface InhibitorHarness {
   /** Messages the inhibitor is expected to allow, and to deny. */
   allowed: IncomingMessage[]
   denied: IncomingMessage[]
+  /**
+   * Already-parsed catalogues, keyed by locale — parseManifest's convention, since the kit must not
+   * import `node:fs`. Supplying them lets the config check see a refusal key that resolves nowhere
+   * (design §6). Their own compilation is not checked here yet: that is the wider 9.7 item.
+   */
+  catalogs?: Record<string, unknown>
 }
 
 /**
@@ -49,7 +55,7 @@ export async function inhibitorChecks(harness: InhibitorHarness): Promise<string
   if (incompatible !== undefined) failures.push(`the manifest ${incompatible}`)
 
   failures.push(
-    ...configSchemaFailures(harness.module.configSchema, harness.validConfig, harness.invalidConfig),
+    ...configSchemaFailures(harness.module.configSchema, harness.validConfig, harness.invalidConfig, harness.catalogs),
   )
 
   let instance: Inhibitor<unknown>

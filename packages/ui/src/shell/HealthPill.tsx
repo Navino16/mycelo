@@ -39,7 +39,7 @@ export function healthPillState(
   if (error) return { state: 'offline', issues: 0 }
   if (health === null) return { state: 'unreadable', issues: 0 }
   const blocked = readArray<string>(health.enforcingBlocked)
-  const dormant = readArray<{ name: string, reason: string }>(health.dormant)
+  const dormant = readArray<{ name: string, reason: string, reasonKey?: string }>(health.dormant)
   const rhizas = readArray<RhizaHealth>(health.rhizas)
   // Absent is not empty (CriticalBanner): a payload with no enforcingBlocked cannot be read
   // as "nothing is blocked", or a mute bot reports healthy.
