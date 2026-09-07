@@ -1,8 +1,9 @@
 import { rmSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'bun:test'
-import { bootAndLogin, closeBooted, cyclingPair, cyclingTriple, unhealthyRhiza } from './support.js'
+import { bootAndLogin, brokenManifest, closeBooted, cyclingPair, cyclingTriple, unhealthyRhiza } from './support.js'
 import type { LoggedIn } from './support.js'
 import type { RuntimeHealth } from '../../src/supervision/health.js'
+import type { RuntimeHealthDto } from '../../src/api/routes/health.js'
 
 let booted: LoggedIn | undefined
 
@@ -61,6 +62,28 @@ describe('/api/health', () => {
     // This is what makes the remedy reachable at all (spec §4.1).
     expect((await app.inject({ method: 'GET', url: '/api/people', headers: { cookie } })).statusCode).toBe(200)
   })
+
+  it('renders a dormant spore reason in the request locale, and differently in each', async () => {
+    booted = await bootAndLogin({ spores: brokenManifest })
+    const { app, cookie } = booted
+    const en = (await app.inject({
+      method: 'GET', url: '/api/health', headers: { cookie, 'accept-language': 'en' },
+    })).json<RuntimeHealthDto>()
+    const fr = (await app.inject({
+      method: 'GET', url: '/api/health', headers: { cookie, 'accept-language': 'fr' },
+    })).json<RuntimeHealthDto>()
+    const enEntry = en.dormant.find((d) => d.name === 'brokenyaml')
+    const frEntry = fr.dormant.find((d) => d.name === 'brokenyaml')
+    expect(enEntry?.reason)
+      .toBe("invalid manifest at 'septum': Invalid input: expected string, received undefined")
+    expect(frEntry?.reason)
+      .toBe("manifeste invalide à « septum » : Invalid input: expected string, received undefined")
+    // Both locales, not one: a route rendering at the default locale would pass a
+    // single-locale assertion and answer English to every reader (design §3).
+    expect(frEntry?.reason).not.toBe(enEntry?.reason)
+    expect(enEntry?.reasonKey).toBe('refusal.germination.invalidManifest')
+    expect(frEntry?.reasonKey).toBe('refusal.germination.invalidManifest')
+  })
 })
 
 describe('/api/germination/retry', () => {
@@ -93,5 +116,36 @@ describe('/api/germination/retry', () => {
     // alpha and beta still cycle: the operator disabled the wrong one and sees a shorter
     // cycle rather than a success (spec §4.2).
     expect(retry.json<RuntimeHealth>()).toMatchObject({ mode: 'degraded', failure: { kind: 'cycle' } })
+  })
+
+  // The retry handler builds its own RuntimeHealthDto rather than sharing the GET route's
+  // renderer; a copy that skipped rendering would leave this one English-only regardless of
+  // the request's locale. Disabling 'beta' also leaves 'alpha' dormant on a second, distinct
+  // cause (requiredRhizaMissing) — its own dormancy sentence was covered by nothing before
+  // this route rendered it, unlike invalidManifest (germinate.test.ts's five-cause guard).
+  it('renders the retry response at the request locale, and every dormancy as a sentence, never as its own dotted key', async () => {
+    booted = await bootAndLogin({
+      spores: (dir) => { cyclingPair(dir); brokenManifest(dir) },
+    })
+    const { app, cookie } = booted
+    expect(booted.served.state.germination.status).toBe('degraded')
+    await app.inject({ method: 'POST', url: '/api/plugins/beta/disable', headers: { cookie } })
+    const retry = await app.inject({
+      method: 'POST', url: '/api/germination/retry', headers: { cookie, 'accept-language': 'fr' },
+    })
+    const body = retry.json<RuntimeHealthDto>()
+    expect(body.mode).toBe('germinated')
+    // The premise: two distinct dormancy causes, or the guard below proves nothing.
+    expect(body.dormant.map((d) => d.name).sort()).toEqual(['alpha', 'brokenyaml'])
+    for (const entry of body.dormant) expect(entry.reason).not.toMatch(/^refusal\./)
+
+    const brokenyaml = body.dormant.find((d) => d.name === 'brokenyaml')
+    expect(brokenyaml?.reason)
+      .toBe("manifeste invalide à « septum » : Invalid input: expected string, received undefined")
+    expect(brokenyaml?.reasonKey).toBe('refusal.germination.invalidManifest')
+
+    const alpha = body.dormant.find((d) => d.name === 'alpha')
+    expect(alpha?.reason).toBe("requiert le rhiza « beta », qui n'est pas installé")
+    expect(alpha?.reasonKey).toBe('refusal.germination.requiredRhizaMissing')
   })
 })

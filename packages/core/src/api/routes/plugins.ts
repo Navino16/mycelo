@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import type { MyceliumScope, SporeKind, TranslatableRef } from '@mycelo/septum'
+import type { MyceliumScope, SporeKind } from '@mycelo/septum'
 import type { RuntimeState } from '../../boot/state.js'
 import { enablePlugin } from '../../config/lifecycle.js'
 import {
@@ -28,11 +28,13 @@ export interface PluginDto {
    */
   commands: readonly string[]
   state: 'germinated' | 'dormant' | 'disabled' | 'pending' | 'unknown'
+  /** The dormancy verdict, rendered at the request's locale (design §2.2, §3). */
+  reason?: string
   /**
-   * The dormancy verdict, unrendered. Task 9 renders it at the request's locale; until then
-   * this route carries no sentence at all (design §2.2).
+   * The refusal's catalogue key, for the SPA's `diagnose` — classification must not read a
+   * translated sentence (plan correction 2, ruling R1).
    */
-  refusal?: TranslatableRef
+  reasonKey?: string
   /** From the install row, which can disagree with `state` until the next germination. */
   enabled: boolean
   /**
@@ -73,7 +75,7 @@ function groupByKind(plugins: readonly PluginDto[]): PluginGroups {
   return groups
 }
 
-function pluginsOf(state: RuntimeState): readonly PluginDto[] {
+function pluginsOf(state: RuntimeState, locale: string): readonly PluginDto[] {
   const installs = new Map(listInstalls(state.db).map((i) => [i.name, i]))
   const provenance = provenanceByName(state.db)
   if (state.germination.status !== 'germinated') {
@@ -101,7 +103,10 @@ function pluginsOf(state: RuntimeState): readonly PluginDto[] {
       commands: info.commands.length > 0 ? info.commands : fact?.commands ?? [],
       ...(fact?.description === undefined ? {} : { description: fact.description }),
       state: info.state,
-      ...(info.refusal === undefined ? {} : { refusal: info.refusal }),
+      ...(info.refusal === undefined ? {} : {
+        reason: renderRefusal(state.translator, info.refusal, locale),
+        reasonKey: info.refusal.key,
+      }),
       enabled: installs.get(info.name)?.enabled ?? info.enabled,
       ...(info.source === undefined ? {} : { source: info.source }),
       ...(info.strain === undefined ? {} : { strain: info.strain }),
@@ -126,11 +131,11 @@ function mountedScopesOf(state: RuntimeState, name: string): readonly MyceliumSc
 const aliasSchema = z.object({ alias: z.string().min(1) })
 
 export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState): void {
-  app.get('/api/plugins', () => groupByKind(pluginsOf(state)))
+  app.get('/api/plugins', (request) => groupByKind(pluginsOf(state, request.locale)))
 
   app.get('/api/plugins/:name', (request): PluginDetailDto => {
     const { name } = request.params as { name: string }
-    const found = pluginsOf(state).find((p) => p.name === name)
+    const found = pluginsOf(state, request.locale).find((p) => p.name === name)
     if (found === undefined) throw notFound('api.pluginNotFound', { plugin: name })
     const read = findSpore(state.config.discoveryDirs, name)
     const mounted = mountedScopesOf(state, name)

@@ -71,13 +71,27 @@ describe('/api/plugins', () => {
     // Not vanished, and not miscategorised into a kind it never validated as.
     expect(broken).toMatchObject({ state: 'dormant' })
     expect(broken?.kind).toBeUndefined()
-    // The dormancy verdict, unrendered until task 9 mounts the renderer here. Without this the
-    // route could drop the field entirely and only the SPA would notice.
-    expect(broken?.refusal).toEqual({
-      domain: 'common',
-      key: 'refusal.germination.invalidManifest',
-      params: { path: 'septum', detail: 'Invalid input: expected string, received undefined' },
-    })
+    expect(broken?.reason)
+      .toBe("invalid manifest at 'septum': Invalid input: expected string, received undefined")
+    expect(broken?.reasonKey).toBe('refusal.germination.invalidManifest')
+  })
+
+  it('renders a dormant plugin reason in the request locale, and differently in each', async () => {
+    booted = await bootAndLogin({ spores: brokenManifest })
+    const { app, cookie } = booted
+    const en = (await app.inject({
+      method: 'GET', url: '/api/plugins', headers: { cookie, 'accept-language': 'en' },
+    })).json<PluginGroups>()
+    const fr = (await app.inject({
+      method: 'GET', url: '/api/plugins', headers: { cookie, 'accept-language': 'fr' },
+    })).json<PluginGroups>()
+    const enReason = en.unknown.find((p) => p.name === 'brokenyaml')?.reason
+    const frReason = fr.unknown.find((p) => p.name === 'brokenyaml')?.reason
+    expect(frReason)
+      .toBe("manifeste invalide à « septum » : Invalid input: expected string, received undefined")
+    // Both locales, not one: a route rendering at the default locale would pass a
+    // single-locale assertion and answer English to every reader (design §3).
+    expect(frReason).not.toBe(enReason)
   })
 
   it('reports the sporangium label and the strain of an installed spore, and neither for a local one', async () => {
