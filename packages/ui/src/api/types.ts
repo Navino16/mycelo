@@ -83,7 +83,7 @@ export interface RhizaHealth {
 export interface RuntimeHealth {
   mode: 'germinated' | 'degraded'
   failure?: GerminationFailure
-  dormant: readonly { name: string, reason: string, reasonKey?: string }[]
+  dormant: readonly { name: string, reason: string, reasonKey: string }[]
   /** Any one entry means the bot refuses all traffic on every channel (design §7). */
   enforcingBlocked: readonly string[]
   rhizas: readonly RhizaHealth[]

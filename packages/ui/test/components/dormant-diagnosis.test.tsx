@@ -50,11 +50,9 @@ describe('the dormant diagnosis', () => {
     expect(screen.getByText('Something it depends on is missing')).toBeDefined()
   })
 
-  // germinate.ts:113-114 quote the dependency's own refusal verbatim after the outer cause, so
-  // the nested text still contains 'configuration is incomplete'. Ruling F14's regex classifier
-  // read the sentence and misclassified this as config; classifying on the key removes the
-  // failure mode structurally — the outer key wins whatever the nested cause is, because the
-  // nested ref is never consulted.
+  // ruling F14: germinate.ts:113-114 quotes the dependency's own refusal verbatim, so the
+  // nested text still reads 'configuration is incomplete' — the outer key wins regardless,
+  // so the nesting can no longer mislead the classifier.
   it('diagnoses a dependency whose own refusal was a configuration one as a dependency, never as config', () => {
     renderDiagnosis(
       "requires one of rhiza 'jellyfin', 'plex'; 'plex' was chosen and is dormant: "

@@ -73,7 +73,7 @@ const SUBSTRATE: SubstrateDto = {
 /** One attention row, so a degradation test can watch that section survive on its own. */
 const ONE_DORMANT: RuntimeHealth = {
   ...GERMINATED,
-  dormant: [{ name: 'radarr', reason: 'Configuration rejected: api_key returned 401.' }],
+  dormant: [{ name: 'radarr', reason: 'Configuration rejected: api_key returned 401.', reasonKey: 'refusal.config.incomplete' }],
 }
 
 /** The Overview reads only `substrate` off the chrome; the counts belong to the sidebar. */
@@ -192,7 +192,7 @@ describe('the overview', () => {
 
   // brief §5: the metaphor never replaces information — the reason travels with the name.
   it('names a dormant plugin beside its literal reason, never the word alone', async () => {
-    await withHealth({ ...GERMINATED, dormant: [{ name: 'radarr', reason: 'apiKey: missing required field' }] })
+    await withHealth({ ...GERMINATED, dormant: [{ name: 'radarr', reason: 'apiKey: missing required field', reasonKey: 'refusal.config.incomplete' }] })
 
     expect(screen.getByText('radarr')).toBeDefined()
     expect(screen.getByText('apiKey: missing required field')).toBeDefined()
@@ -317,7 +317,7 @@ describe('the mute takeover', () => {
     await withHealth({
       ...GERMINATED,
       enforcingBlocked: ['group-gate'],
-      dormant: [{ name: 'radarr', reason: 'apiKey: missing required field' }],
+      dormant: [{ name: 'radarr', reason: 'apiKey: missing required field', reasonKey: 'refusal.config.incomplete' }],
       blockedSinceBoot: 41,
     }, BUSY)
 
@@ -337,7 +337,7 @@ describe('the mute takeover', () => {
   // The takeover is the *mute* condition's alone: a degraded substrate still has numbers
   // worth reading, and hiding them would make journey D unusable on an ordinary bad day.
   it('keeps the body for a merely degraded substrate', async () => {
-    await withHealth({ ...GERMINATED, dormant: [{ name: 'radarr', reason: 'apiKey: missing' }] })
+    await withHealth({ ...GERMINATED, dormant: [{ name: 'radarr', reason: 'apiKey: missing', reasonKey: 'refusal.config.incomplete' }] })
 
     expect(screen.queryByText('The bot is answering nobody')).toBeNull()
     expect(screen.getByText('radarr')).toBeDefined()
@@ -505,7 +505,7 @@ describe('the mute takeover', () => {
     await withHealth({
       ...GERMINATED,
       enforcingBlocked: ['group-gate'],
-      dormant: [{ name: 'radarr', reason: 'configuration rejected: api_key: field required' }],
+      dormant: [{ name: 'radarr', reason: 'configuration rejected: api_key: field required', reasonKey: 'refusal.config.incomplete' }],
       rhizas: [{ rhiza: 'jellyfin', status: { state: 'unreachable', checkedAt: 'x' } }],
     }, {
       ...BUSY,
@@ -761,7 +761,7 @@ describe('what needs attention', () => {
   it('never renders the table headed and empty when the chosen filter matches no row', async () => {
     await withHealth({
       ...GERMINATED,
-      dormant: [{ name: 'radarr', reason: 'Configuration rejected.' }],
+      dormant: [{ name: 'radarr', reason: 'Configuration rejected.', reasonKey: 'refusal.config.incomplete' }],
     }, BUSY)
 
     fireEvent.click(screen.getByRole('button', { name: /^Unreachable/ }))
@@ -963,7 +963,7 @@ describe('the guided path out of an empty substrate', () => {
   // are installed and go dormant — the operator must see both, not one hiding the other.
   it('renders the guided start above the dormant reason, not instead of it', async () => {
     await withHealth(
-      { ...GERMINATED, dormant: [{ name: 'radarr', reason: 'apiKey: missing required field' }] },
+      { ...GERMINATED, dormant: [{ name: 'radarr', reason: 'apiKey: missing required field', reasonKey: 'refusal.config.incomplete' }] },
       { sources: [], plugins: { ...COMPLETE_PLUGINS, hypha: [] }, roles: [] },
     )
 
