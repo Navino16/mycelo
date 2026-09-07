@@ -10,6 +10,7 @@ import type {
   MyceliumScope,
   Outcome,
   OutcomeOf,
+  PluginInfo,
   PluginsConfigure,
   PluginsRead,
   PluginsToggle,
@@ -189,6 +190,14 @@ export const _g: string = inhibitor.t('refused')
 
 // A ref's params are optional.
 export const _ref: TranslatableRef = { domain: 'mock', key: 'lookup.unknown' }
+
+// PluginInfo.refusal: present only when dormant, and only the ref, no rendering (task 9).
+const dormant: PluginInfo = {
+  name: 'x', kind: 'rhiza', commands: [], state: 'dormant', enabled: true,
+  refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' },
+}
+const dormantRefusal: TranslatableRef | undefined = dormant.refusal
+void dormantRefusal
 
 declare const locales: LocaleManage
 export const _h: readonly string[] = locales.availableLocales()

@@ -473,6 +473,31 @@ it('gives a dormant entry the kind its install row recorded, and none when there
   close()
 })
 
+it('carries the dormancy refusal through to PluginInfo', () => {
+  const registry = {
+    ...emptyRegistry(),
+    dormant: [{
+      name: 'broken', reason: 'create() returned no inspect()',
+      refusal: { domain: 'common', key: 'refusal.germination.inhibitorNoInspect' },
+    }],
+  } as unknown as Registry
+  const info = listPlugins(registry, []).find((p) => p.name === 'broken')
+  expect(info?.refusal).toEqual({ domain: 'common', key: 'refusal.germination.inhibitorNoInspect' })
+})
+
+// Correction 7's site: the row survives so the operator can recover it, and it is the one
+// dormancy verdict `Dormant` never carries — the spore is not in the registry at all.
+it('answers the notOnDisk refusal for an install row whose directory has gone', () => {
+  const { db, close } = fresh()
+  recordInstall(db, 'vanished', 'rhiza', true)
+  const info = listPlugins(emptyRegistry(), [], db).find((p) => p.name === 'vanished')
+  expect(info?.state).toBe('dormant')
+  expect(info?.refusal).toEqual({
+    domain: 'common', key: 'refusal.plugin.notOnDisk', params: { plugin: 'vanished' },
+  })
+  close()
+})
+
 // The other three germinated kinds. Both tests above use an enzyme, and dropping the spread
 // from any one of hyphae, rhizas or inhibitors left the whole suite green — while design
 // §14.2 step 9's own subject, `radarr`, is a rhiza.

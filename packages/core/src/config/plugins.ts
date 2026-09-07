@@ -71,6 +71,7 @@ export function listPlugins(registry: Registry, sporesDirs: readonly string[], d
     commands: [],
     state: 'dormant' as const,
     reason: d.reason,
+    ...(d.refusal === undefined ? {} : { refusal: d.refusal }),
     enabled: true,
     ...from(d.name),
   }))
@@ -93,6 +94,11 @@ export function listPlugins(registry: Registry, sporesDirs: readonly string[], d
         ...base,
         state: 'dormant' as const,
         reason: `no spore named '${install.name}' is present on disk`,
+        refusal: {
+          domain: SHARED_DOMAIN,
+          key: 'refusal.plugin.notOnDisk',
+          params: { plugin: install.name },
+        },
         enabled: true,
       }]
     })

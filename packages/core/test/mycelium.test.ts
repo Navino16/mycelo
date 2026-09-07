@@ -532,7 +532,10 @@ it("keeps the mycelium's plugin list consistent with bootstrap()'s own registry 
   expect(observed.plugins).toEqual([
     { name: 'good', kind: 'hypha', commands: [], state: 'germinated', enabled: true },
     { name: 'admin', kind: 'enzyme', commands: ['probe'], state: 'germinated', enabled: true },
-    { name: 'bad', kind: 'hypha', commands: [], state: 'dormant', reason: 'boom', enabled: true },
+    {
+      name: 'bad', kind: 'hypha', commands: [], state: 'dormant', reason: 'boom', enabled: true,
+      refusal: { domain: 'common', key: 'refusal.startup.hyphaListenFailed', params: { detail: 'boom' } },
+    },
   ])
 })
 
@@ -595,7 +598,11 @@ it("keeps the mycelium's plugin list consistent when an inhibitor's start() thro
   const observed = (admin?.instance as unknown as { observed: Record<string, unknown> }).observed
   const listed = observed.plugins as Record<string, unknown>[]
   expect(listed.filter((p) => p.name === 'softgate')).toEqual([
-    { name: 'softgate', kind: 'inhibitor', commands: [], state: 'dormant', reason: 'gate cannot start', enabled: true },
+    {
+      name: 'softgate', kind: 'inhibitor', commands: [], state: 'dormant', reason: 'gate cannot start',
+      enabled: true,
+      refusal: { domain: 'common', key: 'refusal.startup.startFailed', params: { detail: 'gate cannot start' } },
+    },
   ])
 })
 

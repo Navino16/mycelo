@@ -629,6 +629,7 @@ describe('an install with no spore on disk', () => {
     expect(api.listPlugins()).toContainEqual({
       name: 'vanished', kind: 'rhiza', commands: [],
       state: 'dormant', reason: "no spore named 'vanished' is present on disk", enabled: true,
+      refusal: { domain: 'common', key: 'refusal.plugin.notOnDisk', params: { plugin: 'vanished' } },
     })
   })
 

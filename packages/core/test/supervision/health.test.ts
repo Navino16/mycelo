@@ -109,6 +109,23 @@ describe('aggregateRuntimeHealth', () => {
       .toEqual([['boom', 'unreachable', 'socket closed'], ['fine', 'healthy', undefined]])
   })
 
+  it('carries the refusal beside each dormant entry', async () => {
+    const germination = {
+      status: 'germinated' as const,
+      mycelium: {
+        registry: registry({
+          dormant: [{
+            name: 'broken', reason: 'x',
+            refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' },
+          }],
+        }),
+        ...NO_ADMISSION,
+      },
+    } as unknown as Germination
+    const health = await aggregateRuntimeHealth(germination)
+    expect(health.dormant[0]?.refusal?.key).toBe('refusal.germination.rhizaNoApi')
+  })
+
   it('answers starting as degraded rather than inventing a third mode', async () => {
     expect((await aggregateRuntimeHealth({ status: 'starting' })).mode).toBe('degraded')
   })
