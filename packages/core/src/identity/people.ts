@@ -121,7 +121,7 @@ function likeEscaped(column: SQLiteColumn, needle: string): SQL {
 /** A person is one principal across several channel identities (spec §5.4, UI brief §9). */
 export function searchPrincipals(db: Db, query: PeopleQuery): PeoplePage {
   const conditions = []
-  if (query.search !== undefined) {
+  if (query.search !== undefined && query.search !== '') {
     const needle = `%${escapeLike(query.search)}%`
     // Two queries, not a raw sql subquery (task-13 brief): matches on either the
     // channel's own display name or its external id.

@@ -103,6 +103,20 @@ describe('searchPrincipals', () => {
     close()
   })
 
+  it('an empty search matches every principal, including one with null displayName and no identities', () => {
+    const { db, close } = fresh()
+    person(db, 'p1', 'Alice')
+    // Create p2 with null displayName and no channel identities: the edge case
+    db.insert(principal).values({
+      id: 'p2',
+      displayName: null,
+      createdAt: new Date(Date.parse('2026-01-01T00:00:00Z') + 2),
+    }).run()
+    const result = searchPrincipals(db, { page: 1, perPage: 10, search: '' }).items.map((p) => p.id).sort()
+    expect(result).toEqual(['p1', 'p2'])
+    close()
+  })
+
   it('filters the never-reviewed, and returns the others when asked', () => {
     const { db, close } = fresh()
     person(db, 'p1', 'Alice'); person(db, 'p2', 'Bob')
