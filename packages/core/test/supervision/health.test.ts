@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import type { Germination } from '../../src/boot/state.js'
-import { aggregateRuntimeHealth } from '../../src/supervision/health.js'
+import { aggregateHealth, aggregateRuntimeHealth } from '../../src/supervision/health.js'
 import type { Registry } from '../../src/germination/registry.js'
 
 function registry(over: Partial<Registry>): Registry {
@@ -160,5 +160,30 @@ describe('the mute counter reaches the health payload', () => {
 
   it('answers zero for a substrate that never germinated', async () => {
     expect((await aggregateRuntimeHealth({ status: 'starting' })).blockedSinceBoot).toBe(0)
+  })
+})
+
+describe('aggregateHealth timeout', () => {
+  // 9.5 review, M8: aggregateHealth caught a throw but not a `health()` that never resolves, and
+  // the graph became a second route a hanging rhiza could hang. A never-settling promise, not a
+  // slow one: a timer-based fake would pass against a `setTimeout` the code does not have.
+  it('reports a rhiza whose health() never resolves as unreachable', async () => {
+    const hanging = registry({
+      rhizas: [{ name: 'plex', instance: { health: () => new Promise<never>(() => undefined) } }],
+    } as unknown as Partial<Registry>)
+    const health = await aggregateHealth(hanging, 20)
+    expect(health).toHaveLength(1)
+    expect(health[0]?.status.state).toBe('unreachable')
+    expect(health[0]?.status.detail).toContain('did not answer')
+  })
+
+  it('still reports a healthy rhiza that answers well inside the bound', async () => {
+    const quick = registry({
+      rhizas: [{
+        name: 'plex',
+        instance: { health: () => Promise.resolve({ state: 'healthy' as const, checkedAt: new Date() }) },
+      }],
+    } as unknown as Partial<Registry>)
+    expect((await aggregateHealth(quick, 20))[0]?.status.state).toBe('healthy')
   })
 })
