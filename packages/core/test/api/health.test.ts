@@ -42,6 +42,18 @@ describe('/api/health', () => {
     expect(body.failure?.kind === 'cycle' ? [...body.failure.spores].sort() : []).toEqual(['alpha', 'beta'])
   })
 
+  // task 13's degraded-mode audit: none of RuntimeHealth's fields are optional on the wire,
+  // so the degraded branch must answer each one's empty value rather than omit it.
+  it('answers every RuntimeHealth field while degraded, none of them absent', async () => {
+    booted = await bootAndLogin({ spores: cyclingPair })
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/health', headers: { cookie } })).json<RuntimeHealth>()
+    expect(body.dormant).toEqual([])
+    expect(body.enforcingBlocked).toEqual([])
+    expect(body.rhizas).toEqual([])
+    expect(body.blockedSinceBoot).toBe(0)
+  })
+
   // Nothing drove a throwing health() through this route before the whole-branch review:
   // one rejecting rhiza rejected the Promise.all and answered 500, suppressing the very
   // screen that carries enforcingBlocked (spec §11).

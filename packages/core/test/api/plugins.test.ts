@@ -55,6 +55,20 @@ describe('/api/plugins', () => {
     expect(body.unknown).toEqual([])
   })
 
+  // task 13's degraded-mode audit: this branch reads install rows only, so it must not
+  // report the manifest-declared commands or scopes a dormant-while-others-germinate plugin
+  // gets (spec §4.1) — nothing is known about any individual plugin while degraded.
+  it('answers commands and scopes empty for every plugin while degraded, never the manifest facts', async () => {
+    booted = await bootAndLogin({ spores: cyclingPair })
+    const { app, cookie } = booted
+    expect(booted.served.state.germination.status).toBe('degraded')
+    const body = (await app.inject({ method: 'GET', url: '/api/plugins', headers: { cookie } })).json<PluginGroups>()
+    const alpha = body.rhiza.find((p) => p.name === 'alpha')
+    expect(alpha).toMatchObject({ kind: 'rhiza', commands: [], scopes: [], enabled: true })
+    expect(alpha?.reason).toBeUndefined()
+    expect(alpha?.reasonKey).toBeUndefined()
+  })
+
   it('groups every kind, with an always-present unknown bucket, and never drops a plugin whose manifest never parsed', async () => {
     booted = await bootAndLogin({ spores: brokenManifest })
     const { app, cookie } = booted
@@ -770,6 +784,33 @@ describe('GET /api/plugins/:name, declared against mounted', () => {
     expect(body.state).toBe('germinated')
     expect(body.demands?.scopes).toEqual(['principals.read'])
     expect(body.mounted).toEqual(['principals.read'])
+  })
+
+  // Whole-system degraded (cyclingPair), not one plugin's own state: mountedScopesOf's top
+  // check answers undefined for every plugin, but findSpore reads the manifest off disk
+  // regardless of germination, so demands stays present while mounted stays absent.
+  it('answers demands but not mounted for any plugin while the whole substrate is degraded', async () => {
+    booted = await bootAndLogin({ spores: cyclingPair })
+    const { app, cookie } = booted
+    expect(booted.served.state.germination.status).toBe('degraded')
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/plugins/alpha', headers: { cookie },
+    })).json<{
+      state: string
+      commands: string[]
+      scopes: string[]
+      demands?: { requires: unknown[] }
+      mounted?: string[]
+    }>()
+
+    expect(body.state).toBe('unknown')
+    expect(body.commands).toEqual([])
+    expect(body.scopes).toEqual([])
+    expect(body.demands?.requires).toEqual([
+      { targets: ['beta'], anyOf: false, optional: false, scopes: [] },
+    ])
+    expect(body.mounted).toBeUndefined()
   })
 
   // Superseded by task 12, on purpose: the list now carries the manifest-declared scopes too,
