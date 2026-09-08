@@ -493,6 +493,48 @@ it('writing the mask back to a secret leaves the credential intact, and refuses 
   close()
 })
 
+// Found on a running bot via `/plugin-set keep token ••••`: the mask is 4 characters, so a
+// schema requiring a longer secret refused it as incomplete before rewriteSetting was ever
+// reached, and the operator was told their configuration was wrong when nothing was.
+function keepMinLength(): void {
+  mkdirSync(join(dir, 'keep', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'keep', 'spore.yaml'),
+    'kind: enzyme\nname: keep\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: keep\n    description: x\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(
+    join(dir, 'keep', 'src/index.ts'),
+    'export default {\n'
+      + '  configSchema: {\n'
+      + '    secrets: [\'token\'],\n'
+      + '    safeParse: (input) => (typeof input?.token === \'string\' && input.token.length >= 8)\n'
+      + '      ? { success: true, data: input }\n'
+      + '      : { success: false, error: { issues: [{ path: [\'token\'], message: \'too short\' }] } },\n'
+      + '    toJsonSchema: () => ({ properties: { token: { type: \'string\', minLength: 8 } } }),\n'
+      + '  },\n'
+      + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+      + '}\n',
+    'utf8',
+  )
+}
+
+it('a length-constrained secret set to the mask refuses as unchanged, not as incomplete', async () => {
+  const { db, close } = fresh()
+  keepMinLength()
+  recordInstall(db, 'keep', 'enzyme')
+  await writeDeclaredSetting(db, [dir], 'keep', 'token', 'longenough')
+  const result = await writeDeclaredSetting(db, [dir], 'keep', 'token', REDACTED)
+  expect(result.ok).toBe(false)
+  const refusal = result.ok ? undefined : result.refusal
+  expect(refusal?.key).toBe('refusal.config.maskedSecretUnchanged')
+  expect(refusal === undefined ? '' : renderRefusal(translator, refusal, 'en'))
+    .toBe("plugin 'keep' setting 'token' was left unchanged: a masked secret cannot be written back")
+  expect(readSettings(db, 'keep')).toEqual({ token: 'longenough' })
+  close()
+})
+
 // The discriminating case: a guard keying off the string alone, not `isSecret`, would
 // drop this write too and pass the other two tests.
 it('the mask is an ordinary value on a key that is not secret', async () => {

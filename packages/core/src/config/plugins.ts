@@ -249,11 +249,17 @@ export async function writeDeclaredSetting(
       refusal: refusalRef('refusal.plugin.settingUndeclared', { plugin: name, count: 1, keys: key }),
     }
   }
+  const secrets = await secretKeysOf(db, sporesDirs, name)
+  // A masked secret must skip validation the same way rewriteSetting will skip the write, or a
+  // length-constrained secret's own schema refuses a mask this path was never going to store.
+  if (isMaskedSecretUnchanged(db, name, key, value, secrets)) {
+    return { ok: false, refusal: refusalRef('refusal.config.maskedSecretUnchanged', { plugin: name, key }) }
+  }
   const rejected = await rejectedSettingRefs(db, sporesDirs, name, key, value)
   if (rejected.length > 0) {
     return { ok: false, refusal: refusalRef('refusal.config.incomplete', { issues: rejected }) }
   }
-  const written = rewriteSetting(db, name, key, value, await secretKeysOf(db, sporesDirs, name))
+  const written = rewriteSetting(db, name, key, value, secrets)
   if (!written) {
     return { ok: false, refusal: refusalRef('refusal.config.maskedSecretUnchanged', { plugin: name, key }) }
   }
@@ -388,17 +394,21 @@ function existingIsSecret(db: Db, name: string, key: string): boolean {
   return existing?.isSecret ?? false
 }
 
+// A key is secret from the stored row's `is_secret` **or** the plugin's own declaration —
+// never `secrets.includes(key)` alone, which would let a non-secret field whose value happens
+// to be the mask literal skip validation too.
+function isSecretKey(db: Db, name: string, key: string, secrets: readonly string[]): boolean {
+  return existingIsSecret(db, name, key) || secrets.includes(key)
+}
+
 /**
  * `rewriteSetting`'s own drop condition, exported so a caller validating a proposed write can
- * skip the same keys it will silently drop (task 3.1). A key is secret from the stored row's
- * `is_secret` **or** the plugin's own declaration — never `secrets.includes(key)` alone, which
- * would let a non-secret field whose value happens to be the mask literal skip validation too.
+ * skip the same keys it will silently drop (task 3.1).
  */
 export function isMaskedSecretUnchanged(
   db: Db, name: string, key: string, value: unknown, secrets: readonly string[] = [],
 ): boolean {
-  const isSecret = existingIsSecret(db, name, key) || secrets.includes(key)
-  return isSecret && value === REDACTED
+  return isSecretKey(db, name, key, secrets) && value === REDACTED
 }
 
 // Promote, never demote. writeSetting() rewrites is_secret too, so carrying the row's flag
@@ -408,9 +418,10 @@ export function isMaskedSecretUnchanged(
 export function rewriteSetting(
   db: Db, name: string, key: string, value: unknown, secrets: readonly string[] = [],
 ): boolean {
+  const isSecret = isSecretKey(db, name, key, secrets)
   // A form is handed '••••' by redactSecrets and sends the whole object back. Writing it would
   // replace the credential with its own mask, with is_secret still true and no way to tell.
-  if (isMaskedSecretUnchanged(db, name, key, value, secrets)) return false
-  writeSetting(db, name, key, value, existingIsSecret(db, name, key) || secrets.includes(key))
+  if (isSecret && value === REDACTED) return false
+  writeSetting(db, name, key, value, isSecret)
   return true
 }
