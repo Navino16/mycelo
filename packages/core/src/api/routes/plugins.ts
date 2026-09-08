@@ -4,8 +4,8 @@ import type { MyceliumScope, SporeKind } from '@mycelo/septum'
 import type { RuntimeState } from '../../boot/state.js'
 import { enablePlugin } from '../../config/lifecycle.js'
 import {
-  formSchemaOf, listPlugins, manifestFactsByName, provenanceByName, redactSecrets, rejectedSettings,
-  rewriteSetting, secretKeysOf, undeclaredKeys,
+  formSchemaOf, isMaskedSecretUnchanged, listPlugins, manifestFactsByName, provenanceByName,
+  redactSecrets, rejectedSettings, rewriteSetting, secretKeysOf, undeclaredKeys,
 } from '../../config/plugins.js'
 import { clearSetting, getInstall, listInstalls, setEnabled } from '../../config/store.js'
 import { findSpore } from '../../config/lifecycle.js'
@@ -244,10 +244,18 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
         bad,
       )
     }
+    // Resolved before `proposed`, not only before the transaction: a masked secret must skip
+    // validation the same way rewriteSetting will skip the write, or a length-constrained
+    // secret's own schema refuses a '••••' the route was never going to store (task 3.1).
+    const secrets = await secretKeysOf(state.db, state.config.discoveryDirs, name)
     // Declared is not valid: without this an enabled plugin takes a value that makes it
     // dormant at the next boot, which is the failure enablePlugin() exists to prevent (§8).
     // `null` clears a key rather than setting it, so it must skip the schema, not fail it.
-    const proposed = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== null))
+    const proposed = Object.fromEntries(
+      Object.entries(body).filter(([key, v]) => (
+        v !== null && !isMaskedSecretUnchanged(state.db, name, key, v, secrets)
+      )),
+    )
     const rejected = await rejectedSettings(
       state.db, state.config.discoveryDirs, name, proposed, state.translator, request.locale,
     )
@@ -257,9 +265,7 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     }
     // Every key declared and every value parsed, so only the database can still fail: one
     // synchronous transaction makes that all-or-nothing. rewriteSetting is synchronous, so
-    // it can run inside bun:sqlite's transaction(), which cannot await — hence resolving
-    // the plugin's declared secrets before opening it.
-    const secrets = await secretKeysOf(state.db, state.config.discoveryDirs, name)
+    // it can run inside bun:sqlite's transaction(), which cannot await.
     const unchanged: string[] = []
     state.db.transaction(() => {
       for (const [key, value] of Object.entries(body)) {

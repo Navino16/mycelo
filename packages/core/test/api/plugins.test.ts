@@ -28,6 +28,30 @@ afterEach(async () => {
   booted = undefined
 })
 
+// A declared secret whose own schema enforces a minimum length: the mask '••••' is 4
+// characters, so validating it against this schema is what found the defect on a running bot.
+const keep: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'keep', {
+    'spore.yaml': 'kind: enzyme\nname: keep\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: keep\n    description: Report the configured setting\n    code: handleConfigured\n',
+    'src/index.ts': `
+      export default {
+        configSchema: {
+          secrets: ['token'],
+          safeParse: (input) => (typeof input?.token === 'string' && input.token.length >= 8)
+            ? { success: true, data: input }
+            : { success: false, error: { issues: [{ path: ['token'], message: 'too short' }] } },
+          toJsonSchema: () => ({
+            type: 'object',
+            properties: { token: { type: 'string', minLength: 8 } },
+          }),
+        },
+        create: () => ({ handlers: { handleConfigured: async () => {} } }),
+      }
+    `,
+  })
+}
+
 describe('/api/plugins', () => {
   it('carries the install row enabled flag, not only the germination state', async () => {
     booted = await bootAndLogin()
@@ -228,6 +252,42 @@ describe('/api/plugins', () => {
     })
     expect(response.statusCode).toBe(200)
     expect(readSettings(served.state.db, 'needs-config')).toEqual({})
+  })
+
+  // Found on a running bot: the mask is 4 characters, so a schema requiring a longer secret
+  // refused a re-submit the route was never going to write. The filter must drop a masked
+  // secret before validation, not only before the write (task 3.1).
+  it('a length-constrained secret re-submitted with the mask answers ok, not a schema refusal', async () => {
+    booted = await bootAndLogin({ spores: keep })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/keep/settings', headers: { cookie },
+      payload: { token: 'longenough' },
+    })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/keep/settings', headers: { cookie },
+      payload: { token: REDACTED },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({ ok: true, unchanged: ['token'] })
+    expect(readSettings(served.state.db, 'keep')).toEqual({ token: 'longenough' })
+  })
+
+  // The row's own is_secret flag, not only the plugin's declared `secrets` list, must gate the
+  // skip: 'needs-config' declares no secrets at all, so a filter keyed on the declared list
+  // alone would validate this trivially (a non-empty string) and then write the mask itself
+  // over the real credential — corrupting it instead of leaving it alone.
+  it('a secret known only from the stored row, not the plugin\'s declared secrets, still skips the mask write', async () => {
+    booted = await bootAndLogin({ spores: configurable })
+    const { app, served, cookie } = booted
+    writeSetting(served.state.db, 'needs-config', 'token', 'old-secret', true)
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: REDACTED },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({ ok: true, unchanged: ['token'] })
+    expect(readSettings(served.state.db, 'needs-config')).toEqual({ token: 'old-secret' })
   })
 
   it('refuses enable by naming every missing field, not just the first', async () => {

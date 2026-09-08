@@ -379,6 +379,28 @@ export async function rejectedSettings(
     renderConfigIssue(translator, asConfigIssue(issue), name, locale))
 }
 
+function existingIsSecret(db: Db, name: string, key: string): boolean {
+  const existing = db
+    .select({ isSecret: pluginSetting.isSecret })
+    .from(pluginSetting)
+    .where(and(eq(pluginSetting.pluginName, name), eq(pluginSetting.key, key)))
+    .get()
+  return existing?.isSecret ?? false
+}
+
+/**
+ * `rewriteSetting`'s own drop condition, exported so a caller validating a proposed write can
+ * skip the same keys it will silently drop (task 3.1). A key is secret from the stored row's
+ * `is_secret` **or** the plugin's own declaration — never `secrets.includes(key)` alone, which
+ * would let a non-secret field whose value happens to be the mask literal skip validation too.
+ */
+export function isMaskedSecretUnchanged(
+  db: Db, name: string, key: string, value: unknown, secrets: readonly string[] = [],
+): boolean {
+  const isSecret = existingIsSecret(db, name, key) || secrets.includes(key)
+  return isSecret && value === REDACTED
+}
+
 // Promote, never demote. writeSetting() rewrites is_secret too, so carrying the row's flag
 // forward is what keeps an updated credential redacted; OR-ing the declaration in is what lets
 // a plugin that only declares an existing key in a later version ever take effect.
@@ -386,15 +408,9 @@ export async function rejectedSettings(
 export function rewriteSetting(
   db: Db, name: string, key: string, value: unknown, secrets: readonly string[] = [],
 ): boolean {
-  const existing = db
-    .select({ isSecret: pluginSetting.isSecret })
-    .from(pluginSetting)
-    .where(and(eq(pluginSetting.pluginName, name), eq(pluginSetting.key, key)))
-    .get()
-  const isSecret = (existing?.isSecret ?? false) || secrets.includes(key)
   // A form is handed '••••' by redactSecrets and sends the whole object back. Writing it would
   // replace the credential with its own mask, with is_secret still true and no way to tell.
-  if (isSecret && value === REDACTED) return false
-  writeSetting(db, name, key, value, isSecret)
+  if (isMaskedSecretUnchanged(db, name, key, value, secrets)) return false
+  writeSetting(db, name, key, value, existingIsSecret(db, name, key) || secrets.includes(key))
   return true
 }
