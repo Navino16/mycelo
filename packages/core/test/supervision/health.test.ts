@@ -87,6 +87,7 @@ describe('aggregateRuntimeHealth', () => {
   it('reports every rhiza\'s health, not only the first', async () => {
     const rhiza = (name: string, state: string): unknown => ({
       name,
+      manifest: { kind: 'rhiza' },
       instance: { health: () => Promise.resolve({ state, checkedAt: new Date(0) }) },
     })
     const germination = {
@@ -109,8 +110,12 @@ describe('aggregateRuntimeHealth', () => {
       mycelium: {
         registry: registry({
           rhizas: [
-            { name: 'boom', instance: { health: () => { throw new Error('socket closed') } } },
-            { name: 'fine', instance: { health: () => Promise.resolve({ state: 'healthy', checkedAt: new Date(0) }) } },
+            { name: 'boom', manifest: { kind: 'rhiza' }, instance: { health: () => { throw new Error('socket closed') } } },
+            {
+              name: 'fine',
+              manifest: { kind: 'rhiza' },
+              instance: { health: () => Promise.resolve({ state: 'healthy', checkedAt: new Date(0) }) },
+            },
           ] as never,
         }),
         ...NO_ADMISSION,

@@ -29,7 +29,8 @@ function renderHealth(health: RuntimeHealth, translator: Translator, locale: str
 
 export function registerHealthRoutes(app: FastifyInstance, state: RuntimeState): void {
   app.get('/api/health', async (request) => renderHealth(
-    await aggregateRuntimeHealth(state.germination), state.translator, request.locale,
+    await aggregateRuntimeHealth(state.germination, state.config.discoveryDirs, state.db),
+    state.translator, request.locale,
   ))
 
   app.post('/api/germination/retry', async (request) => {
@@ -40,6 +41,9 @@ export function registerHealthRoutes(app: FastifyInstance, state: RuntimeState):
       throw degradedError('api.germinationNotDegraded')
     }
     await retryGermination(state, createLogger())
-    return renderHealth(await aggregateRuntimeHealth(state.germination), state.translator, request.locale)
+    return renderHealth(
+      await aggregateRuntimeHealth(state.germination, state.config.discoveryDirs, state.db),
+      state.translator, request.locale,
+    )
   })
 }

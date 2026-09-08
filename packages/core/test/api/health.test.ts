@@ -1,5 +1,6 @@
 import { rmSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'bun:test'
+import { recordInstall } from '../../src/config/store.js'
 import { bootAndLogin, brokenManifest, closeBooted, cyclingPair, cyclingTriple, unhealthyRhiza } from './support.js'
 import type { LoggedIn } from './support.js'
 import type { RuntimeHealth } from '../../src/supervision/health.js'
@@ -83,6 +84,20 @@ describe('/api/health', () => {
     expect(frEntry?.reason).not.toBe(enEntry?.reason)
     expect(enEntry?.reasonKey).toBe('refusal.germination.invalidManifest')
     expect(frEntry?.reasonKey).toBe('refusal.germination.invalidManifest')
+  })
+
+  // /api/plugins already reports this install row as dormant (config/plugins.ts); before this
+  // fix /api/health said nothing, so the pill and the attention panel read a healthy bot.
+  it('carries an install row whose directory has gone, same as /api/plugins', async () => {
+    booted = await bootAndLogin({
+      beforeServe: (db) => { recordInstall(db, 'vanished', 'rhiza', true) },
+    })
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/health', headers: { cookie } }))
+      .json<RuntimeHealthDto>()
+    expect(body.mode).toBe('germinated')
+    const entry = body.dormant.find((d) => d.name === 'vanished')
+    expect(entry?.reasonKey).toBe('refusal.plugin.notOnDisk')
   })
 })
 

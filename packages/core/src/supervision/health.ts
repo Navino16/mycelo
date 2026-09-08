@@ -1,6 +1,8 @@
-import type { RhizaHealth, TranslatableRef } from '@mycelo/septum'
+import type { PluginInfo, RhizaHealth, TranslatableRef } from '@mycelo/septum'
 import type { Germination, GerminationFailure } from '../boot/state.js'
+import { listPlugins } from '../config/plugins.js'
 import type { Registry } from '../germination/registry.js'
+import type { Db } from '../persistence/db.js'
 import { describeThrown } from '../support/thrown.js'
 
 /**
@@ -51,7 +53,13 @@ export interface RuntimeHealth {
   blockedSinceBoot: number
 }
 
-export async function aggregateRuntimeHealth(germination: Germination): Promise<RuntimeHealth> {
+/**
+ * `sporesDirs`/`db` default to reading nothing extra, so `registry.dormant` alone still
+ * answers when a caller has neither (mirrors listPlugins' own optional db).
+ */
+export async function aggregateRuntimeHealth(
+  germination: Germination, sporesDirs: readonly string[] = [], db?: Db,
+): Promise<RuntimeHealth> {
   if (germination.status !== 'germinated') {
     return {
       mode: 'degraded',
@@ -60,9 +68,14 @@ export async function aggregateRuntimeHealth(germination: Germination): Promise<
     }
   }
   const { registry, admission } = germination.mycelium
+  // Reuses /api/plugins' own reader (config/plugins.ts) rather than a second one: it already
+  // carries the install row of a spore whose directory has gone, which registry.dormant cannot.
+  const dormant = listPlugins(registry, sporesDirs, db)
+    .filter((p): p is PluginInfo & { refusal: TranslatableRef } => p.state === 'dormant' && p.refusal !== undefined)
+    .map((p) => ({ name: p.name, refusal: p.refusal }))
   return {
     mode: 'germinated',
-    dormant: registry.dormant.map((d) => ({ name: d.name, refusal: d.refusal })),
+    dormant,
     enforcingBlocked: registry.brokenEnforcing,
     rhizas: await aggregateHealth(registry),
     blockedSinceBoot: admission.blockedSinceBoot(),
