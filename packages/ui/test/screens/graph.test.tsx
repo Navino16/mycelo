@@ -153,13 +153,9 @@ describe('the anastomosis graph', () => {
     }
   })
 
-  // task 9: two scopes from one rhiza draw two edges between the same pair, and a key made
-  // only of the pair collides on reconciliation. A plain mount is unaffected — React only
-  // consults the key map once a leading sibling's presence changes, forced here by toggling
-  // Only failures away from a third, unrelated, non-failing edge that sits ahead of the
-  // duplicate pair. Verified against React 19's own reconciler: the collision leaves an
-  // orphaned extra node behind rather than dropping one, so the count still mismatches (3, not
-  // 2) — assert the count, not the duplicate-key console warning, which fires either way.
+  // task 9: the brief's "React drops one" premise did not hold under this project's React 19 —
+  // see the phase report for the reconciler detail. Forcing the key-map path (a leading sibling
+  // removed) does surface a real defect: an orphaned extra node, so assert the count, not the warning.
   it('keeps exactly two edges after a re-render drops a leading, unrelated one', async () => {
     serve({
       nodes: [

@@ -406,6 +406,20 @@ describe('the people list in bulk', () => {
     expect(screen.queryByRole('button', { name: /Select all/ })).toBeNull()
   })
 
+  // hasFilter has two inputs; a role-only filter (no q) must disarm the offer too, or a
+  // guard keyed on q alone would pass the q-only test above while still arming over
+  // rows a role filter hides.
+  it('withdraws the select-all offer under a role-only filter, not only a q filter', async () => {
+    mockApi()
+    renderPeople()
+
+    expect(await screen.findByRole('button', { name: 'Select all 14 never-reviewed' })).toBeDefined()
+    fireEvent.change(screen.getByLabelText('Role'), { target: { value: 'guest' } })
+
+    expect(await screen.findByText('14 known')).toBeDefined()
+    expect(screen.queryByRole('button', { name: /Select all/ })).toBeNull()
+  })
+
   // Discriminates the singular selection: 'Select all 1 never-reviewed' would read wrong and
   // is not what the catalogue holds.
   it('names the one never-reviewed person in the singular', async () => {
