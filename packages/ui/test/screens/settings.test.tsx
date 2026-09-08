@@ -5,7 +5,7 @@ import { TONE_CLASSES } from '../../src/components/tone.ts'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { SecretField } from '../../src/components/SecretField.tsx'
 import { PluginSettings } from '../../src/screens/PluginSettings.tsx'
-import type { FormSchema, PluginDetailDto } from '../../src/api/types.ts'
+import type { FormSchema, PluginDetailDto, SettingsWriteResult } from '../../src/api/types.ts'
 
 /**
  * The widget renders the bare input; the field template renders the label. The test stands in
@@ -131,7 +131,7 @@ interface Options {
   schema?: FormSchema
   settings?: unknown
   detail?: PluginDetailDto
-  putResult?: 'ok' | Failure
+  putResult?: 'ok' | Failure | SettingsWriteResult
   enableResult?: 'ok' | Failure
 }
 
@@ -149,7 +149,9 @@ function mockVault(options: Options): { calls: Call[] } {
 
     if (method === 'PUT' && url === '/api/plugins/vault/settings') {
       const result = options.putResult ?? 'ok'
-      return Promise.resolve(result === 'ok' ? json({ ok: true }) : json(result.body, result.status))
+      if (result === 'ok') return Promise.resolve(json({ ok: true }))
+      if ('status' in result) return Promise.resolve(json(result.body, result.status))
+      return Promise.resolve(json(result))
     }
     if (method === 'POST' && url === '/api/plugins/vault/enable') {
       const result = options.enableResult ?? 'ok'
@@ -616,7 +618,7 @@ describe('the generated settings form', () => {
     await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    const summary = await screen.findByText('Saved, but rejected by vault')
+    const summary = await screen.findByText('Rejected by vault — nothing was saved')
     expect(summary.closest('[role="alert"]')?.className).toContain(TONE_CLASSES.crit.border)
   })
 })
@@ -758,8 +760,34 @@ describe("the generated form's page frame", () => {
     await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByText('Saved, but rejected by vault')).toBeDefined()
+    expect(await screen.findByText('Rejected by vault — nothing was saved')).toBeDefined()
     expect(screen.getByText(/1 of 2 fields failed validation on the server/)).toBeDefined()
+  })
+
+  // The route throws before its transaction (routes/plugins.ts:247 vs :254), so a rejection
+  // saves nothing. The banner said 'Saved, but rejected' (9.6A milestone, concern C).
+  it('says nothing was saved when the plugin refuses the value', async () => {
+    mockVault({
+      settings: { url: 'http://x', token: '••••' },
+      putResult: {
+        status: 400,
+        body: {
+          error: {
+            message: 'refused',
+            detail: [{ key: 'url', messages: ['must start with http://'] }],
+          },
+        },
+      },
+    })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    const title = await screen.findByText('Rejected by vault — nothing was saved')
+    const banner = title.closest('[role="alert"]')
+    expect(banner?.textContent).not.toContain('Saved')
+    expect(banner?.textContent).toContain('Rejected')
   })
 
   // Discriminates a summary rendered whenever a save happened from one rendered on a refusal.
@@ -775,8 +803,26 @@ describe("the generated form's page frame", () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect((await screen.findByRole('status')).textContent).toBe('Saved.')
-    expect(screen.queryByText('Saved, but rejected by vault')).toBeNull()
+    expect(screen.queryByText('Rejected by vault — nothing was saved')).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  // Task 3 (88bc838) made the PUT answer `unchanged` for a masked secret the mask guard
+  // dropped; the plain 'Saved.' told the operator it wrote a credential it never touched.
+  it('names the keys the server left as stored, instead of a plain saved message', async () => {
+    mockVault({
+      settings: { url: 'http://x', token: '••••' },
+      putResult: { ok: true, unchanged: ['token'] },
+    })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    fireEvent.change(screen.getByLabelText('URL'), { target: { value: 'http://y' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect((await screen.findByRole('status')).textContent).toBe(
+      'Saved, except token: a mask is not a value, so nothing was written for them.',
+    )
   })
 
   it('drops the acknowledgement as soon as the operator edits again', async () => {
@@ -812,7 +858,7 @@ describe("the generated form's page frame", () => {
     await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    await screen.findByText('Saved, but rejected by vault')
+    await screen.findByText('Rejected by vault — nothing was saved')
     expect(screen.queryByRole('status')).toBeNull()
   })
 

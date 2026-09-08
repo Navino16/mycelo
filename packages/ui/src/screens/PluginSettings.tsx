@@ -11,7 +11,7 @@ import type {
 import type { IChangeEvent } from '@rjsf/core'
 import { api, ApiError } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
-import type { FormSchema, PluginDetailDto } from '../api/types.ts'
+import type { FormSchema, PluginDetailDto, SettingsWriteResult } from '../api/types.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
 import { SecretField } from '../components/SecretField.tsx'
@@ -311,6 +311,7 @@ export function PluginSettings(): React.JSX.Element {
   const [extraErrors, setExtraErrors] = useState<ErrorSchema<Settings>>({})
   const [rejectedCount, setRejectedCount] = useState<number | null>(null)
   const [saved, setSaved] = useState(false)
+  const [unchanged, setUnchanged] = useState<readonly string[]>([])
   const [saveError, setSaveError] = useState<string | null>(null)
   const [enabledNow, setEnabledNow] = useState(false)
   const [enableError, setEnableError] = useState<string | null>(null)
@@ -362,9 +363,11 @@ export function PluginSettings(): React.JSX.Element {
     setExtraErrors({})
     setRejectedCount(null)
     setSaved(false)
+    setUnchanged([])
     try {
-      await api.send('PUT', `/api/plugins/${name}/settings`, changed)
+      const result = await api.send<SettingsWriteResult>('PUT', `/api/plugins/${name}/settings`, changed)
       setBaseline(current)
+      setUnchanged(readArray<string>(result.unchanged) ?? [])
       setSaved(true)
     } catch (e) {
       const rejections = e instanceof ApiError ? readRejections(e.detail) : []
@@ -385,6 +388,7 @@ export function PluginSettings(): React.JSX.Element {
     setRejectedCount(null)
     setSaveError(null)
     setSaved(false)
+    setUnchanged([])
   }
 
   async function enable(): Promise<void> {
@@ -503,7 +507,13 @@ export function PluginSettings(): React.JSX.Element {
                 </div>
               </TypedForm>
             </div>
-            {saved && <p role="status" className="text-body">{t('pluginSettings.saved')}</p>}
+            {saved && (
+              <p role="status" className="text-body">
+                {unchanged.length > 0
+                  ? t('pluginSettings.savedUnchanged', { keys: unchanged.join(', ') })
+                  : t('pluginSettings.saved')}
+              </p>
+            )}
             {saveError !== null && <p role="alert" className={`text-body ${TONE_CLASSES.crit.text}`}>{saveError}</p>}
           </div>
 
