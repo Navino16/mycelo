@@ -6,7 +6,7 @@ import Ajv2020 from 'ajv/dist/2020'
 import { buttonId, getUiOptions } from '@rjsf/utils'
 import type {
   ArrayFieldItemTemplateProps, ArrayFieldTemplateProps, ErrorSchema, FieldTemplateProps,
-  IconButtonProps, UiSchema,
+  IconButtonProps, RJSFValidationError, UiSchema,
 } from '@rjsf/utils'
 import type { IChangeEvent } from '@rjsf/core'
 import { api, ApiError } from '../api/client.ts'
@@ -66,6 +66,18 @@ function changedEntries(baseline: Settings, current: Settings): Settings {
     if (!equalValues(value, baseline[key])) out[key] = value
   }
   return out
+}
+
+/**
+ * The mask is 4 characters, which fails any `minLength` past 4; dropping its ajv errors reads
+ * it as unvalidated, which is the truth — the value is unchanged. Blanking the field instead
+ * (rejected, task 4 step 1) would make a set secret indistinguishable from an unset one.
+ */
+function dropUntouchedSecretErrors(
+  secrets: readonly string[], baseline: Settings, current: Settings,
+): (errors: RJSFValidationError[]) => RJSFValidationError[] {
+  const untouched = new Set(secrets.filter((key) => equalValues(current[key], baseline[key])))
+  return (errors) => errors.filter((e) => !untouched.has((e.property ?? '').replace(/^\./, '')))
 }
 
 function requiredKeys(schema: Settings): readonly string[] {
@@ -477,6 +489,7 @@ export function PluginSettings(): React.JSX.Element {
                   ButtonTemplates: { AddButton, RemoveButton, MoveUpButton, MoveDownButton },
                 }}
                 validator={validator}
+                transformErrors={dropUntouchedSecretErrors(secrets, baseline ?? {}, formData)}
                 extraErrors={extraErrors}
                 onChange={(e) => { setFormData(e.formData ?? {}); setSaved(false) }}
                 onSubmit={(e) => { void save(e) }}

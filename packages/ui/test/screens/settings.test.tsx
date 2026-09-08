@@ -89,6 +89,17 @@ const REQUIRING_SECRET: FormSchema = {
   schema: { type: 'object', required: ['token'], properties: { token: { type: 'string', title: 'Token' } } },
 }
 
+/** The mask is 4 characters; a schema this strict is what 9.6A's milestone measured as unsavable. */
+const MIN_LENGTH_SECRET: FormSchema = {
+  available: true,
+  secrets: ['token'],
+  schema: {
+    type: 'object',
+    required: ['token'],
+    properties: { token: { type: 'string', title: 'Token', minLength: 8 } },
+  },
+}
+
 /** One property of every kind the field meta line names (2c's left column). */
 const RICH: FormSchema = {
   available: true,
@@ -502,6 +513,42 @@ describe('the generated settings form', () => {
       fireEvent.change(tokenInput, { target: { value: 'a-real-key' } })
 
       expect(errorSpy.mock.calls.some((c) => String(c[0]).includes('uncontrolled'))).toBe(false)
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
+  // 9.6A's milestone, concern A/B: the mask is 4 characters, so a `minLength: 8` secret ajv
+  // validates against it, blocking `onSubmit`. The mask is not a value to validate — it stands
+  // for "unchanged" — so it must never reach ajv at all.
+  it('saves a secret left at its mask even when the schema requires a longer one', async () => {
+    const { calls } = mockVault({ schema: MIN_LENGTH_SECRET, settings: { token: '••••' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('Token')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
+  })
+
+  // The other direction: a secret the operator retypes is a real value, and must still be
+  // validated against the plugin's own schema.
+  it('still validates a secret the operator retypes against the schema', async () => {
+    // RJSF's own onSubmit default logs a blocked submission; the block itself is what this
+    // test asserts, so the log is expected noise, not a signal to leave in the test output.
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const { calls } = mockVault({ schema: MIN_LENGTH_SECRET, settings: { token: '••••' } })
+      renderSettings()
+
+      const token = await screen.findByLabelText('Token')
+      fireEvent.change(token, { target: { value: 'abc' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('must NOT have fewer than 8 characters')).toBeDefined()
+      })
+      expect(calls.some((c) => c.method === 'PUT')).toBe(false)
     } finally {
       errorSpy.mockRestore()
     }
