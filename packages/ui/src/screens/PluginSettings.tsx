@@ -70,8 +70,7 @@ function changedEntries(baseline: Settings, current: Settings): Settings {
 
 /**
  * The mask is 4 characters, which fails any `minLength` past 4; dropping its ajv errors reads
- * it as unvalidated, which is the truth — the value is unchanged. Blanking the field instead
- * (rejected, task 4 step 1) would make a set secret indistinguishable from an unset one.
+ * it as unvalidated, which is correct — the value is unchanged (task 4 step 1).
  */
 function dropUntouchedSecretErrors(
   secrets: readonly string[], baseline: Settings, current: Settings,

@@ -518,9 +518,8 @@ describe('the generated settings form', () => {
     }
   })
 
-  // 9.6A's milestone, concern A/B: the mask is 4 characters, so a `minLength: 8` secret ajv
-  // validates against it, blocking `onSubmit`. The mask is not a value to validate — it stands
-  // for "unchanged" — so it must never reach ajv at all.
+  // 9.6A's milestone, concern A/B: a `minLength: 8` secret left at its 4-character mask must
+  // still save — the PUT must fire.
   it('saves a secret left at its mask even when the schema requires a longer one', async () => {
     const { calls } = mockVault({ schema: MIN_LENGTH_SECRET, settings: { token: '••••' } })
     renderSettings()
