@@ -79,6 +79,22 @@ describe('searchPrincipals', () => {
     close()
   })
 
+  // 9's review: `%${term}%` made `_` and `%` wildcards, so a search for `a_b` also returned
+  // `axb`. Measured while fixing it: escaping alone matches *nothing* — SQLite needs the clause
+  // to declare `escape`, which drizzle's `like()` cannot emit.
+  it('treats _ and % in a search term as literal characters, not as wildcards', () => {
+    const { db, close } = fresh()
+    person(db, 'p1', 'a_b')
+    person(db, 'p2', 'axb')
+    person(db, 'p3', '100%')
+    person(db, 'p4', '100pc')
+    expect(searchPrincipals(db, { page: 1, perPage: 10, search: 'a_b' }).items.map((p) => p.id))
+      .toEqual(['p1'])
+    expect(searchPrincipals(db, { page: 1, perPage: 10, search: '100%' }).items.map((p) => p.id))
+      .toEqual(['p3'])
+    close()
+  })
+
   it('finds nobody when the search term matches no display name and no identity', () => {
     const { db, close } = fresh()
     person(db, 'p1', 'Alice')
