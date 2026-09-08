@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it, spyOn } from 'bun:test'
 import type { Germination } from '../../src/boot/state.js'
 import { aggregateHealth, aggregateRuntimeHealth } from '../../src/supervision/health.js'
 import type { Registry } from '../../src/germination/registry.js'
@@ -185,5 +185,21 @@ describe('aggregateHealth timeout', () => {
       }],
     } as unknown as Partial<Registry>)
     expect((await aggregateHealth(quick, 20))[0]?.status.state).toBe('healthy')
+  })
+
+  it('cancels the timeout when health() answers before it fires', async () => {
+    const spy = spyOn(globalThis, 'clearTimeout')
+    try {
+      const quick = registry({
+        rhizas: [{
+          name: 'plex',
+          instance: { health: () => Promise.resolve({ state: 'healthy' as const, checkedAt: new Date() }) },
+        }],
+      } as unknown as Partial<Registry>)
+      await aggregateHealth(quick, 20)
+      expect(spy).toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
