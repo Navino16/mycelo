@@ -391,6 +391,21 @@ describe('the people list in bulk', () => {
     expect(screen.queryByLabelText('Add role\u2026')).toBeNull()
   })
 
+  // task 8: a partial filter still armed the bar over never-reviewed rows the operator cannot
+  // see, because the guard checked only the empty-result case.
+  it('withdraws the select-all offer under a partial filter, not only an empty one', async () => {
+    const { calls } = mockApi()
+    renderPeople()
+
+    expect(await screen.findByRole('button', { name: 'Select all 14 never-reviewed' })).toBeDefined()
+    // Matches 11 of 128 (Person 5, 50-59): a partial filter, not the empty-result case.
+    fireEvent.change(screen.getByLabelText('Search'), { target: { value: 'Person 5' } })
+
+    await waitFor(() => { expect(calls.some((c) => c.url.includes('q=Person'))).toBe(true) })
+    expect(await screen.findByText('11 known')).toBeDefined()
+    expect(screen.queryByRole('button', { name: /Select all/ })).toBeNull()
+  })
+
   // Discriminates the singular selection: 'Select all 1 never-reviewed' would read wrong and
   // is not what the catalogue holds.
   it('names the one never-reviewed person in the singular', async () => {
