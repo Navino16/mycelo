@@ -35,6 +35,7 @@ refusal:
     incomplete: "la configuration est incomplète : {issues}"
     validationThrew: "la configuration est incomplète : sa validation a levé une erreur : {detail}"
     undeclaredSecrets: "la configuration déclare {count, plural, one{un secret} other{des secrets}} {keys} que le schéma ne possède pas"
+    maskedSecretUnchanged: "le réglage « {key} » du plugin « {plugin} » n''a pas été modifié : un secret masqué ne peut pas être réécrit"
   germination:
     reservedDomain: "« {plugin} » est un domaine de traduction réservé"
     reservedName: "le nom « mycelium » est réservé au cœur"

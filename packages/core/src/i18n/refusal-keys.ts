@@ -35,6 +35,7 @@ export const REFUSAL_PARAMS = {
   'refusal.config.incomplete': ['issues'],
   'refusal.config.validationThrew': ['detail'],
   'refusal.config.undeclaredSecrets': ['count', 'keys'],
+  'refusal.config.maskedSecretUnchanged': ['plugin', 'key'],
   'refusal.germination.reservedDomain': ['plugin'],
   'refusal.germination.reservedName': [],
   'refusal.germination.duplicateName': ['plugin', 'claimant', 'duplicate'],

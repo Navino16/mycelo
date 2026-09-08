@@ -178,6 +178,44 @@ describe('/api/plugins', () => {
     expect(readSettings(served.state.db, 'vault')).toEqual({ token: 's3cr3t', url: 'http://changed' })
   })
 
+  // A form re-submitted without retyping a secret sends '••••' back. rewriteSetting drops it,
+  // which is right — writing the mask destroys the credential — but the route answered
+  // { ok: true } and the operator was told it saved (CLAUDE.md, API asymmetries).
+  it('names the masked secret it did not write, rather than answering a bare ok', async () => {
+    booted = await bootAndLogin({ spores: vault })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { token: 's3cr3t' },
+    })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { token: REDACTED, url: 'http://home' },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({ ok: true, unchanged: ['token'] })
+    expect(readSettings(served.state.db, 'vault')).toEqual({ token: 's3cr3t', url: 'http://home' })
+  })
+
+  // An operator returning a plugin to its schema default had no way to say so: every value in
+  // the body goes through rewriteSetting, and there was no shape for "remove this row". Uses
+  // `configurable`, whose schema actually validates 'token' as required: a filter that let the
+  // null through to validation would refuse this with a 400 instead of clearing the row.
+  it('clears a setting when the body sends null for its key', async () => {
+    booted = await bootAndLogin({ spores: configurable })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: 's3cr3t' },
+    })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: null },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(readSettings(served.state.db, 'needs-config')).toEqual({})
+  })
+
   it('refuses enable by naming every missing field, not just the first', async () => {
     booted = await bootAndLogin({ spores: configurableTwoFields })
     const { app, cookie } = booted

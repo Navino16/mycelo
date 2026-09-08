@@ -249,7 +249,10 @@ export async function writeDeclaredSetting(
   if (rejected.length > 0) {
     return { ok: false, refusal: refusalRef('refusal.config.incomplete', { issues: rejected }) }
   }
-  rewriteSetting(db, name, key, value, await secretKeysOf(db, sporesDirs, name))
+  const written = rewriteSetting(db, name, key, value, await secretKeysOf(db, sporesDirs, name))
+  if (!written) {
+    return { ok: false, refusal: refusalRef('refusal.config.maskedSecretUnchanged', { plugin: name, key }) }
+  }
   return { ok: true }
 }
 
@@ -375,9 +378,10 @@ export async function rejectedSettings(
 // Promote, never demote. writeSetting() rewrites is_secret too, so carrying the row's flag
 // forward is what keeps an updated credential redacted; OR-ing the declaration in is what lets
 // a plugin that only declares an existing key in a later version ever take effect.
+/** `false` when the masked-secret guard dropped the write, so a route can say so (task 3). */
 export function rewriteSetting(
   db: Db, name: string, key: string, value: unknown, secrets: readonly string[] = [],
-): void {
+): boolean {
   const existing = db
     .select({ isSecret: pluginSetting.isSecret })
     .from(pluginSetting)
@@ -386,6 +390,7 @@ export function rewriteSetting(
   const isSecret = (existing?.isSecret ?? false) || secrets.includes(key)
   // A form is handed '••••' by redactSecrets and sends the whole object back. Writing it would
   // replace the credential with its own mask, with is_secret still true and no way to tell.
-  if (isSecret && value === REDACTED) return
+  if (isSecret && value === REDACTED) return false
   writeSetting(db, name, key, value, isSecret)
+  return true
 }

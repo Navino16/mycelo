@@ -7,7 +7,7 @@ import {
   formSchemaOf, listPlugins, manifestFactsByName, provenanceByName, redactSecrets, rejectedSettings,
   rewriteSetting, secretKeysOf, undeclaredKeys,
 } from '../../config/plugins.js'
-import { getInstall, listInstalls, setEnabled } from '../../config/store.js'
+import { clearSetting, getInstall, listInstalls, setEnabled } from '../../config/store.js'
 import { findSpore } from '../../config/lifecycle.js'
 import { demandsOf } from '../../germination/requirements.js'
 import type { SporeDemands } from '../../germination/requirements.js'
@@ -239,8 +239,10 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     }
     // Declared is not valid: without this an enabled plugin takes a value that makes it
     // dormant at the next boot, which is the failure enablePlugin() exists to prevent (§8).
+    // `null` clears a key rather than setting it, so it must skip the schema, not fail it.
+    const proposed = Object.fromEntries(Object.entries(body).filter(([, v]) => v !== null))
     const rejected = await rejectedSettings(
-      state.db, state.config.discoveryDirs, name, body, state.translator, request.locale,
+      state.db, state.config.discoveryDirs, name, proposed, state.translator, request.locale,
     )
     if (rejected.length > 0) {
       const rejectedKeys = rejected.map((r) => r.key).join(', ')
@@ -251,10 +253,14 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     // it can run inside bun:sqlite's transaction(), which cannot await — hence resolving
     // the plugin's declared secrets before opening it.
     const secrets = await secretKeysOf(state.db, state.config.discoveryDirs, name)
+    const unchanged: string[] = []
     state.db.transaction(() => {
-      for (const [key, value] of Object.entries(body)) rewriteSetting(state.db, name, key, value, secrets)
+      for (const [key, value] of Object.entries(body)) {
+        if (value === null) { clearSetting(state.db, name, key); continue }
+        if (!rewriteSetting(state.db, name, key, value, secrets)) unchanged.push(key)
+      }
     })
-    return { ok: true, restartRequired: state.germination.status === 'germinated' }
+    return { ok: true, unchanged, restartRequired: state.germination.status === 'germinated' }
   })
 }
 

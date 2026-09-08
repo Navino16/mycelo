@@ -476,12 +476,19 @@ it('a value written while the plugin throws at import is stored in the clear (kn
   close()
 })
 
-it('writing the mask back to a secret leaves the stored credential intact', async () => {
+// An operator can type '••••' into /plugin-set, and a spore that reads settings() and writes
+// back gets the mask from redactSecrets — so the channel path must refuse this too, not answer
+// ok for a write it silently dropped (task 3's ruling on writeDeclaredSetting).
+it('writing the mask back to a secret leaves the credential intact, and refuses rather than answering ok', async () => {
   const { db, close } = fresh()
   vault()
   recordInstall(db, 'vault', 'enzyme')
   await writeDeclaredSetting(db, [dir], 'vault', 'token', 's3cr3t')
-  await writeDeclaredSetting(db, [dir], 'vault', 'token', REDACTED)
+  const result = await writeDeclaredSetting(db, [dir], 'vault', 'token', REDACTED)
+  expect(result.ok).toBe(false)
+  const refusal = result.ok ? undefined : result.refusal
+  expect(refusal === undefined ? '' : renderRefusal(translator, refusal, 'en'))
+    .toBe("plugin 'vault' setting 'token' was left unchanged: a masked secret cannot be written back")
   expect(readSettings(db, 'vault')).toEqual({ token: 's3cr3t' })
   close()
 })

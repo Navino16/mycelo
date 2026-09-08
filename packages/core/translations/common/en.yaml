@@ -35,6 +35,7 @@ refusal:
     incomplete: "configuration is incomplete: {issues}"
     validationThrew: "configuration is incomplete: validating it threw: {detail}"
     undeclaredSecrets: "configuration declares {count, plural, one{a secret} other{secrets}} {keys} the schema does not have"
+    maskedSecretUnchanged: "plugin ''{plugin}'' setting ''{key}'' was left unchanged: a masked secret cannot be written back"
   germination:
     reservedDomain: "''{plugin}'' is a reserved translation domain"
     reservedName: "the name ''mycelium'' is reserved for the core"

@@ -232,6 +232,14 @@ export interface AliasCleared extends MutationResult {
 }
 
 /**
+ * `PUT /api/plugins/:name/settings` — `unchanged` names a masked secret the mask guard dropped,
+ * so a re-submitted form is not told it saved a credential it did not write.
+ */
+export interface SettingsWriteResult extends MutationResult {
+  unchanged: readonly string[]
+}
+
+/**
  * `GET /api/plugins/:name/schema`. `secrets` is added to the available branch by task 10 step 1;
  * without it a never-yet-filled credential renders as an ordinary text field.
  */
