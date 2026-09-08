@@ -825,6 +825,23 @@ describe("the generated form's page frame", () => {
     )
   })
 
+  // A join collapsed to unchanged[0] would still pass every test above: this is the plural case.
+  it('names every key the server left as stored, not only the first', async () => {
+    mockVault({
+      settings: { url: 'http://x', token: '••••' },
+      putResult: { ok: true, unchanged: ['token', 'url'] },
+    })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    fireEvent.change(screen.getByLabelText('URL'), { target: { value: 'http://y' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect((await screen.findByRole('status')).textContent).toBe(
+      'Saved, except token, url: a mask is not a value, so nothing was written for them.',
+    )
+  })
+
   it('drops the acknowledgement as soon as the operator edits again', async () => {
     mockVault({ settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
     renderSettings()
