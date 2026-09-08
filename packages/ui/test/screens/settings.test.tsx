@@ -117,7 +117,9 @@ const RICH: FormSchema = {
   },
 }
 
-const GERMINATED: PluginDetailDto = { name: 'vault', kind: 'enzyme', commands: ['vault'], state: 'germinated', enabled: true }
+const GERMINATED: PluginDetailDto = {
+  name: 'vault', kind: 'enzyme', commands: ['vault'], state: 'germinated', enabled: true, scopes: [],
+}
 const DISABLED: PluginDetailDto = { ...GERMINATED, state: 'disabled', enabled: false }
 
 function json(body: unknown, status = 200): Response {

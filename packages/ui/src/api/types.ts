@@ -29,6 +29,8 @@ export interface PluginDto {
   strain?: string
   /** The manifest's own one-line description. Absent when the manifest declares none. */
   description?: string
+  /** Manifest-declared mycelium scopes, present even for a dormant plugin (task 12). */
+  scopes: readonly string[]
 }
 
 export interface RequirementDto {

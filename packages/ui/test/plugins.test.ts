@@ -3,7 +3,7 @@ import { flatPlugins, pluginsByName } from '../src/plugins.ts'
 import type { PluginDto } from '../src/api/types.ts'
 
 function plugin(name: string): PluginDto {
-  return { name, commands: [], state: 'germinated', enabled: true }
+  return { name, commands: [], state: 'germinated', enabled: true, scopes: [] }
 }
 
 describe('indexing the installed plugins', () => {

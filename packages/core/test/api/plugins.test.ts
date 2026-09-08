@@ -772,18 +772,21 @@ describe('GET /api/plugins/:name, declared against mounted', () => {
     expect(body.mounted).toEqual(['principals.read'])
   })
 
-  it('never carries scopes on the list, which could only be the mounted set', async () => {
+  // Superseded by task 12, on purpose: the list now carries the manifest-declared scopes too,
+  // since a dormant plugin has nothing in the registry to mount from and could not otherwise
+  // answer its 1c card. `demands`, the fuller consent shape, stays detail-only.
+  it('carries the manifest-declared scopes on the list, but never the fuller demands shape', async () => {
     booted = await bootAndLogin()
     const { app, cookie } = booted
 
     const groups = (await app.inject({
       method: 'GET', url: '/api/plugins', headers: { cookie },
-    })).json<Record<string, Record<string, unknown>[]>>()
+    })).json<Record<string, { name: string, scopes: string[] }[]>>()
     const entries = Object.values(groups).flat()
 
     expect(entries.length).toBeGreaterThan(5)
-    expect(entries.every((e) => !('scopes' in e))).toBe(true)
     expect(entries.every((e) => !('demands' in e))).toBe(true)
+    expect(entries.find((e) => e.name === 'help')?.scopes).toEqual(['commands.read'])
   })
 })
 
@@ -836,6 +839,34 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     // Both, not the first: a `.commands[0]`-shaped implementation passes a one-command fixture.
     expect(orphan?.commands).toEqual(['first', 'second'])
     expect(orphan?.description).toBe('Needs a rhiza nobody installed')
+  })
+
+  // Task 12: the registry has no entry for a dormant plugin, so its scopes must come off the
+  // manifest on disk, exactly like the commands above.
+  it('lists the declared mycelium scopes of a dormant plugin, across every requirement', async () => {
+    booted = await bootAndLogin({
+      spores: (dir) => {
+        writeSpore(dir, 'scoped-orphan', {
+          'spore.yaml': 'kind: enzyme\nname: scoped-orphan\nseptum: "^0.12"\n'
+            + 'commands:\n  - name: noop\n    description: command.noop.description\n    respond: noop.text\n'
+            + 'requires:\n'
+            + '  - rhiza: nowhere\n'
+            + '  - rhiza: mycelium\n    scopes: [plugins.read]\n'
+            + '  - rhiza: mycelium\n    scopes: [health.read]\n',
+          'translations/en.yaml': 'command:\n  noop:\n    description: No-op\nnoop:\n  text: ok\n',
+        })
+      },
+    })
+    const { app, cookie } = booted
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/plugins', headers: { cookie },
+    })).json<{ enzyme: { name: string, state: string, scopes: string[] }[] }>()
+    const scoped = body.enzyme.find((p) => p.name === 'scoped-orphan')
+
+    expect(scoped?.state).toBe('dormant')
+    // Both requirements, not only the first: the mycelium scope model is per-requirement.
+    expect(scoped?.scopes).toEqual(['plugins.read', 'health.read'])
   })
 
   // A germinated enzyme's `commands` are the names a caller types, so an alias must win over

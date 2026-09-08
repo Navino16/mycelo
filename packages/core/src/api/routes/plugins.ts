@@ -45,6 +45,11 @@ export interface PluginDto {
   strain?: string
   /** The manifest's own one-line description. Absent when the manifest declares none. */
   description?: string
+  /**
+   * Manifest-declared mycelium scopes, drawn from disk rather than the registry so a
+   * dormant plugin — absent from the registry — still answers them (artboard 1c, task 12).
+   */
+  scopes: readonly MyceliumScope[]
 }
 
 /**
@@ -88,6 +93,7 @@ function pluginsOf(state: RuntimeState, locale: string): readonly PluginDto[] {
       commands: [],
       state: 'unknown' as const,
       enabled: install.enabled,
+      scopes: [],
       ...(provenance.get(install.name) ?? {}),
     }))
   }
@@ -102,6 +108,7 @@ function pluginsOf(state: RuntimeState, locale: string): readonly PluginDto[] {
       // still declares them, and 1c's dead-command list is exactly that set.
       commands: info.commands.length > 0 ? info.commands : fact?.commands ?? [],
       ...(fact?.description === undefined ? {} : { description: fact.description }),
+      scopes: fact?.scopes ?? [],
       state: info.state,
       ...(info.refusal === undefined ? {} : {
         reason: renderRefusal(state.translator, info.refusal, locale),

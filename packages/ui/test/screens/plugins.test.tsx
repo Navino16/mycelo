@@ -10,12 +10,15 @@ const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
 
 const GROUPS: PluginGroups = {
-  hypha: [{ name: 'signal', kind: 'hypha', commands: [], state: 'germinated', enabled: true }],
+  hypha: [{ name: 'signal', kind: 'hypha', commands: [], state: 'germinated', enabled: true, scopes: [] }],
   rhiza: [
-    { name: 'radarr', kind: 'rhiza', commands: [], state: 'germinated', enabled: true },
-    { name: 'plex', kind: 'rhiza', commands: [], state: 'dormant', enabled: true, reason: 'radarr is not installed' },
+    { name: 'radarr', kind: 'rhiza', commands: [], state: 'germinated', enabled: true, scopes: [] },
+    {
+      name: 'plex', kind: 'rhiza', commands: [], state: 'dormant', enabled: true, scopes: [],
+      reason: 'radarr is not installed',
+    },
   ],
-  enzyme: [{ name: 'help', kind: 'enzyme', commands: ['help'], state: 'pending', enabled: true }],
+  enzyme: [{ name: 'help', kind: 'enzyme', commands: ['help'], state: 'pending', enabled: true, scopes: [] }],
   inhibitor: [],
   unknown: [],
 }
@@ -154,6 +157,7 @@ function build(kind: PluginDto['kind'], count: number): PluginDto[] {
     commands: [],
     state: 'germinated' as const,
     enabled: true,
+    scopes: [],
   }))
 }
 
@@ -339,6 +343,7 @@ const SEARCHABLE: PluginGroups = {
       commands: ['weather'],
       state: 'germinated',
       enabled: true,
+      scopes: [],
       description: 'Forecast for a place',
     },
     {
@@ -347,6 +352,7 @@ const SEARCHABLE: PluginGroups = {
       commands: ['roll'],
       state: 'germinated',
       enabled: true,
+      scopes: [],
       description: 'Roll dice',
     },
   ],
@@ -355,9 +361,12 @@ const SEARCHABLE: PluginGroups = {
 const MIXED: PluginGroups = {
   ...EMPTY_GROUPS,
   rhiza: [
-    { name: 'plex', kind: 'rhiza', commands: [], state: 'dormant', enabled: true, reason: 'radarr is not installed' },
-    { name: 'sonarr', kind: 'rhiza', commands: [], state: 'germinated', enabled: true },
-    { name: 'quiet', kind: 'rhiza', commands: [], state: 'disabled', enabled: false },
+    {
+      name: 'plex', kind: 'rhiza', commands: [], state: 'dormant', enabled: true, scopes: [],
+      reason: 'radarr is not installed',
+    },
+    { name: 'sonarr', kind: 'rhiza', commands: [], state: 'germinated', enabled: true, scopes: [] },
+    { name: 'quiet', kind: 'rhiza', commands: [], state: 'disabled', enabled: false, scopes: [] },
   ],
 }
 

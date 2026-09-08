@@ -76,7 +76,7 @@ const THIRD_PARTY: SourceDto = {
 }
 
 function plugin(name: string, extra: Partial<PluginDto> = {}): PluginDto {
-  return { name, commands: [], state: 'germinated', enabled: true, ...extra }
+  return { name, commands: [], state: 'germinated', enabled: true, scopes: [], ...extra }
 }
 
 const INSTALLED: PluginGroups = {

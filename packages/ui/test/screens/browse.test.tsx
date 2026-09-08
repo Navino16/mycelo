@@ -27,7 +27,7 @@ const SOURCE: SourceDto = {
 }
 
 function plugin(name: string, extra: Partial<PluginDto> = {}): PluginDto {
-  return { name, commands: [], state: 'germinated', enabled: true, ...extra }
+  return { name, commands: [], state: 'germinated', enabled: true, scopes: [], ...extra }
 }
 
 const EMPTY_GROUPS: PluginGroups = { hypha: [], rhiza: [], enzyme: [], inhibitor: [], unknown: [] }

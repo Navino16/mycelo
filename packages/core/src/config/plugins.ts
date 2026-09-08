@@ -1,11 +1,12 @@
 import { and, eq } from 'drizzle-orm'
 import type {
-  ConfigIssue, FormSchema, Manifest, Outcome, PluginInfo, SporeKind, TranslatableRef,
+  ConfigIssue, FormSchema, Manifest, MyceliumScope, Outcome, PluginInfo, SporeKind, TranslatableRef,
 } from '@mycelo/septum'
 import { StoreRefusal } from '../authorization/refusal.js'
 import { discover } from '../germination/discover.js'
 import { isFailure, readManifest } from '../germination/manifest.js'
 import type { Registry } from '../germination/registry.js'
+import { demandsOf } from '../germination/requirements.js'
 import { configIssueRefsFor } from '../i18n/config-refs.js'
 import { refusalRef } from '../i18n/refusal-keys.js'
 import { renderConfigIssue } from '../i18n/refusal.js'
@@ -106,11 +107,13 @@ export interface PluginFacts {
   description?: string
   /** Declared names, before any alias. */
   commands: readonly string[]
+  /** Union of every requirement's mycelium scopes (task 12), so a dormant plugin still answers them. */
+  scopes: readonly MyceliumScope[]
 }
 
 /**
- * Description and declared commands per plugin name (inventory §3 rows 4 and 11). One
- * directory walk, never one per plugin: findSpore() re-walks every time.
+ * Description, declared commands and declared scopes per plugin name (inventory §3 rows 4 and
+ * 11). One directory walk, never one per plugin: findSpore() re-walks every time.
  */
 export function manifestFactsByName(
   registry: Registry, sporesDirs: readonly string[],
@@ -121,6 +124,7 @@ export function manifestFactsByName(
     facts.set(manifest.name, {
       ...(manifest.description === undefined ? {} : { description: manifest.description }),
       commands: manifest.kind === 'enzyme' ? manifest.commands.map((c) => c.name) : [],
+      scopes: demandsOf(manifest).scopes,
     })
   }
   for (const spore of [...registry.hyphae, ...registry.rhizas, ...registry.enzymes, ...registry.inhibitors]) {
