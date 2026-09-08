@@ -57,6 +57,66 @@ it('writes a declared key whose value the schema accepts', async () => {
   close()
 })
 
+// Two required fields, neither defaulted — unlike fixtures/gate, which defaults every field it
+// is not given and so can never report an issue on a key other than the one just written.
+// `rejectedSettingRefs` parses `{[key]: value}` against the whole schema, so this is the fixture
+// that can show a real Zod-shaped schema reporting the *other* required key as missing (spec §8).
+function twoRequired(): void {
+  mkdirSync(join(dir, 'twofield', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'twofield', 'spore.yaml'),
+    'kind: enzyme\nname: twofield\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: twofield\n    description: x\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(
+    join(dir, 'twofield', 'src/index.ts'),
+    'export default {\n'
+      + '  configSchema: {\n'
+      + '    safeParse: (input) => {\n'
+      + '      const issues = []\n'
+      + '      if (typeof input?.url !== "string" || input.url.length === 0) {\n'
+      + '        issues.push({ path: ["url"], message: "twofield config needs a non-empty \'url\'" })\n'
+      + '      }\n'
+      + '      if (typeof input?.token !== "string" || input.token.length === 0) {\n'
+      + '        issues.push({ path: ["token"], message: "twofield config needs a non-empty \'token\'" })\n'
+      + '      }\n'
+      + '      return issues.length > 0\n'
+      + '        ? { success: false, error: { issues } }\n'
+      + '        : { success: true, data: input }\n'
+      + '    },\n'
+      + '  },\n'
+      + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+      + '}\n',
+    'utf8',
+  )
+}
+
+// spec §8: "never the merged object — a two-required-field form must be fillable one field at a
+// time". Without the per-key filter this refuses on the unset `token`, and `url` becomes
+// impossible to set while `token` is empty (review, Important 2).
+it('writes one required key even though the other required key is still unset', async () => {
+  const { db, close } = fresh()
+  twoRequired()
+  recordInstall(db, 'twofield', 'enzyme')
+  expect(await writeDeclaredSetting(db, [dir], 'twofield', 'url', 'http://x')).toEqual({ ok: true })
+  expect(readSettings(db, 'twofield')).toEqual({ url: 'http://x' })
+  close()
+})
+
+it('refuses a rejected key, naming only that key and not the other unset one', async () => {
+  const { db, close } = fresh()
+  twoRequired()
+  recordInstall(db, 'twofield', 'enzyme')
+  const result = await writeDeclaredSetting(db, [dir], 'twofield', 'url', '')
+  expect(result.ok).toBe(false)
+  expect(readSettings(db, 'twofield')).toEqual({})
+  const refusal = result.ok ? undefined : result.refusal
+  expect(refusal === undefined ? '' : renderRefusal(translator, refusal, 'en'))
+    .toBe("configuration is incomplete: url: twofield config needs a non-empty 'url'")
+  close()
+})
+
 // design §5.2's own worked example: fixtures/gate's error was a bare string, so
 // objectRejections' `member(result.error, 'issues')` found nothing and the value passed
 // through unvalidated. This is the defect ConfigError's guaranteed shape closes.
