@@ -154,10 +154,9 @@ describe('/api/graph', () => {
     })).json<GraphDto>()
     const enReason = en.nodes.find((n) => n.name === 'needs-config')?.reason
     const frReason = fr.nodes.find((n) => n.name === 'needs-config')?.reason
-    // `describeConfigError` bakes the field/message detail in one fixed format at germination
-    // time (support/thrown.ts) — only the wrapping sentence is locale-sensitive here, unlike
-    // `POST /enable`'s live-rendered `issueAt` (plugins.test.ts).
-    expect(frReason).toBe('la configuration est incomplète : token: missing required field')
+    // Rendered through `issueAt`, same as `POST /enable`'s live path (plugins.test.ts) — the
+    // field/message detail is no longer baked at germination time, so both locales translate.
+    expect(frReason).toBe('la configuration est incomplète : token : missing required field')
     // Both locales, not one: a route rendering at the default locale would pass a
     // single-locale assertion and answer English to every reader (design §3).
     expect(frReason).not.toBe(enReason)

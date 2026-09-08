@@ -35,6 +35,12 @@ function metaLogger(): { logger: Logger; metas: Record<string, unknown>[] } {
   return { logger, metas }
 }
 
+const translator = createTranslator({
+  defaultLocale: 'en',
+  logger: { debug() {}, info() {}, warn() {}, error() {}, child: () => createLogger() },
+  catalogs: loadCoreCatalogs(),
+})
+
 let dir: string
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'mycelo-germ-')) })
 afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
@@ -605,12 +611,17 @@ it('leaves a spore dormant, with the reason, when its config is rejected', async
   confRhiza()
   const registry = await germinate([dir], createLogger(), { confrhiza: { token: 42 } })
   expect(registry.rhizas).toEqual([])
-  expect(registry.dormant[0]?.refusal?.key).toBe('refusal.config.incomplete')
-  expect(registry.dormant[0]?.refusal?.domain).toBe(SHARED_DOMAIN)
-  expect(String(registry.dormant[0]?.refusal?.params?.['issues'])).toContain('token must be a string')
+  const refusal = registry.dormant[0]?.refusal
+  expect(refusal?.key).toBe('refusal.config.incomplete')
+  expect(refusal?.domain).toBe(SHARED_DOMAIN)
   // `issues` and nothing else: the shipped message interpolates only that, and the `plugin`
   // this used to assert was a name no locale ever read.
-  expect(Object.keys(registry.dormant[0]?.refusal?.params ?? {})).toEqual(['issues'])
+  expect(Object.keys(refusal?.params ?? {})).toEqual(['issues'])
+  // Rendered, not stringified: `refusal!` carries refs, and `String()` on those proves nothing.
+  expect(renderRefusal(translator, refusal!, 'en'))
+    .toBe('configuration is incomplete: token: token must be a string')
+  expect(renderRefusal(translator, refusal!, 'fr'))
+    .toBe('la configuration est incomplète : token : token must be a string')
 })
 
 it('rejects a spore whose config key is absent entirely, rather than passing undefined', async () => {
@@ -618,9 +629,14 @@ it('rejects a spore whose config key is absent entirely, rather than passing und
   const registry = await germinate([dir], createLogger(), {})
   expect(registry.rhizas).toEqual([])
   // The absent key must arrive as {}, so the schema's own undefined branch stays unreached.
-  const issues = String(registry.dormant[0]?.refusal?.params?.['issues'])
-  expect(issues).toContain('token must be a string')
-  expect(issues).not.toContain('passed as undefined')
+  const refusal = registry.dormant[0]?.refusal
+  const rendered = renderRefusal(translator, refusal!, 'en')
+  expect(rendered).toContain('token must be a string')
+  expect(rendered).not.toContain('passed as undefined')
+  // `issueAt`'s French template inserts a space before the colon a baked English detail never
+  // would: only a ref rendered through the translator can produce it.
+  expect(renderRefusal(translator, refusal!, 'fr'))
+    .toBe('la configuration est incomplète : token : token must be a string')
 })
 
 it('gives a spore with no configSchema an empty config', async () => {
