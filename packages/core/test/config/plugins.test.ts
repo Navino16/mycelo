@@ -34,6 +34,29 @@ let dir: string
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'mycelo-config-plugins-')) })
 afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
 
+// 9.6A's milestone, concern H: `/plugin-set` stored `gate.channel = ''` and answered
+// `set channel on gate`. An enforcing inhibitor with an empty channel is dormant at the next
+// boot, which refuses all traffic on every channel. Declared is not valid (spec §8).
+it('refuses a declared key whose value the plugin\'s own schema rejects, and writes nothing', async () => {
+  const { db, close } = fresh()
+  recordInstall(db, 'gate', 'inhibitor')
+  const result = await writeDeclaredSetting(db, SPORES, 'gate', 'channel', '')
+  expect(result.ok).toBe(false)
+  expect(readSettings(db, 'gate')).toEqual({})
+  const refusal = result.ok ? undefined : result.refusal
+  expect(refusal === undefined ? '' : renderRefusal(translator, refusal, 'en'))
+    .toBe("configuration is incomplete: channel: gate config needs a non-empty 'channel'")
+  close()
+})
+
+it('writes a declared key whose value the schema accepts', async () => {
+  const { db, close } = fresh()
+  recordInstall(db, 'gate', 'inhibitor')
+  expect(await writeDeclaredSetting(db, SPORES, 'gate', 'channel', 'signal')).toEqual({ ok: true })
+  expect(readSettings(db, 'gate')).toEqual({ channel: 'signal' })
+  close()
+})
+
 // design §5.2's own worked example: fixtures/gate's error was a bare string, so
 // objectRejections' `member(result.error, 'issues')` found nothing and the value passed
 // through unvalidated. This is the defect ConfigError's guaranteed shape closes.

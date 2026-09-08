@@ -1,9 +1,12 @@
 import { and, eq } from 'drizzle-orm'
-import type { ConfigIssue, FormSchema, Manifest, PluginInfo, SporeKind, TranslatableRef } from '@mycelo/septum'
+import type {
+  ConfigIssue, FormSchema, Manifest, Outcome, PluginInfo, SporeKind, TranslatableRef,
+} from '@mycelo/septum'
 import { StoreRefusal } from '../authorization/refusal.js'
 import { discover } from '../germination/discover.js'
 import { isFailure, readManifest } from '../germination/manifest.js'
 import type { Registry } from '../germination/registry.js'
+import { configIssueRefsFor } from '../i18n/config-refs.js'
 import { refusalRef } from '../i18n/refusal-keys.js'
 import { renderConfigIssue } from '../i18n/refusal.js'
 import type { Translator } from '../i18n/translator.js'
@@ -226,18 +229,47 @@ export function undeclaredKeys(form: FormSchema, keys: readonly string[]): reado
   return keys.filter((key) => !Object.hasOwn(properties, key))
 }
 
-/** Refuses a key the plugin's own JSON Schema does not declare (`undeclaredKeys`). */
+/**
+ * Refuses a key the plugin's own JSON Schema does not declare, **and a value that schema rejects**
+ * (spec §8). Declared is not valid: without the second check a channel command stores a value that
+ * makes the plugin dormant at the next boot, which for an enforcing inhibitor refuses all traffic
+ * on every channel with no command left to undo it.
+ */
 export async function writeDeclaredSetting(
   db: Db, sporesDirs: readonly string[], name: string, key: string, value: unknown,
-): Promise<void> {
+): Promise<Outcome> {
   const form = await formSchemaOf(db, sporesDirs, name)
   if (undeclaredKeys(form, [key]).length > 0) {
-    throw new StoreRefusal(
-      'setting-undeclared', `plugin '${name}' declares no setting '${key}'`,
-      { plugin: name, count: 1, keys: key },
-    )
+    return {
+      ok: false,
+      refusal: refusalRef('refusal.plugin.settingUndeclared', { plugin: name, count: 1, keys: key }),
+    }
+  }
+  const rejected = await rejectedSettingRefs(db, sporesDirs, name, key, value)
+  if (rejected.length > 0) {
+    return { ok: false, refusal: refusalRef('refusal.config.incomplete', { issues: rejected }) }
   }
   rewriteSetting(db, name, key, value, await secretKeysOf(db, sporesDirs, name))
+  return { ok: true }
+}
+
+/**
+ * The refs the plugin's own schema produces for one key, or none. Never the merged object
+ * (spec §8): completeness is `enablePlugin`'s check, so a two-field form stays fillable one field
+ * at a time. A plugin that publishes no schema, or whose schema throws, refuses nothing.
+ */
+async function rejectedSettingRefs(
+  db: Db, sporesDirs: readonly string[], name: string, key: string, value: unknown,
+): Promise<readonly TranslatableRef[]> {
+  let module: Awaited<ReturnType<typeof loadSporeModule>>
+  try {
+    module = await loadSporeModule(sporesDirs, name)
+  } catch {
+    return []
+  }
+  const result = parseWith(module?.configSchema, { [key]: value })
+  if (result === undefined || result.ok) return []
+  return configIssueRefsFor(result.error, name, key)
 }
 
 export interface SettingRejection {

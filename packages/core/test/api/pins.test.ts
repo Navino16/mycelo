@@ -81,9 +81,10 @@ describe('the api lists nothing else pins', () => {
     expect(codes).toHaveLength(9)
     const mappers = read('api/routes/roles.ts') + read('api/routes/people.ts')
     // The two plugin codes reach no route today: requireInstalled refuses before setEnabled or
-    // redactSecrets can raise one, and no route calls writeDeclaredSetting — the settings route
-    // runs undeclaredKeys itself. The exemption is unconditional, so it records that fact rather
-    // than enforcing it.
+    // redactSecrets can raise one, and `setting-undeclared` is no longer thrown at all —
+    // writeDeclaredSetting returns the ref directly (9.7 task 1), so the code survives only for
+    // `badRequestRefusal`'s own use of the same wording. The exemption is unconditional, so it
+    // records that fact rather than enforcing it.
     const unreachable = ['plugin-not-installed', 'setting-undeclared']
     expect(codes.filter((code) => unreachable.includes(code))).toEqual(unreachable)
     expect(
