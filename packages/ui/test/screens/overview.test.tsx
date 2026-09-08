@@ -216,6 +216,24 @@ describe('the overview', () => {
     expect(screen.getByText('HTTP 502')).toBeDefined()
   })
 
+  // task 10: attentionRows collapses a rhiza's health state through the same rule as the
+  // plugins list and its detail page — this is the one of those three call sites whose own
+  // suite had nothing pinning the two labels apart.
+  it('tells a degraded rhiza apart from an unreachable one, not just by its reason', async () => {
+    await withHealth({
+      ...GERMINATED,
+      rhizas: [
+        { rhiza: 'plex', status: { state: 'unreachable', detail: 'connection refused', checkedAt: '2026-01-01' } },
+        { rhiza: 'jellyfin', status: { state: 'degraded', detail: 'HTTP 502', checkedAt: '2026-01-01' } },
+      ],
+    })
+
+    const plexRow = screen.getByText('plex').closest('li')
+    const jellyfinRow = screen.getByText('jellyfin').closest('li')
+    expect(within(plexRow as HTMLElement).getByText('Unreachable')).toBeDefined()
+    expect(within(jellyfinRow as HTMLElement).getByText('Degraded')).toBeDefined()
+  })
+
   it('names the germination failure when the bot itself never finished starting', async () => {
     await withHealth({
       mode: 'degraded',
