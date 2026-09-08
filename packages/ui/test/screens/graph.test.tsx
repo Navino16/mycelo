@@ -153,6 +153,35 @@ describe('the anastomosis graph', () => {
     }
   })
 
+  // task 9: two scopes from one rhiza draw two edges between the same pair, and a key made
+  // only of the pair collides on reconciliation. A plain mount is unaffected — React only
+  // consults the key map once a leading sibling's presence changes, forced here by toggling
+  // Only failures away from a third, unrelated, non-failing edge that sits ahead of the
+  // duplicate pair. Verified against React 19's own reconciler: the collision leaves an
+  // orphaned extra node behind rather than dropping one, so the count still mismatches (3, not
+  // 2) — assert the count, not the duplicate-key console warning, which fires either way.
+  it('keeps exactly two edges after a re-render drops a leading, unrelated one', async () => {
+    serve({
+      nodes: [
+        { name: 'admin', kind: 'enzyme', state: 'germinated' },
+        { name: 'radarr', kind: 'rhiza', state: 'dormant', reason: 'url: Invalid input' },
+        { name: 'signal', kind: 'hypha', state: 'germinated' },
+        { name: 'upcoming', kind: 'enzyme', state: 'germinated' },
+      ],
+      edges: [
+        { from: 'signal', to: 'upcoming', optional: false },
+        { from: 'admin', to: 'radarr', optional: false },
+        { from: 'admin', to: 'radarr', optional: true },
+      ],
+    })
+    renderGraph()
+
+    await waitFor(() => { expect(document.querySelectorAll('[data-edge="admin->radarr"]').length).toBe(2) })
+    fireEvent.click(await screen.findByRole('button', { name: 'Only failures' }))
+    await waitFor(() => { expect(document.querySelectorAll('[data-edge="signal->upcoming"]').length).toBe(0) })
+    expect(document.querySelectorAll('[data-edge="admin->radarr"]').length).toBe(2)
+  })
+
   // The discriminating case: the SPA dashed `optional`, which spent the dash on something
   // that is not a failure at all.
   it('leaves an intact optional edge solid and only quieter', async () => {
