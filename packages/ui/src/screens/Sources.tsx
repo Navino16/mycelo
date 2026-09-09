@@ -6,6 +6,7 @@ import { Chip } from '../components/Chip.tsx'
 import { Sheet } from '../components/Sheet.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { plural, useT } from '../i18n.tsx'
+import { truncateTail } from '../truncate.ts'
 import type { SourceDto, SporeOffer } from '../api/types.ts'
 import type { StringKey } from '../../locales/en.ts'
 
@@ -104,11 +105,13 @@ function SourceRow(
       {browsable
         ? (
             <Link to={`/sources/${String(source.id)}`} className="truncate font-mono font-medium">
-              {source.label}
+              {truncateTail(source.label, 34)}
             </Link>
           )
-        : <span className="truncate font-mono font-medium">{source.label}</span>}
-      <span className="truncate font-mono text-meta-lg text-text/60">{source.location}</span>
+        : <span className="truncate font-mono font-medium">{truncateTail(source.label, 34)}</span>}
+      <span className="truncate font-mono text-meta-lg text-text/60">
+        {truncateTail(source.location, 44)}
+      </span>
       <span className="justify-self-start">
         <Chip label={t(badgeKey(source))} tone={source.official && source.enabled ? 'ok' : 'idle'} />
       </span>

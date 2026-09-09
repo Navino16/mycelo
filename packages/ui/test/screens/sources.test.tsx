@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter } from 'react-router'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { Sources } from '../../src/screens/Sources.tsx'
+import { truncateTail } from '../../src/truncate.ts'
 import type { SourceDto, SporeOffer } from '../../src/api/types.ts'
 
 const realFetch = globalThis.fetch
@@ -151,8 +152,8 @@ describe('the sources list', () => {
     mockApi([OFFICIAL, THIRD_PARTY], { catalogues: { 1: 61, 2: 112 } })
     renderSources()
 
-    await waitFor(() => { expect(screen.getByText('git@git.mycelo.dev:core.git')).toBeDefined() })
-    expect(screen.getByText('https://github.com/mycelo-community/spores.git')).toBeDefined()
+    await waitFor(() => { expect(screen.getByText(truncateTail(OFFICIAL.location, 44))).toBeDefined() })
+    expect(screen.getByText(truncateTail(THIRD_PARTY.location, 44))).toBeDefined()
   })
 
   it('counts the catalogue of each source and totals them in the header', async () => {
@@ -385,5 +386,26 @@ describe('a source there is nothing to browse', () => {
 
     const row = await screen.findByTestId('source-1')
     expect(within(row).getByRole('link').getAttribute('href')).toBe('/sources/1')
+  })
+
+  // Two local sources sharing a long prefix, the measured defect: happy-dom has no layout, so a
+  // plain textContent diff can't see CSS clipping — this pins the row to truncateTail's own
+  // output, which is what actually shortens the label pre-fix versus post-fix.
+  it('renders two long sibling paths as different, tail-truncated strings', async () => {
+    const shared = '/home/njaunet/perso/mycelo/mycelo/.superpowers/'
+    const labelA = `${shared}milestone-9.7/spores`
+    const labelB = `${shared}design-9.75/spores`
+    mockApi([
+      { id: 5, label: labelA, driver: 'local', location: labelA, official: false, enabled: true },
+      { id: 6, label: labelB, driver: 'local', location: labelB, official: false, enabled: true },
+    ])
+    render(<I18nProvider><MemoryRouter><Sources /></MemoryRouter></I18nProvider>)
+
+    const rowA = await screen.findByTestId('source-5')
+    const rowB = await screen.findByTestId('source-6')
+    // Literal expectations, not truncateTail(...) calls: this must pin the tail-keeping
+    // behaviour independently, or a wrong-direction helper would move both sides together.
+    expect(within(rowA).getByText('….superpowers/milestone-9.7/spores')).toBeDefined()
+    expect(within(rowB).getByText('…o/.superpowers/design-9.75/spores')).toBeDefined()
   })
 })
