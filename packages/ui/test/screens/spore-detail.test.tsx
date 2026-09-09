@@ -608,6 +608,27 @@ describe('a spore detail whose source cannot serve it', () => {
 
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Something went wrong')
   })
+
+  // The early return ran before the breadcrumb, so a refusal stranded the operator with no
+  // way back — even though the source fetch itself failed and knows nothing to link to.
+  it('keeps a way back to the sources list when the spore is refused and the source is unknown', async () => {
+    serve({ sourceFail: true, strainsRefusal: { status: 404, message: 'no such spore' } })
+    renderDetail()
+
+    const trail = await screen.findByRole('navigation', { name: 'breadcrumb' })
+    expect(within(trail).getByRole('link', { name: 'Sources' }).getAttribute('href')).toBe('/sources')
+    // A trail that always names the source, ignoring the null case, would still pass the
+    // assertion above — so this must be the one crumb, not merely one of several.
+    expect(within(trail).getAllByRole('link')).toHaveLength(1)
+  })
+
+  it('names the source in the trail when the refusal still knows it', async () => {
+    serve({ strainsRefusal: { status: 404, message: 'no such spore' } })
+    renderDetail()
+
+    const link = await screen.findByRole('link', { name: 'My mirror' })
+    expect(link.getAttribute('href')).toBe('/sources/2')
+  })
 })
 
 describe('the screen after its own install', () => {

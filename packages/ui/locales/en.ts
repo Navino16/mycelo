@@ -252,6 +252,7 @@ export const en = {
   'spore.inoculateGrant': 'Inoculate and grant {count} scopes',
   'spore.inoculateGrantOne': 'Inoculate and grant {count} scope',
   'spore.installOnly': 'Installing does not start it. You configure it, then enable it as a separate act.',
+  'spore.refusedTitle': 'This spore could not be read',
   'pluginSettings.fieldCount': '{count} fields from the plugin\'s schema',
   'pluginSettings.fieldCountOne': '{count} field from the plugin\'s schema',
   'pluginSettings.rejectedTitle': 'Rejected by {plugin} — nothing was saved',

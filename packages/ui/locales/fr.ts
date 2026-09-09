@@ -257,6 +257,7 @@ export const fr: Record<StringKey, string> = {
   'spore.inoculateGrant': 'Inoculer et accorder {count} permissions',
   'spore.inoculateGrantOne': 'Inoculer et accorder {count} permission',
   'spore.installOnly': 'Installer ne le d\u00e9marre pas. Vous le configurez, puis vous l\u2019activez, en deux actes distincts.',
+  'spore.refusedTitle': 'Cette spore n\u2019a pas pu \u00eatre lue',
   'pluginSettings.fieldCount': '{count} champs issus du sch\u00e9ma du plugin',
   'pluginSettings.fieldCountOne': '{count} champ issu du sch\u00e9ma du plugin',
   'pluginSettings.rejectedTitle': 'Refus\u00e9 par {plugin} \u2014 rien n\u2019a \u00e9t\u00e9 enregistr\u00e9',

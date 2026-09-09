@@ -203,10 +203,23 @@ export function SporeDetail(): React.JSX.Element {
   }
 
   if (error) {
+    // Built here as well as in the success branch: a refusal is the one state with no other
+    // way back, and `source` may be null because the fetch itself is what failed.
+    const trail = source === null
+      ? [{ label: t('sources.title'), to: '/sources' }]
+      : [{ label: t('sources.title'), to: '/sources' }, { label: source.label, to: `/sources/${id}` }]
     return (
-      <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>
-        {refusal ?? t('error.generic')}
-      </p>
+      <div className="space-y-4">
+        <Breadcrumb trail={trail} />
+        <section
+          className={`space-y-2 rounded-xl border p-4 ${TONE_CLASSES.warn.border} ${TONE_CLASSES.warn.bg}`}
+        >
+          <h1 className="text-title font-medium">{t('spore.refusedTitle')}</h1>
+          <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>
+            {refusal ?? t('error.generic')}
+          </p>
+        </section>
+      </div>
     )
   }
   if (spore === null || source === null) return <div />
