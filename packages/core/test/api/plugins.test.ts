@@ -10,6 +10,7 @@ import { inoculate } from '../../src/sporangium/inoculate.js'
 import { managedRoot } from '../../src/sporangium/layout.js'
 import { bundleOf } from '../support/bundle.js'
 import { silentLogger } from '../support/logger.js'
+import { germinatePhase } from '../../src/boot/germinate.js'
 import { setAlias } from '../../src/rhizomorph/aliases.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
@@ -252,6 +253,90 @@ describe('/api/plugins', () => {
     })
     expect(response.statusCode).toBe(200)
     expect(readSettings(served.state.db, 'needs-config')).toEqual({})
+  })
+
+  // The §8 hole task 1 closed on the mycelium path, reopened on the HTTP route: `null` deleted the
+  // row with no check, so an enabled enforcing inhibitor went dormant at the next boot and refused
+  // all traffic with no command left to undo it. The verdict is on the resulting settings object.
+  it('refuses a clear that would leave an enabled, germinated plugin with a configuration it refuses', async () => {
+    booted = await bootAndLogin({ spores: configurable })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: 's3cr3t' },
+    })
+    // The boot above germinated with no settings, so the plugin is dormant; re-germinating with
+    // the value stored is what puts it in the state a clear must not break.
+    await germinatePhase(served.state, silentLogger())
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: null },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(readSettings(served.state.db, 'needs-config')).toEqual({ token: 's3cr3t' })
+  })
+
+  // The other arm of the same ruling: returning a plugin to its schema defaults before enabling
+  // it is exactly what a clear is for, so a disabled install must still be clearable.
+  it('allows a clear that would leave a disabled plugin incomplete', async () => {
+    booted = await bootAndLogin({ spores: configurable })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: 's3cr3t' },
+    })
+    await germinatePhase(served.state, silentLogger())
+    await app.inject({ method: 'POST', url: '/api/plugins/needs-config/disable', headers: { cookie } })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: null },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(readSettings(served.state.db, 'needs-config')).toEqual({})
+  })
+
+  // Completeness stays enablePlugin's check (§8): a two-required-field form is filled one field at
+  // a time, so a write that leaves the object incomplete is not a clear and must still pass.
+  it('lets a plain write leave an enabled plugin incomplete, since only a clear is guarded', async () => {
+    booted = await bootAndLogin({ spores: configurableTwoFields })
+    const { app, served, cookie } = booted
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { url: 'http://x' },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(readSettings(served.state.db, 'needs-config')).toEqual({ url: 'http://x' })
+  })
+
+  // A `null` on a key with no row removed nothing. The alias route six lines above states the
+  // opposite principle, and an operator must not be told a setting was cleared when none was.
+  it('reports a null that found no row as unchanged, not as a bare ok', async () => {
+    booted = await bootAndLogin({ spores: vault })
+    const { app, served, cookie } = booted
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { url: null },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({ ok: true, unchanged: ['url'] })
+    expect(readSettings(served.state.db, 'vault')).toEqual({})
+  })
+
+  // The plural half: a cleared row and a no-op in one body must be told apart.
+  it('names only the null that found no row, not the one that removed a setting', async () => {
+    booted = await bootAndLogin({ spores: vault })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { url: 'http://x' },
+    })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { url: null, token: null },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({ ok: true, unchanged: ['token'] })
+    expect(readSettings(served.state.db, 'vault')).toEqual({})
   })
 
   // Found on a running bot: the mask is 4 characters, so a schema requiring a longer secret

@@ -234,10 +234,9 @@ export function undeclaredKeys(form: FormSchema, keys: readonly string[]): reado
 }
 
 /**
- * Refuses a key the plugin's own JSON Schema does not declare, **and a value that schema rejects**
- * (spec §8). Declared is not valid: without the second check a channel command stores a value that
- * makes the plugin dormant at the next boot, which for an enforcing inhibitor refuses all traffic
- * on every channel with no command left to undo it.
+ * Refuses a key the plugin's schema does not declare **and a value it rejects** (spec §8): declared
+ * is not valid, or a channel command makes an enforcing inhibitor dormant with nothing left to undo
+ * it. `null` is an ordinary value here — clearing a key is the HTTP route's shape alone.
  */
 export async function writeDeclaredSetting(
   db: Db, sporesDirs: readonly string[], name: string, key: string, value: unknown,
@@ -362,6 +361,23 @@ function asConfigIssue(issue: unknown): ConfigIssue {
       ? { params: params as Record<string, unknown> }
       : {}),
   }
+}
+
+/**
+ * `enablePlugin`'s own whole-object verdict, for a caller holding settings that are not stored yet
+ * (spec §8). A plugin that publishes no schema, or whose schema throws, refuses nothing.
+ */
+export async function settingsIncomplete(
+  db: Db, sporesDirs: readonly string[], name: string, values: Record<string, unknown>,
+): Promise<boolean> {
+  let module: Awaited<ReturnType<typeof loadSporeModule>>
+  try {
+    module = await loadSporeModule(sporesDirs, name)
+  } catch {
+    return false
+  }
+  const result = parseWith(module?.configSchema, values)
+  return result !== undefined && !result.ok
 }
 
 /**

@@ -24,6 +24,7 @@ api:
   aliasRefused: "the alias for ''{plugin}.{command}'' was refused"
   aliasManifestUnreadable: "plugin ''{plugin}'' has no readable manifest on disk"
   pluginSettingInvalid: "plugin ''{plugin}'' rejected the value given for: {keys}"
+  pluginSettingClearRefused: "clearing {keys} would leave plugin ''{plugin}'' with a configuration it refuses; disable it first"
   germinationNotDegraded: "germination can only be retried while the runtime is degraded"
   routeNotFound: "no route for ''{path}''"
   sourceNotFound: "no sporangium source with id ''{id}''"

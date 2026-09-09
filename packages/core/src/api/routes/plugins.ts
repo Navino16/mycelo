@@ -5,9 +5,9 @@ import type { RuntimeState } from '../../boot/state.js'
 import { enablePlugin } from '../../config/lifecycle.js'
 import {
   formSchemaOf, isMaskedSecretUnchanged, listPlugins, manifestFactsByName, provenanceByName,
-  redactSecrets, rejectedSettings, rewriteSetting, secretKeysOf, undeclaredKeys,
+  redactSecrets, rejectedSettings, rewriteSetting, secretKeysOf, settingsIncomplete, undeclaredKeys,
 } from '../../config/plugins.js'
-import { clearSetting, getInstall, listInstalls, setEnabled } from '../../config/store.js'
+import { clearSetting, getInstall, listInstalls, readSettings, setEnabled } from '../../config/store.js'
 import { findSpore } from '../../config/lifecycle.js'
 import { demandsOf } from '../../germination/requirements.js'
 import type { SporeDemands } from '../../germination/requirements.js'
@@ -250,7 +250,7 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     const secrets = await secretKeysOf(state.db, state.config.discoveryDirs, name)
     // Declared is not valid: without this an enabled plugin takes a value that makes it
     // dormant at the next boot, which is the failure enablePlugin() exists to prevent (§8).
-    // `null` clears a key rather than setting it, so it must skip the schema, not fail it.
+    // A `null` carries no value to check against the schema; the clear guard below holds §8 for it.
     const proposed = Object.fromEntries(
       Object.entries(body).filter(([key, v]) => (
         v !== null && !isMaskedSecretUnchanged(state.db, name, key, v, secrets)
@@ -263,18 +263,44 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
       const rejectedKeys = rejected.map((r) => r.key).join(', ')
       throw badRequest('api.pluginSettingInvalid', { plugin: name, keys: rejectedKeys }, rejected)
     }
+    // §8 for a clear, whose verdict is on the resulting object rather than on one value:
+    // completeness stays enablePlugin's check, so a plain write may still leave a form half filled.
+    // `after` is built from `proposed` and `cleared`, never re-derived, so it cannot disagree below.
+    const cleared = keys.filter((key) => body[key] === null)
+    if (cleared.length > 0 && willGerminate(state, name)) {
+      const after = { ...readSettings(state.db, name), ...proposed }
+      for (const key of cleared) delete after[key]
+      if (await settingsIncomplete(state.db, state.config.discoveryDirs, name, after)) {
+        throw badRequest('api.pluginSettingClearRefused', { plugin: name, keys: cleared.join(', ') })
+      }
+    }
     // Every key declared and every value parsed, so only the database can still fail: one
     // synchronous transaction makes that all-or-nothing. rewriteSetting is synchronous, so
     // it can run inside bun:sqlite's transaction(), which cannot await.
+    // `unchanged` is this route's success half — the mask guard dropped it, or the null found no
+    // row. The mycelium path spells the same word a refusal, `Outcome` having no third arm.
     const unchanged: string[] = []
     state.db.transaction(() => {
       for (const [key, value] of Object.entries(body)) {
-        if (value === null) { clearSetting(state.db, name, key); continue }
+        if (value === null) {
+          if (!clearSetting(state.db, name, key)) unchanged.push(key)
+          continue
+        }
         if (!rewriteSetting(state.db, name, key, value, secrets)) unchanged.push(key)
       }
     })
     return { ok: true, unchanged, restartRequired: state.germination.status === 'germinated' }
   })
+}
+
+/**
+ * Whether the next germination will try this install. A disabled or already dormant plugin cannot
+ * be pushed into dormancy, and returning it to its schema defaults is what a clear is for.
+ */
+function willGerminate(state: RuntimeState, name: string): boolean {
+  if (getInstall(state.db, name)?.enabled !== true) return false
+  if (state.germination.status !== 'germinated') return true
+  return !state.germination.mycelium.registry.dormant.some((d) => d.name === name)
 }
 
 function requireInstalled(state: RuntimeState, name: string): void {
