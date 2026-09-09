@@ -23,9 +23,9 @@ const LABEL_X = 24
 const NAME_CHARS = Math.floor((BOX_W - LABEL_X * 2) / MONO_ADVANCE)
 /** Characters of the 12 px mono face that fit inside a node box. */
 export const REASON_CHARS_PER_LINE = Math.floor(BOX_W / MONO_ADVANCE)
-/** 3 lines would carry a descender past the next row's box top; see graph.test.tsx's geometry pin. */
-export const REASON_LINES = 2
-export const REASON_LINE_H = 14
+/** 3 lines at a 12px pitch stays inside the row below; see graph.test.tsx's geometry pin. */
+export const REASON_LINES = 3
+export const REASON_LINE_H = 12
 /** Baseline of the first reason line, relative to the node's own box top. */
 export const REASON_FIRST_BASELINE = BOX_H + 15
 /** A 12 px mono face's descender depth (g, y, p, ...), so the last line clears the row below. */
@@ -46,8 +46,18 @@ function reasonLines(text: string): readonly string[] {
   const lines: string[] = []
   let rest = text
   while (rest.length > 0 && lines.length < REASON_LINES) {
-    lines.push(rest.slice(0, REASON_CHARS_PER_LINE))
-    rest = rest.slice(REASON_CHARS_PER_LINE)
+    if (rest.length <= REASON_CHARS_PER_LINE) {
+      lines.push(rest)
+      rest = ''
+      break
+    }
+    // Break at the last space in budget, keeping it in the line so a plain join still
+    // reconstructs the text; a single token longer than the budget falls back to a hard slice.
+    const window = rest.slice(0, REASON_CHARS_PER_LINE)
+    const at = window.lastIndexOf(' ')
+    const cut = at > 0 ? at + 1 : REASON_CHARS_PER_LINE
+    lines.push(rest.slice(0, cut))
+    rest = rest.slice(cut)
   }
   const last = lines.at(-1)
   // The last line owns the ellipsis, so one mechanism produces one signal (C9).

@@ -123,6 +123,40 @@ describe('the anastomosis graph', () => {
     expect(lines.map((line) => line.textContent).join('')).toBe('radarr2 is not installed')
   })
 
+  // The core's most frequent dormancy text (refusal.germination.requiredRhizaMissing) ran to
+  // the ellipsis at the old 2-line, 46-char capacity in both locales; 3 lines carry 69.
+  it.each([
+    ["requires rhiza 'radarr2', which is not installed"],
+    ["requiert le rhiza « radarr2 », qui n'est pas installé"],
+  ])('fits the most common dormancy reason with no ellipsis: %s', async (reason) => {
+    serve({ ...GRAPH, nodes: [...GRAPH.nodes.filter((n) => n.name !== 'orphan'), { name: 'orphan', state: 'dormant', reason }] })
+    renderGraph()
+
+    await waitFor(() => { expect(screen.getAllByText('orphan').length).toBeGreaterThan(0) })
+    const desktop = screen.getByTestId('graph-desktop')
+    const lines = within(desktop).getAllByTestId('reason-orphan')
+    expect(lines.map((line) => line.textContent).join('')).toBe(reason)
+  })
+
+  // task 4b: a fixed 23-char slice with no word boundary orphaned a single letter on its own
+  // line ('installe' / 'd'). No line may end mid-token unless that one token alone is wider
+  // than the budget — checked against the space-delimited tokens of the source text.
+  it('breaks a wrapped reason at a word boundary, never mid-token', async () => {
+    const reason = 'radarr2 is not installed'
+    serve({ ...GRAPH, nodes: [...GRAPH.nodes.filter((n) => n.name !== 'orphan'), { name: 'orphan', state: 'dormant', reason }] })
+    renderGraph()
+
+    await waitFor(() => { expect(screen.getAllByText('orphan').length).toBeGreaterThan(0) })
+    const desktop = screen.getByTestId('graph-desktop')
+    const lines = within(desktop).getAllByTestId('reason-orphan')
+    const tokens = reason.split(' ')
+    for (const line of lines.slice(0, -1)) {
+      const trimmed = (line.textContent ?? '').trimEnd()
+      const lastWord = trimmed.split(' ').at(-1) ?? ''
+      expect(tokens).toContain(lastWord)
+    }
+  })
+
   // A Zod refusal runs to hundreds of characters; drawn whole at the node it overlaps its
   // neighbours (plan defect 30). The SVG wraps it under the node, bounded to a few lines, and the
   // full text sits in <title> and on the mobile card.
