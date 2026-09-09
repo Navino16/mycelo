@@ -1086,7 +1086,7 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
             + 'description: command.keyed.description\n'
             + 'commands:\n  - name: keyed\n    description: command.keyed.description\n    respond: keyed.text\n',
           'translations/en.yaml': 'command:\n  keyed:\n    description: Report a keyed setting\nkeyed:\n  text: ok\n',
-          'translations/fr.yaml': 'command:\n  keyed:\n    description: Signale un reglage cle\nkeyed:\n  text: ok\n',
+          'translations/fr.yaml': 'command:\n  keyed:\n    description: Signale un réglage clé\nkeyed:\n  text: ok\n',
         })
       },
     })
@@ -1098,7 +1098,7 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
       method: 'GET', url: '/api/plugins', headers: { cookie, 'accept-language': 'fr' },
     })).json<{ enzyme: { name: string, description?: string }[] }>()
     expect(en.enzyme.find((p) => p.name === 'keyed')?.description).toBe('Report a keyed setting')
-    expect(fr.enzyme.find((p) => p.name === 'keyed')?.description).toBe('Signale un reglage cle')
+    expect(fr.enzyme.find((p) => p.name === 'keyed')?.description).toBe('Signale un réglage clé')
   })
 
   // The 'broke' fixture's own shape (task 4): a required, unset setting keeps it dormant, and

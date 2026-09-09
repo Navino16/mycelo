@@ -107,8 +107,8 @@ function pluginsOf(state: RuntimeState, locale: string): readonly PluginDto[] {
       // listPlugins answers [] for anything not germinated (config/plugins.ts); the manifest
       // still declares them, and 1c's dead-command list is exactly that set.
       commands: info.commands.length > 0 ? info.commands : fact?.commands ?? [],
-      // A bare description resolves in the producing spore's own domain (design §5.3); an
-      // author writing plain text instead of a key falls through the cascade unchanged.
+      // A description is a catalogue key in the spore's own domain (i18n design §5.2, §3); an
+      // author writing plain text instead falls through the cascade unchanged.
       ...(fact?.description === undefined
         ? {}
         : { description: state.translator.translate(info.name, fact.description, locale) }),
