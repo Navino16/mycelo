@@ -2,7 +2,15 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { I18nProvider } from '../../src/i18n.tsx'
-import { Graph, REASON_CHARS_PER_LINE } from '../../src/screens/Graph.tsx'
+import { BOX_H, GAP_Y } from '../../src/graphLayout.ts'
+import {
+  Graph,
+  REASON_CHARS_PER_LINE,
+  REASON_DESCENDER,
+  REASON_FIRST_BASELINE,
+  REASON_LINE_H,
+  REASON_LINES,
+} from '../../src/screens/Graph.tsx'
 import type { GraphDto } from '../../src/api/types.ts'
 
 const realFetch = globalThis.fetch
@@ -102,14 +110,17 @@ describe('the anastomosis graph', () => {
     expect(screen.queryByRole('img')).toBeNull()
   })
 
-  // brief §5: the metaphor never replaces information — a dormant node has no kind to
-  // label it by, so its literal reason is what the screen must show instead.
+  // brief §5: a dormant node's literal reason must show, not just the word. Scoped to the
+  // desktop SVG by testid: getByText only joins direct text children, so an unscoped query
+  // on a wrapped <tspan> reason would pass on <title>/mobile alone with no desktop text.
   it('shows the literal reason beside a dormant node, never the word alone', async () => {
     serve(GRAPH)
     renderGraph()
 
     await waitFor(() => { expect(screen.getAllByText('orphan').length).toBeGreaterThan(0) })
-    expect(screen.getAllByText('radarr2 is not installed').length).toBeGreaterThan(0)
+    const desktop = screen.getByTestId('graph-desktop')
+    const lines = within(desktop).getAllByTestId('reason-orphan')
+    expect(lines.map((line) => line.textContent).join('')).toBe('radarr2 is not installed')
   })
 
   // A Zod refusal runs to hundreds of characters; drawn whole at the node it overlaps its
@@ -123,7 +134,7 @@ describe('the anastomosis graph', () => {
     await waitFor(() => { expect(screen.getAllByText('orphan').length).toBeGreaterThan(0) })
     const desktop = screen.getByTestId('graph-desktop')
     const lines = within(desktop).getAllByTestId('reason-orphan')
-    expect(lines.length).toBe(3)
+    expect(lines.length).toBe(REASON_LINES)
     for (const line of lines) expect(line.textContent?.length).toBeLessThanOrEqual(REASON_CHARS_PER_LINE)
     expect(lines[lines.length - 1]?.textContent?.endsWith('…')).toBe(true)
     expect(desktop.querySelector('title')?.textContent).toBe(reason)
@@ -151,6 +162,14 @@ describe('the anastomosis graph', () => {
     // "substrat" is a prefix shared by both catalogues' actual copy, unlike the brief's
     // /chargement|loading/i, which matches neither 'Reading the substrate…' nor 'Lecture du substrat…'.
     expect(screen.getByText(/substrat/i)).toBeTruthy()
+  })
+
+  // Pure geometry, no render: two same-kind nodes can stack one row apart (row pitch
+  // BOX_H + GAP_Y, graphLayout.test.ts's `[0, 79]`); a reason block reaching past that,
+  // descenders included, would overlap the box below it.
+  it('keeps a reason block, descenders included, inside the row pitch', () => {
+    const lastBaseline = REASON_FIRST_BASELINE + (REASON_LINES - 1) * REASON_LINE_H
+    expect(lastBaseline + REASON_DESCENDER).toBeLessThanOrEqual(BOX_H + GAP_Y)
   })
 
   // A component test cannot see a viewport: assert both renderings exist and each carries

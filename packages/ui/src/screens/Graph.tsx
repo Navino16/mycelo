@@ -23,7 +23,13 @@ const LABEL_X = 24
 const NAME_CHARS = Math.floor((BOX_W - LABEL_X * 2) / MONO_ADVANCE)
 /** Characters of the 12 px mono face that fit inside a node box. */
 export const REASON_CHARS_PER_LINE = Math.floor(BOX_W / MONO_ADVANCE)
-const REASON_LINES = 3
+/** 3 lines would carry a descender past the next row's box top; see graph.test.tsx's geometry pin. */
+export const REASON_LINES = 2
+export const REASON_LINE_H = 14
+/** Baseline of the first reason line, relative to the node's own box top. */
+export const REASON_FIRST_BASELINE = BOX_H + 15
+/** A 12 px mono face's descender depth (g, y, p, ...), so the last line clears the row below. */
+export const REASON_DESCENDER = 4
 
 function widthOf(node: GraphNode): number {
   return node.name === 'core' ? CORE_W : BOX_W
@@ -94,7 +100,7 @@ function GraphMark(
                 key={i}
                 data-testid={`reason-${node.name}`}
                 x={0}
-                y={BOX_H + 15 + i * 14}
+                y={REASON_FIRST_BASELINE + i * REASON_LINE_H}
               >
                 {line}
               </tspan>
