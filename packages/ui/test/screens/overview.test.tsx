@@ -977,17 +977,21 @@ describe('the guided path out of an empty substrate', () => {
     expect(screen.queryByText('Create a role')).toBeNull()
   })
 
-  // brief item 2: a fresh substrate stays in the guided state exactly while its first spores
-  // are installed and go dormant — the operator must see both, not one hiding the other.
-  it('renders the guided start above the dormant reason, not instead of it', async () => {
+  // A dormant plugin is a plugin: /api/plugins lists it with state 'dormant', so stats.total
+  // is already 1 and the guided card must not also claim nothing is installed.
+  it('renders the dormant reason, and correctly suppresses the guided card, once that plugin exists', async () => {
     await withHealth(
       { ...GERMINATED, dormant: [{ name: 'radarr', reason: 'apiKey: missing required field', reasonKey: 'refusal.config.incomplete' }] },
-      { sources: [], plugins: { ...COMPLETE_PLUGINS, hypha: [] }, roles: [] },
+      {
+        sources: [],
+        plugins: { ...COMPLETE_PLUGINS, hypha: [], rhiza: [{ name: 'radarr', kind: 'rhiza', commands: [], state: 'dormant', enabled: true, scopes: [] }] },
+        roles: [],
+      },
     )
 
-    expect(await screen.findByText('Nothing is installed yet')).toBeDefined()
-    expect(screen.getByText('radarr')).toBeDefined()
+    expect(await screen.findByText('radarr')).toBeDefined()
     expect(screen.getByText('apiKey: missing required field')).toBeDefined()
+    expect(screen.queryByText('Nothing is installed yet')).toBeNull()
   })
 
   it('renders exactly the two remaining steps once one of them is done', async () => {
