@@ -107,6 +107,9 @@ function Plurals(): React.JSX.Element {
           '1 systemes hors service' on screen. */}
       <span data-testid="down">{plural(t, 'mute.systemsDown', 1, { count: 1 })}</span>
       <span data-testid="mute-dormant">{plural(t, 'mute.dormant', 1, { count: 1 })}</span>
+      <span data-testid="people-note">{plural(t, 'tile.peopleNote', 1, { count: 1 })}</span>
+      <span data-testid="commands-note">{plural(t, 'tile.commandsNote', 1, { count: 1 })}</span>
+      <span data-testid="any-installed">{plural(t, 'spore.anyInstalled', 1, { count: 1 })}</span>
       <button onClick={() => { setLocale(locale === 'en' ? 'fr' : 'en') }}>switch</button>
     </div>
   )
@@ -134,5 +137,16 @@ describe('the plural helper', () => {
     expect(screen.getByTestId('two').textContent).toBe('2 identit\u00e9s')
     expect(screen.getByTestId('down').textContent).toBe('1 syst\u00e8me hors service')
     expect(screen.getByTestId('mute-dormant').textContent).toBe('1 dormant')
+  })
+
+  // The three tile/spore counts routed through plural() by ruling C6, measured at
+  // '1 indisponibles' before the fix.
+  it('renders the singular form of every count string the tiles use', () => {
+    render(<I18nProvider><Plurals /></I18nProvider>)
+    fireEvent.click(screen.getByText('switch'))
+
+    expect(screen.getByTestId('people-note').textContent).toBe('1 jamais v\u00e9rifi\u00e9e')
+    expect(screen.getByTestId('commands-note').textContent).toBe('1 indisponible')
+    expect(screen.getByTestId('any-installed').textContent).toBe('1 install\u00e9')
   })
 })

@@ -327,7 +327,7 @@ export function Overview(): React.JSX.Element {
                     label={t('tile.people')}
                     value={body?.people === undefined ? undefined : String(body.people)}
                     note={body?.neverReviewed !== undefined && body.neverReviewed > 0
-                      ? t('tile.peopleNote', { count: body.neverReviewed })
+                      ? plural(t, 'tile.peopleNote', body.neverReviewed, { count: body.neverReviewed })
                       : undefined}
                     noteTone="warn"
                   />
@@ -335,7 +335,7 @@ export function Overview(): React.JSX.Element {
                     label={t('tile.commands')}
                     value={body?.commands === undefined ? undefined : String(body.commands.length)}
                     note={stats !== undefined && stats.unavailable > 0
-                      ? t('tile.commandsNote', { count: stats.unavailable })
+                      ? plural(t, 'tile.commandsNote', stats.unavailable, { count: stats.unavailable })
                       : undefined}
                     noteTone="warn"
                   />

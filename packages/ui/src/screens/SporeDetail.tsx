@@ -79,7 +79,7 @@ function Requirements(
           if (met.length === 0) {
             return { text: t('spore.unsatisfied'), tone: requirement.optional ? 'idle' : 'warn' }
           }
-          if (requirement.anyOf) return { text: t('spore.anyInstalled', { count: met.length }), tone: 'ok' }
+          if (requirement.anyOf) return { text: plural(t, 'spore.anyInstalled', met.length, { count: met.length }), tone: 'ok' }
           const strain = one === undefined ? undefined : installed.get(targetName(one))?.strain
           return { text: strain ?? t('spore.satisfied'), tone: 'ok' }
         })()
