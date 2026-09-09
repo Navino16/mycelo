@@ -534,6 +534,27 @@ describe('the generated settings form', () => {
     await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
   })
 
+  // A never-stored secret has `undefined` on both sides, so the untouched test held and every
+  // ajv error was dropped — `required` included. Save then fired a PUT without the key, the server
+  // judged only the keys present, and task 5's banner said Saved on a credential nobody set.
+  it('blocks Save on a required secret that was never stored, instead of reporting it saved', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const { calls } = mockVault({ schema: MIN_LENGTH_SECRET, settings: {} })
+      renderSettings()
+
+      await waitFor(() => { expect(screen.getByLabelText('Token')).toBeDefined() })
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      await waitFor(() => {
+        expect(screen.getByText("must have required property 'Token'")).toBeDefined()
+      })
+      expect(calls.some((c) => c.method === 'PUT')).toBe(false)
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
   // The other direction: a secret the operator retypes is a real value, and must still be
   // validated against the plugin's own schema.
   it('still validates a secret the operator retypes against the schema', async () => {
