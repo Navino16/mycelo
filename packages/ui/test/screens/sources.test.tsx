@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter } from 'react-router'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { Sources } from '../../src/screens/Sources.tsx'
-import { truncateTail } from '../../src/truncate.ts'
 import type { SourceDto, SporeOffer } from '../../src/api/types.ts'
 
 const realFetch = globalThis.fetch
@@ -152,8 +151,10 @@ describe('the sources list', () => {
     mockApi([OFFICIAL, THIRD_PARTY], { catalogues: { 1: 61, 2: 112 } })
     renderSources()
 
-    await waitFor(() => { expect(screen.getByText(truncateTail(OFFICIAL.location, 44))).toBeDefined() })
-    expect(screen.getByText(truncateTail(THIRD_PARTY.location, 44))).toBeDefined()
+    // Literals, not truncateTail(...) calls: OFFICIAL's url is under budget and must render
+    // unchanged, THIRD_PARTY's is the truncated case, and either side must pin independently.
+    await waitFor(() => { expect(screen.getByText('git@git.mycelo.dev:core.git')).toBeDefined() })
+    expect(screen.getByText('…ps://github.com/mycelo-community/spores.git')).toBeDefined()
   })
 
   it('counts the catalogue of each source and totals them in the header', async () => {
