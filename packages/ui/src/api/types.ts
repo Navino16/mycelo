@@ -234,8 +234,9 @@ export interface AliasCleared extends MutationResult {
 }
 
 /**
- * `PUT /api/plugins/:name/settings` — `unchanged` names a masked secret the mask guard dropped,
- * so a re-submitted form is not told it saved a credential it did not write.
+ * `PUT /api/plugins/:name/settings` — `unchanged` names a key the write left as stored: a masked
+ * secret the mask guard dropped, or a `null` that found no row. Success either way, unlike the
+ * mycelium path, which spells the same word a refusal.
  */
 export interface SettingsWriteResult extends MutationResult {
   unchanged: readonly string[]

@@ -169,7 +169,7 @@ export function People(): React.JSX.Element {
   // ruling F15: nothing on screen to act on means nothing armed. The set itself is kept rather
   // than emptied, so clearing the search brings the operator's selection back.
   const armed = items.length === 0 ? 0 : selected.size
-  // Same state the query string is built from (line 60-63): a q or role filter narrows what
+  // The same q and role the /api/people query string carries: either narrows what
   // selectNeverReviewed's own unfiltered fetch would grab, so the offer must not survive it.
   const hasFilter = q !== '' || role !== ''
 
