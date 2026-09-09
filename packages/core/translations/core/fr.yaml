@@ -36,3 +36,5 @@ api:
   sporeNotOffered: "« {label} » ne propose aucune spore nommée « {name} »"
   inoculateRefused: "« {name} » n'a pas pu être installé depuis « {label} »"
   inoculateFailed: "l'installation de « {name} » a échoué ; le journal du serveur contient le détail"
+health:
+  timeout: "health() n'a pas répondu en {ms} ms"

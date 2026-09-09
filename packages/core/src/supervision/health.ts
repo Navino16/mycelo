@@ -4,6 +4,7 @@ import { listPlugins } from '../config/plugins.js'
 import type { Registry } from '../germination/registry.js'
 import type { Db } from '../persistence/db.js'
 import { describeThrown } from '../support/thrown.js'
+import type { Translator } from '../i18n/translator.js'
 
 /**
  * spec §11: a rhiza that never answers is unreachable, exactly like one that throws. Without the
@@ -16,20 +17,31 @@ function unreachable(detail: string): RhizaHealth['status'] {
   return { state: 'unreachable', detail, checkedAt: new Date() }
 }
 
-/** Rejects rather than resolving, so one `catch` covers a throw, a rejection and a hang alike. */
-function afterTimeout(ms: number): { promise: Promise<never>, cancel: () => void } {
+/**
+ * Rejects rather than resolving, so one `catch` covers a throw, a rejection and a hang alike.
+ * This detail is core-authored, unlike a plugin's own, so it renders via `translator`/`locale`
+ * when given; the plugin-facing mycelium `health.read` call has no request locale to pass.
+ */
+function afterTimeout(
+  ms: number, translator?: Translator, locale?: string,
+): { promise: Promise<never>, cancel: () => void } {
   let timer: ReturnType<typeof setTimeout> | undefined
   const promise = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => { reject(new Error(`health() did not answer within ${String(ms)}ms`)) }, ms)
+    timer = setTimeout(() => {
+      const detail = translator === undefined || locale === undefined
+        ? `health() did not answer within ${String(ms)}ms`
+        : translator.translate('core', 'health.timeout', locale, { ms })
+      reject(new Error(detail))
+    }, ms)
   })
   return { promise, cancel: () => { if (timer !== undefined) clearTimeout(timer) } }
 }
 
 export async function aggregateHealth(
-  registry: Registry, timeoutMs: number = HEALTH_TIMEOUT_MS,
+  registry: Registry, timeoutMs: number = HEALTH_TIMEOUT_MS, translator?: Translator, locale?: string,
 ): Promise<readonly RhizaHealth[]> {
   return Promise.all(registry.rhizas.map(async (r) => {
-    const bound = afterTimeout(timeoutMs)
+    const bound = afterTimeout(timeoutMs, translator, locale)
     try {
       return { rhiza: r.name, status: await Promise.race([r.instance.health(), bound.promise]) }
     } catch (e) {
@@ -55,10 +67,12 @@ export interface RuntimeHealth {
 
 /**
  * `sporesDirs`/`db` default to reading nothing extra, so `registry.dormant` alone still
- * answers when a caller has neither (mirrors listPlugins' own optional db).
+ * answers when a caller has neither (mirrors listPlugins' own optional db). `translator`/`locale`
+ * render a timed-out rhiza's detail at the caller's locale (task 4, phase 9.75A).
  */
 export async function aggregateRuntimeHealth(
   germination: Germination, sporesDirs: readonly string[] = [], db?: Db,
+  translator?: Translator, locale?: string,
 ): Promise<RuntimeHealth> {
   if (germination.status !== 'germinated') {
     return {
@@ -77,7 +91,7 @@ export async function aggregateRuntimeHealth(
     mode: 'germinated',
     dormant,
     enforcingBlocked: registry.brokenEnforcing,
-    rhizas: await aggregateHealth(registry),
+    rhizas: await aggregateHealth(registry, undefined, translator, locale),
     blockedSinceBoot: admission.blockedSinceBoot(),
   }
 }

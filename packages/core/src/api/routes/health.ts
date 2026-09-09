@@ -29,7 +29,9 @@ function renderHealth(health: RuntimeHealth, translator: Translator, locale: str
 
 export function registerHealthRoutes(app: FastifyInstance, state: RuntimeState): void {
   app.get('/api/health', async (request) => renderHealth(
-    await aggregateRuntimeHealth(state.germination, state.config.discoveryDirs, state.db),
+    await aggregateRuntimeHealth(
+      state.germination, state.config.discoveryDirs, state.db, state.translator, request.locale,
+    ),
     state.translator, request.locale,
   ))
 
@@ -42,7 +44,9 @@ export function registerHealthRoutes(app: FastifyInstance, state: RuntimeState):
     }
     await retryGermination(state, createLogger())
     return renderHealth(
-      await aggregateRuntimeHealth(state.germination, state.config.discoveryDirs, state.db),
+      await aggregateRuntimeHealth(
+        state.germination, state.config.discoveryDirs, state.db, state.translator, request.locale,
+      ),
       state.translator, request.locale,
     )
   })

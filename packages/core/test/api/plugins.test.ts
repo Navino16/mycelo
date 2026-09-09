@@ -14,10 +14,10 @@ import { germinatePhase } from '../../src/boot/germinate.js'
 import { setAlias } from '../../src/rhizomorph/aliases.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
-  bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configurable, configurableTwoFields,
-  cyclingPair, definedSchema, degradedWith, eitherOrSchema, minPortSchema, mixedFieldSchema,
-  noJsonSchema, requiredAndOptional, schemaless, throwingModule, twoPluginsTwoCommands, vault,
-  writeSpore,
+  bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configSchemaModule, configurable,
+  configurableTwoFields, cyclingPair, definedSchema, degradedWith, eitherOrSchema, minPortSchema,
+  mixedFieldSchema, noJsonSchema, requiredAndOptional, schemaless, throwingModule,
+  twoPluginsTwoCommands, vault, writeSpore,
 } from './support.js'
 import type { LoggedIn, SporeWriter } from './support.js'
 
@@ -1075,6 +1075,56 @@ describe('GET /api/plugins/:name, declared against mounted', () => {
 })
 
 describe('the plugin description and a dormant plugin\'s commands', () => {
+  // A manifest whose own description mirrors its command's key (the vault/keep/broke
+  // convention, plan phase 9.75A task 4): it must resolve in the plugin's own domain,
+  // never reach the operator as the bare 'command.<name>.description' key.
+  it('resolves a manifest description that is itself a catalogue key, in the request locale', async () => {
+    booted = await bootAndLogin({
+      spores: (dir) => {
+        writeSpore(dir, 'keyed', {
+          'spore.yaml': 'kind: enzyme\nname: keyed\nseptum: "^0.12"\n'
+            + 'description: command.keyed.description\n'
+            + 'commands:\n  - name: keyed\n    description: command.keyed.description\n    respond: keyed.text\n',
+          'translations/en.yaml': 'command:\n  keyed:\n    description: Report a keyed setting\nkeyed:\n  text: ok\n',
+          'translations/fr.yaml': 'command:\n  keyed:\n    description: Signale un reglage cle\nkeyed:\n  text: ok\n',
+        })
+      },
+    })
+    const { app, cookie } = booted
+    const en = (await app.inject({
+      method: 'GET', url: '/api/plugins', headers: { cookie, 'accept-language': 'en' },
+    })).json<{ enzyme: { name: string, description?: string }[] }>()
+    const fr = (await app.inject({
+      method: 'GET', url: '/api/plugins', headers: { cookie, 'accept-language': 'fr' },
+    })).json<{ enzyme: { name: string, description?: string }[] }>()
+    expect(en.enzyme.find((p) => p.name === 'keyed')?.description).toBe('Report a keyed setting')
+    expect(fr.enzyme.find((p) => p.name === 'keyed')?.description).toBe('Signale un reglage cle')
+  })
+
+  // The 'broke' fixture's own shape (task 4): a required, unset setting keeps it dormant, and
+  // germinate.ts never loads a dormant spore's catalogue (design §5.2's unfinished half), so
+  // the raw key is the designed answer here, not a regression the translator can fix.
+  it('answers the raw key for a dormant plugin, whose catalogue was never loaded', async () => {
+    booted = await bootAndLogin({
+      spores: (dir) => {
+        writeSpore(dir, 'needs-config', {
+          'spore.yaml': 'kind: enzyme\nname: needs-config\nseptum: "^0.12"\n'
+            + 'description: command.keyed.description\n'
+            + 'commands:\n  - name: keyed\n    description: command.keyed.description\n    code: handleKeyed\n',
+          'src/index.ts': configSchemaModule(['token']),
+          'translations/en.yaml': 'command:\n  keyed:\n    description: Report a keyed setting\n',
+        })
+      },
+    })
+    const { app, cookie } = booted
+    const body = (await app.inject({
+      method: 'GET', url: '/api/plugins', headers: { cookie },
+    })).json<{ enzyme: { name: string, state: string, description?: string }[] }>()
+    const dormant = body.enzyme.find((p) => p.name === 'needs-config')
+    expect(dormant?.state).toBe('dormant')
+    expect(dormant?.description).toBe('command.keyed.description')
+  })
+
   it('carries the manifest description on a germinated plugin', async () => {
     booted = await bootAndLogin({
       spores: (dir) => {
