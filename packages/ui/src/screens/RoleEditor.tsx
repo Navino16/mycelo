@@ -267,7 +267,9 @@ export function RoleEditor(): React.JSX.Element {
           <div className="flex flex-wrap items-center gap-2">
             {/* Withheld while /api/commands is unknown: `0 / 0` is a count nobody confirmed. */}
             {commands !== null && (
-              <span className={`font-mono text-title ${ok.text}`}>
+              // Holding '*' warns rather than reassures: the counter must not read as ok
+              // beside the wildcard alert it sits above.
+              <span className={`font-mono text-title ${holdsAll ? warn.text : ok.text}`}>
                 {holdsAll
                   ? plural(t, 'roles.commandsAll', total, { total })
                   : t('role.counter', { granted, total })}
