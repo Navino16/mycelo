@@ -562,6 +562,15 @@ describe('the generated settings form', () => {
     expect(screen.queryByRole('switch')).toBeNull()
   })
 
+  // A dormant plugin is enabled \u2014 it germinated and failed \u2014 so gating on `!enabled` alone
+  // hides the card in exactly the population that reaches this screen.
+  it('offers the enable card on a dormant plugin, which is enabled and did not germinate', async () => {
+    mockVault({ detail: { ...GERMINATED, state: 'dormant' }, settings: {}, schema: MIN_LENGTH_SECRET })
+    renderSettings()
+
+    expect(await screen.findByRole('switch')).toBeTruthy()
+  })
+
   // RJSF passes formData through as `value`, undefined for a never-stored key; typing then
   // makes it defined, the uncontrolled-to-controlled transition React warns about (plan defect 1).
   it('masks a never-filled secret with an empty value and no React controlled-input warning', async () => {
