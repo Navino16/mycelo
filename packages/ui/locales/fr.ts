@@ -137,6 +137,7 @@ export const fr: Record<StringKey, string> = {
   'plugins.noneInState': 'Aucun plugin install\u00e9 n\u2019est {state}',
   'plugins.noneInStateLead': 'Rien sur ce substrat n\u2019est dans cet \u00e9tat. Retirez le filtre pour voir tous les plugins install\u00e9s.',
   'graph.title': 'Anastomose',
+  'graph.loading': 'Lecture du substrat\u2026',
   'graph.emptyTitle': 'Rien \u00e0 dessiner',
   'graph.empty': 'Rien n\u2019a germ\u00e9, il n\u2019y a donc rien \u00e0 dessiner. La vue d\u2019ensemble dit pourquoi.',
   'graph.summary': '{plugins} plugins \u00b7 {links} liens \u00b7 {broken} rompus',

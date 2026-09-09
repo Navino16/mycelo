@@ -20,11 +20,10 @@ const MARGIN = 24
 /** Advance of one 12 px mono character, and where a label starts inside its box. */
 const MONO_ADVANCE = 7.2
 const LABEL_X = 24
-// A Zod refusal runs to hundreds of characters; the node shows a prefix, <title> the whole (defect 30).
-const REASON_CHARS = 48
-/** Both derived from the advance, so neither the reason clips nor the name overruns its box. */
-const REASON_W = Math.ceil(REASON_CHARS * MONO_ADVANCE)
 const NAME_CHARS = Math.floor((BOX_W - LABEL_X * 2) / MONO_ADVANCE)
+/** Characters of the 12 px mono face that fit inside a node box. */
+export const REASON_CHARS_PER_LINE = Math.floor(BOX_W / MONO_ADVANCE)
+const REASON_LINES = 3
 
 function widthOf(node: GraphNode): number {
   return node.name === 'core' ? CORE_W : BOX_W
@@ -32,6 +31,22 @@ function widthOf(node: GraphNode): number {
 
 function clip(text: string, chars: number): string {
   return text.length > chars ? `${text.slice(0, chars - 1)}…` : text
+}
+
+// A Zod refusal runs to hundreds of characters; wrapped under its node it would still overrun
+// (plan defect 30, task 9). Wrapping keeps it inside the node's own width instead of extending
+// past it, where only a scroll or a <title> tooltip could reach it.
+function reasonLines(text: string): readonly string[] {
+  const lines: string[] = []
+  let rest = text
+  while (rest.length > 0 && lines.length < REASON_LINES) {
+    lines.push(rest.slice(0, REASON_CHARS_PER_LINE))
+    rest = rest.slice(REASON_CHARS_PER_LINE)
+  }
+  const last = lines.at(-1)
+  // The last line owns the ellipsis, so one mechanism produces one signal (C9).
+  if (rest.length > 0 && last !== undefined) lines[lines.length - 1] = `${last.slice(0, -1)}…`
+  return lines
 }
 
 function groupByKind(nodes: readonly PlacedNode[]): Record<SporeKind | 'unknown', PlacedNode[]> {
@@ -73,13 +88,17 @@ function GraphMark(
       {node.reason !== undefined && (
         <>
           <title>{node.reason}</title>
-          <text
-            data-reason={node.name}
-            y={BOX_H + 15}
-            fill="var(--color-warn)"
-            className="text-[12px] font-mono"
-          >
-            {clip(node.reason, REASON_CHARS)}
+          <text fill="var(--color-warn)" className="text-[12px] font-mono">
+            {reasonLines(node.reason).map((line, i) => (
+              <tspan
+                key={i}
+                data-testid={`reason-${node.name}`}
+                x={0}
+                y={BOX_H + 15 + i * 14}
+              >
+                {line}
+              </tspan>
+            ))}
           </text>
         </>
       )}
@@ -118,9 +137,7 @@ export function Graph(): React.JSX.Element {
       || shownEdges.some((e) => e.from === n.name || e.to === n.name))
     : placed
 
-  const width = shownNodes.reduce(
-    (m, n) => Math.max(m, n.x + (n.reason === undefined ? widthOf(n) : REASON_W)), 0,
-  ) + MARGIN * 2
+  const width = shownNodes.reduce((m, n) => Math.max(m, n.x + widthOf(n)), 0) + MARGIN * 2
   const height = shownNodes.reduce((m, n) => Math.max(m, n.y), 0) + BOX_H + MARGIN * 2
   // The substrate is not a plugin: it has no kind, and the phone's list is grouped by kind.
   const grouped = groupByKind(shownNodes.filter((n) => n.name !== 'core'))
@@ -166,6 +183,8 @@ export function Graph(): React.JSX.Element {
       </div>
 
       {error && <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.generic')}</p>}
+
+      {graph === null && !error && <p className="text-body text-text/70">{t('graph.loading')}</p>}
 
       {graph !== null && placed.length === 0 && (
         <EmptyState title={t('graph.emptyTitle')} body={t('graph.empty')} />

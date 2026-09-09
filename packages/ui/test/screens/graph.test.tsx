@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { I18nProvider } from '../../src/i18n.tsx'
-import { Graph } from '../../src/screens/Graph.tsx'
+import { Graph, REASON_CHARS_PER_LINE } from '../../src/screens/Graph.tsx'
 import type { GraphDto } from '../../src/api/types.ts'
 
 const realFetch = globalThis.fetch
@@ -46,6 +46,11 @@ function serveError(): void {
   globalThis.fetch = mock(() => Promise.resolve(new Response('{"error":{"message":"x"}}', {
     status: 500, headers: { 'content-type': 'application/json' },
   })))
+}
+
+// Never resolves, so the component is observed in its pre-fetch state: graph === null, error === false.
+function servePending(): void {
+  globalThis.fetch = mock(() => new Promise<Response>(() => {}))
 }
 
 function renderGraph(): void {
@@ -108,19 +113,44 @@ describe('the anastomosis graph', () => {
   })
 
   // A Zod refusal runs to hundreds of characters; drawn whole at the node it overlaps its
-  // neighbours (plan defect 30). The SVG shows a bounded prefix, the full text sits in <title>
-  // and on the mobile card.
-  it('bounds a long dormant reason in the SVG and keeps the full text in a title', async () => {
+  // neighbours (plan defect 30). The SVG wraps it under the node, bounded to a few lines, and the
+  // full text sits in <title> and on the mobile card.
+  it('bounds a long dormant reason across wrapped lines and keeps the full text in a title', async () => {
     const reason = 'configuration rejected: ' + Array.from({ length: 4 }, () => 'url: Invalid input: expected string, received undefined').join('; ')
     serve({ ...GRAPH, nodes: [...GRAPH.nodes.filter((n) => n.name !== 'orphan'), { name: 'orphan', state: 'dormant', reason }] })
     renderGraph()
 
     await waitFor(() => { expect(screen.getAllByText('orphan').length).toBeGreaterThan(0) })
-    const drawn = screen.getByTestId('graph-desktop').querySelector('[data-reason="orphan"]')
-    expect(drawn?.textContent?.length).toBeLessThanOrEqual(60)
-    expect(drawn?.textContent?.endsWith('…')).toBe(true)
-    expect(screen.getByTestId('graph-desktop').querySelector('title')?.textContent).toBe(reason)
+    const desktop = screen.getByTestId('graph-desktop')
+    const lines = within(desktop).getAllByTestId('reason-orphan')
+    expect(lines.length).toBe(3)
+    for (const line of lines) expect(line.textContent?.length).toBeLessThanOrEqual(REASON_CHARS_PER_LINE)
+    expect(lines[lines.length - 1]?.textContent?.endsWith('…')).toBe(true)
+    expect(desktop.querySelector('title')?.textContent).toBe(reason)
     expect(within(screen.getByTestId('graph-mobile')).getByText(reason)).toBeDefined()
+  })
+
+  // task 9, C9: a viewport scroll cut the reason silently, with no ellipsis. happy-dom has no
+  // getBBox (it throws), so the per-rendered-line string length stands in for the geometry check.
+  it('keeps every reason within its own node box', async () => {
+    const reason = 'health() did not answer within 5000ms'
+    serve({ nodes: [{ name: 'stall', kind: 'rhiza', state: 'unreachable', reason }], edges: [] })
+    renderGraph()
+
+    const lines = await screen.findAllByTestId(/^reason-stall/)
+    expect(lines.length).toBeGreaterThan(0)
+    for (const line of lines) {
+      expect(line.textContent?.length).toBeLessThanOrEqual(REASON_CHARS_PER_LINE)
+    }
+  })
+
+  it('renders a loading affordance while the graph has not answered', () => {
+    servePending()
+    renderGraph()
+
+    // "substrat" is a prefix shared by both catalogues' actual copy, unlike the brief's
+    // /chargement|loading/i, which matches neither 'Reading the substrate…' nor 'Lecture du substrat…'.
+    expect(screen.getByText(/substrat/i)).toBeTruthy()
   })
 
   // A component test cannot see a viewport: assert both renderings exist and each carries

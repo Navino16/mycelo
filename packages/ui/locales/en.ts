@@ -132,6 +132,7 @@ export const en = {
   'plugins.noneInState': 'No installed plugin is {state}',
   'plugins.noneInStateLead': 'Nothing on this substrate is in that state. Clear the filter to see every installed plugin.',
   'graph.title': 'Anastomosis',
+  'graph.loading': 'Reading the substrate…',
   'graph.emptyTitle': 'Nothing to draw',
   'graph.empty': 'Nothing has germinated, so there is nothing to draw. The overview says why.',
   'graph.summary': '{plugins} plugins · {links} links · {broken} broken',
