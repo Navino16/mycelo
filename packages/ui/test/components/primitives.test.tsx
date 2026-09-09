@@ -219,6 +219,15 @@ describe('the tab strip', () => {
 
     expect(screen.getByText('12').className).toContain('font-mono')
   })
+
+  // task 10: aria-current was wired on the Link branch alone, so a callback-driven tab set
+  // (no `to`) announced no current tab at all.
+  it('marks the active tab current by aria-current, for a callback-driven tab set too', () => {
+    renderTabs()
+
+    expect(screen.getByRole('button', { name: 'Diagnosis' }).getAttribute('aria-current')).toBe('true')
+    expect(screen.getByRole('button', { name: /Commands/ }).getAttribute('aria-current')).toBeNull()
+  })
 })
 
 describe('a person avatar', () => {

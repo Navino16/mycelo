@@ -81,10 +81,12 @@ export function writeSetting(db: Db, name: string, key: string, value: unknown, 
     .run()
 }
 
-export function clearSetting(db: Db, name: string, key: string): void {
-  db.delete(pluginSetting)
+/** `true` when a row was removed, so a caller can tell a clear from a no-op. */
+export function clearSetting(db: Db, name: string, key: string): boolean {
+  return db.delete(pluginSetting)
     .where(and(eq(pluginSetting.pluginName, name), eq(pluginSetting.key, key)))
-    .run()
+    .returning()
+    .all().length > 0
 }
 
 /** Every install's settings, keyed by plugin name — the shape germinate() takes. */

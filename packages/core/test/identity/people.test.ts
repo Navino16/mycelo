@@ -18,9 +18,14 @@ function person(db: Db, id: string, displayName: string): void {
     .run()
 }
 
-function identity(db: Db, principalId: string, channel: string, externalId: string): void {
+function identity(
+  db: Db, principalId: string, channel: string, externalId: string, displayName?: string,
+): void {
   db.insert(channelIdentity)
-    .values({ channel, externalId, principalId, firstSeenAt: new Date() })
+    .values({
+      channel, externalId, principalId, firstSeenAt: new Date(),
+      ...(displayName === undefined ? {} : { displayName }),
+    })
     .run()
 }
 
@@ -79,11 +84,71 @@ describe('searchPrincipals', () => {
     close()
   })
 
+  // 9's review: `%${term}%` made `_` and `%` wildcards, so a search for `a_b` also returned
+  // `axb`. Measured while fixing it: escaping alone matches *nothing* — SQLite needs the clause
+  // to declare `escape`, which drizzle's `like()` cannot emit.
+  it('treats _ and % in a search term as literal characters, not as wildcards', () => {
+    const { db, close } = fresh()
+    person(db, 'p1', 'a_b')
+    person(db, 'p2', 'axb')
+    person(db, 'p3', '100%')
+    person(db, 'p4', '100pc')
+    expect(searchPrincipals(db, { page: 1, perPage: 10, search: 'a_b' }).items.map((p) => p.id))
+      .toEqual(['p1'])
+    expect(searchPrincipals(db, { page: 1, perPage: 10, search: '100%' }).items.map((p) => p.id))
+      .toEqual(['p3'])
+    close()
+  })
+
+  // No fixture in the repository ever set `channelIdentity.displayName`, so the disjunct that
+  // reads it was dead to the whole suite: a person known to the channel under a name their
+  // principal does not carry was unfindable.
+  it("matches on a channel identity's own display name, not only on the principal's", () => {
+    const { db, close } = fresh()
+    person(db, 'p1', 'Zed')
+    identity(db, 'p1', 'console', 'u-77', 'Alice Cooper')
+    person(db, 'p2', 'Bob')
+    expect(searchPrincipals(db, { page: 1, perPage: 10, search: 'cooper' }).items.map((p) => p.id))
+      .toEqual(['p1'])
+    close()
+  })
+
+  // The third character of the class, and the one the phase's own escaping test misses: `\` is
+  // LIKE's escape character here, so leaving it unescaped makes `a\b` match `ab` — the wrong
+  // person, not merely one too many.
+  it('treats a backslash in a search term as a literal character', () => {
+    const { db, close } = fresh()
+    person(db, 'p1', 'a_b')
+    person(db, 'p2', 'axb')
+    person(db, 'p3', 'a\\_b')
+    person(db, 'p4', 'a\\b')
+    person(db, 'p5', 'ab')
+    expect(searchPrincipals(db, { page: 1, perPage: 10, search: 'a\\b' }).items.map((p) => p.id))
+      .toEqual(['p4'])
+    expect(searchPrincipals(db, { page: 1, perPage: 10, search: 'a\\' }).items.map((p) => p.id))
+      .toEqual(['p3', 'p4'])
+    close()
+  })
+
   it('finds nobody when the search term matches no display name and no identity', () => {
     const { db, close } = fresh()
     person(db, 'p1', 'Alice')
     identity(db, 'p1', 'console', 'alice-42')
     expect(searchPrincipals(db, { page: 1, perPage: 10, search: 'zzz' }).items).toEqual([])
+    close()
+  })
+
+  it('an empty search matches every principal, including one with null displayName and no identities', () => {
+    const { db, close } = fresh()
+    person(db, 'p1', 'Alice')
+    // Create p2 with null displayName and no channel identities: the edge case
+    db.insert(principal).values({
+      id: 'p2',
+      displayName: null,
+      createdAt: new Date(Date.parse('2026-01-01T00:00:00Z') + 2),
+    }).run()
+    const result = searchPrincipals(db, { page: 1, perPage: 10, search: '' }).items.map((p) => p.id).sort()
+    expect(result).toEqual(['p1', 'p2'])
     close()
   })
 

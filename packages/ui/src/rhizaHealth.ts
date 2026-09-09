@@ -7,6 +7,11 @@ export interface RhizaFault {
   detail?: string
 }
 
+/** One rule, two former call sites: a screen must not disagree with another about one rhiza. */
+export function collapseHealth(state: string): 'degraded' | 'unreachable' {
+  return state === 'degraded' ? 'degraded' : 'unreachable'
+}
+
 /**
  * What `/api/health` says about one plugin, or `undefined` while it answers healthy — and for
  * every plugin that is not a rhiza, since only rhizae are probed. Read by the plugins list and
@@ -20,7 +25,7 @@ export function faultOf(health: RuntimeHealth | null, name: string): RhizaFault 
   const found = (readArray<RhizaHealth>(health?.rhizas) ?? []).find((r) => r.rhiza === name)
   if (found === undefined || found.status.state === 'healthy') return undefined
   return {
-    state: found.status.state === 'degraded' ? 'degraded' : 'unreachable',
+    state: collapseHealth(found.status.state),
     ...(found.status.detail === undefined ? {} : { detail: found.status.detail }),
   }
 }

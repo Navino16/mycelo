@@ -153,6 +153,31 @@ describe('the anastomosis graph', () => {
     }
   })
 
+  // task 9: the brief's "React drops one" premise did not hold under this project's React 19 —
+  // see the phase report for the reconciler detail. Forcing the key-map path (a leading sibling
+  // removed) does surface a real defect: an orphaned extra node, so assert the count, not the warning.
+  it('keeps exactly two edges after a re-render drops a leading, unrelated one', async () => {
+    serve({
+      nodes: [
+        { name: 'admin', kind: 'enzyme', state: 'germinated' },
+        { name: 'radarr', kind: 'rhiza', state: 'dormant', reason: 'url: Invalid input' },
+        { name: 'signal', kind: 'hypha', state: 'germinated' },
+        { name: 'upcoming', kind: 'enzyme', state: 'germinated' },
+      ],
+      edges: [
+        { from: 'signal', to: 'upcoming', optional: false },
+        { from: 'admin', to: 'radarr', optional: false },
+        { from: 'admin', to: 'radarr', optional: true },
+      ],
+    })
+    renderGraph()
+
+    await waitFor(() => { expect(document.querySelectorAll('[data-edge="admin->radarr"]').length).toBe(2) })
+    fireEvent.click(await screen.findByRole('button', { name: 'Only failures' }))
+    await waitFor(() => { expect(document.querySelectorAll('[data-edge="signal->upcoming"]').length).toBe(0) })
+    expect(document.querySelectorAll('[data-edge="admin->radarr"]').length).toBe(2)
+  })
+
   // The discriminating case: the SPA dashed `optional`, which spent the dash on something
   // that is not a failure at all.
   it('leaves an intact optional edge solid and only quieter', async () => {

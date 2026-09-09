@@ -149,6 +149,62 @@ export const vault: SporeWriter = (sporesDir) => {
 export const configurableTwoFields: SporeWriter = configurableSpore(['url', 'token'])
 
 /**
+ * One required key and one optional one. Every other configurable fixture has
+ * `required === properties`, so removing any key leaves the object incomplete and a clear
+ * guard reading the wrong `after` cannot be told apart from one reading the right one.
+ */
+export const requiredAndOptional: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'needs-one', {
+    'spore.yaml': 'kind: enzyme\nname: needs-one\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: needsone\n    description: Report the configured setting\n    code: handleConfigured\n',
+    'src/index.ts': `
+      export default {
+        configSchema: {
+          safeParse: (input) => (typeof input?.req === 'string' && input.req.length > 0
+            ? { success: true, data: input }
+            : { success: false, error: { issues: [{ path: ['req'], message: 'missing required field' }] } }),
+          toJsonSchema: () => ({
+            type: 'object',
+            properties: { req: { type: 'string' }, opt: { type: 'string' } },
+            required: ['req'],
+          }),
+        },
+        create: () => ({ handlers: { handleConfigured: async () => {} } }),
+      }
+    `,
+  })
+}
+
+/** A plugin publishing no `configSchema` at all: `parseWith` finds no `safeParse` to call. */
+export const schemaless: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'unchecked', {
+    'spore.yaml': 'kind: enzyme\nname: unchecked\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: unchecked\n    description: Report the configured setting\n    code: handleConfigured\n',
+    'src/index.ts': `
+      export default { create: () => ({ handlers: { handleConfigured: async () => {} } }) }
+    `,
+  })
+}
+
+/**
+ * Another writer's spores beside `cyclingPair`. The cycle degrades the whole runtime, which is
+ * the only state where an enabled install with incomplete settings is still one the next
+ * germination will try — `willGerminate` has no registry to consult and answers true.
+ */
+export function degradedWith(spores: SporeWriter): SporeWriter {
+  return (sporesDir) => { cyclingPair(sporesDir); spores(sporesDir) }
+}
+
+/** A spore whose module throws on import: every reader across the plugin boundary must cope. */
+export const throwingModule: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'thrower', {
+    'spore.yaml': 'kind: enzyme\nname: thrower\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: thrower\n    description: Report the configured setting\n    code: handleConfigured\n',
+    'src/index.ts': "throw new Error('module body threw')\n",
+  })
+}
+
+/**
  * A plugin with a configSchema but **no** `toJsonSchema` — `formSchemaFor` answers
  * `available: false, reason: 'this plugin publishes no JSON Schema: configure it by hand'`.
  * The route must then write whatever it is given: that is what "by hand" means.

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'bun:test'
+import { describe, expect, it, spyOn } from 'bun:test'
 import type { Germination } from '../../src/boot/state.js'
-import { aggregateRuntimeHealth } from '../../src/supervision/health.js'
+import { aggregateHealth, aggregateRuntimeHealth, HEALTH_TIMEOUT_MS } from '../../src/supervision/health.js'
 import type { Registry } from '../../src/germination/registry.js'
 
 function registry(over: Partial<Registry>): Registry {
@@ -87,6 +87,7 @@ describe('aggregateRuntimeHealth', () => {
   it('reports every rhiza\'s health, not only the first', async () => {
     const rhiza = (name: string, state: string): unknown => ({
       name,
+      manifest: { kind: 'rhiza' },
       instance: { health: () => Promise.resolve({ state, checkedAt: new Date(0) }) },
     })
     const germination = {
@@ -109,8 +110,12 @@ describe('aggregateRuntimeHealth', () => {
       mycelium: {
         registry: registry({
           rhizas: [
-            { name: 'boom', instance: { health: () => { throw new Error('socket closed') } } },
-            { name: 'fine', instance: { health: () => Promise.resolve({ state: 'healthy', checkedAt: new Date(0) }) } },
+            { name: 'boom', manifest: { kind: 'rhiza' }, instance: { health: () => { throw new Error('socket closed') } } },
+            {
+              name: 'fine',
+              manifest: { kind: 'rhiza' },
+              instance: { health: () => Promise.resolve({ state: 'healthy', checkedAt: new Date(0) }) },
+            },
           ] as never,
         }),
         ...NO_ADMISSION,
@@ -160,5 +165,71 @@ describe('the mute counter reaches the health payload', () => {
 
   it('answers zero for a substrate that never germinated', async () => {
     expect((await aggregateRuntimeHealth({ status: 'starting' })).blockedSinceBoot).toBe(0)
+  })
+})
+
+describe('aggregateHealth timeout', () => {
+  // 9.5 review, M8: aggregateHealth caught a throw but not a `health()` that never resolves, and
+  // the graph became a second route a hanging rhiza could hang. A never-settling promise, not a
+  // slow one: a timer-based fake would pass against a `setTimeout` the code does not have.
+  it('reports a rhiza whose health() never resolves as unreachable', async () => {
+    const hanging = registry({
+      rhizas: [{ name: 'plex', instance: { health: () => new Promise<never>(() => undefined) } }],
+    } as unknown as Partial<Registry>)
+    const health = await aggregateHealth(hanging, 20)
+    expect(health).toHaveLength(1)
+    expect(health[0]?.status.state).toBe('unreachable')
+    expect(health[0]?.status.detail).toContain('did not answer')
+  })
+
+  it('still reports a healthy rhiza that answers well inside the bound', async () => {
+    const quick = registry({
+      rhizas: [{
+        name: 'plex',
+        instance: { health: () => Promise.resolve({ state: 'healthy' as const, checkedAt: new Date() }) },
+      }],
+    } as unknown as Partial<Registry>)
+    expect((await aggregateHealth(quick, 20))[0]?.status.state).toBe('healthy')
+  })
+
+  // The three tests around this one pass an explicit 20ms, so the shipped default bounds nothing
+  // the suite reads. Measured: Bun clamps a setTimeout delay past 2^31-1 to 1ms, so a
+  // never-settling health() cannot tell an unbounded default apart from a tight one — only the
+  // delay the code hands setTimeout can.
+  it('bounds a rhiza with the shipped default when the caller names none', async () => {
+    const spy = spyOn(globalThis, 'setTimeout')
+    try {
+      const quick = registry({
+        rhizas: [{
+          name: 'plex',
+          instance: { health: () => Promise.resolve({ state: 'healthy' as const, checkedAt: new Date() }) },
+        }],
+      } as unknown as Partial<Registry>)
+      await aggregateHealth(quick)
+      expect(spy.mock.calls.map((c) => c[1])).toEqual([HEALTH_TIMEOUT_MS])
+    } finally {
+      spy.mockRestore()
+    }
+    // An operator opens /api/health *because* something is wrong (9.5 review, M8): a bound they
+    // outwait is no bound.
+    expect(Number.isFinite(HEALTH_TIMEOUT_MS)).toBe(true)
+    expect(HEALTH_TIMEOUT_MS).toBeGreaterThan(0)
+    expect(HEALTH_TIMEOUT_MS).toBeLessThanOrEqual(10_000)
+  })
+
+  it('cancels the timeout when health() answers before it fires', async () => {
+    const spy = spyOn(globalThis, 'clearTimeout')
+    try {
+      const quick = registry({
+        rhizas: [{
+          name: 'plex',
+          instance: { health: () => Promise.resolve({ state: 'healthy' as const, checkedAt: new Date() }) },
+        }],
+      } as unknown as Partial<Registry>)
+      await aggregateHealth(quick, 20)
+      expect(spy).toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
   })
 })

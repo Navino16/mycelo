@@ -1,16 +1,43 @@
-import type { RhizaHealth, TranslatableRef } from '@mycelo/septum'
+import type { PluginInfo, RhizaHealth, TranslatableRef } from '@mycelo/septum'
 import type { Germination, GerminationFailure } from '../boot/state.js'
+import { listPlugins } from '../config/plugins.js'
 import type { Registry } from '../germination/registry.js'
+import type { Db } from '../persistence/db.js'
 import { describeThrown } from '../support/thrown.js'
 
-export async function aggregateHealth(registry: Registry): Promise<readonly RhizaHealth[]> {
+/**
+ * spec §11: a rhiza that never answers is unreachable, exactly like one that throws. Without the
+ * bound, one plugin's hanging `health()` hangs `/api/health` and `/api/graph` — the two screens an
+ * operator opens *because* something is wrong (9.5 review, M8).
+ */
+export const HEALTH_TIMEOUT_MS = 5_000
+
+function unreachable(detail: string): RhizaHealth['status'] {
+  return { state: 'unreachable', detail, checkedAt: new Date() }
+}
+
+/** Rejects rather than resolving, so one `catch` covers a throw, a rejection and a hang alike. */
+function afterTimeout(ms: number): { promise: Promise<never>, cancel: () => void } {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const promise = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => { reject(new Error(`health() did not answer within ${String(ms)}ms`)) }, ms)
+  })
+  return { promise, cancel: () => { if (timer !== undefined) clearTimeout(timer) } }
+}
+
+export async function aggregateHealth(
+  registry: Registry, timeoutMs: number = HEALTH_TIMEOUT_MS,
+): Promise<readonly RhizaHealth[]> {
   return Promise.all(registry.rhizas.map(async (r) => {
+    const bound = afterTimeout(timeoutMs)
     try {
-      return { rhiza: r.name, status: await r.instance.health() }
+      return { rhiza: r.name, status: await Promise.race([r.instance.health(), bound.promise]) }
     } catch (e) {
-      // spec §11: a rhiza that throws is unreachable, never a failed request — this screen
-      // is the one that carries enforcingBlocked, and it is opened because something is wrong.
-      return { rhiza: r.name, status: { state: 'unreachable' as const, detail: describeThrown(e), checkedAt: new Date() } }
+      return { rhiza: r.name, status: unreachable(describeThrown(e)) }
+    } finally {
+      // Or the process keeps a live timer per healthy rhiza per request, and Bun's test runner
+      // does not exit.
+      bound.cancel()
     }
   }))
 }
@@ -26,7 +53,13 @@ export interface RuntimeHealth {
   blockedSinceBoot: number
 }
 
-export async function aggregateRuntimeHealth(germination: Germination): Promise<RuntimeHealth> {
+/**
+ * `sporesDirs`/`db` default to reading nothing extra, so `registry.dormant` alone still
+ * answers when a caller has neither (mirrors listPlugins' own optional db).
+ */
+export async function aggregateRuntimeHealth(
+  germination: Germination, sporesDirs: readonly string[] = [], db?: Db,
+): Promise<RuntimeHealth> {
   if (germination.status !== 'germinated') {
     return {
       mode: 'degraded',
@@ -35,9 +68,14 @@ export async function aggregateRuntimeHealth(germination: Germination): Promise<
     }
   }
   const { registry, admission } = germination.mycelium
+  // Reuses /api/plugins' own reader (config/plugins.ts) rather than a second one: it already
+  // carries the install row of a spore whose directory has gone, which registry.dormant cannot.
+  const dormant = listPlugins(registry, sporesDirs, db)
+    .filter((p): p is PluginInfo & { refusal: TranslatableRef } => p.state === 'dormant' && p.refusal !== undefined)
+    .map((p) => ({ name: p.name, refusal: p.refusal }))
   return {
     mode: 'germinated',
-    dormant: registry.dormant.map((d) => ({ name: d.name, refusal: d.refusal })),
+    dormant,
     enforcingBlocked: registry.brokenEnforcing,
     rhizas: await aggregateHealth(registry),
     blockedSinceBoot: admission.blockedSinceBoot(),

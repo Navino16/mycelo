@@ -1,9 +1,13 @@
 import { and, eq } from 'drizzle-orm'
-import type { ConfigIssue, FormSchema, Manifest, PluginInfo, SporeKind, TranslatableRef } from '@mycelo/septum'
+import type {
+  ConfigIssue, FormSchema, Manifest, MyceliumScope, Outcome, PluginInfo, SporeKind, TranslatableRef,
+} from '@mycelo/septum'
 import { StoreRefusal } from '../authorization/refusal.js'
 import { discover } from '../germination/discover.js'
 import { isFailure, readManifest } from '../germination/manifest.js'
 import type { Registry } from '../germination/registry.js'
+import { demandsOf } from '../germination/requirements.js'
+import { configIssueRefsFor } from '../i18n/config-refs.js'
 import { refusalRef } from '../i18n/refusal-keys.js'
 import { renderConfigIssue } from '../i18n/refusal.js'
 import type { Translator } from '../i18n/translator.js'
@@ -103,11 +107,13 @@ export interface PluginFacts {
   description?: string
   /** Declared names, before any alias. */
   commands: readonly string[]
+  /** Union of every requirement's mycelium scopes (task 12), so a dormant plugin still answers them. */
+  scopes: readonly MyceliumScope[]
 }
 
 /**
- * Description and declared commands per plugin name (inventory §3 rows 4 and 11). One
- * directory walk, never one per plugin: findSpore() re-walks every time.
+ * Description, declared commands and declared scopes per plugin name (inventory §3 rows 4 and
+ * 11). One directory walk, never one per plugin: findSpore() re-walks every time.
  */
 export function manifestFactsByName(
   registry: Registry, sporesDirs: readonly string[],
@@ -118,6 +124,7 @@ export function manifestFactsByName(
     facts.set(manifest.name, {
       ...(manifest.description === undefined ? {} : { description: manifest.description }),
       commands: manifest.kind === 'enzyme' ? manifest.commands.map((c) => c.name) : [],
+      scopes: demandsOf(manifest).scopes,
     })
   }
   for (const spore of [...registry.hyphae, ...registry.rhizas, ...registry.enzymes, ...registry.inhibitors]) {
@@ -226,18 +233,55 @@ export function undeclaredKeys(form: FormSchema, keys: readonly string[]): reado
   return keys.filter((key) => !Object.hasOwn(properties, key))
 }
 
-/** Refuses a key the plugin's own JSON Schema does not declare (`undeclaredKeys`). */
+/**
+ * Refuses a key the plugin's schema does not declare **and a value it rejects** (spec §8): declared
+ * is not valid, or a channel command makes an enforcing inhibitor dormant with nothing left to undo
+ * it. `null` is an ordinary value here — clearing a key is the HTTP route's shape alone.
+ */
 export async function writeDeclaredSetting(
   db: Db, sporesDirs: readonly string[], name: string, key: string, value: unknown,
-): Promise<void> {
+): Promise<Outcome> {
   const form = await formSchemaOf(db, sporesDirs, name)
   if (undeclaredKeys(form, [key]).length > 0) {
-    throw new StoreRefusal(
-      'setting-undeclared', `plugin '${name}' declares no setting '${key}'`,
-      { plugin: name, count: 1, keys: key },
-    )
+    return {
+      ok: false,
+      refusal: refusalRef('refusal.plugin.settingUndeclared', { plugin: name, count: 1, keys: key }),
+    }
   }
-  rewriteSetting(db, name, key, value, await secretKeysOf(db, sporesDirs, name))
+  const secrets = await secretKeysOf(db, sporesDirs, name)
+  // A masked secret must skip validation the same way rewriteSetting will skip the write, or a
+  // length-constrained secret's own schema refuses a mask this path was never going to store.
+  if (isMaskedSecretUnchanged(db, name, key, value, secrets)) {
+    return { ok: false, refusal: refusalRef('refusal.config.maskedSecretUnchanged', { plugin: name, key }) }
+  }
+  const rejected = await rejectedSettingRefs(db, sporesDirs, name, key, value)
+  if (rejected.length > 0) {
+    return { ok: false, refusal: refusalRef('refusal.config.incomplete', { issues: rejected }) }
+  }
+  const written = rewriteSetting(db, name, key, value, secrets)
+  if (!written) {
+    return { ok: false, refusal: refusalRef('refusal.config.maskedSecretUnchanged', { plugin: name, key }) }
+  }
+  return { ok: true }
+}
+
+/**
+ * The refs the plugin's own schema produces for one key, or none. Never the merged object
+ * (spec §8): completeness is `enablePlugin`'s check, so a two-field form stays fillable one field
+ * at a time. A plugin that publishes no schema, or whose schema throws, refuses nothing.
+ */
+async function rejectedSettingRefs(
+  db: Db, sporesDirs: readonly string[], name: string, key: string, value: unknown,
+): Promise<readonly TranslatableRef[]> {
+  let module: Awaited<ReturnType<typeof loadSporeModule>>
+  try {
+    module = await loadSporeModule(sporesDirs, name)
+  } catch {
+    return []
+  }
+  const result = parseWith(module?.configSchema, { [key]: value })
+  if (result === undefined || result.ok) return []
+  return configIssueRefsFor(result.error, name, key)
 }
 
 export interface SettingRejection {
@@ -320,6 +364,24 @@ function asConfigIssue(issue: unknown): ConfigIssue {
 }
 
 /**
+ * The schema half alone of `enablePlugin`'s verdict, for a caller holding settings not stored yet
+ * (spec §8): never its manifest, septum-range or undeclared-secret refusals, and a module that
+ * fails to load or a safeParse that throws refuses nothing here where `enablePlugin` refuses.
+ */
+export async function settingsIncomplete(
+  sporesDirs: readonly string[], name: string, values: Record<string, unknown>,
+): Promise<boolean> {
+  let module: Awaited<ReturnType<typeof loadSporeModule>>
+  try {
+    module = await loadSporeModule(sporesDirs, name)
+  } catch {
+    return false
+  }
+  const result = parseWith(module?.configSchema, values)
+  return result !== undefined && !result.ok
+}
+
+/**
  * Spec §8: never the merged object — a two-required-field form must be fillable one field
  * at a time, which is why completeness is `enablePlugin`'s check and not this one's.
  */
@@ -340,20 +402,43 @@ export async function rejectedSettings(
     renderConfigIssue(translator, asConfigIssue(issue), name, locale))
 }
 
-// Promote, never demote. writeSetting() rewrites is_secret too, so carrying the row's flag
-// forward is what keeps an updated credential redacted; OR-ing the declaration in is what lets
-// a plugin that only declares an existing key in a later version ever take effect.
-export function rewriteSetting(
-  db: Db, name: string, key: string, value: unknown, secrets: readonly string[] = [],
-): void {
+function existingIsSecret(db: Db, name: string, key: string): boolean {
   const existing = db
     .select({ isSecret: pluginSetting.isSecret })
     .from(pluginSetting)
     .where(and(eq(pluginSetting.pluginName, name), eq(pluginSetting.key, key)))
     .get()
-  const isSecret = (existing?.isSecret ?? false) || secrets.includes(key)
+  return existing?.isSecret ?? false
+}
+
+// A key is secret from the stored row's `is_secret` **or** the plugin's own declaration —
+// never `secrets.includes(key)` alone, which would let a non-secret field whose value happens
+// to be the mask literal skip validation too.
+function isSecretKey(db: Db, name: string, key: string, secrets: readonly string[]): boolean {
+  return existingIsSecret(db, name, key) || secrets.includes(key)
+}
+
+/**
+ * `rewriteSetting`'s own drop condition, exported so a caller validating a proposed write can
+ * skip the same keys it will silently drop (task 3.1).
+ */
+export function isMaskedSecretUnchanged(
+  db: Db, name: string, key: string, value: unknown, secrets: readonly string[] = [],
+): boolean {
+  return isSecretKey(db, name, key, secrets) && value === REDACTED
+}
+
+// Promote, never demote. writeSetting() rewrites is_secret too, so carrying the row's flag
+// forward is what keeps an updated credential redacted; OR-ing the declaration in is what lets
+// a plugin that only declares an existing key in a later version ever take effect.
+/** `false` when the masked-secret guard dropped the write, so a route can say so (task 3). */
+export function rewriteSetting(
+  db: Db, name: string, key: string, value: unknown, secrets: readonly string[] = [],
+): boolean {
+  const isSecret = isSecretKey(db, name, key, secrets)
   // A form is handed '••••' by redactSecrets and sends the whole object back. Writing it would
   // replace the credential with its own mask, with is_secret still true and no way to tell.
-  if (isSecret && value === REDACTED) return
+  if (isSecret && value === REDACTED) return false
   writeSetting(db, name, key, value, isSecret)
+  return true
 }

@@ -51,6 +51,7 @@ export function PluginDetail(): React.JSX.Element {
 
   const commands = readArray<string>(plugin?.commands)
   const mounted = readArray<string>(plugin?.mounted)
+  const scopes = readArray<string>(plugin?.scopes)
 
   function run(path: string): void {
     if (inFlight.current) return
@@ -176,6 +177,17 @@ export function PluginDetail(): React.JSX.Element {
               <h2 className="text-title font-medium">{t('detail.mounted')}</h2>
               <ul className="space-y-1 font-mono text-body">
                 {mounted.map((s) => <li key={s}>{s}</li>)}
+              </ul>
+            </section>
+          )}
+
+          {/* task 12, artboard 1c: a dormant plugin has no `mounted` set to show, but its
+              manifest still declares what it would ask for. */}
+          {dormant && scopes !== undefined && scopes.length > 0 && (
+            <section className="space-y-2 rounded-xl border border-line bg-surface p-4">
+              <h2 className="text-title font-medium">{t('detail.declared')}</h2>
+              <ul className="space-y-1 font-mono text-body">
+                {scopes.map((s) => <li key={s}>{s}</li>)}
               </ul>
             </section>
           )}

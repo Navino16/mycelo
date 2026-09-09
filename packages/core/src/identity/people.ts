@@ -1,4 +1,6 @@
-import { and, count, eq, inArray, isNotNull, isNull, like, or } from 'drizzle-orm'
+import { and, count, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
+import type { SQL } from 'drizzle-orm'
+import type { SQLiteColumn } from 'drizzle-orm/sqlite-core'
 import type { Principal } from '@mycelo/septum'
 import { StoreRefusal } from '../authorization/refusal.js'
 import type { Db } from '../persistence/db.js'
@@ -102,21 +104,35 @@ export interface PeoplePage {
   perPage: number
 }
 
+/**
+ * `%` and `_` are LIKE wildcards, so an operator searching for `a_b` also matched `axb`. Measured:
+ * escaping alone matches **nothing** — SQLite treats `\` as an ordinary character unless the clause
+ * declares `escape`, which drizzle's `like()` cannot emit. Hence `likeEscaped` below.
+ */
+function escapeLike(raw: string): string {
+  return raw.replace(/[\\%_]/g, (c) => `\\${c}`)
+}
+
+/** `column LIKE ? ESCAPE '\'`, the clause `like()` has no way to produce. */
+function likeEscaped(column: SQLiteColumn, needle: string): SQL {
+  return sql`${column} like ${needle} escape '\\'`
+}
+
 /** A person is one principal across several channel identities (spec §5.4, UI brief §9). */
 export function searchPrincipals(db: Db, query: PeopleQuery): PeoplePage {
   const conditions = []
   if (query.search !== undefined && query.search !== '') {
-    const needle = `%${query.search}%`
+    const needle = `%${escapeLike(query.search)}%`
     // Two queries, not a raw sql subquery (task-13 brief): matches on either the
     // channel's own display name or its external id.
     const matchingIds = db.select({ principalId: channelIdentity.principalId }).from(channelIdentity)
-      .where(or(like(channelIdentity.externalId, needle), like(channelIdentity.displayName, needle)))
+      .where(or(likeEscaped(channelIdentity.externalId, needle), likeEscaped(channelIdentity.displayName, needle)))
       .all().map((r) => r.principalId)
-    conditions.push(or(like(principal.displayName, needle), inArray(principal.id, matchingIds)))
+    conditions.push(or(likeEscaped(principal.displayName, needle), inArray(principal.id, matchingIds)))
   }
   if (query.reviewed === true) conditions.push(isNotNull(principal.reviewedAt))
   if (query.reviewed === false) conditions.push(isNull(principal.reviewedAt))
-  if (query.role !== undefined && query.role !== '') {
+  if (query.role !== undefined) {
     const holders = db.select({ principalId: principalRole.principalId }).from(principalRole)
       .innerJoin(role, eq(role.id, principalRole.roleId))
       .where(eq(role.name, query.role))

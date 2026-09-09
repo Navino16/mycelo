@@ -25,7 +25,7 @@ const peopleQuerySchema = z.object({
   perPage: z.coerce.number().int().min(1).default(50),
   q: z.string().optional(),
   reviewed: z.enum(['true', 'false']).optional(),
-  role: z.string().min(1).optional(),
+  role: z.string().optional(),
 })
 
 const patchSchema = z.object({

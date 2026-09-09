@@ -34,6 +34,178 @@ let dir: string
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'mycelo-config-plugins-')) })
 afterEach(() => { rmSync(dir, { recursive: true, force: true }) })
 
+// 9.6A's milestone, concern H: `/plugin-set` stored `gate.channel = ''` and answered
+// `set channel on gate`. An enforcing inhibitor with an empty channel is dormant at the next
+// boot, which refuses all traffic on every channel. Declared is not valid (spec §8).
+it('refuses a declared key whose value the plugin\'s own schema rejects, and writes nothing', async () => {
+  const { db, close } = fresh()
+  recordInstall(db, 'gate', 'inhibitor')
+  const result = await writeDeclaredSetting(db, SPORES, 'gate', 'channel', '')
+  expect(result.ok).toBe(false)
+  expect(readSettings(db, 'gate')).toEqual({})
+  const refusal = result.ok ? undefined : result.refusal
+  expect(refusal === undefined ? '' : renderRefusal(translator, refusal, 'en'))
+    .toBe("configuration is incomplete: channel: gate config needs a non-empty 'channel'")
+  close()
+})
+
+it('writes a declared key whose value the schema accepts', async () => {
+  const { db, close } = fresh()
+  recordInstall(db, 'gate', 'inhibitor')
+  expect(await writeDeclaredSetting(db, SPORES, 'gate', 'channel', 'signal')).toEqual({ ok: true })
+  expect(readSettings(db, 'gate')).toEqual({ channel: 'signal' })
+  close()
+})
+
+// Two required fields, neither defaulted — unlike fixtures/gate, which defaults every field it
+// is not given and so can never report an issue on a key other than the one just written.
+// `rejectedSettingRefs` parses `{[key]: value}` against the whole schema, so this is the fixture
+// that can show a real Zod-shaped schema reporting the *other* required key as missing (spec §8).
+function twoRequired(): void {
+  mkdirSync(join(dir, 'twofield', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'twofield', 'spore.yaml'),
+    'kind: enzyme\nname: twofield\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: twofield\n    description: x\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(
+    join(dir, 'twofield', 'src/index.ts'),
+    'export default {\n'
+      + '  configSchema: {\n'
+      + '    safeParse: (input) => {\n'
+      + '      const issues = []\n'
+      + '      if (typeof input?.url !== "string" || input.url.length === 0) {\n'
+      + '        issues.push({ path: ["url"], message: "twofield config needs a non-empty \'url\'" })\n'
+      + '      }\n'
+      + '      if (typeof input?.token !== "string" || input.token.length === 0) {\n'
+      + '        issues.push({ path: ["token"], message: "twofield config needs a non-empty \'token\'" })\n'
+      + '      }\n'
+      + '      return issues.length > 0\n'
+      + '        ? { success: false, error: { issues } }\n'
+      + '        : { success: true, data: input }\n'
+      + '    },\n'
+      + '  },\n'
+      + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+      + '}\n',
+    'utf8',
+  )
+}
+
+// spec §8: "never the merged object — a two-required-field form must be fillable one field at a
+// time". Without the per-key filter this refuses on the unset `token`, and `url` becomes
+// impossible to set while `token` is empty (review, Important 2).
+it('writes one required key even though the other required key is still unset', async () => {
+  const { db, close } = fresh()
+  twoRequired()
+  recordInstall(db, 'twofield', 'enzyme')
+  expect(await writeDeclaredSetting(db, [dir], 'twofield', 'url', 'http://x')).toEqual({ ok: true })
+  expect(readSettings(db, 'twofield')).toEqual({ url: 'http://x' })
+  close()
+})
+
+it('refuses a rejected key, naming only that key and not the other unset one', async () => {
+  const { db, close } = fresh()
+  twoRequired()
+  recordInstall(db, 'twofield', 'enzyme')
+  const result = await writeDeclaredSetting(db, [dir], 'twofield', 'url', '')
+  expect(result.ok).toBe(false)
+  expect(readSettings(db, 'twofield')).toEqual({})
+  const refusal = result.ok ? undefined : result.refusal
+  expect(refusal === undefined ? '' : renderRefusal(translator, refusal, 'en'))
+    .toBe("configuration is incomplete: url: twofield config needs a non-empty 'url'")
+  close()
+})
+
+// Every other fixture emits exactly one issue per key, so a refusal naming only `issues[0]`
+// reads identically to one naming them all. A real Zod chain — `.min(8).regex(/\d/)` — emits two.
+function twoIssuesOnOneKey(): void {
+  mkdirSync(join(dir, 'twoissue', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'twoissue', 'spore.yaml'),
+    'kind: enzyme\nname: twoissue\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: twoissue\n    description: x\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(
+    join(dir, 'twoissue', 'src/index.ts'),
+    'export default {\n'
+      + '  configSchema: {\n'
+      + '    safeParse: (input) => {\n'
+      + '      const issues = []\n'
+      + '      const secret = input?.secret\n'
+      + '      if (typeof secret !== "string" || secret.length < 8) {\n'
+      + '        issues.push({ path: ["secret"], message: "must be at least 8 characters" })\n'
+      + '      }\n'
+      + '      if (typeof secret !== "string" || !/[0-9]/.test(secret)) {\n'
+      + '        issues.push({ path: ["secret"], message: "must contain a digit" })\n'
+      + '      }\n'
+      + '      return issues.length > 0\n'
+      + '        ? { success: false, error: { issues } }\n'
+      + '        : { success: true, data: input }\n'
+      + '    },\n'
+      + '  },\n'
+      + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+      + '}\n',
+    'utf8',
+  )
+}
+
+it('names every issue one key produced, not only the first', async () => {
+  const { db, close } = fresh()
+  twoIssuesOnOneKey()
+  recordInstall(db, 'twoissue', 'enzyme')
+  const result = await writeDeclaredSetting(db, [dir], 'twoissue', 'secret', 'short')
+  expect(result.ok).toBe(false)
+  expect(readSettings(db, 'twoissue')).toEqual({})
+  const refusal = result.ok ? undefined : result.refusal
+  expect(refusal === undefined ? '' : renderRefusal(translator, refusal, 'en'))
+    .toBe('configuration is incomplete: secret: must be at least 8 characters, '
+      + 'secret: must contain a digit')
+  close()
+})
+
+// A top-level `.refine()` carries `path: []`: it refuses the object, not a field. Every other
+// fixture here refuses a named field, so the whole-object branch of `configIssueRefsFor` was
+// reachable from no test — and dropped, this write answers ok and stores what the schema rejects.
+function wholeObjectRefusal(): void {
+  mkdirSync(join(dir, 'exclusive', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'exclusive', 'spore.yaml'),
+    'kind: enzyme\nname: exclusive\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: exclusive\n    description: x\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(
+    join(dir, 'exclusive', 'src/index.ts'),
+    'export default {\n'
+      + '  configSchema: {\n'
+      + '    safeParse: (input) => (typeof input?.socket === "string" && input.socket.length > 0\n'
+      + '      ? { success: false, error: { issues: [{\n'
+      + '          path: [], message: "socket and tcp are mutually exclusive",\n'
+      + '        }] } }\n'
+      + '      : { success: true, data: input }),\n'
+      + '  },\n'
+      + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+      + '}\n',
+    'utf8',
+  )
+}
+
+it("refuses a write the plugin's whole-object schema rejects, and writes nothing", async () => {
+  const { db, close } = fresh()
+  wholeObjectRefusal()
+  recordInstall(db, 'exclusive', 'enzyme')
+  const result = await writeDeclaredSetting(db, [dir], 'exclusive', 'socket', '/run/x.sock')
+  expect(result.ok).toBe(false)
+  expect(readSettings(db, 'exclusive')).toEqual({})
+  const refusal = result.ok ? undefined : result.refusal
+  expect(refusal?.key).toBe('refusal.config.incomplete')
+  expect(refusal === undefined ? '' : renderRefusal(translator, refusal, 'en'))
+    .toBe('configuration is incomplete: socket and tcp are mutually exclusive')
+  close()
+})
+
 // design §5.2's own worked example: fixtures/gate's error was a bare string, so
 // objectRejections' `member(result.error, 'issues')` found nothing and the value passed
 // through unvalidated. This is the defect ConfigError's guaranteed shape closes.
@@ -393,13 +565,62 @@ it('a value written while the plugin throws at import is stored in the clear (kn
   close()
 })
 
-it('writing the mask back to a secret leaves the stored credential intact', async () => {
+// An operator can type '••••' into /plugin-set, and a spore that reads settings() and writes
+// back gets the mask from redactSecrets — so the channel path must refuse this too, not answer
+// ok for a write it silently dropped (task 3's ruling on writeDeclaredSetting).
+it('writing the mask back to a secret leaves the credential intact, and refuses rather than answering ok', async () => {
   const { db, close } = fresh()
   vault()
   recordInstall(db, 'vault', 'enzyme')
   await writeDeclaredSetting(db, [dir], 'vault', 'token', 's3cr3t')
-  await writeDeclaredSetting(db, [dir], 'vault', 'token', REDACTED)
+  const result = await writeDeclaredSetting(db, [dir], 'vault', 'token', REDACTED)
+  expect(result.ok).toBe(false)
+  const refusal = result.ok ? undefined : result.refusal
+  expect(refusal === undefined ? '' : renderRefusal(translator, refusal, 'en'))
+    .toBe("plugin 'vault' setting 'token' was left unchanged: a masked secret cannot be written back")
   expect(readSettings(db, 'vault')).toEqual({ token: 's3cr3t' })
+  close()
+})
+
+// Found on a running bot via `/plugin-set keep token ••••`: the mask is 4 characters, so a
+// schema requiring a longer secret refused it as incomplete before rewriteSetting was ever
+// reached, and the operator was told their configuration was wrong when nothing was.
+function keepMinLength(): void {
+  mkdirSync(join(dir, 'keep', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'keep', 'spore.yaml'),
+    'kind: enzyme\nname: keep\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: keep\n    description: x\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(
+    join(dir, 'keep', 'src/index.ts'),
+    'export default {\n'
+      + '  configSchema: {\n'
+      + '    secrets: [\'token\'],\n'
+      + '    safeParse: (input) => (typeof input?.token === \'string\' && input.token.length >= 8)\n'
+      + '      ? { success: true, data: input }\n'
+      + '      : { success: false, error: { issues: [{ path: [\'token\'], message: \'too short\' }] } },\n'
+      + '    toJsonSchema: () => ({ properties: { token: { type: \'string\', minLength: 8 } } }),\n'
+      + '  },\n'
+      + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+      + '}\n',
+    'utf8',
+  )
+}
+
+it('a length-constrained secret set to the mask refuses as unchanged, not as incomplete', async () => {
+  const { db, close } = fresh()
+  keepMinLength()
+  recordInstall(db, 'keep', 'enzyme')
+  await writeDeclaredSetting(db, [dir], 'keep', 'token', 'longenough')
+  const result = await writeDeclaredSetting(db, [dir], 'keep', 'token', REDACTED)
+  expect(result.ok).toBe(false)
+  const refusal = result.ok ? undefined : result.refusal
+  expect(refusal?.key).toBe('refusal.config.maskedSecretUnchanged')
+  expect(refusal === undefined ? '' : renderRefusal(translator, refusal, 'en'))
+    .toBe("plugin 'keep' setting 'token' was left unchanged: a masked secret cannot be written back")
+  expect(readSettings(db, 'keep')).toEqual({ token: 'longenough' })
   close()
 })
 

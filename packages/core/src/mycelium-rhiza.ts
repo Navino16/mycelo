@@ -47,7 +47,7 @@ import {
 import { inoculate } from './sporangium/inoculate.js'
 import type { DriverFactory } from './sporangium/driver.js'
 import { addSource, deleteSource, listSources, updateSource } from './sporangium/sources.js'
-import { outcome, outcomeOf } from './mycelium-refusal.js'
+import { joinOutcome, outcome, outcomeOf } from './mycelium-refusal.js'
 import { describeThrown } from './support/thrown.js'
 
 // Defers the call into .then() so a throwing driver rejects the returned promise
@@ -158,7 +158,7 @@ export function createMyceliumApi(
   }
   if (granted.has('plugins.configure')) {
     api.settings = (name) => outcomeOf(() => redactSecrets(db, name))
-    api.setSetting = (name, key, value) => outcome(() => writeDeclaredSetting(db, sporesDirs, name, key, value))
+    api.setSetting = (name, key, value) => joinOutcome(() => writeDeclaredSetting(db, sporesDirs, name, key, value))
     api.formSchema = (name) => formSchemaOf(db, sporesDirs, name)
   }
   if (granted.has('restrictions.manage')) {

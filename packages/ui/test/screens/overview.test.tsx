@@ -24,7 +24,7 @@ const COMPLETE_SOURCES: readonly SourceDto[] = [
   { id: 1, label: 'Registry', driver: 'github', location: 'x', official: true, enabled: true },
 ]
 const COMPLETE_PLUGINS: PluginGroups = {
-  hypha: [{ name: 'signal', kind: 'hypha', commands: [], state: 'germinated', enabled: true }],
+  hypha: [{ name: 'signal', kind: 'hypha', commands: [], state: 'germinated', enabled: true, scopes: [] }],
   rhiza: [],
   enzyme: [],
   inhibitor: [],
@@ -43,19 +43,19 @@ const COMPLETE_ROLES: readonly RoleDto[] = [
  * not start: the fixture the health card, the tiles and the search all read from.
  */
 const BUSY_PLUGINS: PluginGroups = {
-  hypha: [{ name: 'signal', kind: 'hypha', commands: [], state: 'germinated', enabled: true }],
+  hypha: [{ name: 'signal', kind: 'hypha', commands: [], state: 'germinated', enabled: true, scopes: [] }],
   rhiza: [{
-    name: 'radarr', kind: 'rhiza', commands: [], state: 'dormant', enabled: true,
+    name: 'radarr', kind: 'rhiza', commands: [], state: 'dormant', enabled: true, scopes: [],
     reason: 'Configuration rejected: api_key returned 401 Unauthorized.',
   }],
   enzyme: [
-    { name: 'search', kind: 'enzyme', commands: ['find', 'grab'], state: 'germinated', enabled: true },
+    { name: 'search', kind: 'enzyme', commands: ['find', 'grab'], state: 'germinated', enabled: true, scopes: [] },
     {
-      name: 'radarr-search', kind: 'enzyme', commands: ['movie', 'queue', 'wanted'],
+      name: 'radarr-search', kind: 'enzyme', commands: ['movie', 'queue', 'wanted'], scopes: [],
       state: 'dormant', enabled: true, reason: 'Requires rhiza-radarr >=2.0.0; installed 1.8.4.',
     },
   ],
-  inhibitor: [{ name: 'quiet-hours', kind: 'inhibitor', commands: [], state: 'disabled', enabled: false }],
+  inhibitor: [{ name: 'quiet-hours', kind: 'inhibitor', commands: [], state: 'disabled', enabled: false, scopes: [] }],
   unknown: [],
 }
 
@@ -214,6 +214,24 @@ describe('the overview', () => {
     expect(screen.getByText('connection refused')).toBeDefined()
     expect(screen.getByText('jellyfin')).toBeDefined()
     expect(screen.getByText('HTTP 502')).toBeDefined()
+  })
+
+  // task 10: attentionRows collapses a rhiza's health state through the same rule as the
+  // plugins list and its detail page — this is the one of those three call sites whose own
+  // suite had nothing pinning the two labels apart.
+  it('tells a degraded rhiza apart from an unreachable one, not just by its reason', async () => {
+    await withHealth({
+      ...GERMINATED,
+      rhizas: [
+        { rhiza: 'plex', status: { state: 'unreachable', detail: 'connection refused', checkedAt: '2026-01-01' } },
+        { rhiza: 'jellyfin', status: { state: 'degraded', detail: 'HTTP 502', checkedAt: '2026-01-01' } },
+      ],
+    })
+
+    const plexRow = screen.getByText('plex').closest('li')
+    const jellyfinRow = screen.getByText('jellyfin').closest('li')
+    expect(within(plexRow as HTMLElement).getByText('Unreachable')).toBeDefined()
+    expect(within(jellyfinRow as HTMLElement).getByText('Degraded')).toBeDefined()
   })
 
   it('names the germination failure when the bot itself never finished starting', async () => {
@@ -512,7 +530,7 @@ describe('the mute takeover', () => {
       plugins: {
         ...COMPLETE_PLUGINS,
         rhiza: [{
-          name: 'radarr', kind: 'rhiza', commands: [], state: 'dormant', enabled: true,
+          name: 'radarr', kind: 'rhiza', commands: [], state: 'dormant', enabled: true, scopes: [],
           reason: 'configuration rejected: api_key: field required',
         }],
       },
@@ -910,7 +928,7 @@ describe('the cross-entity search', () => {
   it('caps a group at eight rows and links to the screen that owns the rest', async () => {
     const many = Array.from({ length: 10 }, (_, i) => ({
       name: `radarr-${String(i)}`, kind: 'rhiza' as const, commands: [],
-      state: 'germinated' as const, enabled: true,
+      state: 'germinated' as const, enabled: true, scopes: [],
     }))
     await withHealth(GERMINATED, { ...BUSY, plugins: { ...BUSY_PLUGINS, rhiza: many } })
 
@@ -944,7 +962,7 @@ describe('the cross-entity search', () => {
 const NO_CHANNEL: PluginGroups = {
   ...COMPLETE_PLUGINS,
   hypha: [],
-  rhiza: [{ name: 'radarr', kind: 'rhiza', commands: [], state: 'germinated', enabled: true }],
+  rhiza: [{ name: 'radarr', kind: 'rhiza', commands: [], state: 'germinated', enabled: true, scopes: [] }],
 }
 
 describe('the guided path out of an empty substrate', () => {

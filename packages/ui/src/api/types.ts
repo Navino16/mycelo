@@ -29,6 +29,8 @@ export interface PluginDto {
   strain?: string
   /** The manifest's own one-line description. Absent when the manifest declares none. */
   description?: string
+  /** Manifest-declared mycelium scopes, present even for a dormant plugin (task 12). */
+  scopes: readonly string[]
 }
 
 export interface RequirementDto {
@@ -229,6 +231,15 @@ export interface MutationResult {
 /** `DELETE /api/plugins/:name/commands/:command/alias` — `cleared` separates a removal from a no-op. */
 export interface AliasCleared extends MutationResult {
   cleared: boolean
+}
+
+/**
+ * `PUT /api/plugins/:name/settings` — `unchanged` names a key the write left as stored: a masked
+ * secret the mask guard dropped, or a `null` that found no row. Success either way, unlike the
+ * mycelium path, which spells the same word a refusal.
+ */
+export interface SettingsWriteResult extends MutationResult {
+  unchanged: readonly string[]
 }
 
 /**

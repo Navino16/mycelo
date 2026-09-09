@@ -5,7 +5,7 @@ import { TONE_CLASSES } from '../../src/components/tone.ts'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { SecretField } from '../../src/components/SecretField.tsx'
 import { PluginSettings } from '../../src/screens/PluginSettings.tsx'
-import type { FormSchema, PluginDetailDto } from '../../src/api/types.ts'
+import type { FormSchema, PluginDetailDto, SettingsWriteResult } from '../../src/api/types.ts'
 
 /**
  * The widget renders the bare input; the field template renders the label. The test stands in
@@ -89,6 +89,44 @@ const REQUIRING_SECRET: FormSchema = {
   schema: { type: 'object', required: ['token'], properties: { token: { type: 'string', title: 'Token' } } },
 }
 
+/** The mask is 4 characters; a schema this strict is what 9.6A's milestone measured as unsavable. */
+const MIN_LENGTH_SECRET: FormSchema = {
+  available: true,
+  secrets: ['token'],
+  schema: {
+    type: 'object',
+    required: ['token'],
+    properties: { token: { type: 'string', title: 'Token', minLength: 8 } },
+  },
+}
+
+/** Two credentials, because `dropUntouchedSecretErrors` loops and a singleton fixture cannot see it. */
+const TWO_SECRETS: FormSchema = {
+  available: true,
+  secrets: ['token', 'apiKey'],
+  schema: {
+    type: 'object',
+    required: ['token', 'apiKey'],
+    properties: {
+      token: { type: 'string', title: 'Token', minLength: 8 },
+      apiKey: { type: 'string', title: 'API key', minLength: 8 },
+    },
+  },
+}
+
+/** A never-stored key beside a stored one: `changedEntries` reads `current`, not `baseline`. */
+const URL_AND_LABEL: FormSchema = {
+  available: true,
+  secrets: [],
+  schema: {
+    type: 'object',
+    properties: {
+      url: { type: 'string', title: 'URL' },
+      label: { type: 'string', title: 'Label' },
+    },
+  },
+}
+
 /** One property of every kind the field meta line names (2c's left column). */
 const RICH: FormSchema = {
   available: true,
@@ -106,7 +144,9 @@ const RICH: FormSchema = {
   },
 }
 
-const GERMINATED: PluginDetailDto = { name: 'vault', kind: 'enzyme', commands: ['vault'], state: 'germinated', enabled: true }
+const GERMINATED: PluginDetailDto = {
+  name: 'vault', kind: 'enzyme', commands: ['vault'], state: 'germinated', enabled: true, scopes: [],
+}
 const DISABLED: PluginDetailDto = { ...GERMINATED, state: 'disabled', enabled: false }
 
 function json(body: unknown, status = 200): Response {
@@ -120,7 +160,7 @@ interface Options {
   schema?: FormSchema
   settings?: unknown
   detail?: PluginDetailDto
-  putResult?: 'ok' | Failure
+  putResult?: 'ok' | Failure | SettingsWriteResult
   enableResult?: 'ok' | Failure
 }
 
@@ -138,7 +178,9 @@ function mockVault(options: Options): { calls: Call[] } {
 
     if (method === 'PUT' && url === '/api/plugins/vault/settings') {
       const result = options.putResult ?? 'ok'
-      return Promise.resolve(result === 'ok' ? json({ ok: true }) : json(result.body, result.status))
+      if (result === 'ok') return Promise.resolve(json({ ok: true }))
+      if ('status' in result) return Promise.resolve(json(result.body, result.status))
+      return Promise.resolve(json(result))
     }
     if (method === 'POST' && url === '/api/plugins/vault/enable') {
       const result = options.enableResult ?? 'ok'
@@ -280,6 +322,40 @@ describe('the generated settings form', () => {
 
     await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
     expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ url: 'http://y' })
+  })
+
+  // Every other PUT-body test edits a key that is already stored, so `keys(current)` and
+  // `keys(baseline)` cannot be told apart. A never-stored key is the only discriminator.
+  it('sends a key the operator fills in for the first time', async () => {
+    const { calls } = mockVault({ schema: URL_AND_LABEL, settings: { url: 'http://x' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('Label')).toBeDefined() })
+    fireEvent.change(screen.getByLabelText('Label'), { target: { value: 'prod' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
+    expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ label: 'prod' })
+  })
+
+  // The post-save baseline is the whole form, not the diff that was sent: rebased on the diff,
+  // a stored secret the operator never touched reads as changed and the second save posts the
+  // 4-character mask as the credential's value.
+  it('does not resend a stored secret at its mask on a second consecutive save', async () => {
+    const { calls } = mockVault({ settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
+    renderSettings()
+
+    const url = await screen.findByLabelText('URL')
+    fireEvent.change(url, { target: { value: 'http://y' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => { expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1) })
+
+    fireEvent.change(url, { target: { value: 'http://z' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => { expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(2) })
+
+    expect(calls.filter((c) => c.method === 'PUT').map((c) => c.body))
+      .toEqual([{ url: 'http://y' }, { url: 'http://z' }])
   })
 
   // Discriminates equalValues' object-deep-equal branch from a bare `===`: a nested object
@@ -507,6 +583,79 @@ describe('the generated settings form', () => {
     }
   })
 
+  // 9.6A's milestone, concern A/B: a `minLength: 8` secret left at its 4-character mask must
+  // still save — the PUT must fire.
+  it('saves a secret left at its mask even when the schema requires a longer one', async () => {
+    const { calls } = mockVault({ schema: MIN_LENGTH_SECRET, settings: { token: '••••' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('Token')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
+  })
+
+  // A never-stored secret has `undefined` on both sides, so the untouched test held and every
+  // ajv error was dropped — `required` included. Save then fired a PUT without the key, the server
+  // judged only the keys present, and task 5's banner said Saved on a credential nobody set.
+  it('blocks Save on a required secret that was never stored, instead of reporting it saved', async () => {
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const { calls } = mockVault({ schema: MIN_LENGTH_SECRET, settings: {} })
+      renderSettings()
+
+      await waitFor(() => { expect(screen.getByLabelText('Token')).toBeDefined() })
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      await waitFor(() => {
+        expect(screen.getByText("must have required property 'Token'")).toBeDefined()
+      })
+      expect(calls.some((c) => c.method === 'PUT')).toBe(false)
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
+  // The plural case. Every other fixture here declares one secret, so the loop over `secrets`
+  // was a singleton and its plural behaviour was dead to the suite: collapsing it to either end
+  // leaves the other credential's `minLength` error standing and the plugin unsavable.
+  it('saves two stored secrets left at their masks, not only the first', async () => {
+    const { calls } = mockVault({
+      schema: TWO_SECRETS,
+      settings: { token: '\u2022\u2022\u2022\u2022', apiKey: '\u2022\u2022\u2022\u2022' },
+    })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('API key')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
+    expect(screen.queryByText('must NOT have fewer than 8 characters')).toBeNull()
+  })
+
+  // The other direction: a secret the operator retypes is a real value, and must still be
+  // validated against the plugin's own schema.
+  it('still validates a secret the operator retypes against the schema', async () => {
+    // RJSF's own onSubmit default logs a blocked submission; the block itself is what this
+    // test asserts, so the log is expected noise, not a signal to leave in the test output.
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => undefined)
+    try {
+      const { calls } = mockVault({ schema: MIN_LENGTH_SECRET, settings: { token: '••••' } })
+      renderSettings()
+
+      const token = await screen.findByLabelText('Token')
+      fireEvent.change(token, { target: { value: 'abc' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('must NOT have fewer than 8 characters')).toBeDefined()
+      })
+      expect(calls.some((c) => c.method === 'PUT')).toBe(false)
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
+
   // The server renders the whole sentence (§3), field name included, and the SPA shows it
   // verbatim — so the fixture is a real `refusal.config.incomplete` rendering with its
   // `issueAt` prefix, and the assertion is what proves the field name survives to the screen.
@@ -570,7 +719,7 @@ describe('the generated settings form', () => {
     await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    const summary = await screen.findByText('Saved, but rejected by vault')
+    const summary = await screen.findByText('Rejected by vault — nothing was saved')
     expect(summary.closest('[role="alert"]')?.className).toContain(TONE_CLASSES.crit.border)
   })
 })
@@ -712,8 +861,34 @@ describe("the generated form's page frame", () => {
     await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByText('Saved, but rejected by vault')).toBeDefined()
+    expect(await screen.findByText('Rejected by vault — nothing was saved')).toBeDefined()
     expect(screen.getByText(/1 of 2 fields failed validation on the server/)).toBeDefined()
+  })
+
+  // The route throws before its transaction (routes/plugins.ts:247 vs :254), so a rejection
+  // saves nothing. The banner said 'Saved, but rejected' (9.6A milestone, concern C).
+  it('says nothing was saved when the plugin refuses the value', async () => {
+    mockVault({
+      settings: { url: 'http://x', token: '••••' },
+      putResult: {
+        status: 400,
+        body: {
+          error: {
+            message: 'refused',
+            detail: [{ key: 'url', messages: ['must start with http://'] }],
+          },
+        },
+      },
+    })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    const title = await screen.findByText('Rejected by vault — nothing was saved')
+    const banner = title.closest('[role="alert"]')
+    expect(banner?.textContent).not.toContain('Saved')
+    expect(banner?.textContent).toContain('Rejected')
   })
 
   // Discriminates a summary rendered whenever a save happened from one rendered on a refusal.
@@ -729,8 +904,43 @@ describe("the generated form's page frame", () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect((await screen.findByRole('status')).textContent).toBe('Saved.')
-    expect(screen.queryByText('Saved, but rejected by vault')).toBeNull()
+    expect(screen.queryByText('Rejected by vault — nothing was saved')).toBeNull()
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  // Task 3 (88bc838) made the PUT answer `unchanged` for a masked secret the mask guard
+  // dropped; the plain 'Saved.' told the operator it wrote a credential it never touched.
+  it('names the keys the server left as stored, instead of a plain saved message', async () => {
+    mockVault({
+      settings: { url: 'http://x', token: '••••' },
+      putResult: { ok: true, unchanged: ['token'] },
+    })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    fireEvent.change(screen.getByLabelText('URL'), { target: { value: 'http://y' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect((await screen.findByRole('status')).textContent).toBe(
+      'Saved, except token: a mask is not a value, so nothing was written for them.',
+    )
+  })
+
+  // A join collapsed to unchanged[0] would still pass every test above: this is the plural case.
+  it('names every key the server left as stored, not only the first', async () => {
+    mockVault({
+      settings: { url: 'http://x', token: '••••' },
+      putResult: { ok: true, unchanged: ['token', 'url'] },
+    })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
+    fireEvent.change(screen.getByLabelText('URL'), { target: { value: 'http://y' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect((await screen.findByRole('status')).textContent).toBe(
+      'Saved, except token, url: a mask is not a value, so nothing was written for them.',
+    )
   })
 
   it('drops the acknowledgement as soon as the operator edits again', async () => {
@@ -766,7 +976,7 @@ describe("the generated form's page frame", () => {
     await waitFor(() => { expect(screen.getByLabelText('URL')).toBeDefined() })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    await screen.findByText('Saved, but rejected by vault')
+    await screen.findByText('Rejected by vault — nothing was saved')
     expect(screen.queryByRole('status')).toBeNull()
   })
 

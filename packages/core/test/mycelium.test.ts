@@ -2,14 +2,26 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, spyOn } from 'bun:test'
-import type { IncomingMessage } from '@mycelo/septum'
+import type { IncomingMessage, Logger } from '@mycelo/septum'
 import { recordConversation } from '../src/conversations/registry.js'
 import { StartupError } from '../src/identity/bootstrap.js'
 import { resolvePrincipal } from '../src/identity/resolve.js'
+import { loadCoreCatalogs } from '../src/i18n/core-catalogs.js'
 import { setConversationLocale, setPrincipalLocale } from '../src/i18n/locale.js'
+import { renderRefusal } from '../src/i18n/refusal.js'
+import { createTranslator } from '../src/i18n/translator.js'
 import { bootstrap, germinationBanner } from '../src/mycelium.js'
 import { migrateDatabase, openDatabase } from '../src/persistence/db.js'
 import { rejectsWith } from './support/rejects.js'
+
+const silentLogger: Logger = {
+  debug() {}, info() {}, warn() {}, error() {}, child: () => silentLogger,
+}
+const translator = createTranslator({
+  defaultLocale: 'en',
+  logger: silentLogger,
+  catalogs: loadCoreCatalogs(),
+})
 
 function message(channel: string, text: string): IncomingMessage {
   return {
@@ -804,8 +816,13 @@ it('refuses all traffic when an enforcing inhibitor is dormant from a rejected c
   expect(registry.inhibitors).toEqual([])
   const gate = registry.dormant.find((d) => d.name === 'badconfiggate')?.refusal
   expect(gate?.key).toBe('refusal.config.incomplete')
-  // The offending field by name: without it this passes on any config rejection at all.
-  expect(String(gate?.params?.['issues'])).toContain('groupId')
+  // The offending field by name, rendered: without it this passes on any config rejection at all.
+  expect(renderRefusal(translator, gate!, 'en'))
+    .toBe('configuration is incomplete: groupId: groupId is required')
+  // `issueAt`'s French template inserts a space before the colon a baked English detail
+  // never would: only a ref rendered through the translator can produce it.
+  expect(renderRefusal(translator, gate!, 'fr'))
+    .toBe('la configuration est incomplète : groupId : groupId is required')
   expect((await admission.admit(message('console', '/ping'))).allow).toBe(false)
 })
 

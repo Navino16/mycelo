@@ -6,12 +6,12 @@ import Ajv2020 from 'ajv/dist/2020'
 import { buttonId, getUiOptions } from '@rjsf/utils'
 import type {
   ArrayFieldItemTemplateProps, ArrayFieldTemplateProps, ErrorSchema, FieldTemplateProps,
-  IconButtonProps, UiSchema,
+  IconButtonProps, RJSFValidationError, UiSchema,
 } from '@rjsf/utils'
 import type { IChangeEvent } from '@rjsf/core'
 import { api, ApiError } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
-import type { FormSchema, PluginDetailDto } from '../api/types.ts'
+import type { FormSchema, PluginDetailDto, SettingsWriteResult } from '../api/types.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
 import { SecretField } from '../components/SecretField.tsx'
@@ -59,13 +59,32 @@ function equalValues(a: unknown, b: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b)
 }
 
+/** One key against what the server last handed back. The two verdicts below both start here. */
+function unchangedSince(baseline: Settings, current: Settings, key: string): boolean {
+  return equalValues(current[key], baseline[key])
+}
+
 /** Only the keys the operator actually changed: the route is a partial update (spec §8). */
 function changedEntries(baseline: Settings, current: Settings): Settings {
   const out: Settings = {}
-  for (const [key, value] of Object.entries(current)) {
-    if (!equalValues(value, baseline[key])) out[key] = value
+  for (const key of Object.keys(current)) {
+    if (!unchangedSince(baseline, current, key)) out[key] = current[key]
   }
   return out
+}
+
+/**
+ * The mask is 4 characters, which fails any `minLength` past 4, so a stored credential the operator
+ * left alone must skip ajv. The `baseline[key] !== undefined` guard is what keeps a never-stored
+ * secret validated: both sides are undefined there, and its `required` error was dropped too.
+ */
+function dropUntouchedSecretErrors(
+  secrets: readonly string[], baseline: Settings, current: Settings,
+): (errors: RJSFValidationError[]) => RJSFValidationError[] {
+  const untouched = new Set(secrets.filter((key) => (
+    baseline[key] !== undefined && unchangedSince(baseline, current, key)
+  )))
+  return (errors) => errors.filter((e) => !untouched.has((e.property ?? '').replace(/^\./, '')))
 }
 
 function requiredKeys(schema: Settings): readonly string[] {
@@ -300,6 +319,7 @@ export function PluginSettings(): React.JSX.Element {
   const [extraErrors, setExtraErrors] = useState<ErrorSchema<Settings>>({})
   const [rejectedCount, setRejectedCount] = useState<number | null>(null)
   const [saved, setSaved] = useState(false)
+  const [unchanged, setUnchanged] = useState<readonly string[]>([])
   const [saveError, setSaveError] = useState<string | null>(null)
   const [enabledNow, setEnabledNow] = useState(false)
   const [enableError, setEnableError] = useState<string | null>(null)
@@ -352,8 +372,9 @@ export function PluginSettings(): React.JSX.Element {
     setRejectedCount(null)
     setSaved(false)
     try {
-      await api.send('PUT', `/api/plugins/${name}/settings`, changed)
+      const result = await api.send<SettingsWriteResult>('PUT', `/api/plugins/${name}/settings`, changed)
       setBaseline(current)
+      setUnchanged(readArray<string>(result.unchanged) ?? [])
       setSaved(true)
     } catch (e) {
       const rejections = e instanceof ApiError ? readRejections(e.detail) : []
@@ -477,6 +498,7 @@ export function PluginSettings(): React.JSX.Element {
                   ButtonTemplates: { AddButton, RemoveButton, MoveUpButton, MoveDownButton },
                 }}
                 validator={validator}
+                transformErrors={dropUntouchedSecretErrors(secrets, baseline ?? {}, formData)}
                 extraErrors={extraErrors}
                 onChange={(e) => { setFormData(e.formData ?? {}); setSaved(false) }}
                 onSubmit={(e) => { void save(e) }}
@@ -491,7 +513,13 @@ export function PluginSettings(): React.JSX.Element {
                 </div>
               </TypedForm>
             </div>
-            {saved && <p role="status" className="text-body">{t('pluginSettings.saved')}</p>}
+            {saved && (
+              <p role="status" className="text-body">
+                {unchanged.length > 0
+                  ? t('pluginSettings.savedUnchanged', { keys: unchanged.join(', ') })
+                  : t('pluginSettings.saved')}
+              </p>
+            )}
             {saveError !== null && <p role="alert" className={`text-body ${TONE_CLASSES.crit.text}`}>{saveError}</p>}
           </div>
 

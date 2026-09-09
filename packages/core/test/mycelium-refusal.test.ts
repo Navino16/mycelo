@@ -3,7 +3,7 @@ import type { RefusalCode } from '../src/authorization/refusal.js'
 import type { RefusalKey } from '../src/i18n/refusal-keys.js'
 import { StoreRefusal } from '../src/authorization/refusal.js'
 import { loadCoreCatalogs } from '../src/i18n/core-catalogs.js'
-import { outcome, outcomeOf, refusalKeyOf } from '../src/mycelium-refusal.js'
+import { joinOutcome, outcome, outcomeOf, refusalKeyOf } from '../src/mycelium-refusal.js'
 
 /**
  * The map, spelled out independently of the implementation: `satisfies` makes a code added to
@@ -107,5 +107,32 @@ describe('outcomeOf', () => {
       thrown = e
     }
     expect(thrown).toBeInstanceOf(RangeError)
+  })
+})
+
+describe('joinOutcome', () => {
+  it('answers what the work answers, for work that already returns an Outcome', async () => {
+    expect(await joinOutcome(() => Promise.resolve({ ok: true }))).toEqual({ ok: true })
+  })
+
+  it("turns a StoreRefusal thrown from under the work into a refusal", async () => {
+    const r = await joinOutcome(() => {
+      throw new StoreRefusal('plugin-not-installed', "plugin 'ghost' is not installed", { plugin: 'ghost' })
+    })
+    expect(r).toEqual({
+      ok: false,
+      refusal: { domain: 'common', key: 'refusal.plugin.notInstalled', params: { plugin: 'ghost' } },
+    })
+  })
+
+  it('propagates a non-refusal, rather than reporting a bug as success', async () => {
+    let thrown: unknown
+    try {
+      await joinOutcome(() => { throw new Error('a real bug') })
+    } catch (e) {
+      thrown = e
+    }
+    expect(thrown).toBeInstanceOf(Error)
+    expect((thrown as Error).message).toBe('a real bug')
   })
 })

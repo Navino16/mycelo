@@ -52,6 +52,7 @@ export function Tabs(
             type="button"
             data-tab={tab.id}
             aria-pressed={current}
+            aria-current={current ? 'true' : undefined}
             onClick={() => { onSelect(tab.id) }}
             className={shape}
           >

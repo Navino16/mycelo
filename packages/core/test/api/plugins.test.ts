@@ -10,12 +10,14 @@ import { inoculate } from '../../src/sporangium/inoculate.js'
 import { managedRoot } from '../../src/sporangium/layout.js'
 import { bundleOf } from '../support/bundle.js'
 import { silentLogger } from '../support/logger.js'
+import { germinatePhase } from '../../src/boot/germinate.js'
 import { setAlias } from '../../src/rhizomorph/aliases.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
   bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configurable, configurableTwoFields,
-  cyclingPair, definedSchema, eitherOrSchema, minPortSchema, mixedFieldSchema, noJsonSchema,
-  twoPluginsTwoCommands, vault, writeSpore,
+  cyclingPair, definedSchema, degradedWith, eitherOrSchema, minPortSchema, mixedFieldSchema,
+  noJsonSchema, requiredAndOptional, schemaless, throwingModule, twoPluginsTwoCommands, vault,
+  writeSpore,
 } from './support.js'
 import type { LoggedIn, SporeWriter } from './support.js'
 
@@ -27,6 +29,30 @@ afterEach(async () => {
   rmSync(booted.dir, { recursive: true, force: true })
   booted = undefined
 })
+
+// A declared secret whose own schema enforces a minimum length: the mask '••••' is 4
+// characters, so validating it against this schema is what found the defect on a running bot.
+const keep: SporeWriter = (sporesDir) => {
+  writeSpore(sporesDir, 'keep', {
+    'spore.yaml': 'kind: enzyme\nname: keep\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: keep\n    description: Report the configured setting\n    code: handleConfigured\n',
+    'src/index.ts': `
+      export default {
+        configSchema: {
+          secrets: ['token'],
+          safeParse: (input) => (typeof input?.token === 'string' && input.token.length >= 8)
+            ? { success: true, data: input }
+            : { success: false, error: { issues: [{ path: ['token'], message: 'too short' }] } },
+          toJsonSchema: () => ({
+            type: 'object',
+            properties: { token: { type: 'string', minLength: 8 } },
+          }),
+        },
+        create: () => ({ handlers: { handleConfigured: async () => {} } }),
+      }
+    `,
+  })
+}
 
 describe('/api/plugins', () => {
   it('carries the install row enabled flag, not only the germination state', async () => {
@@ -53,6 +79,20 @@ describe('/api/plugins', () => {
     expect(body.enzyme).toEqual([])
     expect(body.inhibitor).toEqual([])
     expect(body.unknown).toEqual([])
+  })
+
+  // task 13's degraded-mode audit: this branch reads install rows only, so it must not
+  // report the manifest-declared commands or scopes a dormant-while-others-germinate plugin
+  // gets (spec §4.1) — nothing is known about any individual plugin while degraded.
+  it('answers commands and scopes empty for every plugin while degraded, never the manifest facts', async () => {
+    booted = await bootAndLogin({ spores: cyclingPair })
+    const { app, cookie } = booted
+    expect(booted.served.state.germination.status).toBe('degraded')
+    const body = (await app.inject({ method: 'GET', url: '/api/plugins', headers: { cookie } })).json<PluginGroups>()
+    const alpha = body.rhiza.find((p) => p.name === 'alpha')
+    expect(alpha).toMatchObject({ kind: 'rhiza', commands: [], scopes: [], enabled: true })
+    expect(alpha?.reason).toBeUndefined()
+    expect(alpha?.reasonKey).toBeUndefined()
   })
 
   it('groups every kind, with an always-present unknown bucket, and never drops a plugin whose manifest never parsed', async () => {
@@ -176,6 +216,261 @@ describe('/api/plugins', () => {
     })
     expect(response.statusCode).toBe(200)
     expect(readSettings(served.state.db, 'vault')).toEqual({ token: 's3cr3t', url: 'http://changed' })
+  })
+
+  // A form re-submitted without retyping a secret sends '••••' back. rewriteSetting drops it,
+  // which is right — writing the mask destroys the credential — but the route answered
+  // { ok: true } and the operator was told it saved (CLAUDE.md, API asymmetries).
+  it('names the masked secret it did not write, rather than answering a bare ok', async () => {
+    booted = await bootAndLogin({ spores: vault })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { token: 's3cr3t' },
+    })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { token: REDACTED, url: 'http://home' },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({ ok: true, unchanged: ['token'] })
+    expect(readSettings(served.state.db, 'vault')).toEqual({ token: 's3cr3t', url: 'http://home' })
+  })
+
+  // An operator returning a plugin to its schema default had no way to say so: every value in
+  // the body goes through rewriteSetting, and there was no shape for "remove this row". Uses
+  // `configurable`, whose schema actually validates 'token' as required: a filter that let the
+  // null through to validation would refuse this with a 400 instead of clearing the row.
+  it('clears a setting when the body sends null for its key', async () => {
+    booted = await bootAndLogin({ spores: configurable })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: 's3cr3t' },
+    })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: null },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(readSettings(served.state.db, 'needs-config')).toEqual({})
+  })
+
+  // The §8 hole task 1 closed on the mycelium path, reopened on the HTTP route: `null` deleted the
+  // row with no check, so an enabled enforcing inhibitor went dormant at the next boot and refused
+  // all traffic with no command left to undo it. The verdict is on the resulting settings object.
+  it('refuses a clear that would leave an enabled, germinated plugin with a configuration it refuses', async () => {
+    booted = await bootAndLogin({ spores: configurable })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: 's3cr3t' },
+    })
+    // The boot above germinated with no settings, so the plugin is dormant; re-germinating with
+    // the value stored is what puts it in the state a clear must not break.
+    await germinatePhase(served.state, silentLogger())
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: null },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(response.json<{ error: { message: string } }>().error.message)
+      .toContain("clearing token would leave plugin 'needs-config'")
+    expect(readSettings(served.state.db, 'needs-config')).toEqual({ token: 's3cr3t' })
+  })
+
+  // The plural clear: `vault` refuses nothing, so every test that reaches the guard clears exactly
+  // one key and a loop collapsed to `cleared[0]` survives them all. The optional key is first, so
+  // dropping the rest of the loop leaves the required one in `after` and answers 200 on a wipe.
+  it('refuses a two-key clear whose second key is the required one, and keeps both rows', async () => {
+    booted = await bootAndLogin({ spores: requiredAndOptional })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-one/settings', headers: { cookie },
+      payload: { opt: 'x', req: 'v' },
+    })
+    await germinatePhase(served.state, silentLogger())
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-one/settings', headers: { cookie },
+      payload: { opt: null, req: null },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(response.json<{ error: { message: string } }>().error.message)
+      .toContain("clearing opt, req would leave plugin 'needs-one'")
+    expect(readSettings(served.state.db, 'needs-one')).toEqual({ opt: 'x', req: 'v' })
+  })
+
+  // The other arm of the same ruling: returning a plugin to its schema defaults before enabling
+  // it is exactly what a clear is for, so a disabled install must still be clearable.
+  it('allows a clear that would leave a disabled plugin incomplete', async () => {
+    booted = await bootAndLogin({ spores: configurable })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: 's3cr3t' },
+    })
+    await germinatePhase(served.state, silentLogger())
+    await app.inject({ method: 'POST', url: '/api/plugins/needs-config/disable', headers: { cookie } })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: null },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(readSettings(served.state.db, 'needs-config')).toEqual({})
+  })
+
+  // Completeness stays enablePlugin's check (§8): a two-required-field form is filled one field at
+  // a time, so a write that leaves the object incomplete is not a clear and must still pass.
+  // Degraded, not germinated: on a germinated runtime this plugin is already dormant and
+  // willGerminate short-circuits, so the guard the test is about never runs.
+  it('lets a plain write leave an enabled plugin incomplete, since only a clear is guarded', async () => {
+    booted = await bootAndLogin({ spores: degradedWith(configurableTwoFields) })
+    const { app, served, cookie } = booted
+    expect(served.state.germination.status).toBe('degraded')
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { url: 'http://x' },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(readSettings(served.state.db, 'needs-config')).toEqual({ url: 'http://x' })
+  })
+
+  // The guard's own reach while degraded: every enabled install is one the next germination will
+  // try, there being no registry to read a dormancy off. Clearing the required key here is the
+  // enforcing-inhibitor wipe §8 exists to refuse, in the one state no channel command can undo.
+  it('refuses a clear that would leave an enabled plugin incomplete while the runtime is degraded', async () => {
+    booted = await bootAndLogin({ spores: degradedWith(configurable) })
+    const { app, served, cookie } = booted
+    expect(served.state.germination.status).toBe('degraded')
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: 's3cr3t' },
+    })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: null },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(readSettings(served.state.db, 'needs-config')).toEqual({ token: 's3cr3t' })
+  })
+
+  // `after` is the stored settings merged with what this body writes, never the stored ones alone:
+  // supplying the required key in the same body as the clear is what keeps the object complete.
+  it('allows clearing an optional key in the same body that supplies the required one', async () => {
+    booted = await bootAndLogin({ spores: degradedWith(requiredAndOptional) })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-one/settings', headers: { cookie },
+      payload: { opt: 'x' },
+    })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-one/settings', headers: { cookie },
+      payload: { req: 'v', opt: null },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(readSettings(served.state.db, 'needs-one')).toEqual({ req: 'v' })
+  })
+
+  // A plugin whose module throws refuses nothing, so its clear must go through: refusing here
+  // would leave an operator unable to undo the very setting that is keeping the spore broken.
+  it('allows a clear on an enabled plugin whose module throws on import', async () => {
+    booted = await bootAndLogin({ spores: degradedWith(throwingModule) })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/thrower/settings', headers: { cookie },
+      payload: { tok: 'v' },
+    })
+    expect(readSettings(served.state.db, 'thrower')).toEqual({ tok: 'v' })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/thrower/settings', headers: { cookie },
+      payload: { tok: null },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(readSettings(served.state.db, 'thrower')).toEqual({})
+  })
+
+  // A plugin publishing no configSchema validates nothing, so no configuration of it can be
+  // incomplete. Germinated and non-dormant, so the guard genuinely runs.
+  it('allows a clear on a germinated plugin that publishes no schema at all', async () => {
+    booted = await bootAndLogin({ spores: schemaless })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/unchecked/settings', headers: { cookie },
+      payload: { tok: 'v' },
+    })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/unchecked/settings', headers: { cookie },
+      payload: { tok: null },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(readSettings(served.state.db, 'unchecked')).toEqual({})
+  })
+
+  // A `null` on a key with no row removed nothing. The alias route six lines above states the
+  // opposite principle, and an operator must not be told a setting was cleared when none was.
+  it('reports a null that found no row as unchanged, not as a bare ok', async () => {
+    booted = await bootAndLogin({ spores: vault })
+    const { app, served, cookie } = booted
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { url: null },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({ ok: true, unchanged: ['url'] })
+    expect(readSettings(served.state.db, 'vault')).toEqual({})
+  })
+
+  // The plural half: a cleared row and a no-op in one body must be told apart.
+  it('names only the null that found no row, not the one that removed a setting', async () => {
+    booted = await bootAndLogin({ spores: vault })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { url: 'http://x' },
+    })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/vault/settings', headers: { cookie },
+      payload: { url: null, token: null },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({ ok: true, unchanged: ['token'] })
+    expect(readSettings(served.state.db, 'vault')).toEqual({})
+  })
+
+  // Found on a running bot: the mask is 4 characters, so a schema requiring a longer secret
+  // refused a re-submit the route was never going to write. The filter must drop a masked
+  // secret before validation, not only before the write (task 3.1).
+  it('a length-constrained secret re-submitted with the mask answers ok, not a schema refusal', async () => {
+    booted = await bootAndLogin({ spores: keep })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/keep/settings', headers: { cookie },
+      payload: { token: 'longenough' },
+    })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/keep/settings', headers: { cookie },
+      payload: { token: REDACTED },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({ ok: true, unchanged: ['token'] })
+    expect(readSettings(served.state.db, 'keep')).toEqual({ token: 'longenough' })
+  })
+
+  // The row's own is_secret flag, not only the plugin's declared `secrets` list, must gate the
+  // skip: 'needs-config' declares no secrets at all, so a filter keyed on the declared list
+  // alone would validate this trivially (a non-empty string) and then write the mask itself
+  // over the real credential — corrupting it instead of leaving it alone.
+  it('a secret known only from the stored row, not the plugin\'s declared secrets, still skips the mask write', async () => {
+    booted = await bootAndLogin({ spores: configurable })
+    const { app, served, cookie } = booted
+    writeSetting(served.state.db, 'needs-config', 'token', 'old-secret', true)
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: REDACTED },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({ ok: true, unchanged: ['token'] })
+    expect(readSettings(served.state.db, 'needs-config')).toEqual({ token: 'old-secret' })
   })
 
   it('refuses enable by naming every missing field, not just the first', async () => {
@@ -734,18 +1029,48 @@ describe('GET /api/plugins/:name, declared against mounted', () => {
     expect(body.mounted).toEqual(['principals.read'])
   })
 
-  it('never carries scopes on the list, which could only be the mounted set', async () => {
+  // Whole-system degraded (cyclingPair), not one plugin's own state: mountedScopesOf's top
+  // check answers undefined for every plugin, but findSpore reads the manifest off disk
+  // regardless of germination, so demands stays present while mounted stays absent.
+  it('answers demands but not mounted for any plugin while the whole substrate is degraded', async () => {
+    booted = await bootAndLogin({ spores: cyclingPair })
+    const { app, cookie } = booted
+    expect(booted.served.state.germination.status).toBe('degraded')
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/plugins/alpha', headers: { cookie },
+    })).json<{
+      state: string
+      commands: string[]
+      scopes: string[]
+      demands?: { requires: unknown[] }
+      mounted?: string[]
+    }>()
+
+    expect(body.state).toBe('unknown')
+    expect(body.commands).toEqual([])
+    expect(body.scopes).toEqual([])
+    expect(body.demands?.requires).toEqual([
+      { targets: ['beta'], anyOf: false, optional: false, scopes: [] },
+    ])
+    expect(body.mounted).toBeUndefined()
+  })
+
+  // Superseded by task 12, on purpose: the list now carries the manifest-declared scopes too,
+  // since a dormant plugin has nothing in the registry to mount from and could not otherwise
+  // answer its 1c card. `demands`, the fuller consent shape, stays detail-only.
+  it('carries the manifest-declared scopes on the list, but never the fuller demands shape', async () => {
     booted = await bootAndLogin()
     const { app, cookie } = booted
 
     const groups = (await app.inject({
       method: 'GET', url: '/api/plugins', headers: { cookie },
-    })).json<Record<string, Record<string, unknown>[]>>()
+    })).json<Record<string, { name: string, scopes: string[] }[]>>()
     const entries = Object.values(groups).flat()
 
     expect(entries.length).toBeGreaterThan(5)
-    expect(entries.every((e) => !('scopes' in e))).toBe(true)
     expect(entries.every((e) => !('demands' in e))).toBe(true)
+    expect(entries.find((e) => e.name === 'help')?.scopes).toEqual(['commands.read'])
   })
 })
 
@@ -798,6 +1123,34 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     // Both, not the first: a `.commands[0]`-shaped implementation passes a one-command fixture.
     expect(orphan?.commands).toEqual(['first', 'second'])
     expect(orphan?.description).toBe('Needs a rhiza nobody installed')
+  })
+
+  // Task 12: the registry has no entry for a dormant plugin, so its scopes must come off the
+  // manifest on disk, exactly like the commands above.
+  it('lists the declared mycelium scopes of a dormant plugin, across every requirement', async () => {
+    booted = await bootAndLogin({
+      spores: (dir) => {
+        writeSpore(dir, 'scoped-orphan', {
+          'spore.yaml': 'kind: enzyme\nname: scoped-orphan\nseptum: "^0.12"\n'
+            + 'commands:\n  - name: noop\n    description: command.noop.description\n    respond: noop.text\n'
+            + 'requires:\n'
+            + '  - rhiza: nowhere\n'
+            + '  - rhiza: mycelium\n    scopes: [plugins.read]\n'
+            + '  - rhiza: mycelium\n    scopes: [health.read]\n',
+          'translations/en.yaml': 'command:\n  noop:\n    description: No-op\nnoop:\n  text: ok\n',
+        })
+      },
+    })
+    const { app, cookie } = booted
+
+    const body = (await app.inject({
+      method: 'GET', url: '/api/plugins', headers: { cookie },
+    })).json<{ enzyme: { name: string, state: string, scopes: string[] }[] }>()
+    const scoped = body.enzyme.find((p) => p.name === 'scoped-orphan')
+
+    expect(scoped?.state).toBe('dormant')
+    // Both requirements, not only the first: the mycelium scope model is per-requirement.
+    expect(scoped?.scopes).toEqual(['plugins.read', 'health.read'])
   })
 
   // A germinated enzyme's `commands` are the names a caller types, so an alias must win over

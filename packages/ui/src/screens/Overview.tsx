@@ -16,6 +16,7 @@ import { TONE_CLASSES } from '../components/tone.ts'
 import { useHealth } from '../health.tsx'
 import { plural, useT } from '../i18n.tsx'
 import { flatPlugins } from '../plugins.ts'
+import { collapseHealth } from '../rhizaHealth.ts'
 import { allCommands } from '../rights.ts'
 import { healthPillState } from '../shell/HealthPill.tsx'
 import type { AttentionRow } from '../components/AttentionTable.tsx'
@@ -382,7 +383,7 @@ function attentionRows(
   const systems: readonly AttentionRow[] = rhizas.map((r) => ({
     name: r.rhiza,
     kind: 'rhiza',
-    state: r.status.state === 'degraded' ? 'degraded' : 'unreachable',
+    state: collapseHealth(r.status.state),
     reason: r.status.detail ?? r.status.state,
   }))
   return [...plugins, ...systems]

@@ -15,6 +15,7 @@ const DETAIL: PluginDetailDto = {
   commands: [],
   state: 'germinated',
   enabled: true,
+  scopes: ['health.read'],
   demands: {
     requires: [],
     scopes: ['health.read'],
@@ -180,6 +181,7 @@ const DORMANT: PluginDetailDto = {
   description: 'Search and add films from a conversation',
   reason: "requires rhiza 'plex', which is not installed",
   reasonKey: 'refusal.germination.requiredRhizaMissing',
+  scopes: ['health.read'],
   demands: {
     requires: [{ targets: ['plex'], anyOf: false, optional: false, scopes: [] }],
     scopes: ['health.read'],
@@ -249,6 +251,26 @@ describe('the dormant plugin detail, as 1c draws it', () => {
     expect(await screen.findByText('What is unavailable while it sleeps')).toBeDefined()
     expect(screen.getByText('All 3 commands answer nothing. Callers see silence, not an error.')).toBeDefined()
     expect(screen.getByText('radarr.queue')).toBeDefined()
+  })
+
+  // task 12: PluginDto.scopes, read off the manifest, so this card can render for a plugin
+  // absent from the registry — unlike `mounted`, which only a germinated plugin carries.
+  it('names every scope it declares, right on the diagnosis panel', async () => {
+    serve({ ...DORMANT, scopes: ['health.read', 'plugins.read'] })
+    renderDetail()
+
+    await waitFor(() => { expect(screen.getByText('Dormant')).toBeDefined() })
+    expect(screen.getByText('Declared in its manifest')).toBeDefined()
+    expect(screen.getByText('health.read')).toBeDefined()
+    expect(screen.getByText('plugins.read')).toBeDefined()
+  })
+
+  it('omits the declared-scopes card for a dormant plugin declaring none', async () => {
+    serve({ ...DORMANT, scopes: [] })
+    renderDetail()
+
+    await waitFor(() => { expect(screen.getByText('Dormant')).toBeDefined() })
+    expect(screen.queryByText('Declared in its manifest')).toBeNull()
   })
 
   it('does not say "all 1 commands" for a plugin declaring one', async () => {

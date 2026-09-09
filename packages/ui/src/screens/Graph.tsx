@@ -179,7 +179,7 @@ export function Graph(): React.JSX.Element {
           >
             <div className="overflow-x-auto">
               <svg role="img" aria-label={t('graph.title')} width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-                {shownEdges.map((edge) => {
+                {shownEdges.map((edge, index) => {
                   const from = byName.get(edge.from)
                   const to = byName.get(edge.to)
                   if (from === undefined || to === undefined) return null
@@ -187,7 +187,10 @@ export function Graph(): React.JSX.Element {
                   const rightward = from.x < to.x
                   return (
                     <line
-                      key={`${edge.from}-${edge.to}`}
+                      // The pair alone collides when two edges join the same nodes (a plugin
+                      // needing two scopes from one rhiza); the response is server-ordered and
+                      // stable within one render, so the ordinal disambiguates them.
+                      key={`${edge.from}-${edge.to}-${String(index)}`}
                       data-edge={`${edge.from}->${edge.to}`}
                       x1={MARGIN + (rightward ? from.x + widthOf(from) : from.x)}
                       y1={MARGIN + from.y + BOX_H / 2}

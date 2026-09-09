@@ -1,5 +1,6 @@
 import { rmSync } from 'node:fs'
 import { afterEach, describe, expect, it } from 'bun:test'
+import { recordInstall } from '../../src/config/store.js'
 import { bootAndLogin, brokenManifest, closeBooted, cyclingPair, cyclingTriple, unhealthyRhiza } from './support.js'
 import type { LoggedIn } from './support.js'
 import type { RuntimeHealth } from '../../src/supervision/health.js'
@@ -39,6 +40,18 @@ describe('/api/health', () => {
     const body = (await app.inject({ method: 'GET', url: '/api/health', headers: { cookie } })).json<RuntimeHealth>()
     expect(body).toMatchObject({ mode: 'degraded', failure: { kind: 'cycle' } })
     expect(body.failure?.kind === 'cycle' ? [...body.failure.spores].sort() : []).toEqual(['alpha', 'beta'])
+  })
+
+  // task 13's degraded-mode audit: none of RuntimeHealth's fields are optional on the wire,
+  // so the degraded branch must answer each one's empty value rather than omit it.
+  it('answers every RuntimeHealth field while degraded, none of them absent', async () => {
+    booted = await bootAndLogin({ spores: cyclingPair })
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/health', headers: { cookie } })).json<RuntimeHealth>()
+    expect(body.dormant).toEqual([])
+    expect(body.enforcingBlocked).toEqual([])
+    expect(body.rhizas).toEqual([])
+    expect(body.blockedSinceBoot).toBe(0)
   })
 
   // Nothing drove a throwing health() through this route before the whole-branch review:
@@ -84,6 +97,20 @@ describe('/api/health', () => {
     expect(enEntry?.reasonKey).toBe('refusal.germination.invalidManifest')
     expect(frEntry?.reasonKey).toBe('refusal.germination.invalidManifest')
   })
+
+  // /api/plugins already reports this install row as dormant (config/plugins.ts); before this
+  // fix /api/health said nothing, so the pill and the attention panel read a healthy bot.
+  it('carries an install row whose directory has gone, same as /api/plugins', async () => {
+    booted = await bootAndLogin({
+      beforeServe: (db) => { recordInstall(db, 'vanished', 'rhiza', true) },
+    })
+    const { app, cookie } = booted
+    const body = (await app.inject({ method: 'GET', url: '/api/health', headers: { cookie } }))
+      .json<RuntimeHealthDto>()
+    expect(body.mode).toBe('germinated')
+    const entry = body.dormant.find((d) => d.name === 'vanished')
+    expect(entry?.reasonKey).toBe('refusal.plugin.notOnDisk')
+  })
 })
 
 describe('/api/germination/retry', () => {
@@ -116,6 +143,23 @@ describe('/api/germination/retry', () => {
     // alpha and beta still cycle: the operator disabled the wrong one and sees a shorter
     // cycle rather than a success (spec §4.2).
     expect(retry.json<RuntimeHealth>()).toMatchObject({ mode: 'degraded', failure: { kind: 'cycle' } })
+  })
+
+  // The retry handler must read the install rows too, not registry.dormant alone: the GET route
+  // was given sporesDirs and db for exactly this entry, and a retry answering without them tells
+  // an operator the substrate is clean at the one moment they are watching it recover.
+  it('carries an install row whose directory has gone, same as the GET route', async () => {
+    booted = await bootAndLogin({ spores: cyclingPair })
+    const { app, served, cookie } = booted
+    expect(served.state.germination.status).toBe('degraded')
+    // After boot, not through beforeServe: a pre-existing install row makes this a later boot,
+    // which records cyclingPair disabled and germinates cleanly with no cycle to retry.
+    recordInstall(served.state.db, 'vanished', 'rhiza', true)
+    await app.inject({ method: 'POST', url: '/api/plugins/beta/disable', headers: { cookie } })
+    const retry = await app.inject({ method: 'POST', url: '/api/germination/retry', headers: { cookie } })
+    const body = retry.json<RuntimeHealthDto>()
+    expect(body.mode).toBe('germinated')
+    expect(body.dormant.find((d) => d.name === 'vanished')?.reasonKey).toBe('refusal.plugin.notOnDisk')
   })
 
   // The retry handler builds its own RuntimeHealthDto rather than sharing the GET route's

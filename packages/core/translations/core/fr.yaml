@@ -24,6 +24,7 @@ api:
   aliasRefused: "l''alias de ''{plugin}.{command}'' a été refusé"
   aliasManifestUnreadable: "l''extension ''{plugin}'' n''a pas de manifeste lisible sur le disque"
   pluginSettingInvalid: "le plugin « {plugin} » a refusé la valeur fournie pour : {keys}"
+  pluginSettingClearRefused: "effacer {keys} laisserait le plugin « {plugin} » avec une configuration qu''il refuse ; désactivez-le d''abord"
   germinationNotDegraded: "la germination ne peut être retentée que si le runtime est dégradé"
   routeNotFound: "aucune route pour « {path} »"
   sourceNotFound: "aucune source de sporange avec l'id « {id} »"

@@ -5,10 +5,10 @@ import type { Enzyme, Hypha, Inhibitor, Logger, Manifest, Rhiza, TranslatableRef
 import { undeclaredSecretKeys, undeclaredSecretsRefusal } from '../config/plugins.js'
 import { getInstall } from '../config/store.js'
 import { loadCatalogs } from '../i18n/catalog.js'
+import { configIssueRefs } from '../i18n/config-refs.js'
 import { CORE_DOMAIN, SHARED_DOMAIN } from '../i18n/core-catalogs.js'
 import type { LocaleMessages } from '../i18n/catalog.js'
 import type { Db } from '../persistence/db.js'
-import { describeConfigError } from '../support/thrown.js'
 import { resolve, targetName } from './anastomoses.js'
 import type { AnyOfChoice } from './anastomoses.js'
 import { discover } from './discover.js'
@@ -179,10 +179,11 @@ export async function germinate(
           // Duck-typed, never instanceof: a spore is bundled with its own copy of Zod.
           const parsed = module.configSchema.safeParse(declared)
           if (!parsed.success) {
-            const detail = describeConfigError(parsed.error)
-            // `issues` is the only name the shipped `refusal.config.incomplete` message
-            // interpolates; REFUSAL_PARAMS is what now rejects a bag that drifts from it.
-            goDormant(dormancyRefusal('refusal.config.incomplete', { issues: detail }))
+            // The same key `enablePlugin` renders (ledger item 12), and now the same refs: baking
+            // `describeConfigError` here left germination the one core-owned check that reaches
+            // the operator bilingual, and it is what the Overview shows first.
+            const issues = configIssueRefs(parsed.error, manifest.name)
+            goDormant(dormancyRefusal('refusal.config.incomplete', { issues }))
             continue
           }
           const badSecrets = undeclaredSecretKeys(module.configSchema)

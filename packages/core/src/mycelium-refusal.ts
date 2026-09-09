@@ -49,6 +49,21 @@ export async function outcome(work: () => void | Promise<void>): Promise<Outcome
   }
 }
 
+/**
+ * For work that already answers an `Outcome` but can still throw a `StoreRefusal` from under it —
+ * `writeDeclaredSetting` refuses an undeclared key or a rejected value itself, and `rewriteSetting`
+ * still throws for a plugin that is not installed.
+ */
+export async function joinOutcome(work: () => Promise<Outcome>): Promise<Outcome> {
+  try {
+    return await work()
+  } catch (e) {
+    const refusal = asRefusal(e)
+    if (refusal === null) throw e
+    return { ok: false, refusal }
+  }
+}
+
 /** `OutcomeOf`'s refusal arm carries no `value`: `undefined as never` would let an unnarrowed caller read it. */
 export async function outcomeOf<T>(work: () => T | Promise<T>): Promise<OutcomeOf<T>> {
   try {

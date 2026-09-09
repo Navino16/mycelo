@@ -5,8 +5,11 @@ import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { defineConfig, SEPTUM_VERSION, type ConfigSchema, type EnzymeContext, type Logger } from '@mycelo/septum'
 import { enzymeChecks, type EnzymeHarness } from '@mycelo/septum/conformance'
 import { z } from 'zod'
+import { enablePlugin } from '../../src/config/lifecycle.js'
 import { undeclaredSecretKeys, undeclaredSecretsRefusal } from '../../src/config/plugins.js'
+import { recordInstall } from '../../src/config/store.js'
 import { germinate } from '../../src/germination/germinate.js'
+import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import { CollisionError } from '../../src/germination/registry.js'
 import { loadCoreCatalogs, SHARED_DOMAIN } from '../../src/i18n/core-catalogs.js'
 import { renderRefusal } from '../../src/i18n/refusal.js'
@@ -34,6 +37,12 @@ function metaLogger(): { logger: Logger; metas: Record<string, unknown>[] } {
   }
   return { logger, metas }
 }
+
+const translator = createTranslator({
+  defaultLocale: 'en',
+  logger: { debug() {}, info() {}, warn() {}, error() {}, child: () => createLogger() },
+  catalogs: loadCoreCatalogs(),
+})
 
 let dir: string
 beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'mycelo-germ-')) })
@@ -605,12 +614,55 @@ it('leaves a spore dormant, with the reason, when its config is rejected', async
   confRhiza()
   const registry = await germinate([dir], createLogger(), { confrhiza: { token: 42 } })
   expect(registry.rhizas).toEqual([])
-  expect(registry.dormant[0]?.refusal?.key).toBe('refusal.config.incomplete')
-  expect(registry.dormant[0]?.refusal?.domain).toBe(SHARED_DOMAIN)
-  expect(String(registry.dormant[0]?.refusal?.params?.['issues'])).toContain('token must be a string')
+  const refusal = registry.dormant[0]?.refusal
+  expect(refusal?.key).toBe('refusal.config.incomplete')
+  expect(refusal?.domain).toBe(SHARED_DOMAIN)
   // `issues` and nothing else: the shipped message interpolates only that, and the `plugin`
   // this used to assert was a name no locale ever read.
-  expect(Object.keys(registry.dormant[0]?.refusal?.params ?? {})).toEqual(['issues'])
+  expect(Object.keys(refusal?.params ?? {})).toEqual(['issues'])
+  // Rendered, not stringified: `refusal!` carries refs, and `String()` on those proves nothing.
+  expect(renderRefusal(translator, refusal!, 'en'))
+    .toBe('configuration is incomplete: token: token must be a string')
+  expect(renderRefusal(translator, refusal!, 'fr'))
+    .toBe('la configuration est incomplète : token : token must be a string')
+})
+
+// The phase's own comment at germinate.ts:184 claims germination now builds "the same refs"
+// `enablePlugin` builds. Both fixtures elsewhere emit a plain zod issue with no `messageKey`, so
+// the domain argument is unread and `configIssueRefs(error, 'common')` reads identically. A
+// bare-string `messageKey` is the only input the two callers can disagree on.
+function ownKeyRhiza(): void {
+  spore('ownkey', {
+    'spore.yaml': 'kind: enzyme\nname: ownkey\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: ownkey\n    description: x\n    code: handleIt\n',
+    'src/index.ts': [
+      'export default {',
+      '  configSchema: { safeParse: () => ({ success: false, error: { issues: [{',
+      '    path: ["token"], message: "token is invalid", messageKey: "config.tokenInvalid",',
+      '  }] } }) },',
+      '  create: () => ({ handlers: { handleIt: async () => {} } }),',
+      '}',
+    ].join('\n'),
+  })
+}
+
+it("attributes a bare-string messageKey to the spore's own domain, exactly as enablePlugin does", async () => {
+  ownKeyRhiza()
+  const registry = await germinate([dir], createLogger(), { ownkey: {} })
+  const dormant = registry.dormant.find((d) => d.name === 'ownkey')?.refusal
+  expect(dormant?.params?.['issues']).toEqual([{
+    domain: SHARED_DOMAIN,
+    key: 'refusal.config.issueAt',
+    params: { field: 'token', cause: { domain: 'ownkey', key: 'config.tokenInvalid' } },
+  }])
+
+  const { db, close } = openDatabase(':memory:')
+  migrateDatabase(db)
+  recordInstall(db, 'ownkey', 'enzyme')
+  const enabled = await enablePlugin(db, [dir], 'ownkey')
+  expect(enabled.ok).toBe(false)
+  expect(enabled.ok ? undefined : enabled.refusal).toEqual(dormant)
+  close()
 })
 
 it('rejects a spore whose config key is absent entirely, rather than passing undefined', async () => {
@@ -618,9 +670,14 @@ it('rejects a spore whose config key is absent entirely, rather than passing und
   const registry = await germinate([dir], createLogger(), {})
   expect(registry.rhizas).toEqual([])
   // The absent key must arrive as {}, so the schema's own undefined branch stays unreached.
-  const issues = String(registry.dormant[0]?.refusal?.params?.['issues'])
-  expect(issues).toContain('token must be a string')
-  expect(issues).not.toContain('passed as undefined')
+  const refusal = registry.dormant[0]?.refusal
+  const rendered = renderRefusal(translator, refusal!, 'en')
+  expect(rendered).toContain('token must be a string')
+  expect(rendered).not.toContain('passed as undefined')
+  // `issueAt`'s French template inserts a space before the colon a baked English detail never
+  // would: only a ref rendered through the translator can produce it.
+  expect(renderRefusal(translator, refusal!, 'fr'))
+    .toBe('la configuration est incomplète : token : token must be a string')
 })
 
 it('gives a spore with no configSchema an empty config', async () => {
