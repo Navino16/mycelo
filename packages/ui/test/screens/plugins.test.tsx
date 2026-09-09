@@ -399,6 +399,20 @@ describe('the plugins list chrome', () => {
     expect(link.getAttribute('href')).toBe('/sources')
   })
 
+  // happy-dom performs no layout, so a getBoundingClientRect assertion at 390px reads a
+  // zero rect before and after the fix. Pin the shrink mechanism instead: a `w-full` input
+  // beside a `shrink-0` link overflows the row, `min-w-0 flex-1` lets it give way.
+  it('keeps the search field able to shrink beside the inoculate link', async () => {
+    serve(GROUPS)
+    renderPlugins()
+
+    await screen.findByRole('link', { name: 'Inoculate' })
+    const input = screen.getByRole('searchbox')
+    expect(input.className).toContain('min-w-0')
+    expect(input.className).toContain('flex-1')
+    expect(input.className).not.toContain('w-full')
+  })
+
   // design note 1b names all three corpora. A search over names alone passes a fixture whose
   // description and command name repeat the name, so each term below matches on one field only.
   it('finds a plugin by its command name, not by its own name alone', async () => {

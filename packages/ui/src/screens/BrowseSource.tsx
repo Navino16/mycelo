@@ -83,9 +83,10 @@ export function BrowseSource(): React.JSX.Element {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <header className="space-y-1">
+        <header className="min-w-0 space-y-1">
           <Breadcrumb trail={[{ label: t('sources.title'), to: '/sources' }]} />
-          <h1 className="font-mono text-page">{source?.label ?? ''}</h1>
+          {/* break-all over truncate: a filesystem path's distinguishing part is often its end. */}
+          <h1 className="break-all font-mono text-page">{source?.label ?? ''}</h1>
           {offers !== null && (
             <p className="text-meta-lg text-text/60">{t('sources.catalogue', { count: all.length })}</p>
           )}

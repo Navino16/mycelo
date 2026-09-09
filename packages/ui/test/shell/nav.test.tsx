@@ -56,6 +56,18 @@ describe('the primary nav', () => {
 
     expect(screen.getByRole('link', { name: /^Anastomosis/ }).className).toContain('hidden')
   })
+
+  // happy-dom performs no layout, so a phone-bar item's rect stays zero regardless of the
+  // fix. Pin the shrink mechanism instead: the item must be able to shrink below its label's
+  // content width (row 33's five-item bar), and the label must be free to wrap onto a second
+  // line ('Vue d’ensemble' is longer than any of the five columns at 390px).
+  it('lets a phone-bar item shrink and its label wrap across five columns', () => {
+    renderNav()
+
+    const link = screen.getByRole('link', { name: /^Overview/ })
+    expect(link.className).toContain('min-w-0')
+    expect(screen.getByText('Overview').className).toContain('break-words')
+  })
 })
 
 describe('the sidebar counts', () => {
