@@ -270,7 +270,7 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     if (cleared.length > 0 && willGerminate(state, name)) {
       const after = { ...readSettings(state.db, name), ...proposed }
       for (const key of cleared) delete after[key]
-      if (await settingsIncomplete(state.db, state.config.discoveryDirs, name, after)) {
+      if (await settingsIncomplete(state.config.discoveryDirs, name, after)) {
         throw badRequest('api.pluginSettingClearRefused', { plugin: name, keys: cleared.join(', ') })
       }
     }

@@ -364,11 +364,12 @@ function asConfigIssue(issue: unknown): ConfigIssue {
 }
 
 /**
- * `enablePlugin`'s own whole-object verdict, for a caller holding settings that are not stored yet
- * (spec §8). A plugin that publishes no schema, or whose schema throws, refuses nothing.
+ * The schema half alone of `enablePlugin`'s verdict, for a caller holding settings not stored yet
+ * (spec §8): never its manifest, septum-range or undeclared-secret refusals, and a module that
+ * fails to load or a safeParse that throws refuses nothing here where `enablePlugin` refuses.
  */
 export async function settingsIncomplete(
-  db: Db, sporesDirs: readonly string[], name: string, values: Record<string, unknown>,
+  sporesDirs: readonly string[], name: string, values: Record<string, unknown>,
 ): Promise<boolean> {
   let module: Awaited<ReturnType<typeof loadSporeModule>>
   try {

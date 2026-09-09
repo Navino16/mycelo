@@ -145,6 +145,23 @@ describe('/api/germination/retry', () => {
     expect(retry.json<RuntimeHealth>()).toMatchObject({ mode: 'degraded', failure: { kind: 'cycle' } })
   })
 
+  // The retry handler must read the install rows too, not registry.dormant alone: the GET route
+  // was given sporesDirs and db for exactly this entry, and a retry answering without them tells
+  // an operator the substrate is clean at the one moment they are watching it recover.
+  it('carries an install row whose directory has gone, same as the GET route', async () => {
+    booted = await bootAndLogin({ spores: cyclingPair })
+    const { app, served, cookie } = booted
+    expect(served.state.germination.status).toBe('degraded')
+    // After boot, not through beforeServe: a pre-existing install row makes this a later boot,
+    // which records cyclingPair disabled and germinates cleanly with no cycle to retry.
+    recordInstall(served.state.db, 'vanished', 'rhiza', true)
+    await app.inject({ method: 'POST', url: '/api/plugins/beta/disable', headers: { cookie } })
+    const retry = await app.inject({ method: 'POST', url: '/api/germination/retry', headers: { cookie } })
+    const body = retry.json<RuntimeHealthDto>()
+    expect(body.mode).toBe('germinated')
+    expect(body.dormant.find((d) => d.name === 'vanished')?.reasonKey).toBe('refusal.plugin.notOnDisk')
+  })
+
   // The retry handler builds its own RuntimeHealthDto rather than sharing the GET route's
   // renderer; a copy that skipped rendering would leave this one English-only regardless of
   // the request's locale. Disabling 'beta' also leaves 'alpha' dormant on a second, distinct

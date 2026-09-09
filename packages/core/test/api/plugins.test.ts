@@ -15,8 +15,9 @@ import { setAlias } from '../../src/rhizomorph/aliases.js'
 import type { PluginGroups } from '../../src/api/routes/plugins.js'
 import {
   bootAndLogin, brokenManifest, closeBooted, closedJsonSchema, configurable, configurableTwoFields,
-  cyclingPair, definedSchema, eitherOrSchema, minPortSchema, mixedFieldSchema, noJsonSchema,
-  twoPluginsTwoCommands, vault, writeSpore,
+  cyclingPair, definedSchema, degradedWith, eitherOrSchema, minPortSchema, mixedFieldSchema,
+  noJsonSchema, requiredAndOptional, schemaless, throwingModule, twoPluginsTwoCommands, vault,
+  writeSpore,
 } from './support.js'
 import type { LoggedIn, SporeWriter } from './support.js'
 
@@ -278,6 +279,27 @@ describe('/api/plugins', () => {
     expect(readSettings(served.state.db, 'needs-config')).toEqual({ token: 's3cr3t' })
   })
 
+  // The plural clear: `vault` refuses nothing, so every test that reaches the guard clears exactly
+  // one key and a loop collapsed to `cleared[0]` survives them all. The optional key is first, so
+  // dropping the rest of the loop leaves the required one in `after` and answers 200 on a wipe.
+  it('refuses a two-key clear whose second key is the required one, and keeps both rows', async () => {
+    booted = await bootAndLogin({ spores: requiredAndOptional })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-one/settings', headers: { cookie },
+      payload: { opt: 'x', req: 'v' },
+    })
+    await germinatePhase(served.state, silentLogger())
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-one/settings', headers: { cookie },
+      payload: { opt: null, req: null },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(response.json<{ error: { message: string } }>().error.message)
+      .toContain("clearing opt, req would leave plugin 'needs-one'")
+    expect(readSettings(served.state.db, 'needs-one')).toEqual({ opt: 'x', req: 'v' })
+  })
+
   // The other arm of the same ruling: returning a plugin to its schema defaults before enabling
   // it is exactly what a clear is for, so a disabled install must still be clearable.
   it('allows a clear that would leave a disabled plugin incomplete', async () => {
@@ -299,15 +321,89 @@ describe('/api/plugins', () => {
 
   // Completeness stays enablePlugin's check (§8): a two-required-field form is filled one field at
   // a time, so a write that leaves the object incomplete is not a clear and must still pass.
+  // Degraded, not germinated: on a germinated runtime this plugin is already dormant and
+  // willGerminate short-circuits, so the guard the test is about never runs.
   it('lets a plain write leave an enabled plugin incomplete, since only a clear is guarded', async () => {
-    booted = await bootAndLogin({ spores: configurableTwoFields })
+    booted = await bootAndLogin({ spores: degradedWith(configurableTwoFields) })
     const { app, served, cookie } = booted
+    expect(served.state.germination.status).toBe('degraded')
     const response = await app.inject({
       method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
       payload: { url: 'http://x' },
     })
     expect(response.statusCode).toBe(200)
     expect(readSettings(served.state.db, 'needs-config')).toEqual({ url: 'http://x' })
+  })
+
+  // The guard's own reach while degraded: every enabled install is one the next germination will
+  // try, there being no registry to read a dormancy off. Clearing the required key here is the
+  // enforcing-inhibitor wipe §8 exists to refuse, in the one state no channel command can undo.
+  it('refuses a clear that would leave an enabled plugin incomplete while the runtime is degraded', async () => {
+    booted = await bootAndLogin({ spores: degradedWith(configurable) })
+    const { app, served, cookie } = booted
+    expect(served.state.germination.status).toBe('degraded')
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: 's3cr3t' },
+    })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-config/settings', headers: { cookie },
+      payload: { token: null },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(readSettings(served.state.db, 'needs-config')).toEqual({ token: 's3cr3t' })
+  })
+
+  // `after` is the stored settings merged with what this body writes, never the stored ones alone:
+  // supplying the required key in the same body as the clear is what keeps the object complete.
+  it('allows clearing an optional key in the same body that supplies the required one', async () => {
+    booted = await bootAndLogin({ spores: degradedWith(requiredAndOptional) })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-one/settings', headers: { cookie },
+      payload: { opt: 'x' },
+    })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/needs-one/settings', headers: { cookie },
+      payload: { req: 'v', opt: null },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(readSettings(served.state.db, 'needs-one')).toEqual({ req: 'v' })
+  })
+
+  // A plugin whose module throws refuses nothing, so its clear must go through: refusing here
+  // would leave an operator unable to undo the very setting that is keeping the spore broken.
+  it('allows a clear on an enabled plugin whose module throws on import', async () => {
+    booted = await bootAndLogin({ spores: degradedWith(throwingModule) })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/thrower/settings', headers: { cookie },
+      payload: { tok: 'v' },
+    })
+    expect(readSettings(served.state.db, 'thrower')).toEqual({ tok: 'v' })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/thrower/settings', headers: { cookie },
+      payload: { tok: null },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(readSettings(served.state.db, 'thrower')).toEqual({})
+  })
+
+  // A plugin publishing no configSchema validates nothing, so no configuration of it can be
+  // incomplete. Germinated and non-dormant, so the guard genuinely runs.
+  it('allows a clear on a germinated plugin that publishes no schema at all', async () => {
+    booted = await bootAndLogin({ spores: schemaless })
+    const { app, served, cookie } = booted
+    await app.inject({
+      method: 'PUT', url: '/api/plugins/unchecked/settings', headers: { cookie },
+      payload: { tok: 'v' },
+    })
+    const response = await app.inject({
+      method: 'PUT', url: '/api/plugins/unchecked/settings', headers: { cookie },
+      payload: { tok: null },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(readSettings(served.state.db, 'unchecked')).toEqual({})
   })
 
   // A `null` on a key with no row removed nothing. The alias route six lines above states the

@@ -117,6 +117,54 @@ it('refuses a rejected key, naming only that key and not the other unset one', a
   close()
 })
 
+// Every other fixture emits exactly one issue per key, so a refusal naming only `issues[0]`
+// reads identically to one naming them all. A real Zod chain — `.min(8).regex(/\d/)` — emits two.
+function twoIssuesOnOneKey(): void {
+  mkdirSync(join(dir, 'twoissue', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'twoissue', 'spore.yaml'),
+    'kind: enzyme\nname: twoissue\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: twoissue\n    description: x\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(
+    join(dir, 'twoissue', 'src/index.ts'),
+    'export default {\n'
+      + '  configSchema: {\n'
+      + '    safeParse: (input) => {\n'
+      + '      const issues = []\n'
+      + '      const secret = input?.secret\n'
+      + '      if (typeof secret !== "string" || secret.length < 8) {\n'
+      + '        issues.push({ path: ["secret"], message: "must be at least 8 characters" })\n'
+      + '      }\n'
+      + '      if (typeof secret !== "string" || !/[0-9]/.test(secret)) {\n'
+      + '        issues.push({ path: ["secret"], message: "must contain a digit" })\n'
+      + '      }\n'
+      + '      return issues.length > 0\n'
+      + '        ? { success: false, error: { issues } }\n'
+      + '        : { success: true, data: input }\n'
+      + '    },\n'
+      + '  },\n'
+      + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+      + '}\n',
+    'utf8',
+  )
+}
+
+it('names every issue one key produced, not only the first', async () => {
+  const { db, close } = fresh()
+  twoIssuesOnOneKey()
+  recordInstall(db, 'twoissue', 'enzyme')
+  const result = await writeDeclaredSetting(db, [dir], 'twoissue', 'secret', 'short')
+  expect(result.ok).toBe(false)
+  expect(readSettings(db, 'twoissue')).toEqual({})
+  const refusal = result.ok ? undefined : result.refusal
+  expect(refusal === undefined ? '' : renderRefusal(translator, refusal, 'en'))
+    .toBe('configuration is incomplete: secret: must be at least 8 characters, '
+      + 'secret: must contain a digit')
+  close()
+})
+
 // design §5.2's own worked example: fixtures/gate's error was a bare string, so
 // objectRejections' `member(result.error, 'issues')` found nothing and the value passed
 // through unvalidated. This is the defect ConfigError's guaranteed shape closes.
