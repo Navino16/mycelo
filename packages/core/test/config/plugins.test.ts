@@ -165,6 +165,47 @@ it('names every issue one key produced, not only the first', async () => {
   close()
 })
 
+// A top-level `.refine()` carries `path: []`: it refuses the object, not a field. Every other
+// fixture here refuses a named field, so the whole-object branch of `configIssueRefsFor` was
+// reachable from no test — and dropped, this write answers ok and stores what the schema rejects.
+function wholeObjectRefusal(): void {
+  mkdirSync(join(dir, 'exclusive', 'src'), { recursive: true })
+  writeFileSync(
+    join(dir, 'exclusive', 'spore.yaml'),
+    'kind: enzyme\nname: exclusive\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: exclusive\n    description: x\n    code: handleIt\n',
+    'utf8',
+  )
+  writeFileSync(
+    join(dir, 'exclusive', 'src/index.ts'),
+    'export default {\n'
+      + '  configSchema: {\n'
+      + '    safeParse: (input) => (typeof input?.socket === "string" && input.socket.length > 0\n'
+      + '      ? { success: false, error: { issues: [{\n'
+      + '          path: [], message: "socket and tcp are mutually exclusive",\n'
+      + '        }] } }\n'
+      + '      : { success: true, data: input }),\n'
+      + '  },\n'
+      + '  create: () => ({ handlers: { handleIt: async () => {} } }),\n'
+      + '}\n',
+    'utf8',
+  )
+}
+
+it("refuses a write the plugin's whole-object schema rejects, and writes nothing", async () => {
+  const { db, close } = fresh()
+  wholeObjectRefusal()
+  recordInstall(db, 'exclusive', 'enzyme')
+  const result = await writeDeclaredSetting(db, [dir], 'exclusive', 'socket', '/run/x.sock')
+  expect(result.ok).toBe(false)
+  expect(readSettings(db, 'exclusive')).toEqual({})
+  const refusal = result.ok ? undefined : result.refusal
+  expect(refusal?.key).toBe('refusal.config.incomplete')
+  expect(refusal === undefined ? '' : renderRefusal(translator, refusal, 'en'))
+    .toBe('configuration is incomplete: socket and tcp are mutually exclusive')
+  close()
+})
+
 // design §5.2's own worked example: fixtures/gate's error was a bare string, so
 // objectRejections' `member(result.error, 'issues')` found nothing and the value passed
 // through unvalidated. This is the defect ConfigError's guaranteed shape closes.

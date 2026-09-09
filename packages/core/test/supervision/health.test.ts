@@ -1,6 +1,6 @@
 import { describe, expect, it, spyOn } from 'bun:test'
 import type { Germination } from '../../src/boot/state.js'
-import { aggregateHealth, aggregateRuntimeHealth } from '../../src/supervision/health.js'
+import { aggregateHealth, aggregateRuntimeHealth, HEALTH_TIMEOUT_MS } from '../../src/supervision/health.js'
 import type { Registry } from '../../src/germination/registry.js'
 
 function registry(over: Partial<Registry>): Registry {
@@ -190,6 +190,31 @@ describe('aggregateHealth timeout', () => {
       }],
     } as unknown as Partial<Registry>)
     expect((await aggregateHealth(quick, 20))[0]?.status.state).toBe('healthy')
+  })
+
+  // The three tests around this one pass an explicit 20ms, so the shipped default bounds nothing
+  // the suite reads. Measured: Bun clamps a setTimeout delay past 2^31-1 to 1ms, so a
+  // never-settling health() cannot tell an unbounded default apart from a tight one — only the
+  // delay the code hands setTimeout can.
+  it('bounds a rhiza with the shipped default when the caller names none', async () => {
+    const spy = spyOn(globalThis, 'setTimeout')
+    try {
+      const quick = registry({
+        rhizas: [{
+          name: 'plex',
+          instance: { health: () => Promise.resolve({ state: 'healthy' as const, checkedAt: new Date() }) },
+        }],
+      } as unknown as Partial<Registry>)
+      await aggregateHealth(quick)
+      expect(spy.mock.calls.map((c) => c[1])).toEqual([HEALTH_TIMEOUT_MS])
+    } finally {
+      spy.mockRestore()
+    }
+    // An operator opens /api/health *because* something is wrong (9.5 review, M8): a bound they
+    // outwait is no bound.
+    expect(Number.isFinite(HEALTH_TIMEOUT_MS)).toBe(true)
+    expect(HEALTH_TIMEOUT_MS).toBeGreaterThan(0)
+    expect(HEALTH_TIMEOUT_MS).toBeLessThanOrEqual(10_000)
   })
 
   it('cancels the timeout when health() answers before it fires', async () => {

@@ -18,9 +18,14 @@ function person(db: Db, id: string, displayName: string): void {
     .run()
 }
 
-function identity(db: Db, principalId: string, channel: string, externalId: string): void {
+function identity(
+  db: Db, principalId: string, channel: string, externalId: string, displayName?: string,
+): void {
   db.insert(channelIdentity)
-    .values({ channel, externalId, principalId, firstSeenAt: new Date() })
+    .values({
+      channel, externalId, principalId, firstSeenAt: new Date(),
+      ...(displayName === undefined ? {} : { displayName }),
+    })
     .run()
 }
 
@@ -92,6 +97,36 @@ describe('searchPrincipals', () => {
       .toEqual(['p1'])
     expect(searchPrincipals(db, { page: 1, perPage: 10, search: '100%' }).items.map((p) => p.id))
       .toEqual(['p3'])
+    close()
+  })
+
+  // No fixture in the repository ever set `channelIdentity.displayName`, so the disjunct that
+  // reads it was dead to the whole suite: a person known to the channel under a name their
+  // principal does not carry was unfindable.
+  it("matches on a channel identity's own display name, not only on the principal's", () => {
+    const { db, close } = fresh()
+    person(db, 'p1', 'Zed')
+    identity(db, 'p1', 'console', 'u-77', 'Alice Cooper')
+    person(db, 'p2', 'Bob')
+    expect(searchPrincipals(db, { page: 1, perPage: 10, search: 'cooper' }).items.map((p) => p.id))
+      .toEqual(['p1'])
+    close()
+  })
+
+  // The third character of the class, and the one the phase's own escaping test misses: `\` is
+  // LIKE's escape character here, so leaving it unescaped makes `a\b` match `ab` — the wrong
+  // person, not merely one too many.
+  it('treats a backslash in a search term as a literal character', () => {
+    const { db, close } = fresh()
+    person(db, 'p1', 'a_b')
+    person(db, 'p2', 'axb')
+    person(db, 'p3', 'a\\_b')
+    person(db, 'p4', 'a\\b')
+    person(db, 'p5', 'ab')
+    expect(searchPrincipals(db, { page: 1, perPage: 10, search: 'a\\b' }).items.map((p) => p.id))
+      .toEqual(['p4'])
+    expect(searchPrincipals(db, { page: 1, perPage: 10, search: 'a\\' }).items.map((p) => p.id))
+      .toEqual(['p3', 'p4'])
     close()
   })
 

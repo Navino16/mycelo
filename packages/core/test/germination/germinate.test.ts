@@ -5,8 +5,11 @@ import { afterEach, beforeEach, expect, it } from 'bun:test'
 import { defineConfig, SEPTUM_VERSION, type ConfigSchema, type EnzymeContext, type Logger } from '@mycelo/septum'
 import { enzymeChecks, type EnzymeHarness } from '@mycelo/septum/conformance'
 import { z } from 'zod'
+import { enablePlugin } from '../../src/config/lifecycle.js'
 import { undeclaredSecretKeys, undeclaredSecretsRefusal } from '../../src/config/plugins.js'
+import { recordInstall } from '../../src/config/store.js'
 import { germinate } from '../../src/germination/germinate.js'
+import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import { CollisionError } from '../../src/germination/registry.js'
 import { loadCoreCatalogs, SHARED_DOMAIN } from '../../src/i18n/core-catalogs.js'
 import { renderRefusal } from '../../src/i18n/refusal.js'
@@ -622,6 +625,44 @@ it('leaves a spore dormant, with the reason, when its config is rejected', async
     .toBe('configuration is incomplete: token: token must be a string')
   expect(renderRefusal(translator, refusal!, 'fr'))
     .toBe('la configuration est incomplète : token : token must be a string')
+})
+
+// The phase's own comment at germinate.ts:184 claims germination now builds "the same refs"
+// `enablePlugin` builds. Both fixtures elsewhere emit a plain zod issue with no `messageKey`, so
+// the domain argument is unread and `configIssueRefs(error, 'common')` reads identically. A
+// bare-string `messageKey` is the only input the two callers can disagree on.
+function ownKeyRhiza(): void {
+  spore('ownkey', {
+    'spore.yaml': 'kind: enzyme\nname: ownkey\nseptum: "^0.12"\n'
+      + 'commands:\n  - name: ownkey\n    description: x\n    code: handleIt\n',
+    'src/index.ts': [
+      'export default {',
+      '  configSchema: { safeParse: () => ({ success: false, error: { issues: [{',
+      '    path: ["token"], message: "token is invalid", messageKey: "config.tokenInvalid",',
+      '  }] } }) },',
+      '  create: () => ({ handlers: { handleIt: async () => {} } }),',
+      '}',
+    ].join('\n'),
+  })
+}
+
+it("attributes a bare-string messageKey to the spore's own domain, exactly as enablePlugin does", async () => {
+  ownKeyRhiza()
+  const registry = await germinate([dir], createLogger(), { ownkey: {} })
+  const dormant = registry.dormant.find((d) => d.name === 'ownkey')?.refusal
+  expect(dormant?.params?.['issues']).toEqual([{
+    domain: SHARED_DOMAIN,
+    key: 'refusal.config.issueAt',
+    params: { field: 'token', cause: { domain: 'ownkey', key: 'config.tokenInvalid' } },
+  }])
+
+  const { db, close } = openDatabase(':memory:')
+  migrateDatabase(db)
+  recordInstall(db, 'ownkey', 'enzyme')
+  const enabled = await enablePlugin(db, [dir], 'ownkey')
+  expect(enabled.ok).toBe(false)
+  expect(enabled.ok ? undefined : enabled.refusal).toEqual(dormant)
+  close()
 })
 
 it('rejects a spore whose config key is absent entirely, rather than passing undefined', async () => {
