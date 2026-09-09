@@ -151,10 +151,10 @@ describe('the sources list', () => {
     mockApi([OFFICIAL, THIRD_PARTY], { catalogues: { 1: 61, 2: 112 } })
     renderSources()
 
-    // Literals, not truncateTail(...) calls: OFFICIAL's url is under budget and must render
-    // unchanged, THIRD_PARTY's is the truncated case, and either side must pin independently.
+    // Literals, not truncateTail(...) calls: both urls are under the 64-char budget and must
+    // render unchanged — the column, not this helper, is what clips a wider one visually.
     await waitFor(() => { expect(screen.getByText('git@git.mycelo.dev:core.git')).toBeDefined() })
-    expect(screen.getByText('…ps://github.com/mycelo-community/spores.git')).toBeDefined()
+    expect(screen.getByText('https://github.com/mycelo-community/spores.git')).toBeDefined()
   })
 
   it('counts the catalogue of each source and totals them in the header', async () => {
@@ -406,7 +406,9 @@ describe('a source there is nothing to browse', () => {
     const rowB = await screen.findByTestId('source-6')
     // Literal expectations, not truncateTail(...) calls: this must pin the tail-keeping
     // behaviour independently, or a wrong-direction helper would move both sides together.
-    expect(within(rowA).getByText('….superpowers/milestone-9.7/spores')).toBeDefined()
-    expect(within(rowB).getByText('…o/.superpowers/design-9.75/spores')).toBeDefined()
+    // A local source's label and location are the same path, so the same budget renders it
+    // identically in both columns — hence two matches, not one, for each row.
+    expect(within(rowA).getAllByText('…e/njaunet/perso/mycelo/mycelo/.superpowers/milestone-9.7/spores')).toHaveLength(2)
+    expect(within(rowB).getAllByText('…ome/njaunet/perso/mycelo/mycelo/.superpowers/design-9.75/spores')).toHaveLength(2)
   })
 })

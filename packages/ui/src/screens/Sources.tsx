@@ -102,15 +102,17 @@ function SourceRow(
           api/routes/sources.ts, driverOf): its spores are already installed, so the row names
           it rather than linking into a route that can only fail — the first row an operator
           meets on a scratch install. */}
+      {/* 64: the widest columns render up to ~65 mono chars at 1440px, and this budget is
+          only a safety net past that — the visual clip is CSS `truncate`'s job, not this one's. */}
       {browsable
         ? (
-            <Link to={`/sources/${String(source.id)}`} className="truncate font-mono font-medium">
-              {truncateTail(source.label, 34)}
+            <Link to={`/sources/${String(source.id)}`} className="truncate font-mono font-medium" title={source.label}>
+              {truncateTail(source.label, 64)}
             </Link>
           )
-        : <span className="truncate font-mono font-medium">{truncateTail(source.label, 34)}</span>}
-      <span className="truncate font-mono text-meta-lg text-text/60">
-        {truncateTail(source.location, 44)}
+        : <span className="truncate font-mono font-medium" title={source.label}>{truncateTail(source.label, 64)}</span>}
+      <span className="truncate font-mono text-meta-lg text-text/60" title={source.location}>
+        {truncateTail(source.location, 64)}
       </span>
       <span className="justify-self-start">
         <Chip label={t(badgeKey(source))} tone={source.official && source.enabled ? 'ok' : 'idle'} />
