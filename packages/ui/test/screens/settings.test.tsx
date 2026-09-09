@@ -571,6 +571,16 @@ describe('the generated settings form', () => {
     expect(await screen.findByRole('switch')).toBeTruthy()
   })
 
+  // The same dormant-but-enabled population reaches the empty-schema branch too, e.g. a plugin
+  // dormant on an unsatisfied `requires:` that also takes no configuration.
+  it('offers Enable for a dormant plugin with an empty schema, not just a disabled one', async () => {
+    mockVault({ schema: { available: false, reason: 'requires rhiza \'radarr2\'' }, detail: { ...GERMINATED, state: 'dormant' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByText('requires rhiza \'radarr2\'')).toBeDefined() })
+    expect(screen.getByRole('button', { name: 'Enable' })).toBeDefined()
+  })
+
   // RJSF passes formData through as `value`, undefined for a never-stored key; typing then
   // makes it defined, the uncontrolled-to-controlled transition React warns about (plan defect 1).
   it('masks a never-filled secret with an empty value and no React controlled-input warning', async () => {

@@ -453,7 +453,7 @@ export function PluginSettings(): React.JSX.Element {
           action={
             <div className="space-y-2">
               <p className="font-mono text-meta-lg text-text/60">{schema.reason}</p>
-              {!enabledNow && detail?.enabled !== true && (
+              {!enabledNow && detail !== null && (!detail.enabled || detail.state === 'dormant') && (
                 <button
                   type="button"
                   onClick={() => { void enable() }}
