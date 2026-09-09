@@ -1001,8 +1001,7 @@ describe('the guided path out of an empty substrate', () => {
 
   // Discriminates counting non-builtin roles from counting builtin ones: two builtin roles and
   // no custom one must still read as "no role created yet", not as two roles done. Plugins must
-  // stay at zero here — a channel is itself a plugin, and one would now suppress the card
-  // entirely (row 1/34), which is not the dimension this test isolates.
+  // stay at zero here — a channel is itself a plugin, and one would now suppress the card (row 1/34).
   it('still asks for a role when only builtin roles exist', async () => {
     await withHealth(GERMINATED, {
       sources: COMPLETE_SOURCES,

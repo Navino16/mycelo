@@ -68,8 +68,8 @@ describe('the guided empty substrate', () => {
 
   // row 1/34: a substrate with plugins already installed is not an empty one, whatever
   // configuration is still outstanding.
-  // count 1, not 10: a mutant of "plugins > 0" into "plugins > 1" survives at 10 but not at 1.
   it('renders nothing on a substrate that already has plugins', () => {
+    // count 1, not 10: a mutant of "plugins > 0" into "plugins > 1" survives at 10 but not at 1.
     renderGuided({ sources: 1, channels: 1, customRoles: 0 }, 1)
 
     expect(screen.queryByText(/n’est encore installé|nothing is installed/i)).toBeNull()
