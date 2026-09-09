@@ -241,7 +241,7 @@ export function Overview(): React.JSX.Element {
               {/* Renders alongside the health body, not instead of it: a fresh substrate's first
                   spores go dormant for missing configuration while steps are still outstanding,
                   and the operator must see both (whole-branch fix brief, item 2). */}
-              {guided !== undefined && <GuidedStart counts={guided} />}
+              {guided !== undefined && <GuidedStart counts={guided} plugins={stats?.total ?? 0} />}
 
               {/* One container for the whole health body: the phone order is the DOM order,
                   and the desktop frame's side-by-side comes from explicit grid placement, so
