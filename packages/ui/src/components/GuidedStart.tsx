@@ -1,5 +1,5 @@
 import { Link } from 'react-router'
-import { useT } from '../i18n.tsx'
+import { plural, useT } from '../i18n.tsx'
 import type { StringKey } from '../../locales/en.ts'
 
 export interface SubstrateCounts {
@@ -24,16 +24,22 @@ const TARGET: Record<Step, string> = {
   role: '/roles',
 }
 
-export function GuidedStart({ counts }: { counts: SubstrateCounts }): React.JSX.Element | null {
+export function GuidedStart(
+  { counts, plugins }: { counts: SubstrateCounts, plugins: number },
+): React.JSX.Element | null {
   const t = useT()
   const steps = outstandingSteps(counts)
-  if (steps.length === 0) return null
+  // A substrate with plugins is not an empty one, whatever is still outstanding: the heading
+  // claims emptiness, and row 1 measured it above a card reading "8 of 10 germinated".
+  if (plugins > 0 || steps.length === 0) return null
 
   return (
     <section className="space-y-3">
       <div className="space-y-1">
         <h2 className="text-title font-medium">{t('guided.nothingInstalled')}</h2>
-        <p className="text-body text-text/70">{t('guided.nothingInstalledLead')}</p>
+        <p className="text-body text-text/70">
+          {plural(t, 'guided.nothingInstalledLead', steps.length, { count: steps.length })}
+        </p>
       </div>
       <ol className="grid gap-3 md:grid-cols-3">
         {steps.map((step, index) => (

@@ -14,7 +14,7 @@ export const BOX_W = 166
 export const BOX_H = 34
 const GAP_X = 60
 /** Wide enough that a dormant node's reason line fits under its box. */
-const GAP_Y = 45
+export const GAP_Y = 45
 
 /** By kind, never by dependency depth (design 2k); `core` is synthetic, so it goes by name. */
 export function columnOf(node: GraphNode): number {

@@ -60,7 +60,7 @@ export function Nav(): React.JSX.Element {
               to={to}
               end={to === '/'}
               className={({ isActive }) => [
-                'flex flex-1 flex-col items-center gap-1 border-t-2 border-transparent p-3 text-meta',
+                'flex min-w-0 flex-1 flex-col items-center gap-1 border-t-2 border-transparent p-3 text-meta',
                 'md:flex-none md:flex-row md:gap-3 md:border-t-0 md:px-4 md:py-2 md:text-title',
                 desktopOnly === true ? 'hidden md:flex' : '',
                 // The phone bar marks the active item with an accent rule and accent ink; the
@@ -72,7 +72,9 @@ export function Nav(): React.JSX.Element {
                   1a draws one of the two per width, never both. */}
               <span className="hidden md:block"><Dot tone={tone} /></span>
               <Icon size={18} className="md:hidden" />
-              <span className="md:flex-1">{t(key)}</span>
+              {/* row 33: 'Vue d’ensemble' outruns any of five phone columns at 390px; let it
+                  wrap onto a second line rather than clip. */}
+              <span className="break-words text-center md:flex-1 md:text-left">{t(key)}</span>
               {n !== undefined && (
                 <span className={`hidden font-mono text-meta md:inline ${tone === 'warn' ? TONE_CLASSES.warn.text : 'text-text/50'}`}>
                   {String(n)}

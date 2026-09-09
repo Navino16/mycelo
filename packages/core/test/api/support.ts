@@ -86,7 +86,7 @@ export const brokenManifest: SporeWriter = (sporesDir) => {
 
 // Duck-typed like lifecycle.test.ts's needs-config: a spore under /tmp cannot resolve
 // the workspace's zod, and a real one carries its own copy anyway.
-function configSchemaModule(fields: readonly string[]): string {
+export function configSchemaModule(fields: readonly string[]): string {
   const checks = fields.map((f) => `typeof input?.${f} === 'string' && input.${f}.length > 0`).join(' && ')
   const missingExpr = fields.map((f) => `(typeof input?.${f} === 'string' && input.${f}.length > 0 ? [] : ['${f}'])`).join(', ')
   const properties = fields.map((f) => `${f}: { type: 'string' }`).join(', ')

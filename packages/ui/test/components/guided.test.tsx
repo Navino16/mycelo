@@ -5,10 +5,10 @@ import { GuidedStart, outstandingSteps } from '../../src/components/GuidedStart.
 import { I18nProvider } from '../../src/i18n.tsx'
 import type { SubstrateCounts } from '../../src/components/GuidedStart.tsx'
 
-function renderGuided(counts: SubstrateCounts): void {
+function renderGuided(counts: SubstrateCounts, plugins = 0): void {
   render(
     <I18nProvider>
-      <MemoryRouter><GuidedStart counts={counts} /></MemoryRouter>
+      <MemoryRouter><GuidedStart counts={counts} plugins={plugins} /></MemoryRouter>
     </I18nProvider>,
   )
 }
@@ -64,5 +64,33 @@ describe('the guided empty substrate', () => {
     expect(stepNumbers()).toEqual(['1', '2'])
     expect(screen.getAllByRole('link')).toHaveLength(2)
     expect(screen.queryByText('Add a source')).toBeNull()
+  })
+
+  // row 1/34: a substrate with plugins already installed is not an empty one, whatever
+  // configuration is still outstanding.
+  it('renders nothing on a substrate that already has plugins', () => {
+    // count 1, not 10: a mutant of "plugins > 0" into "plugins > 1" survives at 10 but not at 1.
+    renderGuided({ sources: 1, channels: 1, customRoles: 0 }, 1)
+
+    expect(screen.queryByText(/n’est encore installé|nothing is installed/i)).toBeNull()
+  })
+
+  it('still guides an empty substrate that has a source but no channel', () => {
+    renderGuided({ sources: 1, channels: 0, customRoles: 0 }, 0)
+
+    expect(screen.getByRole('heading', { level: 2 })).toBeTruthy()
+  })
+
+  // C7: the lead sentence must name however many steps remain, not a hardcoded "three".
+  it('counts down the lead sentence as steps are completed', () => {
+    renderGuided({ sources: 1, channels: 0, customRoles: 0 }, 0)
+
+    expect(screen.getByText(/2 steps make it answer\./)).toBeDefined()
+  })
+
+  it('uses the singular lead sentence for exactly one remaining step', () => {
+    renderGuided({ sources: 1, channels: 1, customRoles: 0 }, 0)
+
+    expect(screen.getByText(/One step makes it answer\./)).toBeDefined()
   })
 })

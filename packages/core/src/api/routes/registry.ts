@@ -176,7 +176,7 @@ export function registerRegistryRoutes(app: FastifyInstance, state: RuntimeState
     const { registry } = state.germination.mycelium
     // The same probe /api/health runs, so both screens read one verdict per fetch — the graph
     // fetches once per mount and the health poll every 15 s, so they still age apart.
-    const unhealthy = new Map((await aggregateHealth(registry))
+    const unhealthy = new Map((await aggregateHealth(registry, undefined, state.translator, request.locale))
       .filter((h) => h.status.state !== 'healthy')
       .map((h) => [h.rhiza, {
         // aggregateHealth returns the plugin's own answer unvalidated: anything but the two

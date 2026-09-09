@@ -453,7 +453,7 @@ export function PluginSettings(): React.JSX.Element {
           action={
             <div className="space-y-2">
               <p className="font-mono text-meta-lg text-text/60">{schema.reason}</p>
-              {!enabledNow && detail?.enabled !== true && (
+              {!enabledNow && detail !== null && (!detail.enabled || detail.state === 'dormant') && (
                 <button
                   type="button"
                   onClick={() => { void enable() }}
@@ -524,7 +524,7 @@ export function PluginSettings(): React.JSX.Element {
           </div>
 
           <div className="space-y-4">
-            {detail !== null && !detail.enabled && (
+            {detail !== null && (!detail.enabled || detail.state === 'dormant') && (
               <section className="space-y-3 rounded-xl border border-line bg-surface p-4">
                 <h2 className="text-title font-medium">{t('action.enable')}</h2>
                 <div className="flex items-center justify-between gap-3">

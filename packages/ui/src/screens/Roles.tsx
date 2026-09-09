@@ -171,7 +171,10 @@ export function Roles(): React.JSX.Element {
               const isDefault = role.name === defaultRole
               const wildcards = wildcardsIn(patterns)
               const held = holders[role.name]
-              const nameTone = isDefault ? ok.text : patterns.includes('*') ? warn.text : ''
+              // Holding '*' outranks being the default: on a fresh substrate the default role
+              // is also the one holding everything, and testing isDefault first made the
+              // wildcard-all warning unreachable there.
+              const nameTone = patterns.includes('*') ? warn.text : isDefault ? ok.text : ''
               return (
                 <li
                   key={role.name}

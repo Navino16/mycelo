@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
+import { TONE_CLASSES } from '../../src/components/tone.ts'
 import { I18nProvider, useLocale } from '../../src/i18n.tsx'
 import { PluginGroup, RoleEditor } from '../../src/screens/RoleEditor.tsx'
 import type { CommandDto, CommandGroups, RoleDto } from '../../src/api/types.ts'
@@ -567,6 +568,26 @@ describe('the editor header', () => {
     renderEditor()
 
     expect(await screen.findByText('1 person holds this role')).toBeDefined()
+  })
+
+  // A role holding '*' warns rather than reassures: the counter must not paint the same
+  // ok tone it uses for an ordinary, partial grant.
+  it('paints the commands counter in the warn tone when the role holds everything', async () => {
+    mockApi({ role: { name: 'family', builtin: false, patterns: ['*'] } })
+    renderEditor()
+
+    const counter = await screen.findByText('all 2 commands')
+    expect(counter.className).toContain(TONE_CLASSES.warn.text)
+    expect(counter.className).not.toContain(TONE_CLASSES.ok.text)
+  })
+
+  it('keeps the commands counter in the ok tone when the role holds less than everything', async () => {
+    mockApi({ role: { name: 'family', builtin: false, patterns: ['radarr.add'] } })
+    renderEditor()
+
+    const counter = await screen.findByText('1 / 2', { selector: '.text-title' })
+    expect(counter.className).toContain(TONE_CLASSES.ok.text)
+    expect(counter.className).not.toContain(TONE_CLASSES.warn.text)
   })
 
   // Cancel is the control the SPA lacked: an operator who unticked half a role needs a way

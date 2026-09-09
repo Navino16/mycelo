@@ -151,6 +151,8 @@ describe('the sources list', () => {
     mockApi([OFFICIAL, THIRD_PARTY], { catalogues: { 1: 61, 2: 112 } })
     renderSources()
 
+    // Literals, not truncateTail(...) calls: both urls are under the 64-char budget and must
+    // render unchanged — the column, not this helper, is what clips a wider one visually.
     await waitFor(() => { expect(screen.getByText('git@git.mycelo.dev:core.git')).toBeDefined() })
     expect(screen.getByText('https://github.com/mycelo-community/spores.git')).toBeDefined()
   })
@@ -385,5 +387,28 @@ describe('a source there is nothing to browse', () => {
 
     const row = await screen.findByTestId('source-1')
     expect(within(row).getByRole('link').getAttribute('href')).toBe('/sources/1')
+  })
+
+  // Two local sources sharing a long prefix, the measured defect: happy-dom has no layout, so a
+  // plain textContent diff can't see CSS clipping — this pins the row to truncateTail's own
+  // output, which is what actually shortens the label pre-fix versus post-fix.
+  it('renders two long sibling paths as different, tail-truncated strings', async () => {
+    const shared = '/home/njaunet/perso/mycelo/mycelo/.superpowers/'
+    const labelA = `${shared}milestone-9.7/spores`
+    const labelB = `${shared}design-9.75/spores`
+    mockApi([
+      { id: 5, label: labelA, driver: 'local', location: labelA, official: false, enabled: true },
+      { id: 6, label: labelB, driver: 'local', location: labelB, official: false, enabled: true },
+    ])
+    render(<I18nProvider><MemoryRouter><Sources /></MemoryRouter></I18nProvider>)
+
+    const rowA = await screen.findByTestId('source-5')
+    const rowB = await screen.findByTestId('source-6')
+    // Literal expectations, not truncateTail(...) calls: this must pin the tail-keeping
+    // behaviour independently, or a wrong-direction helper would move both sides together.
+    // A local source's label and location are the same path, so the same budget renders it
+    // identically in both columns — hence two matches, not one, for each row.
+    expect(within(rowA).getAllByText('…e/njaunet/perso/mycelo/mycelo/.superpowers/milestone-9.7/spores')).toHaveLength(2)
+    expect(within(rowB).getAllByText('…ome/njaunet/perso/mycelo/mycelo/.superpowers/design-9.75/spores')).toHaveLength(2)
   })
 })

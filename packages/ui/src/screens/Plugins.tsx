@@ -75,7 +75,7 @@ export function Plugins(): React.JSX.Element {
             aria-label={searchLabel}
             placeholder={searchLabel}
             onChange={(e) => { setTerm(e.target.value) }}
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-body md:w-65"
+            className="min-w-0 flex-1 rounded-md border border-line bg-surface px-3 py-2 text-body md:w-65 md:flex-none"
           />
           <Link
             to="/sources"

@@ -1,7 +1,10 @@
 import { describe, expect, it, spyOn } from 'bun:test'
+import type { Logger } from '@mycelo/septum'
 import type { Germination } from '../../src/boot/state.js'
 import { aggregateHealth, aggregateRuntimeHealth, HEALTH_TIMEOUT_MS } from '../../src/supervision/health.js'
 import type { Registry } from '../../src/germination/registry.js'
+import { loadCoreCatalogs } from '../../src/i18n/core-catalogs.js'
+import { createTranslator } from '../../src/i18n/translator.js'
 
 function registry(over: Partial<Registry>): Registry {
   return {
@@ -231,5 +234,20 @@ describe('aggregateHealth timeout', () => {
     } finally {
       spy.mockRestore()
     }
+  })
+
+  // Task 4 (phase 9.75A): this sentence is core-authored, unlike a plugin's own thrown detail,
+  // so it must render at the caller's locale rather than reach a French operator in English.
+  it('renders the timeout detail through the given translator, in the given locale', async () => {
+    const logger: Logger = { debug() {}, info() {}, warn() {}, error() {}, child: () => logger }
+    const translator = createTranslator({ catalogs: loadCoreCatalogs(), defaultLocale: 'en', logger })
+    const hanging = registry({
+      rhizas: [{ name: 'plex', instance: { health: () => new Promise<never>(() => undefined) } }],
+    } as unknown as Partial<Registry>)
+    const en = await aggregateHealth(hanging, 20, translator, 'en')
+    const fr = await aggregateHealth(hanging, 20, translator, 'fr')
+    expect(en[0]?.status.detail).toBe('health() did not answer within 20ms')
+    expect(fr[0]?.status.detail).toContain('20')
+    expect(fr[0]?.status.detail).not.toBe(en[0]?.status.detail)
   })
 })

@@ -955,9 +955,8 @@ describe('the cross-entity search', () => {
 })
 
 /**
- * A substrate mid-setup: a rhiza is installed, so the guided start still names the missing
- * channel while the health body has something to be healthy about. `hypha: []` alone is a
- * substrate with no plugins at all, which ruling F16 makes a different screen.
+ * A substrate mid-setup: a rhiza is installed, so `hypha: []` alone is not "no plugins at
+ * all" (ruling F16's different screen) — one plugin already exists, via `rhiza`.
  */
 const NO_CHANNEL: PluginGroups = {
   ...COMPLETE_PLUGINS,
@@ -966,28 +965,33 @@ const NO_CHANNEL: PluginGroups = {
 }
 
 describe('the guided path out of an empty substrate', () => {
-  it('renders the three steps alongside the health body when nothing is configured yet', async () => {
+  // row 1/34: a plugin already installed (here, one germinated rhiza) means the substrate is
+  // not empty, so the guided card must not claim otherwise — whatever is still outstanding.
+  it('does not claim nothing is installed once a plugin exists, even with every step outstanding', async () => {
     await withHealth(GERMINATED, { sources: [], plugins: NO_CHANNEL, roles: [] })
 
-    await waitFor(() => { expect(screen.getAllByRole('link')).toHaveLength(3) })
-    expect(screen.getByText('Add a source')).toBeDefined()
-    expect(screen.getByText('Install a channel')).toBeDefined()
-    expect(screen.getByText('Create a role')).toBeDefined()
-    // With nothing dormant and germination healthy, the ordinary tiles render too.
-    expect(screen.getByText('Everything is germinated.')).toBeDefined()
+    await waitFor(() => { expect(screen.getByText('Everything is germinated.')).toBeDefined() })
+    expect(screen.queryByText('Nothing is installed yet')).toBeNull()
+    expect(screen.queryByText('Add a source')).toBeNull()
+    expect(screen.queryByText('Install a channel')).toBeNull()
+    expect(screen.queryByText('Create a role')).toBeNull()
   })
 
-  // brief item 2: a fresh substrate stays in the guided state exactly while its first spores
-  // are installed and go dormant — the operator must see both, not one hiding the other.
-  it('renders the guided start above the dormant reason, not instead of it', async () => {
+  // A dormant plugin is a plugin: /api/plugins lists it with state 'dormant', so stats.total
+  // is already 1 and the guided card must not also claim nothing is installed.
+  it('renders the dormant reason, and correctly suppresses the guided card, once that plugin exists', async () => {
     await withHealth(
       { ...GERMINATED, dormant: [{ name: 'radarr', reason: 'apiKey: missing required field', reasonKey: 'refusal.config.incomplete' }] },
-      { sources: [], plugins: { ...COMPLETE_PLUGINS, hypha: [] }, roles: [] },
+      {
+        sources: [],
+        plugins: { ...COMPLETE_PLUGINS, hypha: [], rhiza: [{ name: 'radarr', kind: 'rhiza', commands: [], state: 'dormant', enabled: true, scopes: [] }] },
+        roles: [],
+      },
     )
 
-    expect(await screen.findByText('Nothing is installed yet')).toBeDefined()
-    expect(screen.getByText('radarr')).toBeDefined()
+    expect(await screen.findByText('radarr')).toBeDefined()
     expect(screen.getByText('apiKey: missing required field')).toBeDefined()
+    expect(screen.queryByText('Nothing is installed yet')).toBeNull()
   })
 
   it('renders exactly the two remaining steps once one of them is done', async () => {
@@ -1000,17 +1004,18 @@ describe('the guided path out of an empty substrate', () => {
   })
 
   // Discriminates counting non-builtin roles from counting builtin ones: two builtin roles and
-  // no custom one must still read as "no role created yet", not as two roles done.
+  // no custom one must still read as "no role created yet", not as two roles done. Plugins must
+  // stay at zero here — a channel is itself a plugin, and one would now suppress the card (row 1/34).
   it('still asks for a role when only builtin roles exist', async () => {
     await withHealth(GERMINATED, {
       sources: COMPLETE_SOURCES,
-      plugins: COMPLETE_PLUGINS,
+      plugins: NO_PLUGINS,
       roles: [{ name: 'owner', builtin: true, patterns: ['*'] }, { name: 'admin', builtin: true, patterns: [] }],
     })
 
     expect(await screen.findByText('Create a role')).toBeDefined()
     expect(screen.queryByText('Add a source')).toBeNull()
-    expect(screen.queryByText('Install a channel')).toBeNull()
+    expect(screen.getByText('Install a channel')).toBeDefined()
   })
 
   // A refused count is not a step taken: with /api/sources refused the source step would

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter } from 'react-router'
+import { TONE_CLASSES } from '../../src/components/tone.ts'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { Roles } from '../../src/screens/Roles.tsx'
 import type { CommandDto, CommandGroups, ConfigDto, RoleDto } from '../../src/api/types.ts'
@@ -266,6 +267,26 @@ describe('what each row states about a role', () => {
     expect(within(await screen.findByTestId('role-family')).getByText('radarr.*')).toBeDefined()
     expect(within(row('owner')).getByText('*')).toBeDefined()
     expect(within(row('guest')).getByText('—')).toBeDefined()
+  })
+
+  // The default role is also the one holding '*' on a fresh substrate — the case that must
+  // outrank isDefault, or the wildcard-all warning is unreachable where it matters most.
+  it('warns in amber on a role that is both the default and holds everything', async () => {
+    mockApi({ roles: [{ name: 'owner', builtin: true, patterns: ['*'] }], config: { ...CONFIG, defaultRole: 'owner' } })
+    renderRoles()
+
+    const link = await screen.findByRole('link', { name: 'owner' })
+    expect(link.className).toContain(TONE_CLASSES.warn.text)
+    expect(link.className).not.toContain(TONE_CLASSES.ok.text)
+  })
+
+  it('still paints a default role that holds no wildcard in the ok tone', async () => {
+    mockApi({ roles: [{ name: 'guest', builtin: false, patterns: ['help.help'] }], config: { ...CONFIG, defaultRole: 'guest' } })
+    renderRoles()
+
+    const link = await screen.findByRole('link', { name: 'guest' })
+    expect(link.className).toContain(TONE_CLASSES.ok.text)
+    expect(link.className).not.toContain(TONE_CLASSES.warn.text)
   })
 
   it('summarises the substrate above the table', async () => {

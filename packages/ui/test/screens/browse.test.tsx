@@ -44,6 +44,7 @@ interface Options {
   missing?: boolean
   /** The refusal `/spores` answers with, message included. */
   offersRefusal?: { status: number, message: string }
+  label?: string
 }
 
 function serve(opts: Options = {}): void {
@@ -63,7 +64,7 @@ function serve(opts: Options = {}): void {
         ? json({ error: { message: 'could not read it' } }, 400)
         : json(opts.offers ?? []))
     }
-    return Promise.resolve(json(SOURCE))
+    return Promise.resolve(json(opts.label === undefined ? SOURCE : { ...SOURCE, label: opts.label }))
   }) as unknown as typeof fetch
 }
 
@@ -120,6 +121,20 @@ describe('browsing a source', () => {
     expect(trail.textContent).toContain('Sources')
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('sporangium/core')
     expect(screen.getByText('3 spores')).toBeDefined()
+  })
+
+  // happy-dom performs no layout, so document.scrollWidth stays 0 in a test — pin the
+  // wrapping mechanism instead. A 62-char unbroken path is the measured case (row 14) that
+  // dragged the whole body into a horizontal scroll at 390px.
+  it('lets a long unbroken source label wrap rather than overflow the page', async () => {
+    const path = '/mnt/media/library/movies-and-shows/a-very-long-directory-name-here'
+    serve({ offers: offers(1), label: path })
+    renderBrowse()
+
+    const heading = await screen.findByRole('heading', { level: 1 })
+    expect(heading.textContent).toBe(path)
+    expect(heading.className).toContain('break-all')
+    expect(heading.closest('header')?.className).toContain('min-w-0')
   })
 
   it('says the source offers nothing rather than showing an empty list', async () => {
