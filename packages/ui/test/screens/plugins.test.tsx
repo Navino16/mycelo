@@ -411,6 +411,10 @@ describe('the plugins list chrome', () => {
     expect(input.className).toContain('min-w-0')
     expect(input.className).toContain('flex-1')
     expect(input.className).not.toContain('w-full')
+    // flex-1 sets an explicit flex-basis, which takes width out of main-axis sizing — so
+    // md:w-65 needs the basis reset back to auto at md: or it stops applying (review finding 1).
+    expect(input.className).toContain('md:flex-none')
+    expect(input.className).toContain('md:w-65')
   })
 
   // design note 1b names all three corpora. A search over names alone passes a fixture whose
