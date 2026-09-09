@@ -100,6 +100,33 @@ const MIN_LENGTH_SECRET: FormSchema = {
   },
 }
 
+/** Two credentials, because `dropUntouchedSecretErrors` loops and a singleton fixture cannot see it. */
+const TWO_SECRETS: FormSchema = {
+  available: true,
+  secrets: ['token', 'apiKey'],
+  schema: {
+    type: 'object',
+    required: ['token', 'apiKey'],
+    properties: {
+      token: { type: 'string', title: 'Token', minLength: 8 },
+      apiKey: { type: 'string', title: 'API key', minLength: 8 },
+    },
+  },
+}
+
+/** A never-stored key beside a stored one: `changedEntries` reads `current`, not `baseline`. */
+const URL_AND_LABEL: FormSchema = {
+  available: true,
+  secrets: [],
+  schema: {
+    type: 'object',
+    properties: {
+      url: { type: 'string', title: 'URL' },
+      label: { type: 'string', title: 'Label' },
+    },
+  },
+}
+
 /** One property of every kind the field meta line names (2c's left column). */
 const RICH: FormSchema = {
   available: true,
@@ -295,6 +322,40 @@ describe('the generated settings form', () => {
 
     await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
     expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ url: 'http://y' })
+  })
+
+  // Every other PUT-body test edits a key that is already stored, so `keys(current)` and
+  // `keys(baseline)` cannot be told apart. A never-stored key is the only discriminator.
+  it('sends a key the operator fills in for the first time', async () => {
+    const { calls } = mockVault({ schema: URL_AND_LABEL, settings: { url: 'http://x' } })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('Label')).toBeDefined() })
+    fireEvent.change(screen.getByLabelText('Label'), { target: { value: 'prod' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
+    expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ label: 'prod' })
+  })
+
+  // The post-save baseline is the whole form, not the diff that was sent: rebased on the diff,
+  // a stored secret the operator never touched reads as changed and the second save posts the
+  // 4-character mask as the credential's value.
+  it('does not resend a stored secret at its mask on a second consecutive save', async () => {
+    const { calls } = mockVault({ settings: { url: 'http://x', token: '\u2022\u2022\u2022\u2022' } })
+    renderSettings()
+
+    const url = await screen.findByLabelText('URL')
+    fireEvent.change(url, { target: { value: 'http://y' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => { expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1) })
+
+    fireEvent.change(url, { target: { value: 'http://z' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => { expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(2) })
+
+    expect(calls.filter((c) => c.method === 'PUT').map((c) => c.body))
+      .toEqual([{ url: 'http://y' }, { url: 'http://z' }])
   })
 
   // Discriminates equalValues' object-deep-equal branch from a bare `===`: a nested object
@@ -553,6 +614,23 @@ describe('the generated settings form', () => {
     } finally {
       errorSpy.mockRestore()
     }
+  })
+
+  // The plural case. Every other fixture here declares one secret, so the loop over `secrets`
+  // was a singleton and its plural behaviour was dead to the suite: collapsing it to either end
+  // leaves the other credential's `minLength` error standing and the plugin unsavable.
+  it('saves two stored secrets left at their masks, not only the first', async () => {
+    const { calls } = mockVault({
+      schema: TWO_SECRETS,
+      settings: { token: '\u2022\u2022\u2022\u2022', apiKey: '\u2022\u2022\u2022\u2022' },
+    })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('API key')).toBeDefined() })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => { expect(calls.some((c) => c.method === 'PUT')).toBe(true) })
+    expect(screen.queryByText('must NOT have fewer than 8 characters')).toBeNull()
   })
 
   // The other direction: a secret the operator retypes is a real value, and must still be

@@ -371,7 +371,6 @@ export function PluginSettings(): React.JSX.Element {
     setExtraErrors({})
     setRejectedCount(null)
     setSaved(false)
-    setUnchanged([])
     try {
       const result = await api.send<SettingsWriteResult>('PUT', `/api/plugins/${name}/settings`, changed)
       setBaseline(current)
@@ -396,7 +395,6 @@ export function PluginSettings(): React.JSX.Element {
     setRejectedCount(null)
     setSaveError(null)
     setSaved(false)
-    setUnchanged([])
   }
 
   async function enable(): Promise<void> {

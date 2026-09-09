@@ -7,7 +7,7 @@ export interface RhizaFault {
   detail?: string
 }
 
-/** One rule, three former call sites: a screen must not disagree with another about one rhiza. */
+/** One rule, two former call sites: a screen must not disagree with another about one rhiza. */
 export function collapseHealth(state: string): 'degraded' | 'unreachable' {
   return state === 'degraded' ? 'degraded' : 'unreachable'
 }
