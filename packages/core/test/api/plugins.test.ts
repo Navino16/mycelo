@@ -273,6 +273,8 @@ describe('/api/plugins', () => {
       payload: { token: null },
     })
     expect(response.statusCode).toBe(400)
+    expect(response.json<{ error: { message: string } }>().error.message)
+      .toContain("clearing token would leave plugin 'needs-config'")
     expect(readSettings(served.state.db, 'needs-config')).toEqual({ token: 's3cr3t' })
   })
 
