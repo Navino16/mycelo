@@ -57,8 +57,7 @@ describe('configIssueRefs', () => {
   })
 
   // ConfigIssue.path is readonly PropertyKey[], so a symbol is inside the contract and
-  // Array.prototype.join throws on one. thrown.test.ts still pins this for describeConfigError,
-  // the function germination stopped calling — the coverage did not follow the code.
+  // Array.prototype.join throws on one — hence String() per segment here.
   it('renders a symbol path segment instead of throwing', () => {
     const s = Symbol('s')
     expect(configIssueRefs({ issues: [{ path: [s, 'token'], message: 'required' }] }, 'plex')[0]

@@ -399,7 +399,6 @@ export async function rejectedSettings(
   db: Db, sporesDirs: readonly string[], name: string, values: Record<string, unknown>,
   translator: Translator, locale: string,
 ): Promise<readonly SettingRejection[]> {
-  if (getInstall(db, name) === null) return []
   let module: Awaited<ReturnType<typeof loadSporeModule>>
   try {
     module = await loadSporeModule(sporesDirs, name)

@@ -13,7 +13,6 @@ import type { Db } from '../../src/persistence/db.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import type { Registry } from '../../src/germination/registry.js'
 import { addSource, listSources, seedOfficialSource } from '../../src/sporangium/sources.js'
-import { describeConfigError } from '../../src/support/thrown.js'
 import { emptyRegistry } from '../support/registry.js'
 import { loadCoreCatalogs } from '../../src/i18n/core-catalogs.js'
 import { renderRefusal } from '../../src/i18n/refusal.js'
@@ -423,12 +422,6 @@ it('reads an issue with no usable path the way enablePlugin does, against every 
   const rejected = await rejectedSettings(db, [dir], 'pathless', { a: 1, b: 2 }, translator, 'en')
   const messages = ['the whole thing is wrong', 'so is this']
   expect(rejected).toEqual([{ key: 'a', messages }, { key: 'b', messages }])
-  // The same two issues through the other reader, which has always treated them this way.
-  const issues = [
-    { message: 'the whole thing is wrong' },
-    { path: 'notanarray', message: 'so is this' },
-  ]
-  expect(describeConfigError({ issues })).toBe('the whole thing is wrong; so is this')
   close()
 })
 
