@@ -9,7 +9,7 @@ import { coversPlugin, grants, wildcardsIn } from '../patterns.ts'
 import { plural, useLocale, useT } from '../i18n.tsx'
 import { flatPlugins } from '../plugins.ts'
 import type {
-  CommandDto, CommandGroups, PageDto, PersonDto, PluginGroups, RoleDto,
+  CommandDto, CommandGroups, PluginGroups, RoleDto,
 } from '../api/types.ts'
 
 interface GroupProps {
@@ -154,7 +154,6 @@ export function RoleEditor(): React.JSX.Element {
   const [role, setRole] = useState<RoleDto | null>(null)
   const [patterns, setPatterns] = useState<readonly string[]>([])
   const [saved, setSaved] = useState<readonly string[]>([])
-  const [holders, setHolders] = useState<number | null>(null)
   const [descriptions, setDescriptions] = useState<Readonly<Record<string, string>>>({})
   const [filter, setFilter] = useState('')
   const [pick, setPick] = useState('')
@@ -176,12 +175,6 @@ export function RoleEditor(): React.JSX.Element {
       setPatterns(held)
       setSaved(held)
       setError(false)
-      // Inside this resolution, not in an effect keyed on the fetched role: the count is part
-      // of the same load, so it is fired by it rather than by a second, later trigger.
-      api.get<PageDto<PersonDto>>(`/api/people?role=${encodeURIComponent(name)}&perPage=1`).then(
-        (page) => { setHolders(page.total) },
-        () => undefined,
-      )
     })
   }, [name, locale])
 
@@ -256,9 +249,9 @@ export function RoleEditor(): React.JSX.Element {
           <Breadcrumb trail={[{ label: t('roles.title'), to: '/roles' }]} />
           <div className="flex flex-wrap items-baseline gap-3">
             <h1 className="font-mono text-page font-semibold">{name}</h1>
-            {holders !== null && (
+            {role !== null && (
               <span className="text-meta-lg text-text/60">
-                {plural(t, 'role.holders', holders, { count: holders })}
+                {plural(t, 'role.holders', role.holders, { count: role.holders })}
               </span>
             )}
           </div>

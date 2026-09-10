@@ -129,3 +129,15 @@ test('message survives every mapping, because the log reads it', () => {
   if (r.success) throw new Error('expected a refusal')
   expect(r.error.issues[0]?.message).toContain('Too small')
 })
+
+it('is idempotent: a mapped issue passes through unchanged', () => {
+  const once = toConfigIssue({ code: 'invalid_type', path: ['url'], message: 'expected string' } as never)
+  expect(once.messageKey).toBeDefined()
+  expect(toConfigIssue(once as never)).toEqual(once)
+})
+
+it('passes a custom-code key through unchanged too', () => {
+  const once = toConfigIssue({ code: 'custom', path: [], message: 'either.socket.or.tcp' } as never)
+  expect(once).toMatchObject({ messageKey: 'either.socket.or.tcp' })
+  expect(toConfigIssue(once as never)).toEqual(once)
+})

@@ -79,7 +79,7 @@ export type EveryScopeMountsAnInterface = Expect<Equal<Mounted, MyceliumScope>>
 // A plugin author's own implementation must satisfy each interface structurally. Deleting
 // an interface, or widening a signature, stops this file compiling.
 const alice: Principal = { id: 'p1', displayName: 'alice', identities: [], roles: ['owner'] }
-const owner: RoleInfo = { name: 'owner', patterns: ['*'], builtin: true }
+const owner: RoleInfo = { name: 'owner', patterns: ['*'], builtin: true, holders: 1 }
 
 export const principalsRead: PrincipalsRead = {
   listPrincipals: () => Promise.resolve([alice]),

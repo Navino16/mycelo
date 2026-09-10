@@ -47,7 +47,7 @@ async function addThirdParty(b: LoggedIn, label: string): Promise<SporangiumSour
 }
 
 const MANIFEST = (name: string): string =>
-  `kind: enzyme\nname: ${name}\nseptum: "^0.12"\n`
+  `kind: enzyme\nname: ${name}\nseptum: "^1.0"\n`
   + `commands:\n  - name: ${name}\n    description: x\n    respond: ${name}.reply\n`
   // `needy` is the two-warning case: third-party *and* an unsatisfied mandatory requirement.
   + (name === 'needy' ? 'requires:\n  - rhiza: absent-connector\n' : '')
@@ -73,7 +73,7 @@ async function fakeSporangium(offers: Record<string, readonly string[]>): Promis
       .map(([name, strains]): SporeOffer => ({ name, strain: strains[0] ?? '0.0.0' }))),
     strains: (name) => Promise.resolve(strainsOf(name)),
     detail: (name, strain) => Promise.resolve({
-      name, kind: 'enzyme' as const, description: `${name} at ${strain}`, septum: '^0.12',
+      name, kind: 'enzyme' as const, description: `${name} at ${strain}`, septum: '^1.0',
       demands: { requires: [], scopes: [], externals: [], commands: [] },
     }),
     fetch: (name, strain) => {
@@ -362,7 +362,7 @@ describe('browsing a sporangium', () => {
         list: () => Promise.resolve([]),
         strains: (name) => { reached += 1; return Promise.resolve(name === 'radarr' ? ['0.2.0'] : []) },
         detail: (name, strain) => Promise.resolve({
-          name, kind: 'enzyme' as const, description: '', septum: '^0.12' + strain.slice(0, 0),
+          name, kind: 'enzyme' as const, description: '', septum: '^1.0' + strain.slice(0, 0),
           demands: { requires: [], scopes: [], externals: [], commands: [] },
         }),
         fetch: () => Promise.reject(new Error('unused')),
@@ -452,6 +452,23 @@ describe('POST /api/sources/:id/inoculate', () => {
     // never did, would pass either assertion alone (design §11).
     expect(body.warnings).toHaveLength(1)
     expect(body.warnings[0]).toContain('not code-reviewed')
+  })
+
+  // The English `message` and the `en` catalogue entry are byte-identical, so only a non-default
+  // locale proves the route translates `messageKey` rather than passing `message` through.
+  it('translates the third-party warning into the request locale', async () => {
+    booted = await bootWithSporangium()
+    const { app, cookie } = booted
+    const third = await addThirdParty(booted, 'elsewhere')
+
+    const answer = await app.inject({
+      method: 'POST', url: `/api/sources/${String(third.id)}/inoculate`,
+      headers: { cookie, 'accept-language': 'fr' }, payload: { name: 'help', strain: '0.2.0' },
+    })
+    expect(answer.statusCode).toBe(200)
+    expect(answer.json<{ warnings: string[] }>().warnings).toEqual([
+      '« elsewhere » n\'est pas le sporange officiel : ses spores ne sont pas relues avant publication',
+    ])
   })
 
   it('unpacks into the managed root, where /api/plugins then reports its sporangium and strain', async () => {

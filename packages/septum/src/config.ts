@@ -5,7 +5,14 @@ import type { ConfigIssue, ConfigSchema } from './spore.js'
 /** What `PluginsConfigure.formSchema()` resolves to for one plugin's settings form. */
 export type FormSchema =
   | { available: true; schema: object }
-  | { available: false; reason: string }
+  | {
+      available: false
+      /** English, for the operator's log: a translated log cannot be grepped (design §5.2). */
+      reason: string
+      /** A `core`-domain key the API translates before answering. */
+      reasonKey?: string
+      reasonParams?: Record<string, unknown>
+    }
 
 /** `defineConfig`'s second argument. */
 export interface ConfigOptions {
@@ -55,6 +62,12 @@ function pick(issue: Record<string, unknown>, names: readonly string[]): Record<
  */
 export function toConfigIssue(raw: z.core.$ZodIssue): ConfigIssue {
   const issue = raw as unknown as Record<string, unknown>
+  // Already mapped: a hand-rolled safeParse may return septum's own shape, and re-mapping it
+  // drops the messageKey it already carries. Duck-typed — never instanceof across the boundary.
+  const mappedKey = issue['messageKey']
+  if (typeof mappedKey === 'string' || (typeof mappedKey === 'object' && mappedKey !== null)) {
+    return raw
+  }
   const message = typeof issue['message'] === 'string' ? issue['message'] : 'unspecified issue'
   const base: ConfigIssue = { path: raw.path, message }
   // An empty error callback result would yield an empty key — guard against it by emitting

@@ -1,5 +1,49 @@
 # @mycelo/septum
 
+## 1.0.0
+
+### Added
+- `FormSchema`'s `available: false` branch gains `reasonKey?: string` and `reasonParams?:
+  Record<string, unknown>`, a `core`-domain key the API translates before answering. `reason`
+  itself is unchanged: English, for the operator's log.
+- `septumCompat(range, septumVersion?): SeptumCompat`, alongside the existing
+  `septumIncompatibility`. Where that returns a sentence or `undefined`, `SeptumCompat` is a typed
+  result — `{ ok: true }`, `{ ok: false, fault: 'unparseable', detail }` or `{ ok: false, fault:
+  'out-of-range', range, running }` — because the two faults are different decisions: an
+  unparseable range behaves as `*` and is refused everywhere, while an out-of-range one is only
+  refused at germination (design §9.2). `septumIncompatibility` is now built on top of it.
+- `InoculateWarning`: `{ message: string; messageKey: string; params?: Record<string, unknown> }`, the
+  shape `InoculateOutcome.warnings` now carries (see Changed).
+- `RoleInfo.holders: number`, **required**. Built only by the core
+  (`packages/core/src/authorization/roles.ts`), so no shipped spore or fixture constructs a
+  `RoleInfo` object literal: nothing in this tree needs a code change for it.
+- `HyphaContext.name: string`, **required**. Also core-produced only — the core builds it before
+  calling a hypha's `connect()` — so the same holds: nothing in this tree constructs one by hand.
+- `Hypha.health?(): Promise<HealthStatus>`, optional, unlike Rhiza's: not every channel has a
+  probe to run beyond its own socket, and a rhiza fronting a remote API — which always has one —
+  is the outlier, not the rule. `signal` implements none, and the conformance kit stays green.
+
+### Changed
+- **`InoculateOutcome.warnings` is now `readonly InoculateWarning[]`, not `readonly string[]`.**
+  Breaking for any caller reading it as plain strings — but latent today: `sources.manage` (the
+  scope `inoculate` mounts under) is reachable from no shipped spore, `admin` included, so the
+  break bites the first caller that reads the field, in or out of tree.
+- `toConfigIssue` is now idempotent: an issue that already carries a `messageKey` (a string or a
+  ref) is returned unchanged instead of being re-mapped, so a hand-rolled `safeParse` that returns
+  septum's own shape does not lose the key it already set.
+- The conformance kit now also flags a config refusal's `messageKey` when it names a
+  `TranslatableRef` domain other than `common` — design §5.3 honours a ref only for `common`, not
+  even the spore's own domain, so any other domain silently falls back to `message` at runtime.
+  Unlike the undeclared-bare-key check, this one is gated on neither `declared.size > 0` nor the
+  presence of `catalogs`: a domain-bearing ref is an unambiguous translation claim, and the spore
+  most likely to name a foreign domain is the one shipping no catalogues at all.
+  **A kit run that passed under 0.12 can fail under 1.0**: a spore whose `.refine()` ref named its
+  own domain, or any domain besides `common`, was passing by omission.
+- `hyphaChecks` now validates `health()` the way `rhizaChecks` already did — an object, a known
+  `state`, a valid `checkedAt`, no throw — but only when the optional hook is present, so a hypha
+  shipping none is unaffected. Neither health aggregate re-validates the plugin's answer, so a
+  malformed `checkedAt` otherwise reaches the SPA as JSON with no signal anywhere.
+
 ## 0.12.0
 
 ### Added

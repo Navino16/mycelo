@@ -19,7 +19,7 @@ const goodHarness: HyphaHarness = {
   manifest: {
     kind: 'hypha',
     name: 'good',
-    septum: '^0.12',
+    septum: '^1.0',
     capabilities: ['group_membership'],
   },
   module: {
@@ -47,7 +47,7 @@ describe('hypha conformance checks', () => {
   it('catches a manifest whose kind does not match', async () => {
     const failures = await hyphaChecks({
       ...goodHarness,
-      manifest: { kind: 'rhiza', name: 'good', septum: '^0.12' },
+      manifest: { kind: 'rhiza', name: 'good', septum: '^1.0' },
     })
     expect(failures.join(' ')).toContain('kind')
   })
@@ -132,6 +132,72 @@ describe('hypha conformance checks', () => {
     })
     expect(failures.join(' ')).toContain('toJsonSchema is present but is not a function')
   })
+
+  // Hypha.health is optional and `signal` implements none, so the absent case must stay green
+  // while the present-but-malformed one is checked as thoroughly as a rhiza's.
+  it('stays green for a hypha that implements no health() at all', async () => {
+    let created: Record<string, unknown> = {}
+    const failures = await hyphaChecks({
+      ...goodHarness,
+      module: {
+        configSchema: config,
+        create: () => {
+          created = {
+            async connect() {}, listen() {}, async stop() {}, async send() {},
+            async listGroupMembers() { return [] },
+          }
+          return created as never
+        },
+      },
+    })
+    expect('health' in created).toBe(false)
+    expect(failures).toEqual([])
+  })
+
+  it('catches a hypha health() returning a malformed checkedAt', async () => {
+    const failures = await hyphaChecks({
+      ...goodHarness,
+      module: {
+        configSchema: config,
+        create: () => ({
+          async connect() {}, listen() {}, async stop() {}, async send() {},
+          async listGroupMembers() { return [] },
+          async health() { return { state: 'healthy' as const, checkedAt: 'yesterday' as never } },
+        }),
+      },
+    })
+    expect(failures).toEqual(['health() returned no valid checkedAt date'])
+  })
+
+  it('catches a hypha health() reporting an unknown state', async () => {
+    const failures = await hyphaChecks({
+      ...goodHarness,
+      module: {
+        configSchema: config,
+        create: () => ({
+          async connect() {}, listen() {}, async stop() {}, async send() {},
+          async listGroupMembers() { return [] },
+          async health() { return { state: 'fine' as never, checkedAt: new Date(0) } },
+        }),
+      },
+    })
+    expect(failures.join(' ')).toContain("state 'fine'")
+  })
+
+  it('catches a hypha health() throwing instead of reporting a degraded state', async () => {
+    const failures = await hyphaChecks({
+      ...goodHarness,
+      module: {
+        configSchema: config,
+        create: () => ({
+          async connect() {}, listen() {}, async stop() {}, async send() {},
+          async listGroupMembers() { return [] },
+          async health(): Promise<never> { throw new Error('ECONNREFUSED') },
+        }),
+      },
+    })
+    expect(failures.join(' ')).toContain('threw instead of reporting')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -161,7 +227,7 @@ const goodEnzyme: EnzymeHarness = {
   manifest: {
     kind: 'enzyme',
     name: 'links',
-    septum: '^0.12',
+    septum: '^1.0',
     commands: [{ name: 'links', description: 'command.links.description', code: 'links' }],
   },
   module: { create: () => ({ handlers: { links: async () => {} } }) },
@@ -200,7 +266,7 @@ describe('enzyme conformance checks', () => {
   const requiredArgManifest = {
     kind: 'enzyme' as const,
     name: 'radarr-add',
-    septum: '^0.12',
+    septum: '^1.0',
     commands: [
       {
         name: 'add',
@@ -268,7 +334,7 @@ describe('enzyme conformance checks', () => {
     expect(await enzymeChecks({
       name: 'shared',
       manifest: {
-        kind: 'enzyme', name: 'shared', septum: '^0.12',
+        kind: 'enzyme', name: 'shared', septum: '^1.0',
         commands: [
           { name: 'links', description: 'Service URLs', respond: 'Radarr' },
           { name: 'add', description: 'Add', code: 'mutate' },
@@ -283,7 +349,7 @@ describe('enzyme conformance checks', () => {
     const failures = await enzymeChecks({
       name: 'broken',
       manifest: {
-        kind: 'enzyme', name: 'broken', septum: '^0.12',
+        kind: 'enzyme', name: 'broken', septum: '^1.0',
         commands: [{ name: 'add', description: 'Add', code: 'mutate' }],
       },
       module: { create: () => ({ handlers: {} }) },
@@ -296,7 +362,7 @@ describe('enzyme conformance checks', () => {
     expect(await enzymeChecks({
       name: 'textonly',
       manifest: {
-        kind: 'enzyme', name: 'textonly', septum: '^0.12',
+        kind: 'enzyme', name: 'textonly', septum: '^1.0',
         commands: [{ name: 'links', description: 'Service URLs', respond: 'Radarr' }],
       },
       context: enzymeContext,
@@ -307,7 +373,7 @@ describe('enzyme conformance checks', () => {
     const failures = await enzymeChecks({
       name: 'needy',
       manifest: {
-        kind: 'enzyme', name: 'needy', septum: '^0.12',
+        kind: 'enzyme', name: 'needy', septum: '^1.0',
         commands: [{ name: 'add', description: 'Add', code: 'mutate' }],
       },
       context: enzymeContext,
@@ -319,7 +385,7 @@ describe('enzyme conformance checks', () => {
     const failures = await enzymeChecks({
       name: 'shared',
       manifest: {
-        kind: 'enzyme', name: 'shared', septum: '^0.12',
+        kind: 'enzyme', name: 'shared', septum: '^1.0',
         commands: [
           { name: 'add', description: 'Add', code: 'mutate' },
           { name: 'remove', description: 'Remove', code: 'mutate' },
@@ -336,7 +402,7 @@ describe('enzyme conformance checks', () => {
     const failures = await enzymeChecks({
       name: 'shared',
       manifest: {
-        kind: 'enzyme', name: 'shared', septum: '^0.12',
+        kind: 'enzyme', name: 'shared', septum: '^1.0',
         commands: [
           { name: 'add', description: 'Add', code: 'mutate' },
           { name: 'remove', description: 'Remove', code: 'mutate' },
@@ -405,7 +471,7 @@ describe('enzyme conformance checks', () => {
     const failures = await enzymeChecks({
       name: 'sneaky',
       manifest: {
-        kind: 'enzyme', name: 'sneaky', septum: '^0.12',
+        kind: 'enzyme', name: 'sneaky', septum: '^1.0',
         commands: [{ name: 'go', description: 'Go', code: 'constructor' }],
       },
       module: { create: () => ({ handlers: {} }) },
@@ -451,7 +517,7 @@ function msg(externalId: string): IncomingMessage {
 
 const goodInhibitor: InhibitorHarness = {
   name: 'allowlist',
-  manifest: { kind: 'inhibitor', name: 'allowlist', septum: '^0.12', enforcing: true },
+  manifest: { kind: 'inhibitor', name: 'allowlist', septum: '^1.0', enforcing: true },
   module: {
     create: () => ({
       async inspect(message) {
@@ -530,7 +596,7 @@ describe('inhibitor conformance checks', () => {
 
 const goodRhiza: RhizaHarness = {
   name: 'radarr',
-  manifest: { kind: 'rhiza', name: 'radarr', septum: '^0.12' },
+  manifest: { kind: 'rhiza', name: 'radarr', septum: '^1.0' },
   module: {
     create: () => ({
       async start() {},
@@ -785,7 +851,7 @@ describe('regressions', () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
       manifest: {
-        kind: 'enzyme', name: 'links', septum: '^0.12',
+        kind: 'enzyme', name: 'links', septum: '^1.0',
         commands: [{ name: 'links', description: 'Show links', code: 'links' }],
       },
       catalogs: { en: { links: { usage: 'x' } } },
@@ -802,7 +868,7 @@ describe('regressions', () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
       manifest: {
-        kind: 'enzyme', name: 'links', septum: '^0.12',
+        kind: 'enzyme', name: 'links', septum: '^1.0',
         commands: [
           { name: 'links', description: 'command.links.description', code: 'links' },
           { name: 'usage', description: 'command.usage.description', code: 'links' },
@@ -823,7 +889,7 @@ describe('regressions', () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
       manifest: {
-        kind: 'enzyme', name: 'links', septum: '^0.12',
+        kind: 'enzyme', name: 'links', septum: '^1.0',
         commands: [
           { name: 'links', description: 'command.links.description', code: 'links' },
           { name: 'usage', description: 'command.usage.description', code: 'links' },
@@ -846,7 +912,7 @@ describe('regressions', () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
       manifest: {
-        kind: 'enzyme', name: 'links', septum: '^0.12',
+        kind: 'enzyme', name: 'links', septum: '^1.0',
         commands: [
           { name: 'links', description: 'command.links.description', code: 'links' },
           { name: 'usage', description: 'command.usage.description', code: 'links' },
@@ -869,7 +935,7 @@ describe('regressions', () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
       manifest: {
-        kind: 'enzyme', name: 'links', septum: '^0.12',
+        kind: 'enzyme', name: 'links', septum: '^1.0',
         commands: [{
           name: 'links', description: 'command.links.description', code: 'links',
           args: [{ name: 'name', description: 'Plugin name', required: true }],
@@ -886,7 +952,7 @@ describe('regressions', () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
       manifest: {
-        kind: 'enzyme', name: 'links', septum: '^0.12',
+        kind: 'enzyme', name: 'links', septum: '^1.0',
         commands: [{
           name: 'links', description: 'command.links.description', code: 'links',
           args: [{ name: 'name', description: 'arg.links-name.description', required: true }],
@@ -934,7 +1000,7 @@ describe('regressions', () => {
     const failures = await enzymeChecks({
       ...goodEnzyme,
       manifest: {
-        kind: 'enzyme', name: 'links', septum: '^0.12',
+        kind: 'enzyme', name: 'links', septum: '^1.0',
         requires: [{ rhiza: 'radarr' }],
         commands: [{ name: 'links', description: 'Show links', code: 'links' }],
       },

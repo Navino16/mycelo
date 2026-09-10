@@ -1,4 +1,4 @@
-import type { HyphaContext } from './context.js'
+import type { HealthStatus, HyphaContext } from './context.js'
 import type { ChannelIdentity, OutgoingContent } from './message.js'
 import type { SporeModule } from './spore.js'
 
@@ -14,6 +14,11 @@ export interface Hypha<TConfig = unknown> {
   send(conversationId: string, out: OutgoingContent): Promise<void>
   /** Present only when the manifest declares the group_membership capability. */
   listGroupMembers?(groupId: string): Promise<readonly ChannelIdentity[]>
+  /**
+   * Optional, unlike Rhiza's: not every channel has a probe to run beyond its own socket, and a
+   * rhiza fronting a remote API — which always has one — is the outlier, not the rule.
+   */
+  health?(): Promise<HealthStatus>
 }
 
 export type HyphaModule<TConfig = unknown> = SporeModule<Hypha<TConfig>, TConfig>

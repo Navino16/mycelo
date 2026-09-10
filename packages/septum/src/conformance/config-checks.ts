@@ -112,10 +112,14 @@ export function configSchemaFailures(
   return failures
 }
 
+/** design §5.3: a `TranslatableRef` is honoured only for `common` — matches enzyme.ts's own copy. */
+const SHARED_DOMAIN = 'common'
+
 /**
  * A `.refine()` whose key no supplied catalogue declares renders as a raw dotted key to an
  * operator — the green-build-broken-execution class, and one phase 9.6 creates if nothing checks
- * it (design §6).
+ * it (design §6). Also reports a `messageKey` ref naming any domain but `common`: design §5.3
+ * never translates it, so it silently renders its English `message` instead.
  *
  * **Incomplete by construction.** The corpus is two probes: the empty object — what
  * `readSettings` hands `safeParse` before any setting is ever written, so every plugin's first
@@ -128,16 +132,13 @@ function unresolvableMessageKeys(
   invalidConfig: unknown,
   catalogs: Record<string, unknown> | undefined,
 ): string[] {
-  // No catalogue supplied means the author is not claiming to translate, and the runtime
-  // germinates such a plugin — the empty-object probe runs regardless of invalidConfig.
-  if (catalogs === undefined) return []
-  const declared = declaredCatalogKeys(catalogs)
-  // A `.refine()` returning a literal sentence carries that sentence as messageKey (custom code
-  // sets messageKey = message); with nothing declared the plugin isn't claiming to translate it,
-  // so reporting it would be a false positive — same guard as enzyme.ts's catalogFailures().
-  if (declared.size === 0) return []
+  // No catalogue supplied means the author is not claiming to translate a bare key — the branch
+  // below already gates on `declared.size`. A domain-bearing ref claims it regardless, so the
+  // wrong-domain check must still run.
+  const declared = catalogs === undefined ? new Set<string>() : declaredCatalogKeys(catalogs)
   const probes: unknown[] = invalidConfig === undefined ? [{}] : [{}, invalidConfig]
-  const unresolved = new Set<string>()
+  const undeclared = new Set<string>()
+  const wrongDomain = new Set<string>()
   for (const probe of probes) {
     let parsed: ReturnType<ConfigSchema<unknown>['safeParse']>
     try {
@@ -149,14 +150,30 @@ function unresolvableMessageKeys(
     const issues: unknown = member(parsed.error, 'issues')
     if (!Array.isArray(issues)) continue
     for (const issue of issues as readonly unknown[]) {
-      // Only a bare string is a key in this spore's own domain; a ref names `common`, which the
-      // core owns and the kit cannot see (design §5.3).
       const key = member(issue, 'messageKey')
-      if (typeof key !== 'string' || key.length === 0) continue
-      if (!declared.has(key)) unresolved.add(key)
+      if (typeof key === 'string') {
+        // A literal `.refine()` sentence is indistinguishable from a typo'd key when nothing is
+        // declared (same guard as enzyme.ts's catalogFailures()) — unlike the domain-bearing ref
+        // below, which is unambiguous and not gated on `declared.size`.
+        if (declared.size > 0 && key.length > 0 && !declared.has(key)) undeclared.add(key)
+        continue
+      }
+      // A bare string names this spore's own domain; a ref is honoured only for `common`
+      // (design §5.3) — any other domain, including the spore's own, never translates.
+      const domain = member(key, 'domain')
+      if (typeof domain !== 'string' || domain.length === 0 || domain === SHARED_DOMAIN) continue
+      const refKey = member(key, 'key')
+      const named = typeof refKey === 'string' && refKey.length > 0 ? ` and key '${refKey}'` : ''
+      wrongDomain.add(
+        `configSchema refuses with a messageKey naming domain '${domain}'${named}, which is `
+        + `never honoured — only 'common' is — so it renders its English message to the operator`,
+      )
     }
   }
-  return [...unresolved].map(
-    (key) => `configSchema refuses with key '${key}', which no supplied catalogue declares`,
-  )
+  return [
+    ...[...undeclared].map(
+      (key) => `configSchema refuses with key '${key}', which no supplied catalogue declares`,
+    ),
+    ...wrongDomain,
+  ]
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { septumIncompatibility } from '../src/compat.js'
+import { septumCompat, septumIncompatibility } from '../src/compat.js'
 import { SEPTUM_VERSION } from '../src/version.js'
 
 describe('septumIncompatibility', () => {
@@ -31,5 +31,27 @@ describe('septumIncompatibility', () => {
   it('defaults to the septum actually running, not a duplicated constant', () => {
     expect(septumIncompatibility(`^${SEPTUM_VERSION}`)).toBeUndefined()
     expect(septumIncompatibility('^0.1')).toContain(SEPTUM_VERSION)
+  })
+})
+
+describe('septumCompat', () => {
+  it('admits a range that covers the running septum', () => {
+    expect(septumCompat('^1.0', '1.0.0')).toEqual({ ok: true })
+  })
+  it('separates an out-of-range declaration from an unparseable one', () => {
+    expect(septumCompat('^0.12', '1.0.0')).toEqual({
+      ok: false, fault: 'out-of-range', range: '^0.12', running: '1.0.0',
+    })
+    expect(septumCompat('not-a-range', '1.0.0')).toMatchObject({
+      ok: false, fault: 'unparseable',
+    })
+  })
+
+  // The whole reason 1.0.0 is being cut: below 1.0 a caret is bounded at the next minor
+  // (^0.12 excludes 0.13.0), but at or above 1.0 it floors on the major instead.
+  it('is a floor within the major at or above 1.0, unlike a caret below 1.0', () => {
+    expect(septumCompat('^1.0', '1.1.0')).toEqual({ ok: true })
+    expect(septumCompat('^1.0', '1.99.3')).toEqual({ ok: true })
+    expect(septumCompat('^1.0', '2.0.0')).toMatchObject({ ok: false, fault: 'out-of-range' })
   })
 })

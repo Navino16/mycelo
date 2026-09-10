@@ -7,7 +7,7 @@ import { Layout } from '../../src/shell/Layout.tsx'
 import type { RuntimeHealth } from '../../src/api/types.ts'
 
 const HEALTHY: RuntimeHealth = {
-  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0,
+  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], hyphae: [], blockedSinceBoot: 0,
 }
 
 const realFetch = globalThis.fetch

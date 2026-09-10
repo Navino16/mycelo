@@ -30,6 +30,7 @@ const GERMINATED: RuntimeHealth = {
   dormant: [],
   enforcingBlocked: [],
   rhizas: [],
+  hyphae: [],
   blockedSinceBoot: 0,
 }
 

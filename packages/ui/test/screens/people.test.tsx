@@ -9,9 +9,9 @@ const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
 
 const ROLES: readonly RoleDto[] = [
-  { name: 'owner', builtin: true, patterns: ['*'] },
-  { name: 'guest', builtin: false, patterns: ['help.help'] },
-  { name: 'family', builtin: false, patterns: ['radarr.*'] },
+  { name: 'owner', builtin: true, patterns: ['*'], holders: 0 },
+  { name: 'guest', builtin: false, patterns: ['help.help'], holders: 0 },
+  { name: 'family', builtin: false, patterns: ['radarr.*'], holders: 0 },
 ]
 
 function json(body: unknown, status = 200): Response {

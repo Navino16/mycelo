@@ -38,3 +38,16 @@ api:
   inoculateFailed: "installing ''{name}'' failed; the server log holds the detail"
 health:
   timeout: "health() did not answer within {ms}ms"
+config:
+  schema:
+    none: "this plugin takes no configuration"
+    noJsonSchema: "this plugin publishes no JSON Schema: configure it by hand"
+    notObject: "toJsonSchema() did not return an object"
+    conversionFailed: "the schema cannot be converted: {detail}"
+    notInstalled: "no plugin named ''{name}'' is installed"
+    loadFailed: "the spore ''{name}'' could not be loaded: {detail}"
+    absent: "no spore named ''{name}'' is present on disk"
+inoculate:
+  thirdParty: "''{label}'' is not the official sporangium: its spores are not code-reviewed before publication"
+  missingRequirements: "''{name}'' requires {missing}, which nothing installed provides: it will be dormant until you install them"
+  septumOutOfRange: "''{name}'' declares septum ''{range}'', which excludes the running {running}: it will not germinate until it is re-released"

@@ -16,7 +16,7 @@ const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
 
 const GERMINATED: RuntimeHealth = {
-  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0,
+  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], hyphae: [], blockedSinceBoot: 0,
 }
 
 /** A setup with a source, a channel and a custom role — nothing left for GuidedStart to name. */
@@ -34,8 +34,8 @@ const NO_PLUGINS: PluginGroups = {
   hypha: [], rhiza: [], enzyme: [], inhibitor: [], unknown: [],
 }
 const COMPLETE_ROLES: readonly RoleDto[] = [
-  { name: 'owner', builtin: true, patterns: ['*'] },
-  { name: 'guest', builtin: false, patterns: [] },
+  { name: 'owner', builtin: true, patterns: ['*'], holders: 0 },
+  { name: 'guest', builtin: false, patterns: [], holders: 0 },
 ]
 
 /**
@@ -240,6 +240,7 @@ describe('the overview', () => {
       dormant: [],
       enforcingBlocked: [],
       rhizas: [],
+      hyphae: [],
       blockedSinceBoot: 0,
       failure: { kind: 'cycle', message: 'cycle: alpha -> beta -> alpha', spores: ['alpha', 'beta'] },
     })
@@ -255,7 +256,7 @@ describe('the overview', () => {
   // R1: crit belongs to the mute bot alone, so a failed germination — bad as it is — is amber.
   it('paints the germination failure amber, never the mute red', async () => {
     const container = await withHealth({
-      mode: 'degraded', dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0,
+      mode: 'degraded', dormant: [], enforcingBlocked: [], rhizas: [], hyphae: [], blockedSinceBoot: 0,
       failure: { kind: 'unknown', message: 'boot threw' },
     })
     const card = container.querySelector('[data-testid="germination-failure"]')
@@ -290,7 +291,7 @@ describe('the overview', () => {
   // through to '.message' the same way the unguarded arrays let '{}' through to '.filter'.
   it('does not crash on a null failure in degraded mode', async () => {
     await withHealth({
-      mode: 'degraded', dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0,
+      mode: 'degraded', dormant: [], enforcingBlocked: [], rhizas: [], hyphae: [], blockedSinceBoot: 0,
       failure: null as unknown as RuntimeHealth['failure'],
     })
 
@@ -1010,7 +1011,7 @@ describe('the guided path out of an empty substrate', () => {
     await withHealth(GERMINATED, {
       sources: COMPLETE_SOURCES,
       plugins: NO_PLUGINS,
-      roles: [{ name: 'owner', builtin: true, patterns: ['*'] }, { name: 'admin', builtin: true, patterns: [] }],
+      roles: [{ name: 'owner', builtin: true, patterns: ['*'], holders: 0 }, { name: 'admin', builtin: true, patterns: [], holders: 0 }],
     })
 
     expect(await screen.findByText('Create a role')).toBeDefined()

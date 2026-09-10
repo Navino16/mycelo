@@ -29,7 +29,7 @@ function tree(entries: Record<string, string>): string {
   return dir
 }
 
-const MANIFEST = ['name: radarr', 'kind: rhiza', 'septum: "^0.12"'].join('\n')
+const MANIFEST = ['name: radarr', 'kind: rhiza', 'septum: "^1.0"'].join('\n')
 const MODULE = 'export default { create: () => ({}) }'
 
 describe('treeProblem', () => {
@@ -93,7 +93,7 @@ describe('treeProblem', () => {
 
   test('refuses a manifest whose name is not the requested one', () => {
     expect(treeProblem(tree({
-      'radarr/spore.yaml': 'name: sonarr\nkind: rhiza\nseptum: "^0.12"\n',
+      'radarr/spore.yaml': 'name: sonarr\nkind: rhiza\nseptum: "^1.0"\n',
       'radarr/index.js': MODULE,
     }), 'radarr')).toContain('sonarr')
   })
@@ -138,11 +138,20 @@ describe('treeProblem', () => {
     expect(problem).not.toContain('/tmp')
   })
 
-  test('refuses a spore whose septum range excludes the running core', () => {
+  test('accepts a spore whose septum range excludes the running core: out-of-range installs, it does not refuse', () => {
+    // inoculate.ts's warnings block is what flags this now — the range has only ever been
+    // enforced at germination (design §9.2).
     expect(treeProblem(tree({
       'radarr/spore.yaml': 'name: radarr\nkind: rhiza\nseptum: "^0.9"\n',
       'radarr/index.js': MODULE,
-    }), 'radarr')).toContain('^0.9')
+    }), 'radarr')).toBeNull()
+  })
+
+  test('refuses a spore whose septum range does not parse', () => {
+    expect(treeProblem(tree({
+      'radarr/spore.yaml': 'name: radarr\nkind: rhiza\nseptum: "%%%"\n',
+      'radarr/index.js': MODULE,
+    }), 'radarr')).toContain('%%%')
   })
 
   test('refuses a code spore with no entry point', () => {
@@ -159,7 +168,7 @@ describe('treeProblem', () => {
   test('accepts a respond-only enzyme with no module at all', () => {
     expect(treeProblem(tree({
       'hello/spore.yaml': [
-        'name: hello', 'kind: enzyme', 'septum: "^0.12"',
+        'name: hello', 'kind: enzyme', 'septum: "^1.0"',
         'commands:', '  - name: hi', '    description: command.hi.description', '    respond: reply.hi',
       ].join('\n'),
     }), 'hello')).toBeNull()
@@ -170,7 +179,7 @@ describe('treeProblem', () => {
     // enough to need an entry point.
     expect(treeProblem(tree({
       'hello/spore.yaml': [
-        'name: hello', 'kind: enzyme', 'septum: "^0.12"',
+        'name: hello', 'kind: enzyme', 'septum: "^1.0"',
         'commands:',
         '  - name: hi', '    description: command.hi.description', '    respond: reply.hi',
         '  - name: ho', '    description: command.ho.description', '    code: handleHo',
@@ -184,7 +193,7 @@ function stubDriver(tarball: Uint8Array, strains: readonly string[] = ['0.2.0', 
     list: () => Promise.resolve([{ name: 'radarr', strain: strains[0]! }]),
     strains: () => Promise.resolve(strains),
     detail: () => Promise.resolve({
-    name: 'radarr', kind: 'rhiza' as const, description: '', septum: '^0.12',
+    name: 'radarr', kind: 'rhiza' as const, description: '', septum: '^1.0',
     demands: { requires: [], scopes: [], externals: [], commands: [] },
   }),
     fetch: (_name, strain) => Promise.resolve({ tarball, strain }),
@@ -324,7 +333,7 @@ describe('inoculate', () => {
     const tarball = await bundleOf('radarr', { 'spore.yaml': MANIFEST, 'index.js': MODULE })
     const result = await inoculate(ctxOf(db, stubDriver(tarball), managedDir()), { sourceId: third.id, name: 'radarr' })
     expect(result.ok).toBe(true)
-    expect(result.ok && result.warnings.join(' ')).toContain('not code-reviewed')
+    expect(result.ok && result.warnings.map((w) => w.message).join(' ')).toContain('not code-reviewed')
   })
 
   test('a third-party install with a missing dependency carries both warnings', async () => {
@@ -333,7 +342,7 @@ describe('inoculate', () => {
     const { db } = freshDb()
     const third = addSource(db, { label: 'someone else', driver: 'github', location: 'https://github.com/x/y' })
     const manifest = [
-      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.12"',
+      'name: upcoming-movies', 'kind: enzyme', 'septum: "^1.0"',
       'requires:', '  - rhiza: radarr',
       'commands:', '  - name: upcoming', '    description: command.upcoming.description', '    code: handleUpcoming',
     ].join('\n')
@@ -342,8 +351,8 @@ describe('inoculate', () => {
     expect(result.ok).toBe(true)
     const warnings = result.ok ? result.warnings : []
     expect(warnings).toHaveLength(2)
-    expect(warnings[0]).toContain('not code-reviewed')
-    expect(warnings[1]).toContain("'radarr'")
+    expect(warnings[0]?.message).toContain('not code-reviewed')
+    expect(warnings[1]?.message).toContain("'radarr'")
   })
 
   test('a disabled install satisfies nothing, so the requirement is still warned about', async () => {
@@ -354,13 +363,13 @@ describe('inoculate', () => {
     writeFileSync(join(held, 'radarr', 'spore.yaml'), MANIFEST)
     recordInstall(db, 'radarr', 'rhiza', false)
     const manifest = [
-      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.12"',
+      'name: upcoming-movies', 'kind: enzyme', 'septum: "^1.0"',
       'requires:', '  - rhiza: radarr',
       'commands:', '  - name: upcoming', '    description: command.upcoming.description', '    code: handleUpcoming',
     ].join('\n')
     const tarball = await bundleOf('upcoming-movies', { 'spore.yaml': manifest, 'index.js': MODULE })
     const result = await inoculate(ctxOf(db, stubDriver(tarball, ['0.2.0']), managedDir(), [held]), { sourceId: id, name: 'upcoming-movies' })
-    expect(result.ok && result.warnings.join(' ')).toContain("'radarr'")
+    expect(result.ok && result.warnings.map((w) => w.message).join(' ')).toContain("'radarr'")
     // The control: the same tree with the install enabled warns about nothing.
     setEnabled(db, 'radarr', true)
     const second = await inoculate(ctxOf(db, stubDriver(tarball, ['0.2.0']), managedDir(), [held]), { sourceId: id, name: 'upcoming-movies' })
@@ -373,21 +382,21 @@ describe('inoculate', () => {
     const { db } = freshDb()
     const id = officialId(db)
     const manifest = [
-      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.12"',
+      'name: upcoming-movies', 'kind: enzyme', 'septum: "^1.0"',
       'requires:', '  - rhiza: radarr',
       'commands:', '  - name: upcoming', '    description: command.upcoming.description', '    code: handleUpcoming',
     ].join('\n')
     const tarball = await bundleOf('upcoming-movies', { 'spore.yaml': manifest, 'index.js': MODULE })
     const result = await inoculate(ctxOf(db, stubDriver(tarball, ['0.2.0']), managedDir()), { sourceId: id, name: 'upcoming-movies' })
     expect(result.ok).toBe(true)
-    expect(result.ok && result.warnings.join(' ')).toContain('radarr')
+    expect(result.ok && result.warnings.map((w) => w.message).join(' ')).toContain('radarr')
   })
 
   test('names every unsatisfied requirement, including every alternative of an any_of', async () => {
     const { db } = freshDb()
     const id = officialId(db)
     const manifest = [
-      'name: now-watching', 'kind: enzyme', 'septum: "^0.12"',
+      'name: now-watching', 'kind: enzyme', 'septum: "^1.0"',
       'requires:',
       '  - rhiza: radarr',
       '  - rhiza: sonarr',
@@ -396,7 +405,7 @@ describe('inoculate', () => {
     ].join('\n')
     const tarball = await bundleOf('now-watching', { 'spore.yaml': manifest, 'index.js': MODULE })
     const result = await inoculate(ctxOf(db, stubDriver(tarball, ['0.2.0']), managedDir()), { sourceId: id, name: 'now-watching' })
-    const warning = result.ok ? result.warnings.join(' ') : ''
+    const warning = result.ok ? result.warnings.map((w) => w.message).join(' ') : ''
     for (const named of ["'radarr'", "'sonarr'", "'plex'", "'jellyfin'"]) expect(warning).toContain(named)
     expect(warning).not.toContain('@^')
   })
@@ -408,7 +417,7 @@ describe('inoculate', () => {
     mkdirSync(join(held, 'radarr'))
     writeFileSync(join(held, 'radarr', 'spore.yaml'), MANIFEST)
     const manifest = [
-      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.12"',
+      'name: upcoming-movies', 'kind: enzyme', 'septum: "^1.0"',
       'requires:',
       '  - rhiza: radarr',
       '  - rhiza: sonarr', '    optional: true',
@@ -430,13 +439,13 @@ describe('inoculate', () => {
     mkdirSync(join(held, 'radarr'))
     writeFileSync(join(held, 'radarr', 'spore.yaml'), MANIFEST)
     const manifest = [
-      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.12"',
+      'name: upcoming-movies', 'kind: enzyme', 'septum: "^1.0"',
       'requires:', '  - rhiza: radarr@^2', '  - rhiza: sonarr@^2',
       'commands:', '  - name: upcoming', '    description: command.upcoming.description', '    code: handleUpcoming',
     ].join('\n')
     const tarball = await bundleOf('upcoming-movies', { 'spore.yaml': manifest, 'index.js': MODULE })
     const result = await inoculate(ctxOf(db, stubDriver(tarball, ['0.2.0']), managedDir(), [held]), { sourceId: id, name: 'upcoming-movies' })
-    const warning = result.ok ? result.warnings.join(' ') : ''
+    const warning = result.ok ? result.warnings.map((w) => w.message).join(' ') : ''
     expect(warning).toContain("'sonarr'")
     expect(warning).not.toContain('radarr')
     expect(warning).not.toContain('@^2')
@@ -450,9 +459,9 @@ describe('inoculate', () => {
     const id = officialId(db)
     const held = mkdtempSync(join(tmpdir(), 'operator-'))
     mkdirSync(join(held, 'jellyfin'))
-    writeFileSync(join(held, 'jellyfin', 'spore.yaml'), 'name: jellyfin\nkind: rhiza\nseptum: "^0.12"\n')
+    writeFileSync(join(held, 'jellyfin', 'spore.yaml'), 'name: jellyfin\nkind: rhiza\nseptum: "^1.0"\n')
     const manifest = [
-      'name: now-watching', 'kind: enzyme', 'septum: "^0.12"',
+      'name: now-watching', 'kind: enzyme', 'septum: "^1.0"',
       'requires:', '  - any_of:', '      - rhiza: plex', '      - rhiza: jellyfin@^10',
       'commands:', '  - name: watching', '    description: command.watching.description', '    code: handleWatching',
     ].join('\n')
@@ -470,17 +479,17 @@ describe('inoculate', () => {
     const held = mkdtempSync(join(tmpdir(), 'operator-'))
     mkdirSync(join(held, 'radarr'))
     writeFileSync(join(held, 'radarr', 'spore.yaml'), [
-      'name: radarr', 'kind: enzyme', 'septum: "^0.12"',
+      'name: radarr', 'kind: enzyme', 'septum: "^1.0"',
       'commands:', '  - name: r', '    description: command.r.description', '    respond: reply.r',
     ].join('\n'))
     const manifest = [
-      'name: upcoming-movies', 'kind: enzyme', 'septum: "^0.12"',
+      'name: upcoming-movies', 'kind: enzyme', 'septum: "^1.0"',
       'requires:', '  - rhiza: radarr',
       'commands:', '  - name: upcoming', '    description: command.upcoming.description', '    code: handleUpcoming',
     ].join('\n')
     const tarball = await bundleOf('upcoming-movies', { 'spore.yaml': manifest, 'index.js': MODULE })
     const result = await inoculate(ctxOf(db, stubDriver(tarball, ['0.2.0']), managedDir(), [held]), { sourceId: id, name: 'upcoming-movies' })
-    expect(result.ok && result.warnings.join(' ')).toContain('radarr')
+    expect(result.ok && result.warnings.map((w) => w.message).join(' ')).toContain('radarr')
   })
 
   test('refuses a real tarball carrying a symlink, leaving nothing on disk', async () => {
@@ -734,6 +743,27 @@ describe('inoculate', () => {
     // The boolean cannot say why; this is what lets a caller name the blockers.
     expect(installsFromSource(db, third.id)).toEqual(['radarr'])
     expect(installsFromSource(db, officialId(db))).toEqual([])
+  })
+
+  test('installs an out-of-range strain disabled, with a warning', async () => {
+    const { db } = freshDb()
+    const id = officialId(db)
+    const manifest = 'name: stale\nkind: rhiza\nseptum: "^0.1"\n'
+    const tarball = await bundleOf('stale', { 'spore.yaml': manifest, 'index.js': MODULE })
+    const result = await inoculate(ctxOf(db, stubDriver(tarball), managedDir()), { sourceId: id, name: 'stale' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.warnings.map((w) => w.messageKey)).toContain('inoculate.septumOutOfRange')
+    expect(getInstall(db, 'stale')?.enabled).toBe(false)
+  })
+
+  test('still refuses an unparseable range', async () => {
+    const { db } = freshDb()
+    const id = officialId(db)
+    const manifest = 'name: garbled\nkind: rhiza\nseptum: "%%%"\n'
+    const tarball = await bundleOf('garbled', { 'spore.yaml': manifest, 'index.js': MODULE })
+    const result = await inoculate(ctxOf(db, stubDriver(tarball), managedDir()), { sourceId: id, name: 'garbled' })
+    expect(result.ok).toBe(false)
   })
 
   test('installsFromSource names every blocker, sorted, not just the first', async () => {

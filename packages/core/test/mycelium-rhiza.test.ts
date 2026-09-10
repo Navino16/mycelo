@@ -53,7 +53,7 @@ function fresh(): Db {
 const registry = {
   hyphae: [], rhizas: [], inhibitors: [],
   dormant: [{ name: 'broken', refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' } }],
-  enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^0.12',
+  enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^1.0',
     commands: [{ name: 'movies', description: 'x', code: 'h' }] }, instance: null }],
   routes: new Map(),
 } as unknown as Registry
@@ -90,7 +90,7 @@ it('omits kind for a dormant plugin rather than inventing one, since none was ev
 it('lists a germinated inhibitor with an empty command list', () => {
   const withInhibitor = {
     ...registry,
-    inhibitors: [{ name: 'gate', manifest: { kind: 'inhibitor', name: 'gate', septum: '^0.12', enforcing: true } }],
+    inhibitors: [{ name: 'gate', manifest: { kind: 'inhibitor', name: 'gate', septum: '^1.0', enforcing: true } }],
   } as unknown as Registry
   const api = createMyceliumApi(withInhibitor, ['plugins.read'], stubSend, fresh(), SPORES) as PluginsRead
   expect(api.listPlugins()).toContainEqual({ name: 'gate', kind: 'inhibitor', commands: [], state: 'germinated', enabled: true })
@@ -261,7 +261,7 @@ describe('MOUNTABLE_SCOPES against what createMyceliumApi actually mounts', () =
       const r = resolve([{
         location: { directory: 'user', manifestPath: 'user/spore.yaml' },
         manifest: {
-          kind: 'enzyme', name: 'user', septum: '^0.12',
+          kind: 'enzyme', name: 'user', septum: '^1.0',
           commands: [{ name: 'user', description: 'x', respond: 'hi' }],
           requires: [{ rhiza: 'mycelium', scopes: [scope] }],
         },
@@ -422,15 +422,20 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
 
   it('reports formSchema unavailable for a plugin that is not installed', async () => {
     const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, fresh(), SPORES) as PluginsConfigure
-    expect(await api.formSchema('ghost')).toEqual({ available: false, reason: "plugin 'ghost' is not installed" })
+    expect(await api.formSchema('ghost')).toEqual({
+      available: false, reason: "plugin 'ghost' is not installed",
+      reasonKey: 'config.schema.notInstalled', reasonParams: { name: 'ghost' },
+    })
   })
 
   it('reports formSchema unavailable for an install whose spore is gone from disk', async () => {
     const db = fresh()
     recordInstall(db, 'vanished', 'rhiza')
     const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, SPORES) as PluginsConfigure
-    expect(await api.formSchema('vanished'))
-      .toEqual({ available: false, reason: "no spore named 'vanished' is present on disk" })
+    expect(await api.formSchema('vanished')).toEqual({
+      available: false, reason: "no spore named 'vanished' is present on disk",
+      reasonKey: 'config.schema.absent', reasonParams: { name: 'vanished' },
+    })
   })
 
   // loadSporeModule propagates whatever the spore throws at import; formSchema() has an
@@ -444,7 +449,7 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
       mkdirSync(join(dir, 'boomspore', 'src'), { recursive: true })
       writeFileSync(
         join(dir, 'boomspore', 'spore.yaml'),
-        'kind: enzyme\nname: boomspore\nseptum: "^0.12"\n'
+        'kind: enzyme\nname: boomspore\nseptum: "^1.0"\n'
           + 'commands:\n  - name: boom\n    description: x\n    code: handleBoom\n',
         'utf8',
       )
@@ -464,8 +469,10 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
     const db = fresh()
     recordInstall(db, 'gate', 'inhibitor')
     const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, SPORES) as PluginsConfigure
-    expect(await api.formSchema('gate'))
-      .toEqual({ available: false, reason: 'this plugin publishes no JSON Schema: configure it by hand' })
+    expect(await api.formSchema('gate')).toEqual({
+      available: false, reason: 'this plugin publishes no JSON Schema: configure it by hand',
+      reasonKey: 'config.schema.noJsonSchema',
+    })
   })
 
   it('enables a plugin on disk and disables it again', async () => {
@@ -522,7 +529,7 @@ describe('setSetting against the keys the plugin declares', () => {
     mkdirSync(join(dir, 'declares', 'src'), { recursive: true })
     writeFileSync(
       join(dir, 'declares', 'spore.yaml'),
-      'kind: enzyme\nname: declares\nseptum: "^0.12"\n'
+      'kind: enzyme\nname: declares\nseptum: "^1.0"\n'
         + 'commands:\n  - name: declares\n    description: x\n    code: handleIt\n',
       'utf8',
     )
@@ -773,7 +780,7 @@ describe('commands.read', () => {
 })
 
 describe('sources.manage', () => {
-  const MANIFEST = 'kind: rhiza\nname: radarr\nseptum: "^0.12"\nrequires:\n  - rhiza: plex\n'
+  const MANIFEST = 'kind: rhiza\nname: radarr\nseptum: "^1.0"\nrequires:\n  - rhiza: plex\n'
 
   function sourcesApi(db: Db, options: MyceliumApiOptions = {}): SourcesManage {
     return createMyceliumApi(emptyRegistry(), ['sources.manage'], noSend, db, SPORES, options) as SourcesManage
@@ -853,7 +860,7 @@ describe('sources.manage', () => {
       list: () => Promise.resolve([{ name: 'radarr', strain: '0.2.0' }]),
       strains: () => Promise.resolve(['0.2.0']),
       detail: () => Promise.resolve({
-        name: 'radarr', kind: 'rhiza' as const, description: '', septum: '^0.12',
+        name: 'radarr', kind: 'rhiza' as const, description: '', septum: '^1.0',
         demands: { requires: [], scopes: [], externals: [], commands: [] },
       }),
       fetch: (_name, strain) => Promise.resolve({ tarball, strain }),
@@ -865,8 +872,9 @@ describe('sources.manage', () => {
       // Both warnings, not the first: a third-party sporangium is not code-reviewed, and
       // nothing installed satisfies the bundle's own `requires: plex`.
       expect(outcome.warnings).toHaveLength(2)
-      expect(outcome.warnings.join(' ')).toContain('not code-reviewed')
-      expect(outcome.warnings.join(' ')).toContain("'plex'")
+      const messages = outcome.warnings.map((w) => w.message).join(' ')
+      expect(messages).toContain('not code-reviewed')
+      expect(messages).toContain("'plex'")
       expect(getInstall(db, 'radarr')).toMatchObject({ strain: '0.2.0', sourceId: source.id, enabled: false })
     } finally {
       rmSync(managed, { recursive: true, force: true })

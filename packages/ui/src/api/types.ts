@@ -1,7 +1,8 @@
 /**
  * The wire shapes of the HTTP API, redeclared rather than imported: packages/ui is outside the
  * root solution and has no Bun or Node types, so a core route module cannot enter this program
- * (spec §2). Every shape here was read off the route that answers it.
+ * (spec §2). Every shape here was read off the route that answers it. Pinned against the
+ * server's own types by packages/ui/test/api/types.test-d.ts.
  */
 
 export type SporeKind = 'hypha' | 'rhiza' | 'enzyme' | 'inhibitor'
@@ -33,6 +34,11 @@ export interface PluginDto {
   scopes: readonly string[]
 }
 
+/**
+ * `scopes`/`capabilities` are widened from the server's `MyceliumScope`/`ChannelCapability`
+ * literal unions to plain `string`, deliberately: a scope or capability the UI's own septum
+ * version does not know rendered raw is a tested fallback (DemandsList), not a bug.
+ */
 export interface RequirementDto {
   targets: readonly string[]
   anyOf: boolean
@@ -81,6 +87,12 @@ export interface RhizaHealth {
   status: HealthStatus
 }
 
+/** `hypha`, matching RhizaHealth's own naming. Only a hypha that declares `health` appears. */
+export interface HyphaHealth {
+  hypha: string
+  status: HealthStatus
+}
+
 /** `GET /api/health` — supervision/health.ts. */
 export interface RuntimeHealth {
   mode: 'germinated' | 'degraded'
@@ -89,6 +101,7 @@ export interface RuntimeHealth {
   /** Any one entry means the bot refuses all traffic on every channel (design §7). */
   enforcingBlocked: readonly string[]
   rhizas: readonly RhizaHealth[]
+  hyphae: readonly HyphaHealth[]
   /** Messages refused since boot by a broken enforcing inhibitor. 0 while not germinated. */
   blockedSinceBoot: number
 }
@@ -163,6 +176,7 @@ export interface RoleDto {
   name: string
   builtin: boolean
   patterns: readonly string[]
+  holders: number
 }
 
 /**

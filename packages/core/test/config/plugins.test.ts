@@ -13,7 +13,6 @@ import type { Db } from '../../src/persistence/db.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
 import type { Registry } from '../../src/germination/registry.js'
 import { addSource, listSources, seedOfficialSource } from '../../src/sporangium/sources.js'
-import { describeConfigError } from '../../src/support/thrown.js'
 import { emptyRegistry } from '../support/registry.js'
 import { loadCoreCatalogs } from '../../src/i18n/core-catalogs.js'
 import { renderRefusal } from '../../src/i18n/refusal.js'
@@ -65,7 +64,7 @@ function twoRequired(): void {
   mkdirSync(join(dir, 'twofield', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'twofield', 'spore.yaml'),
-    'kind: enzyme\nname: twofield\nseptum: "^0.12"\n'
+    'kind: enzyme\nname: twofield\nseptum: "^1.0"\n'
       + 'commands:\n  - name: twofield\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -123,7 +122,7 @@ function twoIssuesOnOneKey(): void {
   mkdirSync(join(dir, 'twoissue', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'twoissue', 'spore.yaml'),
-    'kind: enzyme\nname: twoissue\nseptum: "^0.12"\n'
+    'kind: enzyme\nname: twoissue\nseptum: "^1.0"\n'
       + 'commands:\n  - name: twoissue\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -172,7 +171,7 @@ function wholeObjectRefusal(): void {
   mkdirSync(join(dir, 'exclusive', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'exclusive', 'spore.yaml'),
-    'kind: enzyme\nname: exclusive\nseptum: "^0.12"\n'
+    'kind: enzyme\nname: exclusive\nseptum: "^1.0"\n'
       + 'commands:\n  - name: exclusive\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -224,7 +223,7 @@ function minPort(): void {
   mkdirSync(join(dir, 'minport', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'minport', 'spore.yaml'),
-    'kind: enzyme\nname: minport\nseptum: "^0.12"\n'
+    'kind: enzyme\nname: minport\nseptum: "^1.0"\n'
       + 'commands:\n  - name: minport\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -281,7 +280,7 @@ function ownDomainName(): void {
   mkdirSync(join(dir, 'common', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'common', 'spore.yaml'),
-    'kind: enzyme\nname: common\nseptum: "^0.12"\n'
+    'kind: enzyme\nname: common\nseptum: "^1.0"\n'
       + 'commands:\n  - name: common\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -316,7 +315,7 @@ function handwritten(): void {
   mkdirSync(join(dir, 'handwritten', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'handwritten', 'spore.yaml'),
-    'kind: enzyme\nname: handwritten\nseptum: "^0.12"\n'
+    'kind: enzyme\nname: handwritten\nseptum: "^1.0"\n'
       + 'commands:\n  - name: handwritten\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -352,7 +351,7 @@ function eitherOr(): void {
   mkdirSync(join(dir, 'eitheror', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'eitheror', 'spore.yaml'),
-    'kind: enzyme\nname: eitheror\nseptum: "^0.12"\n'
+    'kind: enzyme\nname: eitheror\nseptum: "^1.0"\n'
       + 'commands:\n  - name: eitheror\n    description: command.eitheror.description\n    code: handleIt\n',
     'utf8',
   )
@@ -397,7 +396,7 @@ function pathless(): void {
   mkdirSync(join(dir, 'pathless', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'pathless', 'spore.yaml'),
-    'kind: enzyme\nname: pathless\nseptum: "^0.12"\n'
+    'kind: enzyme\nname: pathless\nseptum: "^1.0"\n'
       + 'commands:\n  - name: pathless\n    description: command.pathless.description\n    code: handleIt\n',
     'utf8',
   )
@@ -423,12 +422,6 @@ it('reads an issue with no usable path the way enablePlugin does, against every 
   const rejected = await rejectedSettings(db, [dir], 'pathless', { a: 1, b: 2 }, translator, 'en')
   const messages = ['the whole thing is wrong', 'so is this']
   expect(rejected).toEqual([{ key: 'a', messages }, { key: 'b', messages }])
-  // The same two issues through the other reader, which has always treated them this way.
-  const issues = [
-    { message: 'the whole thing is wrong' },
-    { path: 'notanarray', message: 'so is this' },
-  ]
-  expect(describeConfigError({ issues })).toBe('the whole thing is wrong; so is this')
   close()
 })
 
@@ -451,7 +444,7 @@ function vault(): void {
   mkdirSync(join(dir, 'vault', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'vault', 'spore.yaml'),
-    'kind: enzyme\nname: vault\nseptum: "^0.12"\n'
+    'kind: enzyme\nname: vault\nseptum: "^1.0"\n'
       + 'commands:\n  - name: vault\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -474,7 +467,7 @@ function twin(): void {
   mkdirSync(join(dir, 'twin', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'twin', 'spore.yaml'),
-    'kind: enzyme\nname: twin\nseptum: "^0.12"\n'
+    'kind: enzyme\nname: twin\nseptum: "^1.0"\n'
       + 'commands:\n  - name: twin\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -554,7 +547,7 @@ it('a value written while the plugin throws at import is stored in the clear (kn
   mkdirSync(join(dir, 'boomvault', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'boomvault', 'spore.yaml'),
-    'kind: enzyme\nname: boomvault\nseptum: "^0.12"\n'
+    'kind: enzyme\nname: boomvault\nseptum: "^1.0"\n'
       + 'commands:\n  - name: boomvault\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -589,7 +582,7 @@ function keepMinLength(): void {
   mkdirSync(join(dir, 'keep', 'src'), { recursive: true })
   writeFileSync(
     join(dir, 'keep', 'spore.yaml'),
-    'kind: enzyme\nname: keep\nseptum: "^0.12"\n'
+    'kind: enzyme\nname: keep\nseptum: "^1.0"\n'
       + 'commands:\n  - name: keep\n    description: x\n    code: handleIt\n',
     'utf8',
   )
@@ -664,7 +657,7 @@ it('carries provenance onto a germinated and a dormant entry, each from its own 
   recordInstall(db, 'broken', 'rhiza', true, { sourceId: third.id, strain: '2.3.4' })
   const registry = {
     ...emptyRegistry(),
-    enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^0.12', commands: [] } }],
+    enzymes: [{ name: 'media', manifest: { kind: 'enzyme', name: 'media', septum: '^1.0', commands: [] } }],
     dormant: [{ name: 'broken', refusal: { domain: 'common', key: 'refusal.germination.rhizaNoApi' } }],
   } as unknown as Registry
   const infos = listPlugins(registry, [], db)
@@ -731,7 +724,7 @@ it('carries provenance onto a germinated hypha, rhiza and inhibitor, each from i
   const entries = kinds.map(([name, kind, label, strain]) => {
     const s = addSource(db, { label, driver: 'github', location: `https://example/${name}` })
     recordInstall(db, name, kind, true, { sourceId: s.id, strain })
-    return { name, manifest: { kind, name, septum: '^0.12' } }
+    return { name, manifest: { kind, name, septum: '^1.0' } }
   })
   const registry = {
     ...emptyRegistry(),

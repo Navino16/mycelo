@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { septumIncompatibility } from '@mycelo/septum'
-import type { InoculateOutcome, Logger } from '@mycelo/septum'
+import { septumCompat } from '@mycelo/septum'
+import type { InoculateOutcome, InoculateWarning, Logger } from '@mycelo/septum'
 import { listInstalls, recordInstall } from '../config/store.js'
 import { targetName } from '../germination/anastomoses.js'
 import { discover } from '../germination/discover.js'
@@ -127,8 +127,10 @@ export function treeProblem(dir: string, name: string): string | null {
   if (read.manifest.name !== name) {
     return `the archive's manifest declares '${read.manifest.name}', not the requested '${name}'`
   }
-  const incompatible = septumIncompatibility(read.manifest.septum)
-  if (incompatible !== undefined) return `the spore ${incompatible}`
+  const compat = septumCompat(read.manifest.septum)
+  if (!compat.ok && compat.fault === 'unparseable') {
+    return `the spore declares septum '${read.manifest.septum}', which ${compat.detail}`
+  }
   if (!needsNoModule(read.manifest) && !BUNDLE_ENTRIES.some((c) => existsSync(join(root, c)))) {
     return `the archive holds no entry point: expected one of ${BUNDLE_ENTRIES.join(', ')}`
   }
@@ -269,13 +271,31 @@ export async function inoculate(
       return { ok: false, reason: `'${request.name}@${strain}' is not installable: ${withoutStagingPath(read.reason, staging)}` }
     }
 
-    const warnings: string[] = []
+    const warnings: InoculateWarning[] = []
     if (!source.official) {
-      warnings.push(`'${source.label}' is not the official sporangium: its spores are not code-reviewed before publication`)
+      warnings.push({
+        message: `'${source.label}' is not the official sporangium: its spores are not code-reviewed before publication`,
+        messageKey: 'inoculate.thirdParty', params: { label: source.label },
+      })
     }
     const missing = unsatisfiedRequirements(read.manifest, db, roots)
     if (missing.length > 0) {
-      warnings.push(`'${request.name}' requires ${missing.join(', ')}, which nothing installed provides: it will be dormant until you install them`)
+      warnings.push({
+        message: `'${request.name}' requires ${missing.join(', ')}, which nothing installed provides: it will be dormant until you install them`,
+        messageKey: 'inoculate.missingRequirements', params: { name: request.name, missing: missing.join(', ') },
+      })
+    }
+    const rangeCompat = septumCompat(read.manifest.septum)
+    // treeProblem already refused an unparseable range above, so 'out-of-range' is the only
+    // fault reachable here — narrowed explicitly rather than asserted.
+    if (!rangeCompat.ok && rangeCompat.fault === 'out-of-range') {
+      // Installed disabled and refused at germination either way (design §9.2): admitting it is
+      // what lets an operator repair from the API after a septum minor.
+      warnings.push({
+        message: `'${request.name}' declares septum '${rangeCompat.range}', which excludes the running ${rangeCompat.running}: it will not germinate until it is re-released`,
+        messageKey: 'inoculate.septumOutOfRange',
+        params: { name: request.name, range: rangeCompat.range, running: rangeCompat.running },
+      })
     }
 
     // One rename, so a spore is never half-visible to a concurrent discover() (design §9 step 8).

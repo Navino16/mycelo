@@ -219,7 +219,16 @@ export function registerPluginRoutes(app: FastifyInstance, state: RuntimeState):
     const { name } = request.params as { name: string }
     requireInstalled(state, name)
     const form = await formSchemaOf(state.db, state.config.discoveryDirs, name)
-    if (!form.available) return form
+    // reason stays English in the log; the answer carries the operator's language (design §5.2).
+    // reasonKey and reasonParams are the translation's own inputs, never echoed on the wire.
+    if (!form.available) {
+      return {
+        available: false,
+        reason: form.reasonKey === undefined
+          ? form.reason
+          : state.translator.translate('core', form.reasonKey, request.locale, form.reasonParams),
+      }
+    }
     // A never-yet-filled credential is in neither the schema nor the redacted settings,
     // so without this the form renders it as an ordinary text input.
     return { ...form, secrets: await secretKeysOf(state.db, state.config.discoveryDirs, name) }

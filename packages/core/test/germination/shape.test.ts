@@ -19,7 +19,7 @@ const respond = (name: string): CommandSpec => ({ name, description: name, respo
 const code = (name: string, handler = name): CommandSpec => ({ name, description: name, code: handler })
 
 function manifest(capabilities: HyphaManifest['capabilities']): HyphaManifest {
-  return { kind: 'hypha', name: 'test', septum: '^0.12', capabilities }
+  return { kind: 'hypha', name: 'test', septum: '^1.0', capabilities }
 }
 
 it('hyphaShapeError refuses a non-object instance', () => {

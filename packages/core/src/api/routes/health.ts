@@ -10,7 +10,8 @@ import { degradedError } from '../errors.js'
 
 /**
  * `RuntimeHealth` with its `dormant` verdicts rendered at the request locale (design §2.2,
- * §3) — never widen `RuntimeHealth` itself, which is the runtime's own shape and carries refs.
+ * §3) — never widen `RuntimeHealth` itself with rendered strings: it is the runtime's own shape
+ * and carries refs. Widening it with more runtime data, as `hyphae` did, is the normal case.
  */
 export interface RuntimeHealthDto extends Omit<RuntimeHealth, 'dormant'> {
   dormant: readonly { name: string, reason: string, reasonKey: string }[]
