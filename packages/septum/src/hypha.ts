@@ -15,8 +15,8 @@ export interface Hypha<TConfig = unknown> {
   /** Present only when the manifest declares the group_membership capability. */
   listGroupMembers?(groupId: string): Promise<readonly ChannelIdentity[]>
   /**
-   * Optional, unlike Rhiza's: nine published spores implement Hypha without it, and a hypha that
-   * does not is reported exactly as it is today.
+   * Optional, unlike Rhiza's: the one published hypha (signal) predates this hook, and requiring
+   * it would break every implementation compiled against 0.x.
    */
   health?(): Promise<HealthStatus>
 }

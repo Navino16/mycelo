@@ -485,9 +485,10 @@ parses to `null` or holds no keys at all.
 
 ## Status
 
-`0.x` — the contract is expected to change. The core's runtime implements it: `bun run
-start` answers a `respond:` command directly and dispatches a `code:` command to its
-`handlers` entry. Pin an exact version if that matters to you.
+`1.0.0` — the contract is stable: a breaking change now ships as a new major, not folded into a
+minor. The core's runtime implements it: `bun run start` answers a `respond:` command directly and
+dispatches a `code:` command to its `handlers` entry. Declare a caret range, `^1.0`, as the example
+above does.
 
 `SEPTUM_VERSION` is exported and equals this package's own `version`, so a plugin that needs to
 branch on the contract it was loaded against can read it rather than guess. **A caret range below
