@@ -85,3 +85,43 @@ test('a key both probes produce is reported once, not twice', () => {
     "configSchema refuses with key 'config.path.relative', which no supplied catalogue declares",
   ])
 })
+
+/** A hand-rolled ConfigSchema whose safeParse always refuses with the given messageKey. */
+function refusingWithKey(messageKey: unknown): Parameters<typeof configSchemaFailures>[0] {
+  return {
+    safeParse: () => ({
+      success: false as const,
+      error: { issues: [{ path: [], message: 'refused', messageKey }] },
+    }),
+  } as unknown as Parameters<typeof configSchemaFailures>[0]
+}
+
+test('a ref naming common stays silent: the core owns that catalogue and the kit cannot see it', () => {
+  const schema = refusingWithKey({ domain: 'common', key: 'refusal.config.invalidType' })
+  expect(configSchemaFailures(schema, undefined, undefined, { en: { anything: 'x' } })).toEqual([])
+})
+
+test('a ref naming another domain is reported: design §5.3 honours only common', () => {
+  const schema = refusingWithKey({ domain: 'radarr', key: 'config.badUrl' })
+  expect(configSchemaFailures(schema, undefined, undefined, { en: { anything: 'x' } })).toEqual([
+    "configSchema refuses with a messageKey naming domain 'radarr' and key 'config.badUrl', which "
+    + "is never honoured — only 'common' is — so it renders its English message to the operator",
+  ])
+})
+
+test('a bare string messageKey still resolves against the supplied catalogue as before', () => {
+  const schema = refusingWithKey('config.badUrl')
+  expect(configSchemaFailures(schema, undefined, undefined, { en: { anything: 'x' } })).toEqual([
+    "configSchema refuses with key 'config.badUrl', which no supplied catalogue declares",
+  ])
+})
+
+test('a ref naming another domain is reported even when the supplied catalogue declares no key at all', () => {
+  // Unlike a bare string, an object ref is an unambiguous translation claim — nothing declared is
+  // no excuse to stay silent about a refusal that will never translate.
+  const schema = refusingWithKey({ domain: 'radarr', key: 'config.badUrl' })
+  expect(configSchemaFailures(schema, undefined, undefined, { en: {} })).toEqual([
+    "configSchema refuses with a messageKey naming domain 'radarr' and key 'config.badUrl', which "
+    + "is never honoured — only 'common' is — so it renders its English message to the operator",
+  ])
+})
