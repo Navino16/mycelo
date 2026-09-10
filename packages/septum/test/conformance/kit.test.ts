@@ -132,6 +132,72 @@ describe('hypha conformance checks', () => {
     })
     expect(failures.join(' ')).toContain('toJsonSchema is present but is not a function')
   })
+
+  // Hypha.health is optional and `signal` implements none, so the absent case must stay green
+  // while the present-but-malformed one is checked as thoroughly as a rhiza's.
+  it('stays green for a hypha that implements no health() at all', async () => {
+    let created: Record<string, unknown> = {}
+    const failures = await hyphaChecks({
+      ...goodHarness,
+      module: {
+        configSchema: config,
+        create: () => {
+          created = {
+            async connect() {}, listen() {}, async stop() {}, async send() {},
+            async listGroupMembers() { return [] },
+          }
+          return created as never
+        },
+      },
+    })
+    expect('health' in created).toBe(false)
+    expect(failures).toEqual([])
+  })
+
+  it('catches a hypha health() returning a malformed checkedAt', async () => {
+    const failures = await hyphaChecks({
+      ...goodHarness,
+      module: {
+        configSchema: config,
+        create: () => ({
+          async connect() {}, listen() {}, async stop() {}, async send() {},
+          async listGroupMembers() { return [] },
+          async health() { return { state: 'healthy' as const, checkedAt: 'yesterday' as never } },
+        }),
+      },
+    })
+    expect(failures).toEqual(['health() returned no valid checkedAt date'])
+  })
+
+  it('catches a hypha health() reporting an unknown state', async () => {
+    const failures = await hyphaChecks({
+      ...goodHarness,
+      module: {
+        configSchema: config,
+        create: () => ({
+          async connect() {}, listen() {}, async stop() {}, async send() {},
+          async listGroupMembers() { return [] },
+          async health() { return { state: 'fine' as never, checkedAt: new Date(0) } },
+        }),
+      },
+    })
+    expect(failures.join(' ')).toContain("state 'fine'")
+  })
+
+  it('catches a hypha health() throwing instead of reporting a degraded state', async () => {
+    const failures = await hyphaChecks({
+      ...goodHarness,
+      module: {
+        configSchema: config,
+        create: () => ({
+          async connect() {}, listen() {}, async stop() {}, async send() {},
+          async listGroupMembers() { return [] },
+          async health(): Promise<never> { throw new Error('ECONNREFUSED') },
+        }),
+      },
+    })
+    expect(failures.join(' ')).toContain('threw instead of reporting')
+  })
 })
 
 // ---------------------------------------------------------------------------

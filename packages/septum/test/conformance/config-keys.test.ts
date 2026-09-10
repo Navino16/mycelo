@@ -125,3 +125,19 @@ test('a ref naming another domain is reported even when the supplied catalogue d
     + "is never honoured — only 'common' is — so it renders its English message to the operator",
   ])
 })
+
+test('a ref naming another domain is reported when no catalogues are supplied at all', () => {
+  // The spore most likely to name a foreign domain is exactly the one shipping no catalogues,
+  // expecting the core to translate for it. `{ en: {} }` and an omitted `catalogs` are the same
+  // spore, so they must report the same.
+  const schema = refusingWithKey({ domain: 'radarr', key: 'config.badUrl' })
+  expect(configSchemaFailures(schema, undefined, undefined, undefined)).toEqual([
+    "configSchema refuses with a messageKey naming domain 'radarr' and key 'config.badUrl', which "
+    + "is never honoured — only 'common' is — so it renders its English message to the operator",
+  ])
+})
+
+test('a bare string messageKey stays silent when no catalogues are supplied, as before', () => {
+  const schema = refusingWithKey('config.badUrl')
+  expect(configSchemaFailures(schema, undefined, undefined, undefined)).toEqual([])
+})

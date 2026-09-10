@@ -132,10 +132,10 @@ function unresolvableMessageKeys(
   invalidConfig: unknown,
   catalogs: Record<string, unknown> | undefined,
 ): string[] {
-  // No catalogue supplied means the author is not claiming to translate, and the runtime
-  // germinates such a plugin — the empty-object probe runs regardless of invalidConfig.
-  if (catalogs === undefined) return []
-  const declared = declaredCatalogKeys(catalogs)
+  // No catalogue supplied means the author is not claiming to translate a bare key — the branch
+  // below already gates on `declared.size`. A domain-bearing ref claims it regardless, so the
+  // wrong-domain check must still run.
+  const declared = catalogs === undefined ? new Set<string>() : declaredCatalogKeys(catalogs)
   const probes: unknown[] = invalidConfig === undefined ? [{}] : [{}, invalidConfig]
   const undeclared = new Set<string>()
   const wrongDomain = new Set<string>()

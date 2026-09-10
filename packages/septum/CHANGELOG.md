@@ -12,16 +12,16 @@
   'out-of-range', range, running }` — because the two faults are different decisions: an
   unparseable range behaves as `*` and is refused everywhere, while an out-of-range one is only
   refused at germination (design §9.2). `septumIncompatibility` is now built on top of it.
-- `InoculateWarning`: `{ message: string; key: string; params?: Record<string, unknown> }`, the
+- `InoculateWarning`: `{ message: string; messageKey: string; params?: Record<string, unknown> }`, the
   shape `InoculateOutcome.warnings` now carries (see Changed).
 - `RoleInfo.holders: number`, **required**. Built only by the core
   (`packages/core/src/authorization/roles.ts`), so no shipped spore or fixture constructs a
   `RoleInfo` object literal: nothing in this tree needs a code change for it.
 - `HyphaContext.name: string`, **required**. Also core-produced only — the core builds it before
   calling a hypha's `connect()` — so the same holds: nothing in this tree constructs one by hand.
-- `Hypha.health?(): Promise<HealthStatus>`, optional, unlike Rhiza's: the one published hypha
-  (`signal`) predates this hook, and requiring it would break every implementation compiled
-  against 0.x.
+- `Hypha.health?(): Promise<HealthStatus>`, optional, unlike Rhiza's: not every channel has a
+  probe to run beyond its own socket, and a rhiza fronting a remote API — which always has one —
+  is the outlier, not the rule. `signal` implements none, and the conformance kit stays green.
 
 ### Changed
 - **`InoculateOutcome.warnings` is now `readonly InoculateWarning[]`, not `readonly string[]`.**
@@ -34,10 +34,15 @@
 - The conformance kit now also flags a config refusal's `messageKey` when it names a
   `TranslatableRef` domain other than `common` — design §5.3 honours a ref only for `common`, not
   even the spore's own domain, so any other domain silently falls back to `message` at runtime.
-  Unlike the undeclared-bare-key check, this one is not gated on `declared.size > 0` — it fires
-  even when the supplied catalogues declare no keys at all.
+  Unlike the undeclared-bare-key check, this one is gated on neither `declared.size > 0` nor the
+  presence of `catalogs`: a domain-bearing ref is an unambiguous translation claim, and the spore
+  most likely to name a foreign domain is the one shipping no catalogues at all.
   **A kit run that passed under 0.12 can fail under 1.0**: a spore whose `.refine()` ref named its
   own domain, or any domain besides `common`, was passing by omission.
+- `hyphaChecks` now validates `health()` the way `rhizaChecks` already did — an object, a known
+  `state`, a valid `checkedAt`, no throw — but only when the optional hook is present, so a hypha
+  shipping none is unaffected. Neither health aggregate re-validates the plugin's answer, so a
+  malformed `checkedAt` otherwise reaches the SPA as JSON with no signal anywhere.
 
 ## 0.12.0
 

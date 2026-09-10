@@ -1,10 +1,8 @@
 import { septumIncompatibility } from '../compat.js'
 import { parseManifest } from '../manifest.js'
 import { configSchemaFailures } from './config-checks.js'
-import type { HealthState } from '../context.js'
+import { healthFailures } from './health-checks.js'
 import type { Rhiza, RhizaModule } from '../rhiza.js'
-
-const HEALTH_STATES: readonly HealthState[] = ['healthy', 'degraded', 'unreachable']
 
 export interface RhizaHarness {
   name: string
@@ -66,27 +64,7 @@ export async function rhizaChecks(harness: RhizaHarness): Promise<string[]> {
     failures.push('create() returned no api — enzymes would resolve undefined through ctx.rhiza()')
   }
 
-  if (typeof instance.health === 'function') {
-    try {
-      const health = await instance.health()
-      if (typeof health !== 'object' || health === null) {
-        failures.push(`health() returned ${String(health)}, expected a HealthStatus`)
-      } else {
-        if (!HEALTH_STATES.includes(health.state)) {
-          failures.push(
-            `health() reported state '${String(health.state)}', expected one of ${HEALTH_STATES.join(', ')}`,
-          )
-        }
-        if (!(health.checkedAt instanceof Date) || Number.isNaN(health.checkedAt.getTime())) {
-          failures.push('health() returned no valid checkedAt date')
-        }
-      }
-    } catch (e) {
-      // health() reporting a problem is its job; throwing is not. The core calls it
-      // on a schedule and a throw would surface as an unhandled rejection.
-      failures.push(`health() threw instead of reporting a degraded state: ${(e as Error).message}`)
-    }
-  }
+  failures.push(...await healthFailures(instance))
 
   // The core calls stop() during shutdown regardless of how germination went.
   if (typeof instance.stop === 'function') {

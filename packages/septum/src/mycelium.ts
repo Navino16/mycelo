@@ -331,7 +331,7 @@ export interface InoculateWarning {
   /** English, for the operator's log. */
   message: string
   /** A `core`-domain key the API translates before answering. */
-  key: string
+  messageKey: string
   params?: Record<string, unknown>
 }
 

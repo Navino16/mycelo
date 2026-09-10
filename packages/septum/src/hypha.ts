@@ -15,8 +15,8 @@ export interface Hypha<TConfig = unknown> {
   /** Present only when the manifest declares the group_membership capability. */
   listGroupMembers?(groupId: string): Promise<readonly ChannelIdentity[]>
   /**
-   * Optional, unlike Rhiza's: the one published hypha (signal) predates this hook, and requiring
-   * it would break every implementation compiled against 0.x.
+   * Optional, unlike Rhiza's: not every channel has a probe to run beyond its own socket, and a
+   * rhiza fronting a remote API — which always has one — is the outlier, not the rule.
    */
   health?(): Promise<HealthStatus>
 }

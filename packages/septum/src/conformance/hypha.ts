@@ -1,6 +1,7 @@
 import { septumIncompatibility } from '../compat.js'
 import { parseManifest } from '../manifest.js'
 import { configSchemaFailures } from './config-checks.js'
+import { healthFailures } from './health-checks.js'
 import type { HyphaModule } from '../hypha.js'
 
 export interface HyphaHarness {
@@ -68,6 +69,10 @@ export async function hyphaChecks(harness: HyphaHarness): Promise<string[]> {
       failures.push(`create() returned no ${method}()`)
     }
   }
+
+  // Only when the hook is present: Hypha.health is optional, and a channel that ships none
+  // must stay as green as it was before the hook existed.
+  failures.push(...await healthFailures(instance))
 
   const declaresMembership = manifest.capabilities.includes('group_membership')
   const implementsMembership = typeof instance.listGroupMembers === 'function'
