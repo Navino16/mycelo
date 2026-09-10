@@ -325,6 +325,14 @@ export interface SporangiumSource {
   enabled: boolean
 }
 
+export interface InoculateWarning {
+  /** English, for the operator's log. */
+  message: string
+  /** A `core`-domain key the API translates before answering. */
+  key: string
+  params?: Record<string, unknown>
+}
+
 export interface InoculateOutcome {
   name: string
   strain: string
@@ -332,7 +340,7 @@ export interface InoculateOutcome {
    * Owned by the core, not composed by the caller, so a third-party install cannot be made
    * to look official by a UI that forgets to render a flag (design §11).
    */
-  warnings: readonly string[]
+  warnings: readonly InoculateWarning[]
   /** Always true: germination orders the whole resolved set at boot, so a spore arriving after it has no place in that order. */
   restartRequired: true
 }

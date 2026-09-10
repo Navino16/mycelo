@@ -872,8 +872,9 @@ describe('sources.manage', () => {
       // Both warnings, not the first: a third-party sporangium is not code-reviewed, and
       // nothing installed satisfies the bundle's own `requires: plex`.
       expect(outcome.warnings).toHaveLength(2)
-      expect(outcome.warnings.join(' ')).toContain('not code-reviewed')
-      expect(outcome.warnings.join(' ')).toContain("'plex'")
+      const messages = outcome.warnings.map((w) => w.message).join(' ')
+      expect(messages).toContain('not code-reviewed')
+      expect(messages).toContain("'plex'")
       expect(getInstall(db, 'radarr')).toMatchObject({ strain: '0.2.0', sourceId: source.id, enabled: false })
     } finally {
       rmSync(managed, { recursive: true, force: true })

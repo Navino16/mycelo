@@ -138,11 +138,20 @@ describe('treeProblem', () => {
     expect(problem).not.toContain('/tmp')
   })
 
-  test('refuses a spore whose septum range excludes the running core', () => {
+  test('accepts a spore whose septum range excludes the running core: out-of-range installs, it does not refuse', () => {
+    // inoculate.ts's warnings block is what flags this now — the range has only ever been
+    // enforced at germination (design §9.2).
     expect(treeProblem(tree({
       'radarr/spore.yaml': 'name: radarr\nkind: rhiza\nseptum: "^0.9"\n',
       'radarr/index.js': MODULE,
-    }), 'radarr')).toContain('^0.9')
+    }), 'radarr')).toBeNull()
+  })
+
+  test('refuses a spore whose septum range does not parse', () => {
+    expect(treeProblem(tree({
+      'radarr/spore.yaml': 'name: radarr\nkind: rhiza\nseptum: "%%%"\n',
+      'radarr/index.js': MODULE,
+    }), 'radarr')).toContain('%%%')
   })
 
   test('refuses a code spore with no entry point', () => {
@@ -324,7 +333,7 @@ describe('inoculate', () => {
     const tarball = await bundleOf('radarr', { 'spore.yaml': MANIFEST, 'index.js': MODULE })
     const result = await inoculate(ctxOf(db, stubDriver(tarball), managedDir()), { sourceId: third.id, name: 'radarr' })
     expect(result.ok).toBe(true)
-    expect(result.ok && result.warnings.join(' ')).toContain('not code-reviewed')
+    expect(result.ok && result.warnings.map((w) => w.message).join(' ')).toContain('not code-reviewed')
   })
 
   test('a third-party install with a missing dependency carries both warnings', async () => {
@@ -342,8 +351,8 @@ describe('inoculate', () => {
     expect(result.ok).toBe(true)
     const warnings = result.ok ? result.warnings : []
     expect(warnings).toHaveLength(2)
-    expect(warnings[0]).toContain('not code-reviewed')
-    expect(warnings[1]).toContain("'radarr'")
+    expect(warnings[0]?.message).toContain('not code-reviewed')
+    expect(warnings[1]?.message).toContain("'radarr'")
   })
 
   test('a disabled install satisfies nothing, so the requirement is still warned about', async () => {
@@ -360,7 +369,7 @@ describe('inoculate', () => {
     ].join('\n')
     const tarball = await bundleOf('upcoming-movies', { 'spore.yaml': manifest, 'index.js': MODULE })
     const result = await inoculate(ctxOf(db, stubDriver(tarball, ['0.2.0']), managedDir(), [held]), { sourceId: id, name: 'upcoming-movies' })
-    expect(result.ok && result.warnings.join(' ')).toContain("'radarr'")
+    expect(result.ok && result.warnings.map((w) => w.message).join(' ')).toContain("'radarr'")
     // The control: the same tree with the install enabled warns about nothing.
     setEnabled(db, 'radarr', true)
     const second = await inoculate(ctxOf(db, stubDriver(tarball, ['0.2.0']), managedDir(), [held]), { sourceId: id, name: 'upcoming-movies' })
@@ -380,7 +389,7 @@ describe('inoculate', () => {
     const tarball = await bundleOf('upcoming-movies', { 'spore.yaml': manifest, 'index.js': MODULE })
     const result = await inoculate(ctxOf(db, stubDriver(tarball, ['0.2.0']), managedDir()), { sourceId: id, name: 'upcoming-movies' })
     expect(result.ok).toBe(true)
-    expect(result.ok && result.warnings.join(' ')).toContain('radarr')
+    expect(result.ok && result.warnings.map((w) => w.message).join(' ')).toContain('radarr')
   })
 
   test('names every unsatisfied requirement, including every alternative of an any_of', async () => {
@@ -396,7 +405,7 @@ describe('inoculate', () => {
     ].join('\n')
     const tarball = await bundleOf('now-watching', { 'spore.yaml': manifest, 'index.js': MODULE })
     const result = await inoculate(ctxOf(db, stubDriver(tarball, ['0.2.0']), managedDir()), { sourceId: id, name: 'now-watching' })
-    const warning = result.ok ? result.warnings.join(' ') : ''
+    const warning = result.ok ? result.warnings.map((w) => w.message).join(' ') : ''
     for (const named of ["'radarr'", "'sonarr'", "'plex'", "'jellyfin'"]) expect(warning).toContain(named)
     expect(warning).not.toContain('@^')
   })
@@ -436,7 +445,7 @@ describe('inoculate', () => {
     ].join('\n')
     const tarball = await bundleOf('upcoming-movies', { 'spore.yaml': manifest, 'index.js': MODULE })
     const result = await inoculate(ctxOf(db, stubDriver(tarball, ['0.2.0']), managedDir(), [held]), { sourceId: id, name: 'upcoming-movies' })
-    const warning = result.ok ? result.warnings.join(' ') : ''
+    const warning = result.ok ? result.warnings.map((w) => w.message).join(' ') : ''
     expect(warning).toContain("'sonarr'")
     expect(warning).not.toContain('radarr')
     expect(warning).not.toContain('@^2')
@@ -480,7 +489,7 @@ describe('inoculate', () => {
     ].join('\n')
     const tarball = await bundleOf('upcoming-movies', { 'spore.yaml': manifest, 'index.js': MODULE })
     const result = await inoculate(ctxOf(db, stubDriver(tarball, ['0.2.0']), managedDir(), [held]), { sourceId: id, name: 'upcoming-movies' })
-    expect(result.ok && result.warnings.join(' ')).toContain('radarr')
+    expect(result.ok && result.warnings.map((w) => w.message).join(' ')).toContain('radarr')
   })
 
   test('refuses a real tarball carrying a symlink, leaving nothing on disk', async () => {
@@ -734,6 +743,27 @@ describe('inoculate', () => {
     // The boolean cannot say why; this is what lets a caller name the blockers.
     expect(installsFromSource(db, third.id)).toEqual(['radarr'])
     expect(installsFromSource(db, officialId(db))).toEqual([])
+  })
+
+  test('installs an out-of-range strain disabled, with a warning', async () => {
+    const { db } = freshDb()
+    const id = officialId(db)
+    const manifest = 'name: stale\nkind: rhiza\nseptum: "^0.1"\n'
+    const tarball = await bundleOf('stale', { 'spore.yaml': manifest, 'index.js': MODULE })
+    const result = await inoculate(ctxOf(db, stubDriver(tarball), managedDir()), { sourceId: id, name: 'stale' })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.warnings.map((w) => w.key)).toContain('inoculate.septumOutOfRange')
+    expect(getInstall(db, 'stale')?.enabled).toBe(false)
+  })
+
+  test('still refuses an unparseable range', async () => {
+    const { db } = freshDb()
+    const id = officialId(db)
+    const manifest = 'name: garbled\nkind: rhiza\nseptum: "%%%"\n'
+    const tarball = await bundleOf('garbled', { 'spore.yaml': manifest, 'index.js': MODULE })
+    const result = await inoculate(ctxOf(db, stubDriver(tarball), managedDir()), { sourceId: id, name: 'garbled' })
+    expect(result.ok).toBe(false)
   })
 
   test('installsFromSource names every blocker, sorted, not just the first', async () => {

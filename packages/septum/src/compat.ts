@@ -23,14 +23,31 @@ export function isParseableRange(range: string): boolean {
   return rangeRejection(range) === undefined
 }
 
+export type SeptumCompat =
+  | { ok: true }
+  | { ok: false, fault: 'unparseable', detail: string }
+  | { ok: false, fault: 'out-of-range', range: string, running: string }
+
+/**
+ * The two faults are different decisions: an unparseable range behaves as `*`, so it is refused
+ * everywhere, while an out-of-range one is only refused at germination (design §9.2).
+ */
+export function septumCompat(range: string, septumVersion: string = SEPTUM_VERSION): SeptumCompat {
+  const rejection = rangeRejection(range)
+  if (rejection !== undefined) return { ok: false, fault: 'unparseable', detail: rejection }
+  if (satisfies(septumVersion, range)) return { ok: true }
+  return { ok: false, fault: 'out-of-range', range, running: septumVersion }
+}
+
 /**
  * Undefined when the range admits the septum actually running; a sentence naming both when it
  * does not. One implementation for the conformance kit and for the core: two would drift at
  * exactly the septum release where the check matters (design §10).
  */
 export function septumIncompatibility(range: string, septumVersion: string = SEPTUM_VERSION): string | undefined {
-  const rejection = rangeRejection(range)
-  if (rejection !== undefined) return `declares septum '${range}', which ${rejection}`
-  if (satisfies(septumVersion, range)) return undefined
-  return `declares septum '${range}', which excludes the septum actually running (${septumVersion})`
+  const compat = septumCompat(range, septumVersion)
+  if (compat.ok) return undefined
+  return compat.fault === 'unparseable'
+    ? `declares septum '${range}', which ${compat.detail}`
+    : `declares septum '${compat.range}', which excludes the septum actually running (${compat.running})`
 }

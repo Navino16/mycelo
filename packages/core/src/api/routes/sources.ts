@@ -154,9 +154,13 @@ export function registerSourceRoutes(
       throw badRequest('api.inoculateRefused', { name: body.name, label: nameOf(source) }, result.reason)
     }
     // The warnings are inoculate's, never composed here: a UI that forgets to render a flag
-    // must still receive the sentence (design §11).
+    // must still receive the sentence (design §11). The DTO keeps warnings as plain strings,
+    // translated at the operator's locale; the English message stays in the log only.
     return {
-      name: result.name, strain: result.strain, warnings: result.warnings, restartRequired: result.restartRequired,
+      name: result.name,
+      strain: result.strain,
+      warnings: result.warnings.map((w) => state.translator.translate('core', w.key, request.locale, w.params)),
+      restartRequired: result.restartRequired,
     }
   })
 }
