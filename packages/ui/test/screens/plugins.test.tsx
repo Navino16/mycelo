@@ -30,7 +30,7 @@ function serve(body: unknown): void {
 }
 
 const GERMINATED: RuntimeHealth = {
-  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0,
+  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], hyphae: [], blockedSinceBoot: 0,
 }
 
 // PluginRow reads /api/health for a rhiza that germinated and then stopped answering

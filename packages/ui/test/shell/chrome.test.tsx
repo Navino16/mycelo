@@ -6,7 +6,7 @@ import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { Nav } from '../../src/shell/Nav.tsx'
 import type { ChromeValue } from '../../src/chrome.tsx'
-import type { RuntimeHealth, SubstrateDto } from '../../src/api/types.ts'
+import type { RoleDto, RuntimeHealth, SubstrateDto } from '../../src/api/types.ts'
 
 const UP = 14 * 86_400 + 3 * 3_600
 
@@ -69,7 +69,7 @@ describe('useUptimeLine', () => {
 })
 
 const HEALTHY: RuntimeHealth = {
-  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0,
+  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], hyphae: [], blockedSinceBoot: 0,
 }
 
 const realFetch = globalThis.fetch
@@ -87,6 +87,13 @@ const PLUGINS = {
   unknown: [],
 }
 
+// Typed so a field RoleDto later gains, like `holders`, fails this fixture at compile time
+// instead of silently going through json()'s `unknown` body.
+const ROLES: readonly RoleDto[] = [
+  { name: 'owner', builtin: true, patterns: ['*'], holders: 1 },
+  { name: 'guest', builtin: false, patterns: [], holders: 0 },
+]
+
 /** Renders the real provider around Nav, so the counts come from fetches rather than a fixture. */
 function withCounts(refuse: readonly string[], health: RuntimeHealth = HEALTHY): void {
   globalThis.fetch = mock((url: string) => {
@@ -94,7 +101,7 @@ function withCounts(refuse: readonly string[], health: RuntimeHealth = HEALTHY):
     if (url === '/api/substrate') return Promise.resolve(json({ version: '0.9.3', startedAt: 'x', uptimeSeconds: 60 }))
     if (url === '/api/plugins') return Promise.resolve(json(PLUGINS))
     if (url === '/api/sources') return Promise.resolve(json([{ id: 1, label: 'Registry', driver: 'github', location: 'x', official: true, enabled: true }]))
-    if (url === '/api/roles') return Promise.resolve(json([{ name: 'owner', builtin: true, patterns: ['*'] }, { name: 'guest', builtin: false, patterns: [] }]))
+    if (url === '/api/roles') return Promise.resolve(json(ROLES))
     if (url.startsWith('/api/people')) return Promise.resolve(json({ items: [], page: 1, perPage: 1, total: 128 }))
     return Promise.resolve(json({ error: { message: 'unhandled in test' } }, 404))
   }) as unknown as typeof fetch

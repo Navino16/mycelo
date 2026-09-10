@@ -9,7 +9,7 @@ import { Layout } from '../../src/shell/Layout.tsx'
 import type { RuntimeHealth } from '../../src/api/types.ts'
 
 const OK: RuntimeHealth = {
-  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0,
+  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], hyphae: [], blockedSinceBoot: 0,
 }
 
 function pill(health: RuntimeHealth | null, error = false, plugins?: number): void {
