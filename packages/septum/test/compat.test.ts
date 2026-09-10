@@ -46,4 +46,12 @@ describe('septumCompat', () => {
       ok: false, fault: 'unparseable',
     })
   })
+
+  // The whole reason 1.0.0 is being cut: below 1.0 a caret is bounded at the next minor
+  // (^0.12 excludes 0.13.0), but at or above 1.0 it floors on the major instead.
+  it('is a floor within the major at or above 1.0, unlike a caret below 1.0', () => {
+    expect(septumCompat('^1.0', '1.1.0')).toEqual({ ok: true })
+    expect(septumCompat('^1.0', '1.99.3')).toEqual({ ok: true })
+    expect(septumCompat('^1.0', '2.0.0')).toMatchObject({ ok: false, fault: 'out-of-range' })
+  })
 })
