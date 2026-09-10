@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, count, eq } from 'drizzle-orm'
 import type { RoleInfo } from '@mycelo/septum'
 import { requirePrincipal } from '../identity/people.js'
 import type { Db } from '../persistence/db.js'
@@ -6,11 +6,16 @@ import { principalRole, role, roleCommand } from '../persistence/schema.js'
 import { StoreRefusal } from './refusal.js'
 
 export function listRoles(db: Db): readonly RoleInfo[] {
+  // One grouped query for every role's count, not one query per role in the map below.
+  const holderCounts = db.select({ roleId: principalRole.roleId, n: count() })
+    .from(principalRole).groupBy(principalRole.roleId).all()
+  const holders = new Map(holderCounts.map((h) => [h.roleId, h.n]))
   return db.select().from(role).all().map((r) => ({
     name: r.name,
     builtin: r.builtin,
     patterns: db.select({ pattern: roleCommand.pattern }).from(roleCommand)
       .where(eq(roleCommand.roleId, r.id)).all().map((p) => p.pattern),
+    holders: holders.get(r.id) ?? 0,
   }))
 }
 

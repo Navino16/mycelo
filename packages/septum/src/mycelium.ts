@@ -81,6 +81,8 @@ export interface RoleInfo {
   name: string
   patterns: readonly string[]
   builtin: boolean
+  /** How many principals hold it. Zero for a role nobody was granted. */
+  holders: number
 }
 
 // Lookups answer null for "not found", because asking is their purpose; everything

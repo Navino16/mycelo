@@ -12,9 +12,9 @@ afterEach(() => { globalThis.fetch = realFetch })
 const CONFIG: ConfigDto = { prefix: '/', defaultLocale: 'en', defaultRole: 'guest' }
 
 const ROLES: readonly RoleDto[] = [
-  { name: 'owner', builtin: true, patterns: ['*'] },
-  { name: 'guest', builtin: false, patterns: ['help.help'] },
-  { name: 'family', builtin: false, patterns: ['radarr.*'] },
+  { name: 'owner', builtin: true, patterns: ['*'], holders: 1 },
+  { name: 'guest', builtin: false, patterns: ['help.help'], holders: 0 },
+  { name: 'family', builtin: false, patterns: ['radarr.*'], holders: 0 },
 ]
 
 function json(body: unknown, status = 200): Response {
@@ -48,8 +48,6 @@ function mockApi(
     deleteBody?: unknown
     commands?: CommandGroups
     commandsStatus?: number
-    holders?: Readonly<Record<string, number>>
-    holdersStatus?: number
     people?: number
   } = {},
 ): { calls: Call[] } {
@@ -78,21 +76,13 @@ function mockApi(
     if (method === 'GET' && url === '/api/people?perPage=1') {
       return Promise.resolve(json({ items: [], page: 1, perPage: 1, total: options.people ?? 0 }))
     }
-    const holder = /^\/api\/people\?role=([^&]+)&perPage=1$/.exec(url)
-    if (method === 'GET' && holder !== null) {
-      if (options.holdersStatus !== undefined) {
-        return Promise.resolve(json({ error: { message: 'refused' } }, options.holdersStatus))
-      }
-      const role = decodeURIComponent(holder[1] ?? '')
-      return Promise.resolve(json({ items: [], page: 1, perPage: 1, total: options.holders?.[role] ?? 0 }))
-    }
 
     if (method === 'POST' && url === '/api/roles') {
       if (options.postStatus !== undefined) {
         return Promise.resolve(json(options.postBody ?? { error: { message: 'refused' } }, options.postStatus))
       }
       const created = body as { name: string }
-      roles = [...roles, { name: created.name, builtin: false, patterns: [] }]
+      roles = [...roles, { name: created.name, builtin: false, patterns: [], holders: 0 }]
       return Promise.resolve(json({ ok: true }))
     }
 
@@ -108,6 +98,11 @@ function mockApi(
     return Promise.resolve(json({ error: { message: 'unhandled in test' } }, 404))
   }) as unknown as typeof fetch
   return { calls }
+}
+
+/** ROLES with a per-name holder count overridden, for tests pinning specific counts. */
+function withHolders(counts: Readonly<Record<string, number>>): readonly RoleDto[] {
+  return ROLES.map((r) => ({ ...r, holders: counts[r.name] ?? r.holders }))
 }
 
 function renderRoles(): void {
@@ -233,7 +228,7 @@ describe('what each row states about a role', () => {
   // task 14's ?role= filter, rendered. A count read off the unfiltered total would show the
   // whole substrate's population beside every role, which is the failure this catches.
   it('shows a different holder count per role, not the same total twice', async () => {
-    mockApi({ holders: { family: 9, guest: 98, owner: 1 }, people: 128 })
+    mockApi({ roles: withHolders({ family: 9, guest: 98, owner: 1 }), people: 128 })
     renderRoles()
 
     expect(await screen.findByText('9 people')).toBeDefined()
@@ -243,10 +238,21 @@ describe('what each row states about a role', () => {
   })
 
   it('says one person, not 1 people, for a role a single person holds', async () => {
-    mockApi({ holders: { owner: 1 }, people: 128 })
+    mockApi({ roles: withHolders({ owner: 1 }), people: 128 })
     renderRoles()
 
     expect(within(await screen.findByTestId('role-owner')).getByText('1 person')).toBeDefined()
+  })
+
+  // The point of this task: the count comes bundled on the role, so seven roles no longer cost
+  // seven extra requests. A test asserting only the two numbers would pass against the old code.
+  it('reads the holder count off the role itself, firing no per-role /api/people request', async () => {
+    const { calls } = mockApi({ roles: withHolders({ family: 3, guest: 0 }), people: 128 })
+    renderRoles()
+
+    expect(await screen.findByText('3 people')).toBeDefined()
+    expect(within(row('guest')).getByText('0 people')).toBeDefined()
+    expect(calls.some((c) => c.url.includes('role='))).toBe(false)
   })
 
   // 'all 4 commands' is what a wildcard means; '1 of 4' is what an explicit pattern means.
@@ -272,7 +278,10 @@ describe('what each row states about a role', () => {
   // The default role is also the one holding '*' on a fresh substrate — the case that must
   // outrank isDefault, or the wildcard-all warning is unreachable where it matters most.
   it('warns in amber on a role that is both the default and holds everything', async () => {
-    mockApi({ roles: [{ name: 'owner', builtin: true, patterns: ['*'] }], config: { ...CONFIG, defaultRole: 'owner' } })
+    mockApi({
+      roles: [{ name: 'owner', builtin: true, patterns: ['*'], holders: 0 }],
+      config: { ...CONFIG, defaultRole: 'owner' },
+    })
     renderRoles()
 
     const link = await screen.findByRole('link', { name: 'owner' })
@@ -281,7 +290,10 @@ describe('what each row states about a role', () => {
   })
 
   it('still paints a default role that holds no wildcard in the ok tone', async () => {
-    mockApi({ roles: [{ name: 'guest', builtin: false, patterns: ['help.help'] }], config: { ...CONFIG, defaultRole: 'guest' } })
+    mockApi({
+      roles: [{ name: 'guest', builtin: false, patterns: ['help.help'], holders: 0 }],
+      config: { ...CONFIG, defaultRole: 'guest' },
+    })
     renderRoles()
 
     const link = await screen.findByRole('link', { name: 'guest' })
@@ -290,7 +302,7 @@ describe('what each row states about a role', () => {
   })
 
   it('summarises the substrate above the table', async () => {
-    mockApi({ holders: { family: 9, guest: 98, owner: 1 }, people: 128 })
+    mockApi({ people: 128 })
     renderRoles()
 
     expect(await screen.findByText('3 roles · 128 people · 4 commands')).toBeDefined()
@@ -298,43 +310,23 @@ describe('what each row states about a role', () => {
 })
 
 // A count nobody confirmed is withheld, never rendered as 0: a screen claiming `0 commands`
-// or `held by 0 of 128 people` states something about the substrate that no route answered.
+// states something about the substrate that no route answered. The holder count no longer has
+// this failure mode of its own — it arrives bundled on the role, never as a separately refusable
+// request — so the two cases that tested a refused per-role count were removed with that request.
 describe('a count still in flight, or refused', () => {
   it('shows no 0 commands in the summary when /api/commands is refused', async () => {
-    mockApi({ commandsStatus: 500, holders: { guest: 98 }, people: 128 })
+    mockApi({ commandsStatus: 500, people: 128 })
     renderRoles()
 
     expect(await screen.findByTestId('role-guest')).toBeDefined()
     expect(screen.queryByText('3 roles · 128 people · 0 commands')).toBeNull()
     expect(screen.queryByText('0 of 4')).toBeNull()
   })
-
-  it('shows no held by 0 in the default card until that role’s own count answers', async () => {
-    mockApi({ holdersStatus: 500, people: 128 })
-    renderRoles()
-
-    // The card itself still renders: only the sentence it cannot yet state is withheld.
-    expect(await screen.findByText('Default role · what unknown senders get')).toBeDefined()
-    expect(screen.getByRole('link', { name: 'Edit guest' })).toBeDefined()
-    // The whole sentence goes, not only its zero: `held by undefined of 128` is the same lie
-    // with a worse spelling, and asserting the absence of `0` cannot see it.
-    expect(screen.queryByText(/held by/)).toBeNull()
-  })
-
-  it('shows no 0 people in a row whose count was refused', async () => {
-    mockApi({ holdersStatus: 500, people: 128 })
-    renderRoles()
-
-    const cell = (await screen.findByTestId('role-guest')).children[3]
-    // The cell stands empty: no digit at all, so an `undefined people` renders no better
-    // than a `0 people`.
-    expect(cell?.textContent).toBe('')
-  })
 })
 
 describe('the default-role card', () => {
   it('names the default role, what it reaches and who holds it, and states it is read-only', async () => {
-    mockApi({ holders: { guest: 98 }, people: 128 })
+    mockApi({ roles: withHolders({ guest: 98 }), people: 128 })
     renderRoles()
 
     expect(await screen.findByText('Default role · what unknown senders get')).toBeDefined()
@@ -358,12 +350,15 @@ describe('the default-role card', () => {
 // brief §3: 5-10 roles, never three sample rows. build() fills the real order of magnitude so a
 // role dropped from the list, or the default marker misapplied, turns a specific assertion red.
 function build(count: number): RoleDto[] {
-  return Array.from({ length: count }, (_, i) => ({ name: `role-${String(i + 1)}`, builtin: false, patterns: [] }))
+  return Array.from(
+    { length: count },
+    (_, i) => ({ name: `role-${String(i + 1)}`, builtin: false, patterns: [], holders: 0 }),
+  )
 }
 
 describe('the roles list at scale', () => {
   it('lists every role at once, with delete offered on each ordinary one', async () => {
-    const roles = [{ name: 'owner', builtin: true, patterns: ['*'] }, ...build(8)]
+    const roles = [{ name: 'owner', builtin: true, patterns: ['*'], holders: 1 }, ...build(8)]
     mockApi({ roles, config: { prefix: '/', defaultLocale: 'en', defaultRole: 'role-3' } })
     renderRoles()
 

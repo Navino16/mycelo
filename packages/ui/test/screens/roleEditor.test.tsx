@@ -160,8 +160,8 @@ function json(body: unknown, status = 200): Response {
 
 interface Call { method: string, url: string, body: unknown, locale: string | null }
 
-const ORDINARY: RoleDto = { name: 'family', builtin: false, patterns: ['radarr.add'] }
-const BUILTIN: RoleDto = { name: 'owner', builtin: true, patterns: ['*'] }
+const ORDINARY: RoleDto = { name: 'family', builtin: false, patterns: ['radarr.add'], holders: 0 }
+const BUILTIN: RoleDto = { name: 'owner', builtin: true, patterns: ['*'], holders: 0 }
 
 /** A stateful fake serving what RoleEditor calls, tracking every call it saw. */
 function mockApi(
@@ -177,7 +177,7 @@ function mockApi(
 ): { calls: Call[] } {
   const calls: Call[] = []
   const commands = options.commands ?? { radarr: COMMANDS }
-  let role = options.role ?? ORDINARY
+  let role = options.role ?? { ...ORDINARY, ...(options.holders === undefined ? {} : { holders: options.holders }) }
 
   globalThis.fetch = mock((url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
@@ -201,9 +201,6 @@ function mockApi(
           ...(options.descriptions?.[name] === undefined ? {} : { description: options.descriptions[name] }),
         })),
       }))
-    }
-    if (method === 'GET' && url.startsWith('/api/people?role=')) {
-      return Promise.resolve(json({ items: [], page: 1, perPage: 1, total: options.holders ?? 0 }))
     }
     if (method === 'GET' && url === `/api/roles/${role.name}`) return Promise.resolve(json(role))
     if (method === 'PUT' && url === `/api/roles/${role.name}/commands`) {
@@ -259,7 +256,7 @@ describe('the role editor screen', () => {
 
   // The `*` alert reads off the role's own patterns, so it survives the same refusal.
   it('keeps the * alert when /api/commands is refused', async () => {
-    mockApi({ role: { name: 'family', builtin: false, patterns: ['*'] }, commandsStatus: 500 })
+    mockApi({ role: { name: 'family', builtin: false, patterns: ['*'], holders: 0 }, commandsStatus: 500 })
     renderEditor()
 
     expect(await screen.findByText('This role holds *')).toBeDefined()
@@ -286,7 +283,7 @@ describe('the role editor screen', () => {
   // A partial, non-wildcard pattern forces the checkbox list to render, so readOnly's
   // wiring through to PluginGroup is actually exercised, not just the surrounding text.
   it('disables every checkbox for a built-in role holding an explicit, non-wildcard pattern', async () => {
-    mockApi({ role: { name: 'owner', builtin: true, patterns: ['radarr.add'] }, commands: { radarr: COMMANDS } })
+    mockApi({ role: { name: 'owner', builtin: true, patterns: ['radarr.add'], holders: 0 }, commands: { radarr: COMMANDS } })
     renderEditor('owner')
 
     fireEvent.click(await screen.findByText('radarr'))
@@ -304,7 +301,7 @@ describe('the role editor screen', () => {
   })
 
   it('saves the patterns the operator selected, sent as the exact PUT body', async () => {
-    const { calls } = mockApi({ role: { name: 'family', builtin: false, patterns: [] } })
+    const { calls } = mockApi({ role: { name: 'family', builtin: false, patterns: [], holders: 0 } })
     renderEditor()
 
     fireEvent.click(await screen.findByText('radarr'))
@@ -319,7 +316,7 @@ describe('the role editor screen', () => {
   // is a regression the design does not draw only because 2c is the pre-save frame" — and the
   // rule was not carried here: the PUT persisted and the screen said nothing at all.
   it('acknowledges a save that persisted', async () => {
-    mockApi({ role: { name: 'family', builtin: false, patterns: [] } })
+    mockApi({ role: { name: 'family', builtin: false, patterns: [], holders: 0 } })
     renderEditor()
 
     fireEvent.click(await screen.findByText('radarr'))
@@ -330,7 +327,7 @@ describe('the role editor screen', () => {
   })
 
   it('says nothing before a save, and withdraws the acknowledgement once edited again', async () => {
-    mockApi({ role: { name: 'family', builtin: false, patterns: [] } })
+    mockApi({ role: { name: 'family', builtin: false, patterns: [], holders: 0 } })
     renderEditor()
 
     fireEvent.click(await screen.findByText('radarr'))
@@ -346,7 +343,7 @@ describe('the role editor screen', () => {
   })
 
   it('renders the save refusal in its own alert', async () => {
-    mockApi({ role: { name: 'family', builtin: false, patterns: [] }, putStatus: 409, putBody: { error: { message: 'a duplicate pattern was refused' } } })
+    mockApi({ role: { name: 'family', builtin: false, patterns: [], holders: 0 }, putStatus: 409, putBody: { error: { message: 'a duplicate pattern was refused' } } })
     renderEditor()
 
     await waitFor(() => { expect(screen.getByRole('button', { name: 'Save this role' })).toBeDefined() })
@@ -356,7 +353,7 @@ describe('the role editor screen', () => {
   })
 
   it('the group checkbox produces the plugin.* pattern, saved verbatim', async () => {
-    const { calls } = mockApi({ role: { name: 'family', builtin: false, patterns: [] } })
+    const { calls } = mockApi({ role: { name: 'family', builtin: false, patterns: [], holders: 0 } })
     renderEditor()
 
     fireEvent.click(await screen.findByLabelText('All radarr commands'))
@@ -369,7 +366,7 @@ describe('the role editor screen', () => {
   // Discriminates dropping the plugin's own prior patterns from replacing them: the group
   // checkbox must not leave a stale 'radarr.add' alongside the new 'radarr.*' it subsumes.
   it('the group checkbox replaces any pattern already held for that plugin, not just adds to it', async () => {
-    const { calls } = mockApi({ role: { name: 'family', builtin: false, patterns: ['radarr.add'] } })
+    const { calls } = mockApi({ role: { name: 'family', builtin: false, patterns: ['radarr.add'], holders: 0 } })
     renderEditor()
 
     fireEvent.click(await screen.findByLabelText('All radarr commands'))
@@ -382,7 +379,7 @@ describe('the role editor screen', () => {
   // The decision on unticking under a wildcard: refuse to guess which commands to keep.
   // Removing the wildcard clears the plugin back to zero, never to "every command but one".
   it('removing a held wildcard clears that plugin to nothing, rather than expanding it', async () => {
-    mockApi({ role: { name: 'family', builtin: false, patterns: ['radarr.*'] } })
+    mockApi({ role: { name: 'family', builtin: false, patterns: ['radarr.*'], holders: 0 } })
     renderEditor()
 
     expect(await screen.findByText('Wildcards held')).toBeDefined()
@@ -417,7 +414,7 @@ function buildScaleCommands(): CommandGroups {
 describe('the role editor at real scale', () => {
   it('renders every plugin group with its own counter: some granted, none granted, all granted by wildcard', async () => {
     const commands = buildScaleCommands()
-    mockApi({ commands, role: { name: 'family', builtin: false, patterns: ['radarr.cmd0', 'signal.*'] } })
+    mockApi({ commands, role: { name: 'family', builtin: false, patterns: ['radarr.cmd0', 'signal.*'], holders: 0 } })
     renderEditor()
 
     expect(await screen.findByText('radarr')).toBeDefined()
@@ -480,7 +477,7 @@ describe('the collapsed group list and its filter', () => {
   // design 2g: `collapsed by default` is only safe because the filter exists; a collapsed
   // list with no filter would hide every checkbox. Both halves, or neither.
   it('starts every group collapsed', async () => {
-    mockApi({ commands: editorCommands(), role: { name: 'family', builtin: false, patterns: ['radarr.search'] } })
+    mockApi({ commands: editorCommands(), role: { name: 'family', builtin: false, patterns: ['radarr.search'], holders: 0 } })
     renderEditor()
 
     expect(await screen.findByText('radarr')).toBeDefined()
@@ -490,7 +487,7 @@ describe('the collapsed group list and its filter', () => {
   })
 
   it('opens a group whose commands match the filter, without a click', async () => {
-    mockApi({ commands: editorCommands(), role: { name: 'family', builtin: false, patterns: [] } })
+    mockApi({ commands: editorCommands(), role: { name: 'family', builtin: false, patterns: [], holders: 0 } })
     renderEditor()
 
     fireEvent.change(await screen.findByLabelText('Filter 22 commands'), { target: { value: 'search' } })
@@ -503,7 +500,7 @@ describe('the collapsed group list and its filter', () => {
   })
 
   it('shows only the commands the filter kept in a group opened by hand', async () => {
-    mockApi({ commands: editorCommands(), role: { name: 'family', builtin: false, patterns: [] } })
+    mockApi({ commands: editorCommands(), role: { name: 'family', builtin: false, patterns: [], holders: 0 } })
     renderEditor()
 
     fireEvent.click(await screen.findByText('radarr'))
@@ -520,7 +517,7 @@ describe('a role holding the bare star', () => {
   // design 2g frame 3: a role holding `*` never shows 104 ticks; it shows the term and the
   // one action that changes it.
   it('replaces per-command editing with the wildcard alert when the role holds *', async () => {
-    mockApi({ commands: editorCommands(), role: { name: 'admin', builtin: false, patterns: ['*'] } })
+    mockApi({ commands: editorCommands(), role: { name: 'admin', builtin: false, patterns: ['*'], holders: 0 } })
     renderEditor('admin')
 
     expect(await screen.findByText('This role holds *')).toBeDefined()
@@ -532,7 +529,7 @@ describe('a role holding the bare star', () => {
   })
 
   it('falls back to per-command editing once the star is removed', async () => {
-    mockApi({ commands: editorCommands(), role: { name: 'admin', builtin: false, patterns: ['*'] } })
+    mockApi({ commands: editorCommands(), role: { name: 'admin', builtin: false, patterns: ['*'], holders: 0 } })
     renderEditor('admin')
 
     fireEvent.click(await screen.findByText('Remove * and pick commands'))
@@ -545,7 +542,7 @@ describe('a role holding the bare star', () => {
 
   // A built-in role holding `*` is the owner: the alert states the term, and offers nothing.
   it('offers no removal on a built-in role holding *', async () => {
-    mockApi({ commands: editorCommands(), role: { name: 'owner', builtin: true, patterns: ['*'] } })
+    mockApi({ commands: editorCommands(), role: { name: 'owner', builtin: true, patterns: ['*'], holders: 0 } })
     renderEditor('owner')
 
     expect(await screen.findByText('This role holds *')).toBeDefined()
@@ -573,7 +570,7 @@ describe('the editor header', () => {
   // A role holding '*' warns rather than reassures: the counter must not paint the same
   // ok tone it uses for an ordinary, partial grant.
   it('paints the commands counter in the warn tone when the role holds everything', async () => {
-    mockApi({ role: { name: 'family', builtin: false, patterns: ['*'] } })
+    mockApi({ role: { name: 'family', builtin: false, patterns: ['*'], holders: 0 } })
     renderEditor()
 
     const counter = await screen.findByText('all 2 commands')
@@ -582,7 +579,7 @@ describe('the editor header', () => {
   })
 
   it('keeps the commands counter in the ok tone when the role holds less than everything', async () => {
-    mockApi({ role: { name: 'family', builtin: false, patterns: ['radarr.add'] } })
+    mockApi({ role: { name: 'family', builtin: false, patterns: ['radarr.add'], holders: 0 } })
     renderEditor()
 
     const counter = await screen.findByText('1 / 2', { selector: '.text-title' })
@@ -594,7 +591,7 @@ describe('the editor header', () => {
   // back to the fetched value without a reload.
   it('resets the patterns to the fetched value when Cancel is used', async () => {
     const { calls } = mockApi({
-      commands: editorCommands(), role: { name: 'family', builtin: false, patterns: ['radarr.search'] },
+      commands: editorCommands(), role: { name: 'family', builtin: false, patterns: ['radarr.search'], holders: 0 },
     })
     renderEditor()
 
@@ -621,7 +618,7 @@ describe('the editor header', () => {
 
 describe('the group checkbox', () => {
   it('grants the whole plugin as plugin.*, and clears it back to nothing', async () => {
-    const { calls } = mockApi({ role: { name: 'family', builtin: false, patterns: [] } })
+    const { calls } = mockApi({ role: { name: 'family', builtin: false, patterns: [], holders: 0 } })
     renderEditor()
 
     const box = await screen.findByLabelText('All radarr commands')
@@ -639,7 +636,7 @@ describe('the group checkbox', () => {
   // coversPlugin answers 'some' for any explicit pattern, so reading the box off it alone left
   // a fully ticked group indeterminate beside a green `2 / 2`.
   it('is checked when explicit patterns already cover every command, with no wildcard held', async () => {
-    const { calls } = mockApi({ role: { name: 'family', builtin: false, patterns: ['radarr.add', 'radarr.remove'] } })
+    const { calls } = mockApi({ role: { name: 'family', builtin: false, patterns: ['radarr.add', 'radarr.remove'], holders: 0 } })
     renderEditor()
 
     const box = await screen.findByLabelText<HTMLInputElement>('All radarr commands')
@@ -663,7 +660,7 @@ describe('the group checkbox', () => {
   // The tri-state: 'some' is neither on nor off, and rendering it as off would invite an
   // operator to tick it and silently widen the role to plugin.*.
   it('is indeterminate when only part of the plugin is granted, checked when all of it is', async () => {
-    mockApi({ role: { name: 'family', builtin: false, patterns: ['radarr.add'] } })
+    mockApi({ role: { name: 'family', builtin: false, patterns: ['radarr.add'], holders: 0 } })
     renderEditor()
 
     const partial = await screen.findByLabelText<HTMLInputElement>('All radarr commands')
@@ -678,7 +675,7 @@ describe('the group checkbox', () => {
   })
 
   it('is disabled for a built-in role', async () => {
-    mockApi({ role: { name: 'owner', builtin: true, patterns: ['radarr.add'] } })
+    mockApi({ role: { name: 'owner', builtin: true, patterns: ['radarr.add'], holders: 0 } })
     renderEditor('owner')
 
     expect((await screen.findByLabelText<HTMLInputElement>('All radarr commands')).disabled).toBe(true)
@@ -688,7 +685,7 @@ describe('the group checkbox', () => {
 describe('adding a wildcard from the editor', () => {
   it('appends plugin.* for the plugin chosen, and drops that plugin’s explicit patterns', async () => {
     const { calls } = mockApi({
-      commands: editorCommands(), role: { name: 'family', builtin: false, patterns: ['radarr.add', 'help.help'] },
+      commands: editorCommands(), role: { name: 'family', builtin: false, patterns: ['radarr.add', 'help.help'], holders: 0 },
     })
     renderEditor()
 

@@ -34,8 +34,8 @@ const NO_PLUGINS: PluginGroups = {
   hypha: [], rhiza: [], enzyme: [], inhibitor: [], unknown: [],
 }
 const COMPLETE_ROLES: readonly RoleDto[] = [
-  { name: 'owner', builtin: true, patterns: ['*'] },
-  { name: 'guest', builtin: false, patterns: [] },
+  { name: 'owner', builtin: true, patterns: ['*'], holders: 0 },
+  { name: 'guest', builtin: false, patterns: [], holders: 0 },
 ]
 
 /**
@@ -1010,7 +1010,7 @@ describe('the guided path out of an empty substrate', () => {
     await withHealth(GERMINATED, {
       sources: COMPLETE_SOURCES,
       plugins: NO_PLUGINS,
-      roles: [{ name: 'owner', builtin: true, patterns: ['*'] }, { name: 'admin', builtin: true, patterns: [] }],
+      roles: [{ name: 'owner', builtin: true, patterns: ['*'], holders: 0 }, { name: 'admin', builtin: true, patterns: [], holders: 0 }],
     })
 
     expect(await screen.findByText('Create a role')).toBeDefined()

@@ -3,9 +3,9 @@ import { allCommands, effectiveCommands, effectiveWildcards } from '../src/right
 import type { CommandGroups, RoleDto } from '../src/api/types.ts'
 
 const ROLES: readonly RoleDto[] = [
-  { name: 'media', builtin: false, patterns: ['radarr.*'] },
-  { name: 'basic', builtin: false, patterns: ['help.help'] },
-  { name: 'admin', builtin: true, patterns: ['*'] },
+  { name: 'media', builtin: false, patterns: ['radarr.*'], holders: 0 },
+  { name: 'basic', builtin: false, patterns: ['help.help'], holders: 0 },
+  { name: 'admin', builtin: true, patterns: ['*'], holders: 0 },
 ]
 
 const COMMANDS: CommandGroups = {
@@ -71,8 +71,8 @@ describe('effective rights', () => {
 
   it('deduplicates a wildcard two roles both hold', () => {
     const shared: readonly RoleDto[] = [
-      { name: 'a', builtin: false, patterns: ['radarr.*'] },
-      { name: 'b', builtin: false, patterns: ['radarr.*', '*'] },
+      { name: 'a', builtin: false, patterns: ['radarr.*'], holders: 0 },
+      { name: 'b', builtin: false, patterns: ['radarr.*', '*'], holders: 0 },
     ]
 
     expect(effectiveWildcards(['a', 'b'], shared)).toEqual(['radarr.*', '*'])

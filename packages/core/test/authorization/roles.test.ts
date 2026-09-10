@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test'
 import { isRefusal } from '../../src/authorization/refusal.js'
-import { assignRole, createRole, deleteRole, setRoleCommands } from '../../src/authorization/roles.js'
+import { assignRole, createRole, deleteRole, listRoles, setRoleCommands } from '../../src/authorization/roles.js'
 import { requirePrincipal } from '../../src/identity/people.js'
 import { migrateDatabase, openDatabase } from '../../src/persistence/db.js'
-import { role } from '../../src/persistence/schema.js'
+import { principal, role } from '../../src/persistence/schema.js'
 import type { Db } from '../../src/persistence/db.js'
 
 function fresh(): { db: Db, close: () => void } {
@@ -14,6 +14,10 @@ function fresh(): { db: Db, close: () => void } {
 
 function builtinRole(db: Db, name: string): void {
   db.insert(role).values({ id: crypto.randomUUID(), name, builtin: true }).run()
+}
+
+function newPrincipal(db: Db, id: string): void {
+  db.insert(principal).values({ id, createdAt: new Date() }).run()
 }
 
 /** Fails loudly if `fn` does not throw, so a passing test proves a refusal happened. */
@@ -72,6 +76,22 @@ describe('the authorization store throws a StoreRefusal with the right code', ()
   it('principal-unknown', () => {
     const { db, close } = fresh()
     expect(isRefusal(thrown(() => { requirePrincipal(db, 'nobody') }), 'principal-unknown')).toBe(true)
+    close()
+  })
+})
+
+describe('listRoles', () => {
+  it('counts the principals holding each role', () => {
+    const { db, close } = fresh()
+    createRole(db, 'ops', ['radarr.*'])
+    builtinRole(db, 'owner')
+    newPrincipal(db, 'alice')
+    newPrincipal(db, 'bob')
+    assignRole(db, 'alice', 'ops')
+    assignRole(db, 'bob', 'ops')
+    const roles = listRoles(db)
+    expect(roles.find((r) => r.name === 'ops')?.holders).toBe(2)
+    expect(roles.find((r) => r.name === 'owner')?.holders).toBe(0)
     close()
   })
 })

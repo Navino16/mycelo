@@ -163,6 +163,7 @@ export interface RoleDto {
   name: string
   builtin: boolean
   patterns: readonly string[]
+  holders: number
 }
 
 /**

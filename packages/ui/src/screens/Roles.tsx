@@ -18,22 +18,13 @@ export function Roles(): React.JSX.Element {
   const [defaultRole, setDefaultRole] = useState<string | undefined>(undefined)
   const [commands, setCommands] = useState<CommandGroups | null>(null)
   const [people, setPeople] = useState<number | null>(null)
-  const [holders, setHolders] = useState<Readonly<Record<string, number>>>({})
   const [error, setError] = useState(false)
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [addError, setAddError] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
-  function countHolders(role: string): void {
-    api.get<PageDto<PersonDto>>(`/api/people?role=${encodeURIComponent(role)}&perPage=1`).then(
-      (page) => { setHolders((prev) => ({ ...prev, [role]: page.total })) },
-      () => { /* a refused count leaves that one cell blank, never the table */ },
-    )
-  }
-
-  // allSettled, not all: a refused /api/config costs the default-role card, never the table —
-  // the same rule the holder counts below are already fired under.
+  // allSettled, not all: a refused /api/config costs the default-role card, never the table.
   function load(): void {
     void Promise.allSettled([
       api.get<readonly RoleDto[]>('/api/roles'),
@@ -43,9 +34,6 @@ export function Roles(): React.JSX.Element {
       if (r.status !== 'fulfilled') { setError(true); return }
       setRoles(r.value)
       setError(false)
-      // Fired from inside this resolution and in parallel, never as a gate on the list: the
-      // People column is one request per role and no single refusal may blank the screen.
-      for (const role of readArray<RoleDto>(r.value) ?? []) countHolders(role.name)
     })
   }
 
@@ -97,7 +85,7 @@ export function Roles(): React.JSX.Element {
     return t('roles.commandsSome', { granted, total })
   }
 
-  const defHolders = def === undefined ? undefined : holders[def.name]
+  const defHolders = def?.holders
 
   const ok = TONE_CLASSES.ok
   const warn = TONE_CLASSES.warn
@@ -170,7 +158,6 @@ export function Roles(): React.JSX.Element {
               const patterns = readArray<string>(role.patterns) ?? []
               const isDefault = role.name === defaultRole
               const wildcards = wildcardsIn(patterns)
-              const held = holders[role.name]
               // Holding '*' outranks being the default: on a fresh substrate the default role
               // is also the one holding everything, and testing isDefault first made the
               // wildcard-all warning unreachable there.
@@ -195,9 +182,7 @@ export function Roles(): React.JSX.Element {
                     {wildcards.length === 0 ? '—' : wildcards.join(', ')}
                   </span>
                   <span className="text-body text-text/70">
-                    {held === undefined
-                      ? ''
-                      : plural(t, 'roles.holders', held, { count: held })}
+                    {plural(t, 'roles.holders', role.holders, { count: role.holders })}
                   </span>
                   {!isDefault && !role.builtin
                     ? (
