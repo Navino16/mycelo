@@ -50,6 +50,7 @@ export async function startMycelium(options: StartMyceliumOptions): Promise<Myce
       await hypha.instance.connect({
         config: hypha.config,
         logger: logger.child({ hypha: hypha.name }),
+        name: hypha.name,
         emit: (message) => {
           if (busBox.current === undefined) {
             logger.warn(`hypha '${hypha.name}' emitted before the bus was ready; message dropped`)

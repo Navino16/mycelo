@@ -59,6 +59,8 @@ export type Translate = (
 ) => string
 
 export interface HyphaContext<TConfig = unknown> extends BaseContext<TConfig> {
+  /** The channel's own manifest name, so a hypha can label what it logs and what it refuses. */
+  readonly name: string
   /** Hands a normalized inbound message to the rhizomorph. */
   emit(message: IncomingMessage): void
 }

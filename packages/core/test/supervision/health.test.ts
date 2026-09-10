@@ -1,7 +1,9 @@
 import { describe, expect, it, spyOn } from 'bun:test'
 import type { Logger } from '@mycelo/septum'
 import type { Germination } from '../../src/boot/state.js'
-import { aggregateHealth, aggregateRuntimeHealth, HEALTH_TIMEOUT_MS } from '../../src/supervision/health.js'
+import {
+  aggregateHealth, aggregateHyphaHealth, aggregateRuntimeHealth, HEALTH_TIMEOUT_MS,
+} from '../../src/supervision/health.js'
 import type { Registry } from '../../src/germination/registry.js'
 import { loadCoreCatalogs } from '../../src/i18n/core-catalogs.js'
 import { createTranslator } from '../../src/i18n/translator.js'
@@ -249,5 +251,35 @@ describe('aggregateHealth timeout', () => {
     expect(en[0]?.status.detail).toBe('health() did not answer within 20ms')
     expect(fr[0]?.status.detail).toContain('20')
     expect(fr[0]?.status.detail).not.toBe(en[0]?.status.detail)
+  })
+})
+
+describe('aggregateHyphaHealth', () => {
+  it('reports a hypha that declares health() and omits one that does not', async () => {
+    const declaring = registry({
+      hyphae: [
+        {
+          name: 'signal',
+          instance: {
+            health: () => Promise.resolve({ state: 'degraded', detail: 'socket closed', checkedAt: new Date(0) }),
+          },
+        },
+        { name: 'console', instance: {} },
+      ] as unknown as Registry['hyphae'],
+    })
+    const health = await aggregateHyphaHealth(declaring)
+    expect(health).toEqual([
+      { hypha: 'signal', status: { state: 'degraded', detail: 'socket closed', checkedAt: new Date(0) } },
+    ])
+  })
+
+  it('reports a hanging health() as unreachable within the given bound', async () => {
+    const hanging = registry({
+      hyphae: [{ name: 'signal', instance: { health: () => new Promise<never>(() => undefined) } }] as unknown as Registry['hyphae'],
+    })
+    const health = await aggregateHyphaHealth(hanging, 20)
+    expect(health).toHaveLength(1)
+    expect(health[0]?.status.state).toBe('unreachable')
+    expect(health[0]?.status.detail).toContain('did not answer')
   })
 })

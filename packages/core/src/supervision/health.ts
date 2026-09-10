@@ -1,7 +1,7 @@
-import type { PluginInfo, RhizaHealth, TranslatableRef } from '@mycelo/septum'
+import type { HealthStatus, PluginInfo, RhizaHealth, TranslatableRef } from '@mycelo/septum'
 import type { Germination, GerminationFailure } from '../boot/state.js'
 import { listPlugins } from '../config/plugins.js'
-import type { Registry } from '../germination/registry.js'
+import type { GerminatedHypha, Registry } from '../germination/registry.js'
 import type { Db } from '../persistence/db.js'
 import { describeThrown } from '../support/thrown.js'
 import type { Translator } from '../i18n/translator.js'
@@ -54,6 +54,33 @@ export async function aggregateHealth(
   }))
 }
 
+export interface HyphaHealth {
+  hypha: string
+  status: HealthStatus
+}
+
+function declaresHealth(
+  h: GerminatedHypha,
+): h is GerminatedHypha & { instance: { health: () => Promise<HealthStatus> } } {
+  return typeof h.instance.health === 'function'
+}
+
+/** Only hyphae that declare `health` are reported: the rest are unchanged from today (task 4). */
+export async function aggregateHyphaHealth(
+  registry: Registry, timeoutMs: number = HEALTH_TIMEOUT_MS, translator?: Translator, locale?: string,
+): Promise<readonly HyphaHealth[]> {
+  return Promise.all(registry.hyphae.filter(declaresHealth).map(async (h) => {
+    const bound = afterTimeout(timeoutMs, translator, locale)
+    try {
+      return { hypha: h.name, status: await Promise.race([h.instance.health(), bound.promise]) }
+    } catch (e) {
+      return { hypha: h.name, status: unreachable(describeThrown(e)) }
+    } finally {
+      bound.cancel()
+    }
+  }))
+}
+
 export interface RuntimeHealth {
   mode: 'germinated' | 'degraded'
   failure?: GerminationFailure
@@ -61,6 +88,8 @@ export interface RuntimeHealth {
   /** Kept apart from `dormant`: any one of these refuses all traffic (design §7). */
   enforcingBlocked: readonly string[]
   rhizas: readonly RhizaHealth[]
+  /** Only hyphae that declare `health`; a hanging one lands here as unreachable, never omitted. */
+  hyphae: readonly HyphaHealth[]
   /** Messages refused since boot while enforcingBlocked was non-empty (inventory §3 row 7). */
   blockedSinceBoot: number
 }
@@ -78,7 +107,7 @@ export async function aggregateRuntimeHealth(
     return {
       mode: 'degraded',
       ...(germination.status === 'degraded' ? { failure: germination.failure } : {}),
-      dormant: [], enforcingBlocked: [], rhizas: [], blockedSinceBoot: 0,
+      dormant: [], enforcingBlocked: [], rhizas: [], hyphae: [], blockedSinceBoot: 0,
     }
   }
   const { registry, admission } = germination.mycelium
@@ -92,6 +121,7 @@ export async function aggregateRuntimeHealth(
     dormant,
     enforcingBlocked: registry.brokenEnforcing,
     rhizas: await aggregateHealth(registry, undefined, translator, locale),
+    hyphae: await aggregateHyphaHealth(registry, undefined, translator, locale),
     blockedSinceBoot: admission.blockedSinceBoot(),
   }
 }
