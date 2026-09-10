@@ -454,6 +454,23 @@ describe('POST /api/sources/:id/inoculate', () => {
     expect(body.warnings[0]).toContain('not code-reviewed')
   })
 
+  // The English `message` and the `en` catalogue entry are byte-identical, so only a non-default
+  // locale proves the route translates `messageKey` rather than passing `message` through.
+  it('translates the third-party warning into the request locale', async () => {
+    booted = await bootWithSporangium()
+    const { app, cookie } = booted
+    const third = await addThirdParty(booted, 'elsewhere')
+
+    const answer = await app.inject({
+      method: 'POST', url: `/api/sources/${String(third.id)}/inoculate`,
+      headers: { cookie, 'accept-language': 'fr' }, payload: { name: 'help', strain: '0.2.0' },
+    })
+    expect(answer.statusCode).toBe(200)
+    expect(answer.json<{ warnings: string[] }>().warnings).toEqual([
+      '« elsewhere » n\'est pas le sporange officiel : ses spores ne sont pas relues avant publication',
+    ])
+  })
+
   it('unpacks into the managed root, where /api/plugins then reports its sporangium and strain', async () => {
     booted = await bootWithSporangium()
     const { app, cookie } = booted

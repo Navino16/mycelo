@@ -310,9 +310,8 @@ describe('what each row states about a role', () => {
 })
 
 // A count nobody confirmed is withheld, never rendered as 0: a screen claiming `0 commands`
-// states something about the substrate that no route answered. The holder count no longer has
-// this failure mode of its own — it arrives bundled on the role, never as a separately refusable
-// request — so the two cases that tested a refused per-role count were removed with that request.
+// states something about the substrate that no route answered. The holder count arrives bundled
+// on the role, so only the commands count still has that failure mode.
 describe('a count still in flight, or refused', () => {
   it('shows no 0 commands in the summary when /api/commands is refused', async () => {
     mockApi({ commandsStatus: 500, people: 128 })

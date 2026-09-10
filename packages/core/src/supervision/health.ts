@@ -13,7 +13,7 @@ import type { Translator } from '../i18n/translator.js'
  */
 export const HEALTH_TIMEOUT_MS = 5_000
 
-function unreachable(detail: string): RhizaHealth['status'] {
+function unreachable(detail: string): HealthStatus {
   return { state: 'unreachable', detail, checkedAt: new Date() }
 }
 
@@ -37,21 +37,29 @@ function afterTimeout(
   return { promise, cancel: () => { if (timer !== undefined) clearTimeout(timer) } }
 }
 
+/** A throw, a rejection and a hang all land on the same `catch`, so all three read unreachable. */
+async function statusOf(
+  call: () => Promise<HealthStatus>, timeoutMs: number, translator?: Translator, locale?: string,
+): Promise<HealthStatus> {
+  const bound = afterTimeout(timeoutMs, translator, locale)
+  try {
+    return await Promise.race([call(), bound.promise])
+  } catch (e) {
+    return unreachable(describeThrown(e))
+  } finally {
+    // Or the process keeps a live timer per healthy plugin per request, and Bun's test runner
+    // does not exit.
+    bound.cancel()
+  }
+}
+
 export async function aggregateHealth(
   registry: Registry, timeoutMs: number = HEALTH_TIMEOUT_MS, translator?: Translator, locale?: string,
 ): Promise<readonly RhizaHealth[]> {
-  return Promise.all(registry.rhizas.map(async (r) => {
-    const bound = afterTimeout(timeoutMs, translator, locale)
-    try {
-      return { rhiza: r.name, status: await Promise.race([r.instance.health(), bound.promise]) }
-    } catch (e) {
-      return { rhiza: r.name, status: unreachable(describeThrown(e)) }
-    } finally {
-      // Or the process keeps a live timer per healthy rhiza per request, and Bun's test runner
-      // does not exit.
-      bound.cancel()
-    }
-  }))
+  return Promise.all(registry.rhizas.map(async (r) => ({
+    rhiza: r.name,
+    status: await statusOf(() => r.instance.health(), timeoutMs, translator, locale),
+  })))
 }
 
 export interface HyphaHealth {
@@ -69,16 +77,10 @@ function declaresHealth(
 export async function aggregateHyphaHealth(
   registry: Registry, timeoutMs: number = HEALTH_TIMEOUT_MS, translator?: Translator, locale?: string,
 ): Promise<readonly HyphaHealth[]> {
-  return Promise.all(registry.hyphae.filter(declaresHealth).map(async (h) => {
-    const bound = afterTimeout(timeoutMs, translator, locale)
-    try {
-      return { hypha: h.name, status: await Promise.race([h.instance.health(), bound.promise]) }
-    } catch (e) {
-      return { hypha: h.name, status: unreachable(describeThrown(e)) }
-    } finally {
-      bound.cancel()
-    }
-  }))
+  return Promise.all(registry.hyphae.filter(declaresHealth).map(async (h) => ({
+    hypha: h.name,
+    status: await statusOf(() => h.instance.health(), timeoutMs, translator, locale),
+  })))
 }
 
 export interface RuntimeHealth {

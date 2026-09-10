@@ -753,7 +753,7 @@ describe('inoculate', () => {
     const result = await inoculate(ctxOf(db, stubDriver(tarball), managedDir()), { sourceId: id, name: 'stale' })
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.warnings.map((w) => w.key)).toContain('inoculate.septumOutOfRange')
+    expect(result.warnings.map((w) => w.messageKey)).toContain('inoculate.septumOutOfRange')
     expect(getInstall(db, 'stale')?.enabled).toBe(false)
   })
 

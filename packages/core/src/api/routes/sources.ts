@@ -159,7 +159,7 @@ export function registerSourceRoutes(
     return {
       name: result.name,
       strain: result.strain,
-      warnings: result.warnings.map((w) => state.translator.translate('core', w.key, request.locale, w.params)),
+      warnings: result.warnings.map((w) => state.translator.translate('core', w.messageKey, request.locale, w.params)),
       restartRequired: result.restartRequired,
     }
   })

@@ -275,14 +275,14 @@ export async function inoculate(
     if (!source.official) {
       warnings.push({
         message: `'${source.label}' is not the official sporangium: its spores are not code-reviewed before publication`,
-        key: 'inoculate.thirdParty', params: { label: source.label },
+        messageKey: 'inoculate.thirdParty', params: { label: source.label },
       })
     }
     const missing = unsatisfiedRequirements(read.manifest, db, roots)
     if (missing.length > 0) {
       warnings.push({
         message: `'${request.name}' requires ${missing.join(', ')}, which nothing installed provides: it will be dormant until you install them`,
-        key: 'inoculate.missingRequirements', params: { name: request.name, missing: missing.join(', ') },
+        messageKey: 'inoculate.missingRequirements', params: { name: request.name, missing: missing.join(', ') },
       })
     }
     const rangeCompat = septumCompat(read.manifest.septum)
@@ -293,7 +293,7 @@ export async function inoculate(
       // what lets an operator repair from the API after a septum minor.
       warnings.push({
         message: `'${request.name}' declares septum '${rangeCompat.range}', which excludes the running ${rangeCompat.running}: it will not germinate until it is re-released`,
-        key: 'inoculate.septumOutOfRange',
+        messageKey: 'inoculate.septumOutOfRange',
         params: { name: request.name, range: rangeCompat.range, running: rangeCompat.running },
       })
     }
