@@ -13,11 +13,11 @@ function read(raw: Record<string, unknown>): ReadManifest {
 }
 
 const rhiza = (name: string, requires?: unknown) =>
-  read({ kind: 'rhiza', name, septum: '^0.12', ...(requires === undefined ? {} : { requires }) })
+  read({ kind: 'rhiza', name, septum: '^1.0', ...(requires === undefined ? {} : { requires }) })
 
 const enzyme = (name: string, requires?: unknown) =>
   read({
-    kind: 'enzyme', name, septum: '^0.12',
+    kind: 'enzyme', name, septum: '^1.0',
     commands: [{ name, description: 'x', respond: 'x' }],
     ...(requires === undefined ? {} : { requires }),
   })
@@ -207,7 +207,7 @@ describe('resolve', () => {
         path: `/spores/${directory}`, directory,
         manifestPath: `/spores/${directory}/spore.yaml`,
       },
-      manifest: parseManifest({ kind: 'rhiza', name: 'mock', septum: '^0.12' }),
+      manifest: parseManifest({ kind: 'rhiza', name: 'mock', septum: '^1.0' }),
     })
     const r = resolve([at('first-copy'), at('second-copy')])
     expect(names(r)).toEqual(['mock'])
@@ -278,7 +278,7 @@ describe('MOUNTABLE_SCOPES against MYCELIUM_SCOPES', () => {
     const r = resolve([{
       location: { path: '/spores/future', directory: 'future', manifestPath: '/spores/future/spore.yaml' },
       manifest: {
-        kind: 'enzyme', name: 'future', septum: '^0.12',
+        kind: 'enzyme', name: 'future', septum: '^1.0',
         commands: [{ name: 'future', description: 'x', respond: 'hi' }],
         // Bypasses parseManifest deliberately: septum's z.enum makes an unmountable scope
         // unparseable, so the guard is only reachable from a hand-built manifest.
@@ -299,7 +299,7 @@ describe('MOUNTABLE_SCOPES against MYCELIUM_SCOPES', () => {
     const r = resolve([{
       location: { path: '/spores/other', directory: 'other', manifestPath: '/spores/other/spore.yaml' },
       manifest: {
-        kind: 'enzyme', name: 'other', septum: '^0.12',
+        kind: 'enzyme', name: 'other', septum: '^1.0',
         commands: [{ name: 'other', description: 'x', respond: 'hi' }],
         requires: [{ rhiza: 'mycelium', scopes: ['another.scope'] }],
       },

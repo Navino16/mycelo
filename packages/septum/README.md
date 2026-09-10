@@ -30,7 +30,7 @@ capabilities are declared here rather than in the module.
 ```yaml
 kind: enzyme
 name: radarr-helper
-septum: "^0.12"
+septum: "^1.0"
 description: Movie shortcuts for Radarr
 commands:
   - name: help
@@ -455,7 +455,7 @@ it('conforms to the Enzyme contract', async () => {
   const failures = await enzymeChecks({
     name: 'radarr-helper',
     manifest: {
-      kind: 'enzyme', name: 'radarr-helper', septum: '^0.12',
+      kind: 'enzyme', name: 'radarr-helper', septum: '^1.0',
       commands: [
         { name: 'help', description: 'command.help.description', respond: 'help.text' },
         { name: 'add', description: 'command.add.description', code: 'addMovie',

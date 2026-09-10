@@ -57,7 +57,7 @@ const NEEDS_CONFIG_MODULE = `
 
 function needsConfig(): void {
   spore('needs-config', {
-    'spore.yaml': 'kind: enzyme\nname: needs-config\nseptum: "^0.12"\n'
+    'spore.yaml': 'kind: enzyme\nname: needs-config\nseptum: "^1.0"\n'
       + 'commands:\n  - name: configured\n    description: Report the configured url\n    code: handleConfigured\n',
     'src/index.ts': NEEDS_CONFIG_MODULE,
   })
@@ -158,7 +158,7 @@ function typoSecret(name: string, secrets: string): void {
     throw new Error('TYPO_SECRET_MODULE anchor text has drifted')
   }
   spore(name, {
-    'spore.yaml': `kind: enzyme\nname: ${name}\nseptum: "^0.12"\n`
+    'spore.yaml': `kind: enzyme\nname: ${name}\nseptum: "^1.0"\n`
       + `commands:\n  - name: ${name}\n    description: x\n    respond: hi\n`,
     'src/index.ts': module,
   })
@@ -235,7 +235,7 @@ const NEEDS_TWO_FIELDS_MODULE = `
 
 function needsTwoFields(): void {
   spore('needs-two-fields', {
-    'spore.yaml': 'kind: enzyme\nname: needs-two-fields\nseptum: "^0.12"\n'
+    'spore.yaml': 'kind: enzyme\nname: needs-two-fields\nseptum: "^1.0"\n'
       + 'commands:\n  - name: needs-two-fields\n    description: x\n    respond: hi\n',
     'src/index.ts': NEEDS_TWO_FIELDS_MODULE,
   })
@@ -257,7 +257,7 @@ const REFINES_MODULE = `
 
 function refinesSpore(): void {
   spore('refines', {
-    'spore.yaml': 'kind: enzyme\nname: refines\nseptum: "^0.12"\n'
+    'spore.yaml': 'kind: enzyme\nname: refines\nseptum: "^1.0"\n'
       + 'commands:\n  - name: refines\n    description: x\n    respond: hi\n',
     'src/index.ts': REFINES_MODULE,
   })
@@ -279,7 +279,7 @@ const HAND_ROLLED_MODULE = `
 
 function handRolled(): void {
   spore('hand-rolled', {
-    'spore.yaml': 'kind: enzyme\nname: hand-rolled\nseptum: "^0.12"\n'
+    'spore.yaml': 'kind: enzyme\nname: hand-rolled\nseptum: "^1.0"\n'
       + 'commands:\n  - name: hand-rolled\n    description: x\n    respond: hi\n',
     'src/index.ts': HAND_ROLLED_MODULE,
   })
@@ -301,7 +301,7 @@ const MALFORMED_KEY_MODULE = `
 
 function malformedKey(): void {
   spore('malformed-key', {
-    'spore.yaml': 'kind: enzyme\nname: malformed-key\nseptum: "^0.12"\n'
+    'spore.yaml': 'kind: enzyme\nname: malformed-key\nseptum: "^1.0"\n'
       + 'commands:\n  - name: malformed-key\n    description: x\n    respond: hi\n',
     'src/index.ts': MALFORMED_KEY_MODULE,
   })
@@ -322,7 +322,7 @@ const WHOLE_OBJECT_MODULE = `
 
 function wholeObject(): void {
   spore('whole-object', {
-    'spore.yaml': 'kind: enzyme\nname: whole-object\nseptum: "^0.12"\n'
+    'spore.yaml': 'kind: enzyme\nname: whole-object\nseptum: "^1.0"\n'
       + 'commands:\n  - name: whole-object\n    description: x\n    respond: hi\n',
     'src/index.ts': WHOLE_OBJECT_MODULE,
   })
@@ -435,7 +435,7 @@ it('enabling refuses a plugin whose directory is absent from disk', async () => 
 it('enabling refuses, rather than throwing, when the module throws at import', async () => {
   const { db, close } = fresh()
   spore('boomspore', {
-    'spore.yaml': 'kind: enzyme\nname: boomspore\nseptum: "^0.12"\n'
+    'spore.yaml': 'kind: enzyme\nname: boomspore\nseptum: "^1.0"\n'
       + 'commands:\n  - name: boom\n    description: x\n    code: handleBoom\n',
     'src/index.ts': 'throw new Error("import explodes")\n',
   })
@@ -453,7 +453,7 @@ it('enabling refuses, rather than throwing, when the module throws at import', a
 it('enabling refuses, rather than throwing, when the spore has no entry point', async () => {
   const { db, close } = fresh()
   spore('nocode', {
-    'spore.yaml': 'kind: enzyme\nname: nocode\nseptum: "^0.12"\n'
+    'spore.yaml': 'kind: enzyme\nname: nocode\nseptum: "^1.0"\n'
       + 'commands:\n  - name: nocode\n    description: x\n    code: handleNocode\n',
   })
   recordInstall(db, 'nocode', 'enzyme')
@@ -469,7 +469,7 @@ it('enabling refuses, rather than throwing, when the spore has no entry point', 
 it('enabling refuses, rather than throwing, when the default export has no create()', async () => {
   const { db, close } = fresh()
   spore('nocreate', {
-    'spore.yaml': 'kind: enzyme\nname: nocreate\nseptum: "^0.12"\n'
+    'spore.yaml': 'kind: enzyme\nname: nocreate\nseptum: "^1.0"\n'
       + 'commands:\n  - name: nocreate\n    description: x\n    code: handleNocreate\n',
     'src/index.ts': 'export default { }\n',
   })
@@ -604,7 +604,7 @@ describe('enablePlugin refuses rather than rejecting when validation itself thro
   it('when the plugin\'s own safeParse throws', async () => {
     const { db, close } = fresh()
     spore('throwspore', {
-      'spore.yaml': 'kind: enzyme\nname: throwspore\nseptum: "^0.12"\n'
+      'spore.yaml': 'kind: enzyme\nname: throwspore\nseptum: "^1.0"\n'
         + 'commands:\n  - name: throwspore\n    description: x\n    code: handleIt\n',
       'src/index.ts': 'export default {\n'
         + '  configSchema: { safeParse: () => { throw new Error("predicate exploded") } },\n'

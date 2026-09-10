@@ -304,7 +304,7 @@ describe('the synthetic core node', () => {
   it('answers exactly one node named core when a dormant spore claims the name', async () => {
     booted = await bootAndLogin({
       spores: (dir) => {
-        writeSpore(dir, 'core', { 'spore.yaml': 'kind: rhiza\nname: core\nseptum: "^0.12"\n' })
+        writeSpore(dir, 'core', { 'spore.yaml': 'kind: rhiza\nname: core\nseptum: "^1.0"\n' })
       },
     })
     const { app, cookie } = booted
@@ -325,7 +325,7 @@ describe('the synthetic core node', () => {
     booted = await bootAndLogin({
       spores: (dir) => {
         writeSpore(dir, 'reader', {
-          'spore.yaml': 'kind: enzyme\nname: reader\nseptum: "^0.12"\n'
+          'spore.yaml': 'kind: enzyme\nname: reader\nseptum: "^1.0"\n'
             + 'commands:\n  - name: who\n    description: command.who.description\n    respond: who.text\n'
             + 'requires:\n  - rhiza: mycelium\n    scopes: [principals.read]\n',
           'translations/en.yaml': 'command:\n  who:\n    description: Who\nwho:\n  text: ok\n',

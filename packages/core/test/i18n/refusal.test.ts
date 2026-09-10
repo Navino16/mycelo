@@ -60,10 +60,10 @@ test('a parameter that is a ref is rendered before ICU sees it', () => {
       cause: {
         domain: 'common',
         key: 'refusal.germination.septumIncompatible',
-        params: { plugin: 'radarr', detail: 'needs septum ^0.12' },
+        params: { plugin: 'radarr', detail: 'needs septum ^1.0' },
       },
     },
-  }, 'fr')).toBe('requiert le rhiza radarr, qui est dormant : le spore radarr needs septum ^0.12')
+  }, 'fr')).toBe('requiert le rhiza radarr, qui est dormant : le spore radarr needs septum ^1.0')
 })
 
 test('an array of refs renders element-wise and joins', () => {

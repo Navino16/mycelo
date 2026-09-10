@@ -30,7 +30,7 @@ function connectThrowingHypha(name: string, detail: string): GerminatedHypha {
     stop: async () => {},
     send: async () => {},
   }
-  return { name, manifest: { name, septum: '^0.12', kind: 'hypha', capabilities: [] }, instance, config: undefined }
+  return { name, manifest: { name, septum: '^1.0', kind: 'hypha', capabilities: [] }, instance, config: undefined }
 }
 
 function listenThrowingHypha(name: string, detail: string): GerminatedHypha {
@@ -40,7 +40,7 @@ function listenThrowingHypha(name: string, detail: string): GerminatedHypha {
     stop: async () => {},
     send: async () => {},
   }
-  return { name, manifest: { name, septum: '^0.12', kind: 'hypha', capabilities: [] }, instance, config: undefined }
+  return { name, manifest: { name, septum: '^1.0', kind: 'hypha', capabilities: [] }, instance, config: undefined }
 }
 
 function startThrowingRhiza(name: string, detail: string): GerminatedRhiza {
@@ -50,7 +50,7 @@ function startThrowingRhiza(name: string, detail: string): GerminatedRhiza {
     health: async () => ({ state: 'healthy', checkedAt: new Date() }),
     api: {},
   }
-  return { name, manifest: { name, septum: '^0.12', kind: 'rhiza' }, instance, config: undefined }
+  return { name, manifest: { name, septum: '^1.0', kind: 'rhiza' }, instance, config: undefined }
 }
 
 function startThrowingEnzyme(name: string, detail: string): GerminatedEnzyme {
@@ -62,7 +62,7 @@ function startThrowingEnzyme(name: string, detail: string): GerminatedEnzyme {
   return {
     name,
     manifest: {
-      name, septum: '^0.12', kind: 'enzyme',
+      name, septum: '^1.0', kind: 'enzyme',
       commands: [{ name: 'x', description: 'x', respond: 'x' }],
     },
     instance,
@@ -79,7 +79,7 @@ function startThrowingInhibitor(name: string, detail: string, enforcing: boolean
   }
   return {
     name, config: {}, resolved: new Set(), scopes: [],
-    manifest: { kind: 'inhibitor', name, septum: '^0.12', enforcing },
+    manifest: { kind: 'inhibitor', name, septum: '^1.0', enforcing },
     instance,
   } as unknown as GerminatedInhibitor
 }

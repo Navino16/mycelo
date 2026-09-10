@@ -34,7 +34,7 @@ afterEach(async () => {
 // characters, so validating it against this schema is what found the defect on a running bot.
 const keep: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'keep', {
-    'spore.yaml': 'kind: enzyme\nname: keep\nseptum: "^0.12"\n'
+    'spore.yaml': 'kind: enzyme\nname: keep\nseptum: "^1.0"\n'
       + 'commands:\n  - name: keep\n    description: Report the configured setting\n    code: handleConfigured\n',
     'src/index.ts': `
       export default {
@@ -825,7 +825,7 @@ describe('PUT /api/plugins/:name/settings validates the values', () => {
  * fails open rather than closed when it cannot find the module (design §9, §12).
  */
 describe('a spore installed into the managed root', () => {
-  const MANIFEST = 'kind: enzyme\nname: keyring\nseptum: "^0.12"\n'
+  const MANIFEST = 'kind: enzyme\nname: keyring\nseptum: "^1.0"\n'
     + 'commands:\n  - name: keyring\n    description: Report the configured setting\n    code: handleConfigured\n'
 
   const MODULE = `
@@ -855,7 +855,7 @@ describe('a spore installed into the managed root', () => {
       list: () => Promise.resolve([{ name: 'keyring', strain: '0.2.0' }]),
       strains: () => Promise.resolve(['0.2.0']),
       detail: () => Promise.resolve({
-        name: 'keyring', kind: 'enzyme' as const, description: '', septum: '^0.12',
+        name: 'keyring', kind: 'enzyme' as const, description: '', septum: '^1.0',
         demands: { requires: [], scopes: [], externals: [], commands: [] },
       }),
       fetch: (_name: string, strain: string) => Promise.resolve({ tarball, strain }),
@@ -982,7 +982,7 @@ describe('a spore installed into the managed root', () => {
 const scopedInhibitor: SporeWriter = (sporesDir) => {
   writeSpore(sporesDir, 'watcher', {
     'spore.yaml': [
-      'kind: inhibitor', 'name: watcher', 'septum: "^0.12"', 'enforcing: false',
+      'kind: inhibitor', 'name: watcher', 'septum: "^1.0"', 'enforcing: false',
       'requires:', '  - rhiza: mycelium', '    scopes: [principals.read]', '',
     ].join('\n'),
     'src/index.ts': `
@@ -1105,7 +1105,7 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     booted = await bootAndLogin({
       spores: (dir) => {
         writeSpore(dir, 'keyed', {
-          'spore.yaml': 'kind: enzyme\nname: keyed\nseptum: "^0.12"\n'
+          'spore.yaml': 'kind: enzyme\nname: keyed\nseptum: "^1.0"\n'
             + 'description: command.keyed.description\n'
             + 'commands:\n  - name: keyed\n    description: command.keyed.description\n    respond: keyed.text\n',
           'translations/en.yaml': 'command:\n  keyed:\n    description: Report a keyed setting\nkeyed:\n  text: ok\n',
@@ -1131,7 +1131,7 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     booted = await bootAndLogin({
       spores: (dir) => {
         writeSpore(dir, 'needs-config', {
-          'spore.yaml': 'kind: enzyme\nname: needs-config\nseptum: "^0.12"\n'
+          'spore.yaml': 'kind: enzyme\nname: needs-config\nseptum: "^1.0"\n'
             + 'description: command.keyed.description\n'
             + 'commands:\n  - name: keyed\n    description: command.keyed.description\n    code: handleKeyed\n',
           'src/index.ts': configSchemaModule(['token']),
@@ -1152,7 +1152,7 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     booted = await bootAndLogin({
       spores: (dir) => {
         writeSpore(dir, 'greeter', {
-          'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^0.12"\n'
+          'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^1.0"\n'
             + 'description: Greets a new sender\n'
             + 'commands:\n  - name: hello\n    description: command.hello.description\n    respond: hello.text\n',
           'translations/en.yaml': 'command:\n  hello:\n    description: Say hello\nhello:\n  text: Hi\n',
@@ -1174,7 +1174,7 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     booted = await bootAndLogin({
       spores: (dir) => {
         writeSpore(dir, 'orphan', {
-          'spore.yaml': 'kind: enzyme\nname: orphan\nseptum: "^0.12"\n'
+          'spore.yaml': 'kind: enzyme\nname: orphan\nseptum: "^1.0"\n'
             + 'description: Needs a rhiza nobody installed\n'
             + 'commands:\n'
             + '  - name: first\n    description: command.first.description\n    respond: first.text\n'
@@ -1204,7 +1204,7 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     booted = await bootAndLogin({
       spores: (dir) => {
         writeSpore(dir, 'scoped-orphan', {
-          'spore.yaml': 'kind: enzyme\nname: scoped-orphan\nseptum: "^0.12"\n'
+          'spore.yaml': 'kind: enzyme\nname: scoped-orphan\nseptum: "^1.0"\n'
             + 'commands:\n  - name: noop\n    description: command.noop.description\n    respond: noop.text\n'
             + 'requires:\n'
             + '  - rhiza: nowhere\n'
@@ -1232,7 +1232,7 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     booted = await bootAndLogin({
       spores: (dir) => {
         writeSpore(dir, 'greeter2', {
-          'spore.yaml': 'kind: enzyme\nname: greeter2\nseptum: "^0.12"\n'
+          'spore.yaml': 'kind: enzyme\nname: greeter2\nseptum: "^1.0"\n'
             + 'commands:\n  - name: hello\n    description: command.hello.description\n    respond: hello.text\n',
           'translations/en.yaml': 'command:\n  hello:\n    description: Say hello\nhello:\n  text: Hi\n',
         })
@@ -1257,7 +1257,7 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
       spores: (dir) => {
         sporeDir = join(dir, 'drifter')
         writeSpore(dir, 'drifter', {
-          'spore.yaml': 'kind: enzyme\nname: drifter\nseptum: "^0.12"\n'
+          'spore.yaml': 'kind: enzyme\nname: drifter\nseptum: "^1.0"\n'
             + 'description: What germination read\n'
             + 'commands:\n  - name: drift\n    description: command.drift.description\n    respond: drift.text\n',
           'translations/en.yaml': 'command:\n  drift:\n    description: Drift\ndrift:\n  text: d\n',
@@ -1267,7 +1267,7 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     const { app, cookie } = booted
     writeFileSync(
       join(sporeDir, 'spore.yaml'),
-      'kind: enzyme\nname: drifter\nseptum: "^0.12"\ndescription: Edited after boot\n'
+      'kind: enzyme\nname: drifter\nseptum: "^1.0"\ndescription: Edited after boot\n'
       + 'commands:\n  - name: drift\n    description: command.drift.description\n    respond: drift.text\n',
     )
 
@@ -1291,14 +1291,14 @@ describe('the plugin description and a dormant plugin\'s commands', () => {
     booted = await bootAndLogin({
       spores: (dir) => {
         writeSpore(dir, 'greeter', {
-          'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^0.12"\ncommands:\n'
+          'spore.yaml': 'kind: enzyme\nname: greeter\nseptum: "^1.0"\ncommands:\n'
             + '  - name: hello\n    description: command.hello.description\n    respond: hello.text\n'
             + '  - name: farewell\n    description: command.farewell.description\n    respond: farewell.text\n',
           'translations/en.yaml': 'command:\n  hello:\n    description: Say hello\n'
             + '  farewell:\n    description: Say goodbye\nhello:\n  text: Hi\nfarewell:\n  text: Bye\n',
         })
-        writeSpore(dir, 'silent', { 'spore.yaml': 'kind: rhiza\nname: silent\nseptum: "^0.12"\n' })
-        writeSpore(dir, 'commandless', { 'spore.yaml': 'kind: enzyme\nname: commandless\nseptum: "^0.12"\n' })
+        writeSpore(dir, 'silent', { 'spore.yaml': 'kind: rhiza\nname: silent\nseptum: "^1.0"\n' })
+        writeSpore(dir, 'commandless', { 'spore.yaml': 'kind: enzyme\nname: commandless\nseptum: "^1.0"\n' })
       },
     })
     const { app, cookie } = booted

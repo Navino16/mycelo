@@ -28,7 +28,7 @@ function nameCapturingHypha(manifestName: string, capture: { name?: string }): G
   }
   return {
     name: manifestName,
-    manifest: { name: manifestName, septum: '^0.12', kind: 'hypha', capabilities: [] },
+    manifest: { name: manifestName, septum: '^1.0', kind: 'hypha', capabilities: [] },
     instance,
     config: undefined,
   }
