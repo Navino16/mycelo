@@ -5,7 +5,14 @@ import type { ConfigIssue, ConfigSchema } from './spore.js'
 /** What `PluginsConfigure.formSchema()` resolves to for one plugin's settings form. */
 export type FormSchema =
   | { available: true; schema: object }
-  | { available: false; reason: string }
+  | {
+      available: false
+      /** English, for the operator's log: a translated log cannot be grepped (design §5.2). */
+      reason: string
+      /** A `core`-domain key the API translates before answering. */
+      reasonKey?: string
+      reasonParams?: Record<string, unknown>
+    }
 
 /** `defineConfig`'s second argument. */
 export interface ConfigOptions {

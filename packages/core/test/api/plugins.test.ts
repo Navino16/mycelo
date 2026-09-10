@@ -518,6 +518,29 @@ describe('/api/plugins', () => {
     expect(body).toMatchObject({ available: true })
   })
 
+  // fixtures/ping declares no configSchema at all, so it takes the first of formSchemaOf's
+  // refusal branches — the one measured reaching a French operator untranslated.
+  it('translates a schema refusal into the request locale', async () => {
+    booted = await bootAndLogin()
+    const { app, cookie } = booted
+    const answer = await app.inject({
+      method: 'GET', url: '/api/plugins/ping/schema', headers: { cookie, 'accept-language': 'fr' },
+    })
+    expect(answer.statusCode).toBe(200)
+    expect(answer.json()).toMatchObject({
+      available: false, reason: 'ce plugin ne prend aucune configuration',
+    })
+  })
+
+  it('answers English when the request asks for it', async () => {
+    booted = await bootAndLogin()
+    const { app, cookie } = booted
+    const answer = await app.inject({
+      method: 'GET', url: '/api/plugins/ping/schema', headers: { cookie, 'accept-language': 'en' },
+    })
+    expect(answer.json()).toMatchObject({ reason: 'this plugin takes no configuration' })
+  })
+
   it('404s on a plugin that is not installed', async () => {
     booted = await bootAndLogin()
     const { app, cookie } = booted

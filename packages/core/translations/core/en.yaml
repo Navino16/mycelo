@@ -38,3 +38,12 @@ api:
   inoculateFailed: "installing ''{name}'' failed; the server log holds the detail"
 health:
   timeout: "health() did not answer within {ms}ms"
+config:
+  schema:
+    none: "this plugin takes no configuration"
+    noJsonSchema: "this plugin publishes no JSON Schema: configure it by hand"
+    notObject: "toJsonSchema() did not return an object"
+    conversionFailed: "the schema cannot be converted: {detail}"
+    notInstalled: "no plugin named ''{name}'' is installed"
+    loadFailed: "the spore ''{name}'' could not be loaded: {detail}"
+    absent: "no spore named ''{name}'' is present on disk"

@@ -422,15 +422,20 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
 
   it('reports formSchema unavailable for a plugin that is not installed', async () => {
     const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, fresh(), SPORES) as PluginsConfigure
-    expect(await api.formSchema('ghost')).toEqual({ available: false, reason: "plugin 'ghost' is not installed" })
+    expect(await api.formSchema('ghost')).toEqual({
+      available: false, reason: "plugin 'ghost' is not installed",
+      reasonKey: 'config.schema.notInstalled', reasonParams: { name: 'ghost' },
+    })
   })
 
   it('reports formSchema unavailable for an install whose spore is gone from disk', async () => {
     const db = fresh()
     recordInstall(db, 'vanished', 'rhiza')
     const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, SPORES) as PluginsConfigure
-    expect(await api.formSchema('vanished'))
-      .toEqual({ available: false, reason: "no spore named 'vanished' is present on disk" })
+    expect(await api.formSchema('vanished')).toEqual({
+      available: false, reason: "no spore named 'vanished' is present on disk",
+      reasonKey: 'config.schema.absent', reasonParams: { name: 'vanished' },
+    })
   })
 
   // loadSporeModule propagates whatever the spore throws at import; formSchema() has an
@@ -464,8 +469,10 @@ describe('createMyceliumApi, the phase 5 scopes', () => {
     const db = fresh()
     recordInstall(db, 'gate', 'inhibitor')
     const api = createMyceliumApi(emptyRegistry(), ['plugins.configure'], noSend, db, SPORES) as PluginsConfigure
-    expect(await api.formSchema('gate'))
-      .toEqual({ available: false, reason: 'this plugin publishes no JSON Schema: configure it by hand' })
+    expect(await api.formSchema('gate')).toEqual({
+      available: false, reason: 'this plugin publishes no JSON Schema: configure it by hand',
+      reasonKey: 'config.schema.noJsonSchema',
+    })
   })
 
   it('enables a plugin on disk and disables it again', async () => {

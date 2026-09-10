@@ -141,16 +141,26 @@ export function manifestFactsByName(
 // a FormSchema, so every fault becomes its available: false branch rather than a rejection.
 export async function formSchemaOf(db: Db, sporesDirs: readonly string[], name: string): Promise<FormSchema> {
   if (getInstall(db, name) === null) {
-    return { available: false, reason: `plugin '${name}' is not installed` }
+    return {
+      available: false, reason: `plugin '${name}' is not installed`,
+      reasonKey: 'config.schema.notInstalled', reasonParams: { name },
+    }
   }
   let module: Awaited<ReturnType<typeof loadSporeModule>>
   try {
     module = await loadSporeModule(sporesDirs, name)
   } catch (e) {
-    return { available: false, reason: `spore '${name}' failed to load: ${describeThrown(e)}` }
+    const detail = describeThrown(e)
+    return {
+      available: false, reason: `spore '${name}' failed to load: ${detail}`,
+      reasonKey: 'config.schema.loadFailed', reasonParams: { name, detail },
+    }
   }
   if (module === undefined) {
-    return { available: false, reason: `no spore named '${name}' is present on disk` }
+    return {
+      available: false, reason: `no spore named '${name}' is present on disk`,
+      reasonKey: 'config.schema.absent', reasonParams: { name },
+    }
   }
   return formSchemaFor(module?.configSchema)
 }

@@ -5,7 +5,9 @@ import { formSchemaFor } from '../../src/config/jsonschema.js'
 
 it('a plugin with no configSchema has nothing to fill in', () => {
   const result = formSchemaFor(undefined)
-  expect(result).toEqual({ available: false, reason: 'this plugin takes no configuration' })
+  expect(result).toEqual({
+    available: false, reason: 'this plugin takes no configuration', reasonKey: 'config.schema.none',
+  })
 })
 
 it('a convertible schema yields a form carrying the declared property', () => {
@@ -109,6 +111,22 @@ it('an Error subclass overriding message with a throwing getter degrades instead
   expect(() => formSchemaFor(hostile)).not.toThrow()
   const result = formSchemaFor(hostile)
   expect(result.available).toBe(false)
+})
+
+it('every refusal carries a core-domain key', () => {
+  expect(formSchemaFor(undefined)).toMatchObject({
+    available: false, reasonKey: 'config.schema.none',
+  })
+  expect(formSchemaFor({})).toMatchObject({
+    available: false, reasonKey: 'config.schema.noJsonSchema',
+  })
+  expect(formSchemaFor({ toJsonSchema: () => [1, 2] })).toMatchObject({
+    available: false, reasonKey: 'config.schema.notObject',
+  })
+  expect(formSchemaFor({ toJsonSchema: () => { throw new Error('boom') } })).toMatchObject({
+    available: false, reasonKey: 'config.schema.conversionFailed',
+    reasonParams: { detail: 'boom' },
+  })
 })
 
 it('an Error subclass whose message getter returns an uncoercible object degrades instead of throwing', () => {

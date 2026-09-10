@@ -7,22 +7,36 @@ import { describeThrown } from '../support/thrown.js'
  */
 export function formSchemaFor(configSchema: unknown): FormSchema {
   if (configSchema === undefined || configSchema === null) {
-    return { available: false, reason: 'this plugin takes no configuration' }
+    return { available: false, reason: 'this plugin takes no configuration', reasonKey: 'config.schema.none' }
   }
   try {
     // The property read is inside the try: a foreign object may expose toJsonSchema
     // as a getter, and a getter is code the core does not control either.
     const emit = (configSchema as { toJsonSchema?: unknown }).toJsonSchema
     if (typeof emit !== 'function') {
-      return { available: false, reason: 'this plugin publishes no JSON Schema: configure it by hand' }
+      return {
+        available: false,
+        reason: 'this plugin publishes no JSON Schema: configure it by hand',
+        reasonKey: 'config.schema.noJsonSchema',
+      }
     }
     const schema: unknown = (emit as () => unknown).call(configSchema)
     // typeof admits arrays and thenables; FormSchema's `object` is neither.
     if (typeof schema !== 'object' || schema === null || Array.isArray(schema) || typeof (schema as { then?: unknown }).then === 'function') {
-      return { available: false, reason: 'toJsonSchema() did not return an object' }
+      return {
+        available: false,
+        reason: 'toJsonSchema() did not return an object',
+        reasonKey: 'config.schema.notObject',
+      }
     }
     return { available: true, schema }
   } catch (e) {
-    return { available: false, reason: `the schema cannot be converted: ${describeThrown(e)}` }
+    const detail = describeThrown(e)
+    return {
+      available: false,
+      reason: `the schema cannot be converted: ${detail}`,
+      reasonKey: 'config.schema.conversionFailed',
+      reasonParams: { detail },
+    }
   }
 }
