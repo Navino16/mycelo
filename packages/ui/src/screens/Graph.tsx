@@ -16,7 +16,7 @@ import type { StringKey } from '../../locales/en.ts'
 
 /** The substrate is drawn narrower than a plugin, as design 2k draws it. */
 const CORE_W = 96
-const MARGIN = 24
+export const MARGIN = 24
 /** Advance of one 12 px mono character, and where a label starts inside its box. */
 const MONO_ADVANCE = 7.2
 const LABEL_X = 24
@@ -63,6 +63,13 @@ function reasonLines(text: string): readonly string[] {
   // The last line owns the ellipsis, so one mechanism produces one signal (C9).
   if (rest.length > 0 && last !== undefined) lines[lines.length - 1] = `${last.slice(0, -1)}…`
   return lines
+}
+
+/** How far a node's drawn content reaches below its own top: the box alone, or a wrapped reason's actual last line. */
+function bottomExtent(node: PlacedNode): number {
+  if (node.reason === undefined) return BOX_H
+  const lines = reasonLines(node.reason).length
+  return REASON_FIRST_BASELINE + (lines - 1) * REASON_LINE_H + REASON_DESCENDER
 }
 
 function groupByKind(nodes: readonly PlacedNode[]): Record<SporeKind | 'unknown', PlacedNode[]> {
@@ -154,7 +161,7 @@ export function Graph(): React.JSX.Element {
     : placed
 
   const width = shownNodes.reduce((m, n) => Math.max(m, n.x + widthOf(n)), 0) + MARGIN * 2
-  const height = shownNodes.reduce((m, n) => Math.max(m, n.y), 0) + BOX_H + MARGIN * 2
+  const height = shownNodes.reduce((m, n) => Math.max(m, n.y + bottomExtent(n)), 0) + MARGIN * 2
   // The substrate is not a plugin: it has no kind, and the phone's list is grouped by kind.
   const grouped = groupByKind(shownNodes.filter((n) => n.name !== 'core'))
   const openPlugin = (name: string): void => { void navigate(`/plugins/${name}`) }
