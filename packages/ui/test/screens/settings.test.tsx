@@ -843,6 +843,20 @@ describe("the generated form's page frame", () => {
     expect(document.querySelectorAll(`label[for="${monitored.id}"]`)).toHaveLength(1)
   })
 
+  // 2c-1: the artboard draws each field as a bordered row, label+meta left and the input
+  // right at md, collapsing to one column below it.
+  it('splits a field into a label column and an input column at md, with a hairline divider', async () => {
+    mockVault({ schema: RICH, detail: DISABLED, settings: {} })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('Base URL')).toBeDefined() })
+    const row = screen.getAllByTestId('field-row')[0]
+    const tokens = row?.className.split(/\s+/) ?? []
+    expect(tokens).toContain('md:grid-cols-[18rem_minmax(0,1fr)]')
+    expect(tokens).toContain('md:border-b')
+    expect(tokens).not.toContain('border-b')
+  })
+
   // The only assertion that can fail I10: `text`, `secret`, `number` and `boolean` are the
   // same word in English whether they come from the JSON schema or the catalogue.
   it('names each field type in French, beside the French rank word', async () => {

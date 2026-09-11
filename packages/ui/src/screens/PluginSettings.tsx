@@ -171,6 +171,19 @@ function FieldTemplate(props: FieldTemplateProps<Settings>): React.JSX.Element {
     ? undefined
     : metaLine(context, id) ?? (schema.type === 'object' ? undefined : metaFor(t, schema, required === true, false))
   const isCheckbox = getUiOptions(uiSchema).widget === 'checkbox'
+  // The object wrapping the whole form is itself a FieldTemplate call, with no label and no
+  // meta: giving it the row's grid too would reserve a blank label column above every real row.
+  const isRow = (displayLabel === true && !isCheckbox) || meta !== undefined
+  const rest = (
+    <>
+      {children}
+      {displayLabel === true && rawDescription !== undefined && rawDescription !== '' && !isCheckbox && (
+        <span className="text-meta-lg text-text/60">{description}</span>
+      )}
+      {errors}
+      {help}
+    </>
+  )
   return (
     <Wrap
       classNames={classNames}
@@ -189,20 +202,22 @@ function FieldTemplate(props: FieldTemplateProps<Settings>): React.JSX.Element {
       uiSchema={uiSchema}
       registry={registry}
     >
-      <div className="flex flex-col gap-1.5">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          {displayLabel === true && !isCheckbox && (
-            <label htmlFor={id} className="text-body font-medium">{label}</label>
-          )}
-          {meta !== undefined && <span className="font-mono text-meta text-text/60">{meta}</span>}
+      {isRow ? (
+        <div
+          data-testid="field-row"
+          className="grid gap-2 py-4 md:grid-cols-[18rem_minmax(0,1fr)] md:gap-4 md:border-b md:border-line-soft"
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-2 md:flex-col md:items-start md:justify-start md:gap-1">
+            {displayLabel === true && !isCheckbox && (
+              <label htmlFor={id} className="text-body font-medium">{label}</label>
+            )}
+            {meta !== undefined && <span className="font-mono text-meta text-text/60">{meta}</span>}
+          </div>
+          <div className="flex min-w-0 flex-col gap-1.5">{rest}</div>
         </div>
-        {children}
-        {displayLabel === true && rawDescription !== undefined && rawDescription !== '' && !isCheckbox && (
-          <span className="text-meta-lg text-text/60">{description}</span>
-        )}
-        {errors}
-        {help}
-      </div>
+      ) : (
+        <div className="flex flex-col gap-1.5">{rest}</div>
+      )}
     </Wrap>
   )
 }
