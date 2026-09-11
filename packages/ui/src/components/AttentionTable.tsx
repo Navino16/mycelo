@@ -59,11 +59,13 @@ export function AttentionTable({ rows }: { rows: readonly AttentionRow[] }): Rea
       </div>
       <ul className="divide-y divide-line">
         {rows.map((row) => (
-          <li key={`${row.state}:${row.name}`} className={`grid gap-2 px-4 py-3 ${COLUMNS}`}>
+          <li key={`${row.state}:${row.name}`} className={`relative grid gap-2 px-4 py-3 ${COLUMNS}`}>
             <div className="min-w-0">
               <Link to={`/plugins/${row.name}`} className="font-mono text-body">{row.name}</Link>
               {row.kind !== undefined && (
-                <p className="text-meta text-text/60">{kindLabel(t, row.kind)}</p>
+                <p data-testid="attention-kind" className="hidden text-meta text-text/60 md:block">
+                  {kindLabel(t, row.kind)}
+                </p>
               )}
             </div>
             <StateWord state={row.state} />
@@ -78,6 +80,13 @@ export function AttentionTable({ rows }: { rows: readonly AttentionRow[] }): Rea
                     {row.action.label}
                   </Link>
                 )}
+            <span
+              data-testid="attention-chevron"
+              aria-hidden="true"
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-text/40 md:hidden"
+            >
+              ›
+            </span>
           </li>
         ))}
       </ul>

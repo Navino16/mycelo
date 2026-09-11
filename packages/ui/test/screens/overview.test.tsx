@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter } from 'react-router'
 import { ChromeContext } from '../../src/chrome.tsx'
+import { AttentionTable } from '../../src/components/AttentionTable.tsx'
 import { diagnose } from '../../src/components/DormantDiagnosis.tsx'
 import { TONE_CLASSES } from '../../src/components/tone.ts'
 import { HealthContext } from '../../src/health.tsx'
@@ -1170,5 +1171,39 @@ describe('the overview stacking order on a phone', () => {
 
     expect(entry?.className).toContain('flex')
     expect(entry?.className).toContain('md:block')
+  })
+})
+
+describe("the attention table's phone template", () => {
+  const ROWS = [{
+    name: 'radarr',
+    kind: 'rhiza' as const,
+    state: 'unreachable' as const,
+    reason: "le système n'a pas répondu",
+    action: { to: '/plugins/radarr/settings', label: 'Corriger ses réglages' },
+  }]
+
+  it('carries a chevron on every row', () => {
+    render(<I18nProvider><MemoryRouter><AttentionTable rows={ROWS} /></MemoryRouter></I18nProvider>)
+    expect(screen.getByTestId('attention-chevron')).toBeDefined()
+  })
+
+  it('hides the kind sub-label on a phone, which the artboard does not draw', () => {
+    render(<I18nProvider><MemoryRouter><AttentionTable rows={ROWS} /></MemoryRouter></I18nProvider>)
+    const kind = screen.getByTestId('attention-kind')
+    expect(kind.className).toContain('hidden')
+    expect(kind.className).toContain('md:block')
+  })
+
+  it('keeps the state word, which is the artboard\'s third line', () => {
+    // Default locale is English in this environment; the artboard's word is French.
+    globalThis.localStorage?.setItem('mycelo.locale', 'fr')
+    try {
+      render(<I18nProvider><MemoryRouter><AttentionTable rows={ROWS} /></MemoryRouter></I18nProvider>)
+      // Amber, and present at both widths — it is the only tone signal on the row.
+      expect(screen.getByText(/injoignable/i)).toBeDefined()
+    } finally {
+      globalThis.localStorage?.removeItem('mycelo.locale')
+    }
   })
 })
