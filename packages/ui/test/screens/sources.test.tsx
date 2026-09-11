@@ -238,14 +238,26 @@ describe("the sources list's header and phone template", () => {
     expect(classes).toContain('md:grid')
   })
 
+  // The pill shares the name's line through the row's two-column phone grid plus `order-1`,
+  // with every sibling spanning both columns; a margin cannot do it, since `justify-self-start`
+  // leaves an auto margin no free space to consume.
   it('puts the trust pill on the name line on a phone', async () => {
     mockApi([OFFICIAL, THIRD_PARTY], { catalogues: { 1: 61, 2: 112 } })
     renderSources()
     await waitFor(() => { expect(screen.getByText('sporangium/core')).toBeDefined() })
 
+    const row = screen.getByTestId('source-1')
+    expect(row.className.split(/\s+/)).toContain('grid-cols-[minmax(0,1fr)_auto]')
+
     const pill = screen.getAllByTestId('source-trust')[0]
-    expect(pill?.className).toContain('ml-auto')
-    expect(pill?.className).toContain('md:ml-0')
+    const pillClasses = pill?.className.split(/\s+/) ?? []
+    expect(pillClasses).toContain('order-1')
+    expect(pillClasses).toContain('md:order-none')
+
+    const location = within(row).getByTitle(OFFICIAL.location)
+    const locationClasses = location.className.split(/\s+/)
+    expect(locationClasses).toContain('col-span-2')
+    expect(locationClasses).toContain('md:col-span-1')
   })
 })
 

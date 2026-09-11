@@ -626,9 +626,9 @@ describe("a plugin row's phone template", () => {
     expect(phoneStrain).toBeDefined()
     // Pinned so a future edit that drops md:hidden from the phone copy (or the reverse pair
     // from the desktop copy) duplicates the version at desktop width with nothing catching it.
-    expect(phoneStrain?.className).toContain('md:hidden')
-    expect(desktopStrain?.className).toContain('hidden')
-    expect(desktopStrain?.className).toContain('md:block')
+    expect(phoneStrain?.className.split(/\s+/)).toContain('md:hidden')
+    expect(desktopStrain?.className.split(/\s+/)).toContain('hidden')
+    expect(desktopStrain?.className.split(/\s+/)).toContain('md:block')
   })
 
   it('carries a chevron the artboard draws on every row', () => {
@@ -643,8 +643,8 @@ describe("a plugin row's phone template", () => {
   it('hides the state badge on a phone when the note already carries the tone', () => {
     renderRow()
     // The badge is the fifth line the artboard does not draw; it returns at md.
-    expect(screen.getByTestId('plugin-state').className).toContain('hidden')
-    expect(screen.getByTestId('plugin-state').className).toContain('md:block')
+    expect(screen.getByTestId('plugin-state').className.split(/\s+/)).toContain('hidden')
+    expect(screen.getByTestId('plugin-state').className.split(/\s+/)).toContain('md:block')
   })
 
   it('shows the state badge on a phone when there is no note to carry the tone', () => {

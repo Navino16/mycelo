@@ -1202,9 +1202,7 @@ describe("the attention table's phone template", () => {
   })
 
   // Row 29: the artboard's phone line order is name / reason / state, not the built name / state /
-  // reason / action. `order-*` classes carry that behaviour; happy-dom computes no layout, so this
-  // pins the utility tokens that drive it rather than a rendered position — see task-4-report.md's
-  // "Finding 1" section for why a DOM-position assertion cannot distinguish a CSS-only reorder.
+  // reason / action. CSS `order` never mutates the DOM, so the tokens are the behaviour.
   it('orders the reason and state word ahead of the action on a phone, resetting at md', () => {
     render(<I18nProvider><MemoryRouter><AttentionTable rows={ROWS} /></MemoryRouter></I18nProvider>)
 
@@ -1212,19 +1210,21 @@ describe("the attention table's phone template", () => {
     const state = screen.getByText('Unreachable')
     const action = screen.getByRole('link', { name: RADARR_ROW.action.label })
 
-    expect(reason.className).toContain('order-1')
-    expect(reason.className).toContain('md:order-none')
-    expect(state.className).toContain('order-2')
-    expect(state.className).toContain('md:order-none')
-    expect(action.className).toContain('order-3')
-    expect(action.className).toContain('md:order-none')
+    // Tokenised, not `.toContain('order-1')`: that substring also sits inside `md:order-1`,
+    // which is exactly the desktop-order bug this row was rebuilt to fix.
+    expect(reason.className.split(/\s+/)).toContain('order-1')
+    expect(reason.className.split(/\s+/)).toContain('md:order-none')
+    expect(state.className.split(/\s+/)).toContain('order-2')
+    expect(state.className.split(/\s+/)).toContain('md:order-none')
+    expect(action.className.split(/\s+/)).toContain('order-3')
+    expect(action.className.split(/\s+/)).toContain('md:order-none')
   })
 
   it('hides the kind sub-label on a phone, which the artboard does not draw', () => {
     render(<I18nProvider><MemoryRouter><AttentionTable rows={ROWS} /></MemoryRouter></I18nProvider>)
     const kind = screen.getByTestId('attention-kind')
-    expect(kind.className).toContain('hidden')
-    expect(kind.className).toContain('md:block')
+    expect(kind.className.split(/\s+/)).toContain('hidden')
+    expect(kind.className.split(/\s+/)).toContain('md:block')
   })
 
   it('keeps the state word, which is the artboard\'s third line', () => {

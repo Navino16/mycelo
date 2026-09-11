@@ -59,7 +59,7 @@ export function AttentionTable({ rows }: { rows: readonly AttentionRow[] }): Rea
       </div>
       <ul className="divide-y divide-line">
         {rows.map((row) => (
-          <li key={`${row.state}:${row.name}`} className={`relative grid gap-2 px-4 py-3 ${COLUMNS}`}>
+          <li key={`${row.state}:${row.name}`} className={`relative grid gap-2 px-4 py-3 pr-9 md:pr-4 ${COLUMNS}`}>
             <div className="min-w-0">
               <Link to={`/plugins/${row.name}`} className="font-mono text-body">{row.name}</Link>
               {row.kind !== undefined && (

@@ -122,7 +122,7 @@ function SourceRow(
       >
         {truncateTail(source.location, 64)}
       </span>
-      <span data-testid="source-trust" className="order-1 ml-auto justify-self-start md:order-none md:ml-0">
+      <span data-testid="source-trust" className="order-1 justify-self-start md:order-none">
         <Chip label={t(badgeKey(source))} tone={source.official && source.enabled ? 'ok' : 'idle'} />
       </span>
       <span className="order-3 col-span-2 text-body text-text/70 md:order-none md:col-span-1">

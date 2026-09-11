@@ -8,8 +8,9 @@ import { faultOf } from '../rhizaHealth.ts'
 import type { PluginDto } from '../api/types.ts'
 
 /**
- * One row of 1b: five desktop columns, three lines plus a chevron on a phone. A grid rather
- * than a `<table>` so both layouts stay one component — the mobile frame is not a narrow table.
+ * One row of 1b: five desktop columns, four lines plus a chevron on a phone (description and
+ * source share one cell as two blocks). A grid rather than a `<table>` so both layouts stay one
+ * component — the mobile frame is not a narrow table.
  */
 export function PluginRow({ plugin }: { plugin: PluginDto }): React.JSX.Element {
   const t = useT()
@@ -21,7 +22,7 @@ export function PluginRow({ plugin }: { plugin: PluginDto }): React.JSX.Element 
   const note = plugin.reason ?? fault?.detail
   const tone = toneOf(state)
   return (
-    <li className="relative grid items-baseline gap-x-3 gap-y-1 p-3 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_6rem_8rem_minmax(0,2fr)]">
+    <li className="relative grid items-baseline gap-x-3 gap-y-1 p-3 pr-8 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_6rem_8rem_minmax(0,2fr)] md:pr-3">
       <span className="flex min-w-0 items-center gap-2">
         <Dot tone={tone} />
         <Link to={`/plugins/${plugin.name}`} data-testid="plugin-name" className="truncate font-mono">
