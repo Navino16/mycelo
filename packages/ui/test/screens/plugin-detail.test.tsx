@@ -235,6 +235,36 @@ describe('the dormant plugin detail, as 1c draws it', () => {
     expect(screen.getByText('Search and add films from a conversation')).toBeDefined()
   })
 
+  // 1c's phone header is the badge plus two chips; the rest rejoins the row at md so desktop
+  // still wraps as one row instead of gaining a second.
+  it('hides the kind, count and source chips on a phone, rejoining them at md on desktop', async () => {
+    serve(DORMANT)
+    renderDetail()
+
+    const extra = await screen.findByTestId('detail-chips-extra')
+    const classes = extra.className.split(/\s+/)
+    expect(classes).toContain('hidden')
+    expect(classes).toContain('md:contents')
+
+    const kindChips = screen.getAllByText('Enzymes · commands')
+    expect(kindChips.some((el) => extra.contains(el))).toBe(true)
+    expect(extra.textContent).toContain('3 commands')
+    expect(extra.textContent).toContain('checked out locally')
+  })
+
+  // enabled reads the install row (packages/core/src/api/routes/plugins.ts) and can disagree
+  // with state until the next germination, so it carries information the badge alone does not.
+  it('keeps the strain and enabled chips out of the phone-hidden wrapper', async () => {
+    serve(DORMANT)
+    renderDetail()
+
+    const strain = await screen.findByText('strain 3.1.0')
+    const enabled = screen.getByText('enabled')
+    const extra = screen.getByTestId('detail-chips-extra')
+    expect(extra.contains(strain)).toBe(false)
+    expect(extra.contains(enabled)).toBe(false)
+  })
+
   it('says a disabled plugin is disabled, not enabled', async () => {
     serve({ ...DORMANT, enabled: false, state: 'disabled' })
     renderDetail()

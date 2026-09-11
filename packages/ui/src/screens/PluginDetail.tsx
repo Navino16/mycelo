@@ -106,17 +106,26 @@ export function PluginDetail(): React.JSX.Element {
             <p className="text-body text-text/70">{plugin.description}</p>
           )}
           <div className="flex flex-wrap gap-2">
-            {plugin.kind !== undefined && <Chip label={kindLabel(t, plugin.kind)} />}
             {plugin.strain !== undefined && <Chip label={`strain ${plugin.strain}`} />}
+            {/* plugins.ts: enabled reads the install row and can disagree with state until the
+                next germination, so this is not redundant with the badge — stays visible. */}
             <Chip label={t(plugin.enabled ? 'detail.enabled' : 'detail.disabled')} />
-            <Chip
-              label={plural(t, 'detail.commandCount', declared.length, {
-                count: declared.length,
-              })}
-            />
-            {/* design §7.4: an operator asked "where do I configure Signal?" needs this even
-                for a plugin nobody installed through a source. */}
-            <Chip label={plugin.source ?? t('plugins.source.local')} />
+            {/* 1c's phone header keeps only the badge, strain and enabled state; kind is in the
+                breadcrumb, the count is on the Commands tab, and source repeats on the plugin's
+                list row — all one tap away, so hiding them here loses no information.
+                `md:contents` rejoins this wrapper's chips into the row above at md, so desktop
+                still wraps as a single row instead of gaining a second one. */}
+            <div data-testid="detail-chips-extra" className="hidden gap-2 md:contents">
+              {plugin.kind !== undefined && <Chip label={kindLabel(t, plugin.kind)} />}
+              <Chip
+                label={plural(t, 'detail.commandCount', declared.length, {
+                  count: declared.length,
+                })}
+              />
+              {/* design §7.4: an operator asked "where do I configure Signal?" needs this even
+                  for a plugin nobody installed through a source. */}
+              <Chip label={plugin.source ?? t('plugins.source.local')} />
+            </div>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
