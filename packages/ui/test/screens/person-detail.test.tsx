@@ -345,18 +345,27 @@ describe("a person's detail layout", () => {
     expect(grid.className.split(/\s+/)).toContain('md:items-start')
   })
 
-  // 2i-D-1: the desktop artboard keeps roles under identities and rights in its own column, so a
-  // DOM move of the roles section would break that placement. The phone order comes from
-  // `order-*` instead, reset to `md:order-none` so ties break back to the original DOM order.
-  it('orders the roles card before the rights card on a phone, via order tokens', async () => {
+  // The DOM is now identities, roles, rights: a phone (no `md:` query matches) reads the
+  // artboard's order structurally, not just visually — pinned as DOM position, not a class.
+  it('puts the roles card before the rights card in the DOM, the phone order the artboard draws', async () => {
     mockApi({ person: TWO_ROLES })
     renderDetail()
 
     const roles = await screen.findByTestId('roles')
     const rights = await screen.findByTestId('rights')
-    expect(roles.className.split(/\s+/)).toContain('order-2')
-    expect(rights.className.split(/\s+/)).toContain('order-3')
-    expect(roles.className.split(/\s+/)).toContain('md:order-none')
-    expect(rights.className.split(/\s+/)).toContain('md:order-none')
+    expect(roles.compareDocumentPosition(rights) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    )
+  })
+
+  // 2i-D-1: `md:order-*` alone reconstructs the desktop columns from the new DOM order.
+  it('reconstructs the desktop columns with md:order tokens', async () => {
+    mockApi({ person: TWO_ROLES })
+    renderDetail()
+
+    const roles = await screen.findByTestId('roles')
+    const rights = await screen.findByTestId('rights')
+    expect(roles.className.split(/\s+/)).toContain('md:order-3')
+    expect(rights.className.split(/\s+/)).toContain('md:order-2')
   })
 })
