@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter } from 'react-router'
 import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
+import { PluginRow } from '../../src/components/PluginRow.tsx'
 import { Plugins } from '../../src/screens/Plugins.tsx'
 import type { PluginDto, PluginGroups, RuntimeHealth } from '../../src/api/types.ts'
 
@@ -580,5 +581,52 @@ describe('a dormant row carrying a real refusal', () => {
 
     const reason = await screen.findByText(LONG)
     expect(reason.className).toContain('truncate')
+  })
+})
+
+describe("a plugin row's phone template", () => {
+  const PLUGIN: PluginDto = {
+    name: 'radarr',
+    kind: 'rhiza',
+    description: 'Un serveur Radarr',
+    source: 'Mycelo spores',
+    strain: '0.5.0',
+    state: 'dormant',
+    enabled: true,
+    reason: 'la configuration est incomplète',
+    commands: [],
+    scopes: [],
+  }
+
+  // PluginRow reads useHealth() (finding F17), which throws without a HealthContext provider.
+  function renderRow(): void {
+    render(
+      <I18nProvider>
+        <HealthContext value={{ health: GERMINATED, error: false, refresh: () => Promise.resolve() }}>
+          <MemoryRouter><PluginRow plugin={PLUGIN} /></MemoryRouter>
+        </HealthContext>
+      </I18nProvider>,
+    )
+  }
+
+  it('puts the strain on the name line, not on a line of its own', () => {
+    renderRow()
+    const name = screen.getByTestId('plugin-name')
+    // Tailwind's md:hidden/md:block pair both render in happy-dom (no media query support),
+    // so the strain text appears twice; the mobile copy is the one sharing the name's flex row.
+    const strains = screen.getAllByText('0.5.0')
+    expect(strains.some((s) => name.parentElement?.contains(s))).toBe(true)
+  })
+
+  it('carries a chevron the artboard draws on every row', () => {
+    renderRow()
+    expect(screen.getByTestId('plugin-chevron')).toBeDefined()
+  })
+
+  it('hides the state badge on a phone, where the note already carries the tone', () => {
+    renderRow()
+    // The badge is the fifth line the artboard does not draw; it returns at md.
+    expect(screen.getByTestId('plugin-state').className).toContain('hidden')
+    expect(screen.getByTestId('plugin-state').className).toContain('md:block')
   })
 })
