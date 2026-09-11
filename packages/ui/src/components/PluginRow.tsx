@@ -8,8 +8,9 @@ import { faultOf } from '../rhizaHealth.ts'
 import type { PluginDto } from '../api/types.ts'
 
 /**
- * One row of 1b: five desktop columns, one stacked block on a phone. A grid rather than a
- * `<table>` so both layouts stay one component — the mobile frame is not a narrow table.
+ * One row of 1b: five desktop columns, four lines plus a chevron on a phone (description and
+ * source share one cell as two blocks). A grid rather than a `<table>` so both layouts stay one
+ * component — the mobile frame is not a narrow table.
  */
 export function PluginRow({ plugin }: { plugin: PluginDto }): React.JSX.Element {
   const t = useT()
@@ -21,12 +22,17 @@ export function PluginRow({ plugin }: { plugin: PluginDto }): React.JSX.Element 
   const note = plugin.reason ?? fault?.detail
   const tone = toneOf(state)
   return (
-    <li className="grid items-baseline gap-x-3 gap-y-1 p-3 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_6rem_8rem_minmax(0,2fr)]">
+    <li className="relative grid items-baseline gap-x-3 gap-y-1 p-3 pr-8 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_6rem_8rem_minmax(0,2fr)] md:pr-3">
       <span className="flex min-w-0 items-center gap-2">
         <Dot tone={tone} />
         <Link to={`/plugins/${plugin.name}`} data-testid="plugin-name" className="truncate font-mono">
           {plugin.name}
         </Link>
+        {/* Row 54: on a phone the artboard right-aligns the version against the name rather
+            than giving it a column of its own. At md the column returns and this is empty. */}
+        <span className="ml-auto font-mono text-meta-lg text-text/60 md:hidden">
+          {plugin.strain ?? ''}
+        </span>
       </span>
       <span className="min-w-0">
         {plugin.description !== undefined && (
@@ -38,8 +44,16 @@ export function PluginRow({ plugin }: { plugin: PluginDto }): React.JSX.Element 
           {plugin.source ?? t('plugins.source.local')}
         </span>
       </span>
-      <span className="font-mono text-meta-lg text-text/60">{plugin.strain ?? ''}</span>
-      <span className="justify-self-start"><StateBadge state={state} /></span>
+      <span className="hidden font-mono text-meta-lg text-text/60 md:block">{plugin.strain ?? ''}</span>
+      {/* A disabled/pending/unknown plugin carries no note (no refusal to translate), so the
+          badge is the only tone signal on a phone and must not hide — the note line and the
+          badge line never both need the row's third slot. */}
+      <span
+        data-testid="plugin-state"
+        className={`justify-self-start ${note === undefined ? '' : 'hidden md:block'}`}
+      >
+        <StateBadge state={state} />
+      </span>
       {/* R7: the cause sits on the row, never behind a hover — clamped like the two columns
           beside it, since a real Zod refusal runs to 200 characters and 1b's model is a note
           with the full text on the diagnosis card the name links to. */}
@@ -48,6 +62,14 @@ export function PluginRow({ plugin }: { plugin: PluginDto }): React.JSX.Element 
           {note}
         </span>
       )}
+      {/* Row 54: the artboard draws a chevron on every phone row; the desktop grid needs none. */}
+      <span
+        data-testid="plugin-chevron"
+        aria-hidden="true"
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-text/40 md:hidden"
+      >
+        ›
+      </span>
     </li>
   )
 }

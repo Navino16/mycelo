@@ -235,6 +235,53 @@ describe('the dormant plugin detail, as 1c draws it', () => {
     expect(screen.getByText('Search and add films from a conversation')).toBeDefined()
   })
 
+  // 1c's phone header is the badge plus two chips; the rest rejoins the row at md so desktop
+  // still wraps as one row instead of gaining a second.
+  it('hides the kind, count and source chips on a phone, rejoining them at md on desktop', async () => {
+    serve(DORMANT)
+    renderDetail()
+
+    const kindWrap = await screen.findByTestId('detail-chip-kind')
+    const extra = screen.getByTestId('detail-chips-extra')
+    for (const wrap of [kindWrap, extra]) {
+      const classes = wrap.className.split(/\s+/)
+      expect(classes).toContain('hidden')
+      expect(classes).toContain('md:contents')
+    }
+
+    const kindChips = screen.getAllByText('Enzymes · commands')
+    expect(kindChips.some((el) => kindWrap.contains(el))).toBe(true)
+    expect(extra.textContent).toContain('3 commands')
+    expect(extra.textContent).toContain('checked out locally')
+  })
+
+  // enabled reads the install row (packages/core/src/api/routes/plugins.ts) and can disagree
+  // with state until the next germination, so it carries information the badge alone does not.
+  it('keeps the strain and enabled chips out of the phone-hidden wrappers', async () => {
+    serve(DORMANT)
+    renderDetail()
+
+    const strain = await screen.findByText('strain 3.1.0')
+    const enabled = screen.getByText('enabled')
+    const kindWrap = screen.getByTestId('detail-chip-kind')
+    const extra = screen.getByTestId('detail-chips-extra')
+    for (const wrap of [kindWrap, extra]) {
+      expect(wrap.contains(strain)).toBe(false)
+      expect(wrap.contains(enabled)).toBe(false)
+    }
+  })
+
+  // The wrappers exist only to hide chips on a phone; a desktop viewer must still read the
+  // pre-split order, since `display: contents` splices each wrapper's children in place.
+  it('keeps the desktop chip order kind, strain, enabled, count, source', async () => {
+    serve(DORMANT)
+    renderDetail()
+
+    const row = await screen.findByTestId('detail-chips')
+    const labels = [...row.querySelectorAll('[data-tone]')].map((el) => el.textContent)
+    expect(labels).toEqual(['Enzymes · commands', 'strain 3.1.0', 'enabled', '3 commands', 'checked out locally'])
+  })
+
   it('says a disabled plugin is disabled, not enabled', async () => {
     serve({ ...DORMANT, enabled: false, state: 'disabled' })
     renderDetail()

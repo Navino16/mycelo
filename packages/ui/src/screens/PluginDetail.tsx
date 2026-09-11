@@ -105,18 +105,27 @@ export function PluginDetail(): React.JSX.Element {
           {plugin.description !== undefined && (
             <p className="text-body text-text/70">{plugin.description}</p>
           )}
-          <div className="flex flex-wrap gap-2">
-            {plugin.kind !== undefined && <Chip label={kindLabel(t, plugin.kind)} />}
+          <div data-testid="detail-chips" className="flex flex-wrap gap-2">
+            {/* kind, count and source are one tap away (breadcrumb, Commands tab, plugin's list
+                row) so a phone hides them, design §7.4's source included; `md:contents` rejoins
+                each wrapper at md, keeping the order kind/strain/enabled/count/source. */}
+            {plugin.kind !== undefined && (
+              <div data-testid="detail-chip-kind" className="hidden md:contents">
+                <Chip label={kindLabel(t, plugin.kind)} />
+              </div>
+            )}
             {plugin.strain !== undefined && <Chip label={`strain ${plugin.strain}`} />}
+            {/* enabled reads the install row (plugins.ts) and can disagree with state until the
+                next germination, so it is not redundant with the badge — stays visible. */}
             <Chip label={t(plugin.enabled ? 'detail.enabled' : 'detail.disabled')} />
-            <Chip
-              label={plural(t, 'detail.commandCount', declared.length, {
-                count: declared.length,
-              })}
-            />
-            {/* design §7.4: an operator asked "where do I configure Signal?" needs this even
-                for a plugin nobody installed through a source. */}
-            <Chip label={plugin.source ?? t('plugins.source.local')} />
+            <div data-testid="detail-chips-extra" className="hidden md:contents">
+              <Chip
+                label={plural(t, 'detail.commandCount', declared.length, {
+                  count: declared.length,
+                })}
+              />
+              <Chip label={plugin.source ?? t('plugins.source.local')} />
+            </div>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">

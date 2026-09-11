@@ -5,6 +5,7 @@ import { I18nProvider } from '../../src/i18n.tsx'
 import { BOX_H, GAP_Y } from '../../src/graphLayout.ts'
 import {
   Graph,
+  MARGIN,
   REASON_CHARS_PER_LINE,
   REASON_DESCENDER,
   REASON_FIRST_BASELINE,
@@ -187,6 +188,34 @@ describe('the anastomosis graph', () => {
     for (const line of lines) {
       expect(line.textContent?.length).toBeLessThanOrEqual(REASON_CHARS_PER_LINE)
     }
+  })
+
+  // Defect: the canvas height formula never accounted for the reason block drawn below the
+  // lowest node, clipping it by up to 19 px (task 8b brief).
+  it('grows the canvas to fit the lowest node\'s wrapped three-line reason', async () => {
+    const reason = 'configuration rejected: ' + Array.from({ length: 4 }, () => 'url: Invalid input: expected string, received undefined').join('; ')
+    serve({ nodes: [{ name: 'vault', kind: 'rhiza', state: 'dormant', reason }], edges: [] })
+    renderGraph()
+
+    const svg = await screen.findByRole('img')
+    expect(within(svg).getAllByTestId('reason-vault').length).toBe(REASON_LINES)
+    const height = Number(svg.getAttribute('height'))
+    const minHeight = MARGIN + REASON_FIRST_BASELINE + (REASON_LINES - 1) * REASON_LINE_H + REASON_DESCENDER
+    expect(height).toBeGreaterThanOrEqual(minHeight)
+  })
+
+  // The "actual line count" half: a one-line reason must not buy the three-line budget.
+  it('does not grow the canvas by the three-line budget for a one-line reason', async () => {
+    serve({ nodes: [{ name: 'vault', kind: 'rhiza', state: 'dormant', reason: 'boom' }], edges: [] })
+    renderGraph()
+
+    const svg = await screen.findByRole('img')
+    expect(within(svg).getAllByTestId('reason-vault').length).toBe(1)
+    const height = Number(svg.getAttribute('height'))
+    // Same node, same margins, but a three-line reason instead: the gap is what the extra
+    // two lines cost, and a one-line reason must not be charged for it.
+    const threeLineHeight = MARGIN * 2 + REASON_FIRST_BASELINE + (REASON_LINES - 1) * REASON_LINE_H + REASON_DESCENDER
+    expect(height).toBeLessThan(threeLineHeight)
   })
 
   it('renders a loading affordance while the graph has not answered', () => {

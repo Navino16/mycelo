@@ -211,6 +211,56 @@ describe('the sources list', () => {
   })
 })
 
+describe("the sources list's header and phone template", () => {
+  // The brief's snippet called renderSources() with no mockApi and no await: the list only
+  // ever loads once the fetch promise resolves, so the header — inside the loaded-list branch,
+  // like People's and Roles' — needs both a mocked fetch and an async find.
+  it('labels its columns, as People and Roles do', async () => {
+    mockApi([OFFICIAL], { catalogues: { 1: 61 } })
+    renderSources()
+
+    expect(await screen.findByText(/^SOURCE$/i)).toBeDefined()
+    expect(screen.getByText(/^CATALOGUE$/i)).toBeDefined()
+    // The settled deviation from the artboard: this column reads trust, not reachability.
+    expect(screen.getByText(/^TRUST$/i)).toBeDefined()
+    expect(screen.queryByText(/^STATE$/i)).toBeNull()
+  })
+
+  it('hides the header on a phone, where the rows are stacked blocks', async () => {
+    mockApi([OFFICIAL], { catalogues: { 1: 61 } })
+    renderSources()
+
+    const header = await screen.findByTestId('sources-header')
+    // Tokenised, not `.toContain('md:grid')`: that substring also sits inside
+    // `md:grid-cols-[...]`, so a deleted `md:grid` display class would leave it green.
+    const classes = header.className.split(/\s+/)
+    expect(classes).toContain('hidden')
+    expect(classes).toContain('md:grid')
+  })
+
+  // The pill shares the name's line through the row's two-column phone grid plus `order-1`,
+  // with every sibling spanning both columns; a margin cannot do it, since `justify-self-start`
+  // leaves an auto margin no free space to consume.
+  it('puts the trust pill on the name line on a phone', async () => {
+    mockApi([OFFICIAL, THIRD_PARTY], { catalogues: { 1: 61, 2: 112 } })
+    renderSources()
+    await waitFor(() => { expect(screen.getByText('sporangium/core')).toBeDefined() })
+
+    const row = screen.getByTestId('source-1')
+    expect(row.className.split(/\s+/)).toContain('grid-cols-[minmax(0,1fr)_auto]')
+
+    const pill = screen.getAllByTestId('source-trust')[0]
+    const pillClasses = pill?.className.split(/\s+/) ?? []
+    expect(pillClasses).toContain('order-1')
+    expect(pillClasses).toContain('md:order-none')
+
+    const location = within(row).getByTitle(OFFICIAL.location)
+    const locationClasses = location.className.split(/\s+/)
+    expect(locationClasses).toContain('col-span-2')
+    expect(locationClasses).toContain('md:col-span-1')
+  })
+})
+
 describe('adding a source', () => {
   it('keeps the form behind a sheet rather than sitting open under the list', async () => {
     mockApi([OFFICIAL], { catalogues: { 1: 61 } })

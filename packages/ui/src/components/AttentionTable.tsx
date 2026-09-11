@@ -25,13 +25,13 @@ const LABEL: Record<AttentionRow['state'], StringKey> = {
 // R1: crit is the mute bot's alone, so every row here — dormant plugin or silent system — is amber.
 const COLUMNS = 'md:grid md:grid-cols-[minmax(0,1fr)_7rem_minmax(0,2fr)_9rem] md:items-center md:gap-4'
 
-function StateWord({ state }: { state: AttentionRow['state'] }): React.JSX.Element {
+function StateWord({ state, className = '' }: { state: AttentionRow['state'], className?: string }): React.JSX.Element {
   const t = useT()
   const { text, bg } = TONE_CLASSES.warn
   return (
     <span
       data-tone="warn"
-      className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2 py-0.5 text-meta font-medium ${text} ${bg}`}
+      className={`inline-flex w-fit items-center gap-1.5 rounded-full px-2 py-0.5 text-meta font-medium ${text} ${bg} ${className}`}
     >
       <Dot tone="warn" />
       {t(LABEL[state])}
@@ -59,25 +59,36 @@ export function AttentionTable({ rows }: { rows: readonly AttentionRow[] }): Rea
       </div>
       <ul className="divide-y divide-line">
         {rows.map((row) => (
-          <li key={`${row.state}:${row.name}`} className={`grid gap-2 px-4 py-3 ${COLUMNS}`}>
+          <li key={`${row.state}:${row.name}`} className={`relative grid gap-2 px-4 py-3 pr-9 md:pr-4 ${COLUMNS}`}>
             <div className="min-w-0">
               <Link to={`/plugins/${row.name}`} className="font-mono text-body">{row.name}</Link>
               {row.kind !== undefined && (
-                <p className="text-meta text-text/60">{kindLabel(t, row.kind)}</p>
+                <p data-testid="attention-kind" className="hidden text-meta text-text/60 md:block">
+                  {kindLabel(t, row.kind)}
+                </p>
               )}
             </div>
-            <StateWord state={row.state} />
-            <p className="text-body text-text/70">{row.reason}</p>
+            <StateWord state={row.state} className="order-2 md:order-none" />
+            {/* Row 29: the artboard reads name / reason / state on a phone; `order-*` flips the
+                visual sequence without moving the desktop grid's explicit column assignment. */}
+            <p className="order-1 text-body text-text/70 md:order-none">{row.reason}</p>
             {row.action === undefined
-              ? <span />
+              ? <span className="order-3 md:order-none" />
               : (
                   <Link
                     to={row.action.to}
-                    className="w-fit rounded-md border border-line px-3 py-1.5 text-meta-lg"
+                    className="order-3 w-fit rounded-md border border-line px-3 py-1.5 text-meta-lg md:order-none"
                   >
                     {row.action.label}
                   </Link>
                 )}
+            <span
+              data-testid="attention-chevron"
+              aria-hidden="true"
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-text/40 md:hidden"
+            >
+              ›
+            </span>
           </li>
         ))}
       </ul>

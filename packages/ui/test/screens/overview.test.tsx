@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter } from 'react-router'
 import { ChromeContext } from '../../src/chrome.tsx'
+import { AttentionTable } from '../../src/components/AttentionTable.tsx'
 import { diagnose } from '../../src/components/DormantDiagnosis.tsx'
 import { TONE_CLASSES } from '../../src/components/tone.ts'
 import { HealthContext } from '../../src/health.tsx'
@@ -1170,5 +1171,71 @@ describe('the overview stacking order on a phone', () => {
 
     expect(entry?.className).toContain('flex')
     expect(entry?.className).toContain('md:block')
+  })
+})
+
+describe("the attention table's phone template", () => {
+  const RADARR_ROW = {
+    name: 'radarr',
+    kind: 'rhiza' as const,
+    state: 'unreachable' as const,
+    reason: "le système n'a pas répondu",
+    action: { to: '/plugins/radarr/settings', label: 'Corriger ses réglages' },
+  }
+  // noUncheckedIndexedAccess makes ROWS[0] read back as possibly undefined; keep a
+  // direct reference for the tests that need this row's own fields.
+  const ROWS = [RADARR_ROW]
+
+  it('carries a chevron on every row, hidden again above md', () => {
+    // Two rows of different states: a fixture of one cannot show the chevron is per-row.
+    const rows = [
+      RADARR_ROW,
+      { name: 'plex', kind: 'rhiza' as const, state: 'dormant' as const, reason: 'la version de la souche est hors plage' },
+    ]
+    render(<I18nProvider><MemoryRouter><AttentionTable rows={rows} /></MemoryRouter></I18nProvider>)
+
+    const chevrons = screen.getAllByTestId('attention-chevron')
+    expect(chevrons).toHaveLength(rows.length)
+    for (const chevron of chevrons) {
+      expect(chevron.className).toContain('md:hidden')
+    }
+  })
+
+  // Row 29: the artboard's phone line order is name / reason / state, not the built name / state /
+  // reason / action. CSS `order` never mutates the DOM, so the tokens are the behaviour.
+  it('orders the reason and state word ahead of the action on a phone, resetting at md', () => {
+    render(<I18nProvider><MemoryRouter><AttentionTable rows={ROWS} /></MemoryRouter></I18nProvider>)
+
+    const reason = screen.getByText(RADARR_ROW.reason)
+    const state = screen.getByText('Unreachable')
+    const action = screen.getByRole('link', { name: RADARR_ROW.action.label })
+
+    // Tokenised, not `.toContain('order-1')`: that substring also sits inside `md:order-1`,
+    // which is exactly the desktop-order bug this row was rebuilt to fix.
+    expect(reason.className.split(/\s+/)).toContain('order-1')
+    expect(reason.className.split(/\s+/)).toContain('md:order-none')
+    expect(state.className.split(/\s+/)).toContain('order-2')
+    expect(state.className.split(/\s+/)).toContain('md:order-none')
+    expect(action.className.split(/\s+/)).toContain('order-3')
+    expect(action.className.split(/\s+/)).toContain('md:order-none')
+  })
+
+  it('hides the kind sub-label on a phone, which the artboard does not draw', () => {
+    render(<I18nProvider><MemoryRouter><AttentionTable rows={ROWS} /></MemoryRouter></I18nProvider>)
+    const kind = screen.getByTestId('attention-kind')
+    expect(kind.className.split(/\s+/)).toContain('hidden')
+    expect(kind.className.split(/\s+/)).toContain('md:block')
+  })
+
+  it('keeps the state word, which is the artboard\'s third line', () => {
+    // Default locale is English in this environment; the artboard's word is French.
+    globalThis.localStorage?.setItem('mycelo.locale', 'fr')
+    try {
+      render(<I18nProvider><MemoryRouter><AttentionTable rows={ROWS} /></MemoryRouter></I18nProvider>)
+      // Amber, and present at both widths — it is the only tone signal on the row.
+      expect(screen.getByText(/injoignable/i)).toBeDefined()
+    } finally {
+      globalThis.localStorage?.removeItem('mycelo.locale')
+    }
   })
 })
