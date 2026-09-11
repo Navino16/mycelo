@@ -231,8 +231,11 @@ describe("the sources list's header and phone template", () => {
     renderSources()
 
     const header = await screen.findByTestId('sources-header')
-    expect(header.className).toContain('hidden')
-    expect(header.className).toContain('md:grid')
+    // Tokenised, not `.toContain('md:grid')`: that substring also sits inside
+    // `md:grid-cols-[...]`, so a deleted `md:grid` display class would leave it green.
+    const classes = header.className.split(/\s+/)
+    expect(classes).toContain('hidden')
+    expect(classes).toContain('md:grid')
   })
 
   it('puts the trust pill on the name line on a phone', async () => {

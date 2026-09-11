@@ -12,6 +12,8 @@ import type { StringKey } from '../../locales/en.ts'
 
 interface Draft { label: string, location: string, token: string }
 
+const COLUMNS = 'md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_8rem_7rem_4rem]'
+
 function badgeKey(source: SourceDto): StringKey {
   if (!source.enabled) return 'sources.disabled'
   return source.official ? 'sources.official' : 'sources.thirdParty'
@@ -96,7 +98,7 @@ function SourceRow(
   return (
     <li
       data-testid={`source-${String(source.id)}`}
-      className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1 p-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_8rem_7rem_4rem]"
+      className={`grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1 p-3 ${COLUMNS}`}
     >
       {/* A `local` driver refuses both browse routes by design (the core's
           api/routes/sources.ts, driverOf): its spores are already installed, so the row names
@@ -252,26 +254,30 @@ export function Sources(): React.JSX.Element {
 
       {sources !== null && list.length > 0 && (
         <>
-          <div
-            data-testid="sources-header"
-            className="hidden border-b border-line px-3 py-2 text-meta uppercase tracking-wide text-text/60 md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_8rem_7rem_4rem] md:gap-x-3"
-          >
-            <span>{t('sources.colSource')}</span>
-            <span>{t('sources.colUrl')}</span>
-            <span>{t('sources.colTrust')}</span>
-            <span>{t('sources.colCatalogue')}</span>
-            <span />
+          <div className="rounded-lg border border-line">
+            <div
+              data-testid="sources-header"
+              className={`hidden gap-x-3 border-b border-line px-3 py-2 text-meta uppercase tracking-wide text-text/60 md:grid ${COLUMNS}`}
+            >
+              <span>{t('sources.colSource')}</span>
+              <span>{t('sources.colUrl')}</span>
+              <span>{t('sources.colTrust')}</span>
+              <span>{t('sources.colCatalogue')}</span>
+              {/* The artboard's fifth column, PINNED (branch/tag), has no equivalent here: no
+                  pinning concept exists in this build, so the cell stays deliberately blank. */}
+              <span />
+            </div>
+            <ul className="divide-y divide-line-soft">
+              {list.map((source) => (
+                <SourceRow
+                  key={source.id}
+                  source={source}
+                  spores={counts[source.id]}
+                  onEdit={() => { openEdit(source) }}
+                />
+              ))}
+            </ul>
           </div>
-          <ul className="divide-y divide-line-soft rounded-lg border border-line">
-            {list.map((source) => (
-              <SourceRow
-                key={source.id}
-                source={source}
-                spores={counts[source.id]}
-                onEdit={() => { openEdit(source) }}
-              />
-            ))}
-          </ul>
           {/* The honest version of the design's unreachable card: no probe route exists, so
               nothing here claims to know which source is down. */}
           <p className="text-body text-text/70">{t('sources.unreachableLead')}</p>
