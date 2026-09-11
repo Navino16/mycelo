@@ -96,7 +96,7 @@ function SourceRow(
   return (
     <li
       data-testid={`source-${String(source.id)}`}
-      className="grid items-baseline gap-x-3 gap-y-1 p-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_8rem_7rem_4rem]"
+      className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 gap-y-1 p-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_8rem_7rem_4rem]"
     >
       {/* A `local` driver refuses both browse routes by design (the core's
           api/routes/sources.ts, driverOf): its spores are already installed, so the row names
@@ -111,13 +111,19 @@ function SourceRow(
             </Link>
           )
         : <span className="truncate font-mono font-medium" title={source.label}>{truncateTail(source.label, 64)}</span>}
-      <span className="truncate font-mono text-meta-lg text-text/60" title={source.location}>
+      {/* Mobile is a 2-col grid so the pill shares the name's line; `order-*`/`md:order-none`
+          reseats url/catalogue/edit below it without moving document order, which stays the
+          desktop columns' order — a `display:contents` wrapper here would not. */}
+      <span
+        className="order-2 col-span-2 truncate font-mono text-meta-lg text-text/60 md:order-none md:col-span-1"
+        title={source.location}
+      >
         {truncateTail(source.location, 64)}
       </span>
-      <span className="justify-self-start">
+      <span data-testid="source-trust" className="order-1 ml-auto justify-self-start md:order-none md:ml-0">
         <Chip label={t(badgeKey(source))} tone={source.official && source.enabled ? 'ok' : 'idle'} />
       </span>
-      <span className="text-body text-text/70">
+      <span className="order-3 col-span-2 text-body text-text/70 md:order-none md:col-span-1">
         {!browsable
           ? t('sources.localNote')
           : spores === undefined
@@ -127,7 +133,7 @@ function SourceRow(
       <button
         type="button"
         onClick={onEdit}
-        className="justify-self-start rounded-md border border-line px-2 py-1 text-meta-lg md:justify-self-end"
+        className="order-4 col-span-2 justify-self-start rounded-md border border-line px-2 py-1 text-meta-lg md:order-none md:col-span-1 md:justify-self-end"
       >
         {t('sources.edit')}
       </button>
@@ -246,6 +252,16 @@ export function Sources(): React.JSX.Element {
 
       {sources !== null && list.length > 0 && (
         <>
+          <div
+            data-testid="sources-header"
+            className="hidden border-b border-line px-3 py-2 text-meta uppercase tracking-wide text-text/60 md:grid md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)_8rem_7rem_4rem] md:gap-x-3"
+          >
+            <span>{t('sources.colSource')}</span>
+            <span>{t('sources.colUrl')}</span>
+            <span>{t('sources.colTrust')}</span>
+            <span>{t('sources.colCatalogue')}</span>
+            <span />
+          </div>
           <ul className="divide-y divide-line-soft rounded-lg border border-line">
             {list.map((source) => (
               <SourceRow

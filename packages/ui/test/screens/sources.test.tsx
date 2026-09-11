@@ -211,6 +211,41 @@ describe('the sources list', () => {
   })
 })
 
+describe("the sources list's header and phone template", () => {
+  // The brief's snippet called renderSources() with no mockApi and no await: the list only
+  // ever loads once the fetch promise resolves, so the header — inside the loaded-list branch,
+  // like People's and Roles' — needs both a mocked fetch and an async find.
+  it('labels its columns, as People and Roles do', async () => {
+    mockApi([OFFICIAL], { catalogues: { 1: 61 } })
+    renderSources()
+
+    expect(await screen.findByText(/^SOURCE$/i)).toBeDefined()
+    expect(screen.getByText(/^CATALOGUE$/i)).toBeDefined()
+    // The settled deviation from the artboard: this column reads trust, not reachability.
+    expect(screen.getByText(/^TRUST$/i)).toBeDefined()
+    expect(screen.queryByText(/^STATE$/i)).toBeNull()
+  })
+
+  it('hides the header on a phone, where the rows are stacked blocks', async () => {
+    mockApi([OFFICIAL], { catalogues: { 1: 61 } })
+    renderSources()
+
+    const header = await screen.findByTestId('sources-header')
+    expect(header.className).toContain('hidden')
+    expect(header.className).toContain('md:grid')
+  })
+
+  it('puts the trust pill on the name line on a phone', async () => {
+    mockApi([OFFICIAL, THIRD_PARTY], { catalogues: { 1: 61, 2: 112 } })
+    renderSources()
+    await waitFor(() => { expect(screen.getByText('sporangium/core')).toBeDefined() })
+
+    const pill = screen.getAllByTestId('source-trust')[0]
+    expect(pill?.className).toContain('ml-auto')
+    expect(pill?.className).toContain('md:ml-0')
+  })
+})
+
 describe('adding a source', () => {
   it('keeps the form behind a sheet rather than sitting open under the list', async () => {
     mockApi([OFFICIAL], { catalogues: { 1: 61 } })
