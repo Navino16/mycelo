@@ -335,3 +335,28 @@ describe('a person’s effective rights', () => {
     expect(screen.queryByTestId('rights')).toBeNull()
   })
 })
+
+describe("a person's detail layout", () => {
+  it('does not stretch the identities card to the height of the rights card', async () => {
+    mockApi({ person: TWO_ROLES })
+    renderDetail()
+
+    const grid = await screen.findByTestId('person-grid')
+    expect(grid.className.split(/\s+/)).toContain('md:items-start')
+  })
+
+  // 2i-D-1: the desktop artboard keeps roles under identities and rights in its own column, so a
+  // DOM move of the roles section would break that placement. The phone order comes from
+  // `order-*` instead, reset to `md:order-none` so ties break back to the original DOM order.
+  it('orders the roles card before the rights card on a phone, via order tokens', async () => {
+    mockApi({ person: TWO_ROLES })
+    renderDetail()
+
+    const roles = await screen.findByTestId('roles')
+    const rights = await screen.findByTestId('rights')
+    expect(roles.className.split(/\s+/)).toContain('order-2')
+    expect(rights.className.split(/\s+/)).toContain('order-3')
+    expect(roles.className.split(/\s+/)).toContain('md:order-none')
+    expect(rights.className.split(/\s+/)).toContain('md:order-none')
+  })
+})

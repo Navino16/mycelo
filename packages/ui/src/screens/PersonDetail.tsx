@@ -162,8 +162,14 @@ export function PersonDetail(): React.JSX.Element {
           )}
           {reviewError !== null && <p role="alert" className={`text-body ${crit.text}`}>{reviewError}</p>}
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <section className="space-y-3 rounded-xl border border-line bg-surface p-4">
+          {/* Row 2i-D-2: a grid row stretches its cells, so the identities card grew to the
+              height of the 23-row rights card beside it. */}
+          <div data-testid="person-grid" className="grid gap-4 md:grid-cols-2 md:items-start">
+            {/* Row 2i-M-1: the artboard's phone order is identities, roles, rights. The desktop
+                artboard keeps roles under identities and rights in its own column (2i-D-1), so
+                these `order-*` values reorder the phone stack without moving the DOM — at `md`
+                every card resets to `order-none` and the original desktop columns reconstruct. */}
+            <section className="order-1 space-y-3 rounded-xl border border-line bg-surface p-4 md:order-none">
               <div className="flex items-baseline gap-2">
                 <h2 className="text-title font-semibold">{t('person.identities')}</h2>
                 <span aria-hidden="true" className="text-text/40">·</span>
@@ -185,7 +191,7 @@ export function PersonDetail(): React.JSX.Element {
             </section>
 
             {granted !== null && (
-              <section data-testid="rights" className="space-y-3 rounded-xl border border-line bg-surface p-4">
+              <section data-testid="rights" className="order-3 space-y-3 rounded-xl border border-line bg-surface p-4 md:order-none">
                 <h2 className={`text-title font-semibold ${ok.text}`}>
                   {plural(t, 'person.mayRun', totalCommands, {
                     granted: granted.length, total: totalCommands,
@@ -206,7 +212,7 @@ export function PersonDetail(): React.JSX.Element {
               </section>
             )}
 
-            <section className="space-y-3 rounded-xl border border-line bg-surface p-4">
+            <section data-testid="roles" className="order-2 space-y-3 rounded-xl border border-line bg-surface p-4 md:order-none">
               <h2 className="text-title font-semibold">{t('person.roles')}</h2>
               <ul className="flex flex-wrap gap-2">
                 {heldRoles.map((role) => (
@@ -248,7 +254,7 @@ export function PersonDetail(): React.JSX.Element {
               <p className="text-meta-lg text-text/60">{t('person.rolesLead')}</p>
             </section>
 
-            <section className="space-y-3 rounded-xl border border-line bg-surface p-4">
+            <section className="order-4 space-y-3 rounded-xl border border-line bg-surface p-4 md:order-none">
               <form onSubmit={(e) => { void saveName(e) }} className="flex flex-wrap items-end gap-2">
                 <label className="block space-y-1">
                   <span className="text-meta text-text/60">{t('person.displayName')}</span>
