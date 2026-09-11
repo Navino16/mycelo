@@ -1175,17 +1175,49 @@ describe('the overview stacking order on a phone', () => {
 })
 
 describe("the attention table's phone template", () => {
-  const ROWS = [{
+  const RADARR_ROW = {
     name: 'radarr',
     kind: 'rhiza' as const,
     state: 'unreachable' as const,
     reason: "le système n'a pas répondu",
     action: { to: '/plugins/radarr/settings', label: 'Corriger ses réglages' },
-  }]
+  }
+  // noUncheckedIndexedAccess makes ROWS[0] read back as possibly undefined; keep a
+  // direct reference for the tests that need this row's own fields.
+  const ROWS = [RADARR_ROW]
 
-  it('carries a chevron on every row', () => {
+  it('carries a chevron on every row, hidden again above md', () => {
+    // Two rows of different states: a fixture of one cannot show the chevron is per-row.
+    const rows = [
+      RADARR_ROW,
+      { name: 'plex', kind: 'rhiza' as const, state: 'dormant' as const, reason: 'la version de la souche est hors plage' },
+    ]
+    render(<I18nProvider><MemoryRouter><AttentionTable rows={rows} /></MemoryRouter></I18nProvider>)
+
+    const chevrons = screen.getAllByTestId('attention-chevron')
+    expect(chevrons).toHaveLength(rows.length)
+    for (const chevron of chevrons) {
+      expect(chevron.className).toContain('md:hidden')
+    }
+  })
+
+  // Row 29: the artboard's phone line order is name / reason / state, not the built name / state /
+  // reason / action. `order-*` classes carry that behaviour; happy-dom computes no layout, so this
+  // pins the utility tokens that drive it rather than a rendered position — see task-4-report.md's
+  // "Finding 1" section for why a DOM-position assertion cannot distinguish a CSS-only reorder.
+  it('orders the reason and state word ahead of the action on a phone, resetting at md', () => {
     render(<I18nProvider><MemoryRouter><AttentionTable rows={ROWS} /></MemoryRouter></I18nProvider>)
-    expect(screen.getByTestId('attention-chevron')).toBeDefined()
+
+    const reason = screen.getByText(RADARR_ROW.reason)
+    const state = screen.getByText('Unreachable')
+    const action = screen.getByRole('link', { name: RADARR_ROW.action.label })
+
+    expect(reason.className).toContain('order-1')
+    expect(reason.className).toContain('md:order-none')
+    expect(state.className).toContain('order-2')
+    expect(state.className).toContain('md:order-none')
+    expect(action.className).toContain('order-3')
+    expect(action.className).toContain('md:order-none')
   })
 
   it('hides the kind sub-label on a phone, which the artboard does not draw', () => {
