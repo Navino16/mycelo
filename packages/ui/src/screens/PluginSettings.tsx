@@ -207,9 +207,11 @@ function FieldTemplate(props: FieldTemplateProps<Settings>): React.JSX.Element {
           data-testid="field-row"
           className="grid gap-2 py-4 md:grid-cols-[18rem_minmax(0,1fr)] md:gap-4 md:border-b md:border-line-soft"
         >
-          <div className="flex flex-wrap items-baseline justify-between gap-2 md:flex-col md:items-start md:justify-start md:gap-1">
+          <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-2 md:flex-col md:items-start md:justify-start md:gap-1">
             {displayLabel === true && !isCheckbox && (
-              <label htmlFor={id} className="text-body font-medium">{label}</label>
+              // No fixed width survives an arbitrary plugin-authored title: wrap it inside
+              // the column instead of letting it force the grid track wider.
+              <label htmlFor={id} className="break-words text-body font-medium">{label}</label>
             )}
             {meta !== undefined && <span className="font-mono text-meta text-text/60">{meta}</span>}
           </div>

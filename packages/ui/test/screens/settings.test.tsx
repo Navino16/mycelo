@@ -857,6 +857,20 @@ describe("the generated form's page frame", () => {
     expect(tokens).not.toContain('border-b')
   })
 
+  // No fixed width survives an arbitrary plugin-authored title: the label column must shrink
+  // and the label must wrap, not force the grid track wider.
+  it('lets a long label wrap inside its column instead of widening it', async () => {
+    mockVault({ schema: RICH, detail: DISABLED, settings: {} })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('Base URL')).toBeDefined() })
+    const row = screen.getAllByTestId('field-row')[0]
+    const labelCell = row?.firstElementChild
+    expect(labelCell?.className.split(/\s+/) ?? []).toContain('min-w-0')
+    const label = screen.getByText('Base URL')
+    expect(label.className.split(/\s+/)).toContain('break-words')
+  })
+
   // The only assertion that can fail I10: `text`, `secret`, `number` and `boolean` are the
   // same word in English whether they come from the JSON schema or the catalogue.
   it('names each field type in French, beside the French rank word', async () => {
