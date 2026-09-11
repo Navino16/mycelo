@@ -598,12 +598,18 @@ describe("a plugin row's phone template", () => {
     scopes: [],
   }
 
+  // The file's own disabled fixture (plugins.test.tsx:107): no `reason` at all, matching
+  // config/plugins.ts:88's `disabled` branch, which carries no refusal to translate.
+  const DISABLED_NO_NOTE: PluginDto = {
+    name: 'quiet', kind: 'hypha', commands: [], state: 'disabled', enabled: false, scopes: [],
+  }
+
   // PluginRow reads useHealth() (finding F17), which throws without a HealthContext provider.
-  function renderRow(): void {
+  function renderRow(plugin: PluginDto = PLUGIN): void {
     render(
       <I18nProvider>
         <HealthContext value={{ health: GERMINATED, error: false, refresh: () => Promise.resolve() }}>
-          <MemoryRouter><PluginRow plugin={PLUGIN} /></MemoryRouter>
+          <MemoryRouter><PluginRow plugin={plugin} /></MemoryRouter>
         </HealthContext>
       </I18nProvider>,
     )
@@ -615,18 +621,38 @@ describe("a plugin row's phone template", () => {
     // Tailwind's md:hidden/md:block pair both render in happy-dom (no media query support),
     // so the strain text appears twice; the mobile copy is the one sharing the name's flex row.
     const strains = screen.getAllByText('0.5.0')
-    expect(strains.some((s) => name.parentElement?.contains(s))).toBe(true)
+    const [phoneStrain] = strains.filter((s) => name.parentElement?.contains(s))
+    const [desktopStrain] = strains.filter((s) => !name.parentElement?.contains(s))
+    expect(phoneStrain).toBeDefined()
+    // Pinned so a future edit that drops md:hidden from the phone copy (or the reverse pair
+    // from the desktop copy) duplicates the version at desktop width with nothing catching it.
+    expect(phoneStrain?.className).toContain('md:hidden')
+    expect(desktopStrain?.className).toContain('hidden')
+    expect(desktopStrain?.className).toContain('md:block')
   })
 
   it('carries a chevron the artboard draws on every row', () => {
     renderRow()
-    expect(screen.getByTestId('plugin-chevron')).toBeDefined()
+    const chevron = screen.getByTestId('plugin-chevron')
+    expect(chevron).toBeDefined()
+    // The desktop grid draws its own state/strain columns; the chevron belongs to the phone
+    // template only.
+    expect(chevron.className).toContain('md:hidden')
   })
 
-  it('hides the state badge on a phone, where the note already carries the tone', () => {
+  it('hides the state badge on a phone when the note already carries the tone', () => {
     renderRow()
     // The badge is the fifth line the artboard does not draw; it returns at md.
     expect(screen.getByTestId('plugin-state').className).toContain('hidden')
     expect(screen.getByTestId('plugin-state').className).toContain('md:block')
+  })
+
+  it('shows the state badge on a phone when there is no note to carry the tone', () => {
+    renderRow(DISABLED_NO_NOTE)
+    // disabled/pending/unknown carry no refusal, so no note line renders (routes/plugins.ts:117-
+    // 120): the badge must stay visible at every breakpoint or the tone signal disappears.
+    const className = screen.getByTestId('plugin-state').className
+    expect(className).not.toContain('hidden')
+    expect(className).not.toContain('md:block')
   })
 })

@@ -44,7 +44,13 @@ export function PluginRow({ plugin }: { plugin: PluginDto }): React.JSX.Element 
         </span>
       </span>
       <span className="hidden font-mono text-meta-lg text-text/60 md:block">{plugin.strain ?? ''}</span>
-      <span data-testid="plugin-state" className="hidden justify-self-start md:block">
+      {/* A disabled/pending/unknown plugin carries no note (no refusal to translate), so the
+          badge is the only tone signal on a phone and must not hide — the note line and the
+          badge line never both need the row's third slot. */}
+      <span
+        data-testid="plugin-state"
+        className={`justify-self-start ${note === undefined ? '' : 'hidden md:block'}`}
+      >
         <StateBadge state={state} />
       </span>
       {/* R7: the cause sits on the row, never behind a hover — clamped like the two columns
