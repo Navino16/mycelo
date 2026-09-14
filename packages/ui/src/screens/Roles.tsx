@@ -23,7 +23,6 @@ export function Roles(): React.JSX.Element {
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [addError, setAddError] = useState<string | null>(null)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // allSettled, not all: a refused /api/config costs the default-role card, never the table.
   function load(): void {
@@ -58,16 +57,6 @@ export function Roles(): React.JSX.Element {
     }
   }
 
-  async function remove(role: string): Promise<void> {
-    setDeleteError(null)
-    try {
-      await api.send('DELETE', `/api/roles/${role}`)
-      load()
-    } catch (e) {
-      setDeleteError(e instanceof ApiError ? e.message : t('error.generic'))
-    }
-  }
-
   const list = readArray<RoleDto>(roles) ?? []
   const all = allCommands(commands)
   const total = all.length
@@ -81,7 +70,7 @@ export function Roles(): React.JSX.Element {
   function commandsCell(role: RoleDto): string {
     const granted = grantedBy(role)
     if (granted === total && total > 0) {
-      return plural(t, 'roles.commandsAll', total, { total })
+      return t('roles.commandsAll', { total })
     }
     return t('roles.commandsSome', { granted, total })
   }
@@ -181,17 +170,8 @@ export function Roles(): React.JSX.Element {
                   <span className="text-body text-text/70">
                     {plural(t, 'roles.holders', role.holders, { count: role.holders })}
                   </span>
-                  {!isDefault && !role.builtin
-                    ? (
-                        <button
-                          type="button"
-                          onClick={() => { void remove(role.name) }}
-                          className="justify-self-start rounded-md border border-line px-3 py-1.5 text-body text-text/70 md:justify-self-end"
-                        >
-                          {t('action.delete')}
-                        </button>
-                      )
-                    : <span />}
+                  {/* The fifth grid column: delete moved to the editor (2f-R1), freeing it for task 10. */}
+                  <span />
                   {isDefault && (
                     <p className="text-body text-text/70 md:col-span-5">{t('roles.defaultLead')}</p>
                   )}
@@ -201,7 +181,6 @@ export function Roles(): React.JSX.Element {
           </ul>
         </div>
       )}
-      {deleteError !== null && <p role="alert" className={`text-body ${crit.text}`}>{deleteError}</p>}
 
       <Sheet title={t('roles.createTitle')} open={adding} onClose={() => { setAdding(false) }}>
         <form onSubmit={(e) => { void add(e) }} className="space-y-3">

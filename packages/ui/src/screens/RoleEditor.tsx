@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams } from 'react-router'
+import { useNavigate, useParams } from 'react-router'
 import { api, ApiError } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
@@ -10,7 +10,7 @@ import { coversPlugin, grants, wildcardsIn } from '../patterns.ts'
 import { plural, useLocale, useT } from '../i18n.tsx'
 import { flatPlugins } from '../plugins.ts'
 import type {
-  CommandDto, CommandGroups, PluginGroups, RoleDto,
+  CommandDto, CommandGroups, ConfigDto, PluginGroups, RoleDto,
 } from '../api/types.ts'
 
 interface GroupProps {
@@ -151,8 +151,10 @@ export function RoleEditor(): React.JSX.Element {
   const t = useT()
   const { locale } = useLocale()
   const { name = '' } = useParams()
+  const navigate = useNavigate()
   const [commands, setCommands] = useState<CommandGroups | null>(null)
   const [role, setRole] = useState<RoleDto | null>(null)
+  const [defaultRole, setDefaultRole] = useState<string | undefined>(undefined)
   const [patterns, setPatterns] = useState<readonly string[]>([])
   const [saved, setSaved] = useState<readonly string[]>([])
   const [descriptions, setDescriptions] = useState<Readonly<Record<string, string>>>({})
@@ -160,6 +162,7 @@ export function RoleEditor(): React.JSX.Element {
   const [pick, setPick] = useState('')
   const [error, setError] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [acknowledged, setAcknowledged] = useState(false)
 
   // allSettled, not all: a refused /api/commands costs the per-command editor, never the
@@ -184,6 +187,12 @@ export function RoleEditor(): React.JSX.Element {
       (g) => { setDescriptions(describedPlugins(g)) },
       () => undefined,
     )
+  }, [])
+
+  // Silent on refusal, like the list's own fetch: the delete guard just stays conservative
+  // (isDefault undefined-safe to false) rather than costing the whole editor.
+  useEffect(() => {
+    api.get<ConfigDto>('/api/config').then((c) => { setDefaultRole(c.defaultRole) }, () => undefined)
   }, [])
 
   function toggle(qualified: string, granted: boolean): void {
@@ -220,6 +229,16 @@ export function RoleEditor(): React.JSX.Element {
     }
   }
 
+  async function remove(): Promise<void> {
+    setDeleteError(null)
+    try {
+      await api.send('DELETE', `/api/roles/${name}`)
+      void navigate('/roles')
+    } catch (e) {
+      setDeleteError(e instanceof ApiError ? e.message : t('error.generic'))
+    }
+  }
+
   // Derived rather than cleared in each of the four mutators (ruling 21 concern 2): a mutator
   // added later would otherwise leave 'Saved.' standing over an edited form.
   const dirty = patterns.length !== saved.length || patterns.some((p) => !saved.includes(p))
@@ -227,6 +246,7 @@ export function RoleEditor(): React.JSX.Element {
   const groups = isCommandGroups(commands) ? Object.entries(commands) : []
   const wildcards = wildcardsIn(patterns)
   const holdsAll = patterns.includes('*')
+  const isDefault = role !== null && role.name === defaultRole
 
   let total = 0
   let granted = 0
@@ -257,7 +277,7 @@ export function RoleEditor(): React.JSX.Element {
               // beside the wildcard alert it sits above.
               <span className={`font-mono text-title ${holdsAll ? warn.text : ok.text}`}>
                 {holdsAll
-                  ? plural(t, 'roles.commandsAll', total, { total })
+                  ? t('roles.commandsAll', { total })
                   : t('role.counter', { granted, total })}
               </span>
             )}
@@ -279,11 +299,23 @@ export function RoleEditor(): React.JSX.Element {
                 </button>
               </>
             )}
+            {/* Carried from the list (2f-R1): a builtin or default role stays undeletable
+                wherever the button lives. */}
+            {!role.builtin && !isDefault && (
+              <button
+                type="button"
+                onClick={() => { void remove() }}
+                className="rounded-md border border-line px-3 py-2 text-body text-text/70"
+              >
+                {t('action.delete')}
+              </button>
+            )}
           </div>
         )}
       />
 
       {error && <p role="alert" className={`text-body ${warn.text}`}>{t('error.generic')}</p>}
+      {deleteError !== null && <p role="alert" className={`text-body ${crit.text}`}>{deleteError}</p>}
       {acknowledged && !dirty && <p role="status" className="text-body">{t('role.saved')}</p>}
 
       {role !== null && (

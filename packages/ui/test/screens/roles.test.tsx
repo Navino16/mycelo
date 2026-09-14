@@ -50,8 +50,6 @@ function mockApi(
     configStatus?: number
     postStatus?: number
     postBody?: unknown
-    deleteStatus?: number
-    deleteBody?: unknown
     commands?: CommandGroups
     commandsStatus?: number
     people?: number
@@ -89,15 +87,6 @@ function mockApi(
       }
       const created = body as { name: string }
       roles = [...roles, { name: created.name, builtin: false, patterns: [], holders: 0 }]
-      return Promise.resolve(json({ ok: true }))
-    }
-
-    const del = /^\/api\/roles\/([^/]+)$/.exec(url)
-    if (method === 'DELETE' && del !== null) {
-      if (options.deleteStatus !== undefined) {
-        return Promise.resolve(json(options.deleteBody ?? { error: { message: 'refused' } }, options.deleteStatus))
-      }
-      roles = roles.filter((r) => r.name !== del[1])
       return Promise.resolve(json({ ok: true }))
     }
 
@@ -178,36 +167,14 @@ describe('the roles list', () => {
     expect(row('family').textContent).not.toContain('Built in')
   })
 
-  // Neither the default role nor a built-in one may be deleted from this screen; an
-  // ordinary role is the positive control proving delete is offered at all.
-  it('offers delete on an ordinary role, but neither on the default nor on a built-in one', async () => {
+  // 2f-R1: delete is one mis-aimed click away from destroying a role on a cramped row, so the
+  // list offers no delete control at all — the editor is where it now lives.
+  it('renders no delete control on any row: delete lives in the editor', async () => {
     mockApi()
     renderRoles()
 
-    expect(within(await screen.findByTestId('role-family')).queryByRole('button', { name: 'Delete' })).not.toBeNull()
-    expect(within(row('guest')).queryByRole('button', { name: 'Delete' })).toBeNull()
-    expect(within(row('owner')).queryByRole('button', { name: 'Delete' })).toBeNull()
-  })
-
-  it('deletes an ordinary role and removes it from the list', async () => {
-    const { calls } = mockApi()
-    renderRoles()
-
     expect(await screen.findByTestId('role-family')).toBeDefined()
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
-
-    await waitFor(() => { expect(calls.some((c) => c.method === 'DELETE')).toBe(true) })
-    await waitFor(() => { expect(screen.queryByTestId('role-family')).toBeNull() })
-  })
-
-  it('renders the delete refusal in its own alert', async () => {
-    mockApi({ deleteStatus: 400, deleteBody: { error: { message: 'a built-in role cannot be changed' } } })
-    renderRoles()
-
-    expect(await screen.findByTestId('role-family')).toBeDefined()
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
-
-    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'a built-in role cannot be changed')
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull()
   })
 
   it('creates a role with the name typed, then lists it', async () => {
@@ -267,13 +234,13 @@ describe('what each row states about a role', () => {
     expect(calls.some((c) => c.url.includes('role='))).toBe(false)
   })
 
-  // 'all 4 commands' is what a wildcard means; '1 of 4' is what an explicit pattern means.
-  // Reading one off the other is the join through patterns.ts this pins.
+  // 2f-R4: '4/4' reads as the same measure as the partial case, where the old prose
+  // ('all 4 commands') did not. Reading one off the other is the join through patterns.ts this pins.
   it('states the commands each role reaches, counted against the whole registry', async () => {
     mockApi()
     renderRoles()
 
-    expect(within(await screen.findByTestId('role-owner')).getByText('all 4 commands')).toBeDefined()
+    expect(within(await screen.findByTestId('role-owner')).getByText('4/4')).toBeDefined()
     expect(within(row('guest')).getByText('1 of 4')).toBeDefined()
     expect(within(row('family')).getByText('2 of 4')).toBeDefined()
   })
@@ -368,7 +335,7 @@ function build(count: number): RoleDto[] {
 }
 
 describe('the roles list at scale', () => {
-  it('lists every role at once, with delete offered on each ordinary one', async () => {
+  it('lists every role at once, with the default marked and no delete control anywhere', async () => {
     const roles = [{ name: 'owner', builtin: true, patterns: ['*'], holders: 1 }, ...build(8)]
     mockApi({ roles, config: { prefix: '/', defaultLocale: 'en', defaultRole: 'role-3' } })
     renderRoles()
@@ -376,8 +343,7 @@ describe('the roles list at scale', () => {
     expect(await screen.findByTestId('role-owner')).toBeDefined()
     for (const role of roles) expect(row(role.name)).toBeDefined()
 
-    // 9 roles total: 8 ordinary minus the one marked default, none for the built-in owner.
-    expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(7)
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull()
     expect(row('role-3').textContent).toContain('Default role')
   })
 })
