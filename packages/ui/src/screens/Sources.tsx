@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { api, ApiError } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
 import { Chip } from '../components/Chip.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { Sheet } from '../components/Sheet.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { plural, useT } from '../i18n.tsx'
@@ -232,23 +233,21 @@ export function Sources(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-page font-semibold">{t('sources.title')}</h1>
-          {sources !== null && total !== undefined && (
-            <p className="text-meta-lg text-text/60">
-              {plural(t, 'sources.summary', list.length, { count: list.length, spores: total })}
-            </p>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={openAdd}
-          className="rounded-md bg-accent px-3 py-2 font-medium text-accent-ink"
-        >
-          {t('sources.add')}
-        </button>
-      </div>
+      <PageHeader
+        title={t('sources.title')}
+        subtitle={sources !== null && total !== undefined
+          ? plural(t, 'sources.summary', list.length, { count: list.length, spores: total })
+          : undefined}
+        actions={(
+          <button
+            type="button"
+            onClick={openAdd}
+            className="rounded-md bg-accent px-3 py-2 font-medium text-accent-ink"
+          >
+            {t('sources.add')}
+          </button>
+        )}
+      />
 
       {error && <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.generic')}</p>}
 

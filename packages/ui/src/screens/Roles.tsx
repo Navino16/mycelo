@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { api, ApiError } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
 import { Chip } from '../components/Chip.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { Sheet } from '../components/Sheet.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { grants, wildcardsIn } from '../patterns.ts'
@@ -22,7 +23,6 @@ export function Roles(): React.JSX.Element {
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [addError, setAddError] = useState<string | null>(null)
-  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // allSettled, not all: a refused /api/config costs the default-role card, never the table.
   function load(): void {
@@ -57,16 +57,6 @@ export function Roles(): React.JSX.Element {
     }
   }
 
-  async function remove(role: string): Promise<void> {
-    setDeleteError(null)
-    try {
-      await api.send('DELETE', `/api/roles/${role}`)
-      load()
-    } catch (e) {
-      setDeleteError(e instanceof ApiError ? e.message : t('error.generic'))
-    }
-  }
-
   const list = readArray<RoleDto>(roles) ?? []
   const all = allCommands(commands)
   const total = all.length
@@ -80,7 +70,7 @@ export function Roles(): React.JSX.Element {
   function commandsCell(role: RoleDto): string {
     const granted = grantedBy(role)
     if (granted === total && total > 0) {
-      return plural(t, 'roles.commandsAll', total, { total })
+      return t('roles.commandsAll', { total })
     }
     return t('roles.commandsSome', { granted, total })
   }
@@ -93,27 +83,23 @@ export function Roles(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-page font-semibold">{t('roles.title')}</h1>
-          {/* Gated on all three counts, not on the roles alone: a count nobody confirmed is
-              withheld, never rendered as 0. */}
-          {roles !== null && people !== null && commands !== null && (
-            <p className="text-meta-lg text-text/60">
-              {plural(t, 'roles.summary', list.length, {
-                roles: list.length, people, commands: total,
-              })}
-            </p>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={() => { setName(''); setAddError(null); setAdding(true) }}
-          className="rounded-md bg-accent px-3 py-2 font-medium text-accent-ink"
-        >
-          {t('roles.create')}
-        </button>
-      </div>
+      <PageHeader
+        title={t('roles.title')}
+        // Gated on all three counts, not on the roles alone: a count nobody confirmed is
+        // withheld, never rendered as 0.
+        subtitle={roles !== null && people !== null && commands !== null
+          ? plural(t, 'roles.summary', list.length, { roles: list.length, people, commands: total })
+          : undefined}
+        actions={(
+          <button
+            type="button"
+            onClick={() => { setName(''); setAddError(null); setAdding(true) }}
+            className="rounded-md bg-accent px-3 py-2 font-medium text-accent-ink"
+          >
+            {t('roles.create')}
+          </button>
+        )}
+      />
 
       {error && <p role="alert" className={`text-body ${warn.text}`}>{t('error.generic')}</p>}
 
@@ -184,17 +170,8 @@ export function Roles(): React.JSX.Element {
                   <span className="text-body text-text/70">
                     {plural(t, 'roles.holders', role.holders, { count: role.holders })}
                   </span>
-                  {!isDefault && !role.builtin
-                    ? (
-                        <button
-                          type="button"
-                          onClick={() => { void remove(role.name) }}
-                          className="justify-self-start rounded-md border border-line px-3 py-1.5 text-body text-text/70 md:justify-self-end"
-                        >
-                          {t('action.delete')}
-                        </button>
-                      )
-                    : <span />}
+                  {/* The fifth grid column: delete moved to the editor (2f-R1), freeing it for task 10. */}
+                  <span />
                   {isDefault && (
                     <p className="text-body text-text/70 md:col-span-5">{t('roles.defaultLead')}</p>
                   )}
@@ -204,7 +181,6 @@ export function Roles(): React.JSX.Element {
           </ul>
         </div>
       )}
-      {deleteError !== null && <p role="alert" className={`text-body ${crit.text}`}>{deleteError}</p>}
 
       <Sheet title={t('roles.createTitle')} open={adding} onClose={() => { setAdding(false) }}>
         <form onSubmit={(e) => { void add(e) }} className="space-y-3">

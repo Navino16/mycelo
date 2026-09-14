@@ -14,6 +14,7 @@ import { readArray } from '../api/read.ts'
 import type { FormSchema, PluginDetailDto, SettingsWriteResult } from '../api/types.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { SecretField } from '../components/SecretField.tsx'
 import { StateBadge } from '../components/StateBadge.tsx'
 import { Tabs } from '../components/Tabs.tsx'
@@ -125,12 +126,17 @@ function typeWord(property: unknown, isSecret: boolean): StringKey {
   return 'pluginSettings.type.text'
 }
 
-/** Only a scalar default has a one-line rendering; an object or an array has none. */
+/**
+ * Only a scalar default has a one-line rendering; an object or an array has none. An empty
+ * string is not a default worth showing, but `0` and `false` are — the test is emptiness, not
+ * truthiness.
+ */
 function defaultWord(property: unknown): string | undefined {
   if (!isPlainObject(property)) return undefined
   const value = property.default
   const scalar = typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
-  return scalar ? String(value) : undefined
+  if (!scalar || value === '') return undefined
+  return String(value)
 }
 
 /** 2c's right column: the type word, then the rank — `required`, or the default it falls back to. */
@@ -444,13 +450,14 @@ export function PluginSettings(): React.JSX.Element {
     <div className="space-y-4">
       <Breadcrumb trail={pluginTrail(t, name, detail?.kind)} />
 
-      <header className="space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-mono text-page">{name}</h1>
-          {/* The enable route answers { ok, restartRequired }: folded in, or the badge reads
-              `Disabled` beside the switch that just reported the restart. */}
-          {detail !== null && <StateBadge state={enabledNow ? 'pending' : detail.state} />}
-        </div>
+      <PageHeader
+        title={<span className="font-mono">{name}</span>}
+        // The enable route answers { ok, restartRequired }: folded in, or the badge reads
+        // `Disabled` beside the switch that just reported the restart.
+        actions={detail === null ? undefined : <StateBadge state={enabledNow ? 'pending' : detail.state} />}
+      />
+
+      <div className="space-y-3">
         <Tabs tabs={tabs} active="configuration" onSelect={() => undefined} />
         {schema !== null && schema.available && (
           <p className="font-mono text-meta-lg text-text/60">
@@ -459,7 +466,7 @@ export function PluginSettings(): React.JSX.Element {
             })}
           </p>
         )}
-      </header>
+      </div>
 
       {error && <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.generic')}</p>}
 

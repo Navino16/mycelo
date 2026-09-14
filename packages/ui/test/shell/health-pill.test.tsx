@@ -1,11 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, mock } from 'bun:test'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'bun:test'
 import { HealthContext } from '../../src/health.tsx'
 import { TONE_CLASSES } from '../../src/components/tone.ts'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { HealthPill, healthPillState } from '../../src/shell/HealthPill.tsx'
-import { Layout } from '../../src/shell/Layout.tsx'
 import type { RuntimeHealth } from '../../src/api/types.ts'
 
 const OK: RuntimeHealth = {
@@ -148,76 +146,5 @@ describe('the pill', () => {
   })
 })
 
-const realFetch = globalThis.fetch
-afterEach(() => { globalThis.fetch = realFetch })
-
-function json(body: unknown): Response {
-  return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } })
-}
-
-describe('the shell carries the pill everywhere', () => {
-  // design note 1a: the pill is the only element persistent across every screen, and it is
-  // journey D's entry point — a pill only on the Overview would strand journey D.
-  it('renders the health pill on a screen other than the overview', async () => {
-    globalThis.fetch = mock((url: string) => {
-      if (url === '/api/substrate') {
-        return Promise.resolve(json({ version: '0.9.3', startedAt: '2026-01-01', uptimeSeconds: 100 }))
-      }
-      return Promise.resolve(json({}))
-    }) as unknown as typeof fetch
-
-    render(
-      <I18nProvider>
-        <HealthContext
-          value={{
-            health: { ...OK, enforcingBlocked: ['gate'] },
-            error: false,
-            refresh: () => Promise.resolve(),
-          }}
-        >
-          <MemoryRouter initialEntries={['/roles']}>
-            <Routes>
-              <Route path="/" element={<Layout />}>
-                <Route path="roles" element={<p>the roles screen</p>} />
-              </Route>
-            </Routes>
-          </MemoryRouter>
-        </HealthContext>
-      </I18nProvider>,
-    )
-
-    expect(await screen.findByText('the roles screen')).toBeDefined()
-    expect(await screen.findByText('Mute')).toBeDefined()
-  })
-
-  // The shell is what knows the plugin count, so F16's suppression only works if it is wired:
-  // HealthPill's own prop test stays green with Layout passing nothing.
-  it('hands the pill the substrate\u2019s plugin count, so an empty one shows no pill', async () => {
-    globalThis.fetch = mock((url: string) => {
-      if (url === '/api/substrate') {
-        return Promise.resolve(json({ version: '0.9.3', startedAt: '2026-01-01', uptimeSeconds: 100 }))
-      }
-      if (url === '/api/plugins') {
-        return Promise.resolve(json({ hypha: [], rhiza: [], enzyme: [], inhibitor: [], unknown: [] }))
-      }
-      return Promise.resolve(json([]))
-    }) as unknown as typeof fetch
-
-    render(
-      <I18nProvider>
-        <HealthContext value={{ health: OK, error: false, refresh: () => Promise.resolve() }}>
-          <MemoryRouter initialEntries={['/roles']}>
-            <Routes>
-              <Route path="/" element={<Layout />}>
-                <Route path="roles" element={<p>the roles screen</p>} />
-              </Route>
-            </Routes>
-          </MemoryRouter>
-        </HealthContext>
-      </I18nProvider>,
-    )
-
-    expect(await screen.findByText('the roles screen')).toBeDefined()
-    await waitFor(() => { expect(screen.queryByRole('status')).toBeNull() })
-  })
-})
+// The pill's presence on every screen is now PageHeader's job (Layout renders no chrome, 1a-R4),
+// and components/page-header.test.tsx pins both that and the counts.plugins wiring end to end.

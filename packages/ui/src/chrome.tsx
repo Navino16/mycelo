@@ -30,8 +30,8 @@ export interface ChromeValue {
 export const ChromeContext = createContext<ChromeValue | null>(null)
 
 /**
- * The version to show, or null. `0.0.0` is packages/core/package.json's unreleased placeholder
- * (phase 9.8 cuts the real one), and printing it in the chrome is noise, not information.
+ * The version to show, or null. `0.0.0` is packages/core/package.json's unreleased placeholder,
+ * and printing it in the chrome is noise, not information.
  * Private: useUptimeLine is the one sanctioned way to render it, so the rule lives in one place.
  */
 function releasedVersion(substrate: SubstrateDto | null): string | null {

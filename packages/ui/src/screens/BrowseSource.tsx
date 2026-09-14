@@ -4,6 +4,7 @@ import { api, ApiError } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { useT } from '../i18n.tsx'
 import { pluginsByName } from '../plugins.ts'
@@ -82,16 +83,12 @@ export function BrowseSource(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <header className="min-w-0 space-y-1">
-          <Breadcrumb trail={[{ label: t('sources.title'), to: '/sources' }]} />
-          {/* break-all over truncate: a filesystem path's distinguishing part is often its end. */}
-          <h1 className="break-all font-mono text-page">{source?.label ?? ''}</h1>
-          {offers !== null && (
-            <p className="text-meta-lg text-text/60">{t('sources.catalogue', { count: all.length })}</p>
-          )}
-        </header>
-        {offers !== null && all.length > 0 && (
+      <Breadcrumb trail={[{ label: t('sources.title'), to: '/sources' }]} />
+      <PageHeader
+        // break-all over truncate: a filesystem path's distinguishing part is often its end.
+        title={<span className="break-all font-mono">{source?.label ?? ''}</span>}
+        subtitle={offers !== null ? t('sources.catalogue', { count: all.length }) : undefined}
+        actions={offers !== null && all.length > 0 ? (
           <input
             type="search"
             value={term}
@@ -100,8 +97,8 @@ export function BrowseSource(): React.JSX.Element {
             onChange={(e) => { setTerm(e.target.value); setShown(PER_PAGE) }}
             className="w-full rounded-md border border-line bg-surface px-3 py-2 text-body md:w-70"
           />
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {/* Priority, not both: a missing source (a stale bookmark, deleted elsewhere) is a
           different fault than a live one that cannot be reached, and only one alert renders. */}

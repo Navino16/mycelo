@@ -1,11 +1,17 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
+import { ChromeContext } from '../../src/chrome.tsx'
 import { TONE_CLASSES } from '../../src/components/tone.ts'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { SecretField } from '../../src/components/SecretField.tsx'
 import { PluginSettings } from '../../src/screens/PluginSettings.tsx'
+import type { ChromeValue } from '../../src/chrome.tsx'
 import type { FormSchema, PluginDetailDto, SettingsWriteResult } from '../../src/api/types.ts'
+
+const CHROME: ChromeValue = { substrate: null, counts: null, host: '' }
+const HEALTH = { health: null, error: false, refresh: () => Promise.resolve() }
 
 /**
  * The widget renders the bare input; the field template renders the label. The test stands in
@@ -144,6 +150,24 @@ const RICH: FormSchema = {
   },
 }
 
+/**
+ * Every `default` shape task 7 has to tell apart: absent, empty string, `false` and a real
+ * value — `''` and `false` are both falsy, only `''` is not a default worth showing.
+ */
+const DEFAULTS: FormSchema = {
+  available: true,
+  secrets: [],
+  schema: {
+    type: 'object',
+    properties: {
+      plain: { type: 'string', title: 'Plain' },
+      token: { type: 'string', title: 'Token', default: '' },
+      enabled: { type: 'boolean', title: 'Enabled', default: false },
+      url: { type: 'string', title: 'URL', default: 'http://x' },
+    },
+  },
+}
+
 const GERMINATED: PluginDetailDto = {
   name: 'vault', kind: 'enzyme', commands: ['vault'], state: 'germinated', enabled: true, scopes: [],
 }
@@ -194,9 +218,13 @@ function mockVault(options: Options): { calls: Call[] } {
 function renderSettings(): void {
   render(
     <I18nProvider>
-      <MemoryRouter initialEntries={['/plugins/vault/settings']}>
-        <Routes><Route path="/plugins/:name/settings" element={<PluginSettings />} /></Routes>
-      </MemoryRouter>
+      <HealthContext value={HEALTH}>
+        <ChromeContext value={CHROME}>
+          <MemoryRouter initialEntries={['/plugins/vault/settings']}>
+            <Routes><Route path="/plugins/:name/settings" element={<PluginSettings />} /></Routes>
+          </MemoryRouter>
+        </ChromeContext>
+      </HealthContext>
     </I18nProvider>,
   )
 }
@@ -841,6 +869,20 @@ describe("the generated form's page frame", () => {
     // The checkbox widget renders its own label, so the template must not render a second one.
     const monitored = screen.getByLabelText<HTMLInputElement>('Add monitored')
     expect(document.querySelectorAll(`label[for="${monitored.id}"]`)).toHaveLength(1)
+  })
+
+  // Ruling 2c-R2: an empty-string default is no default, but a falsy scalar default (`false`,
+  // and by the same rule `0`) is a real one and must still render.
+  it('treats an empty-string default as no default, unlike a falsy one', async () => {
+    mockVault({ schema: DEFAULTS, detail: DISABLED, settings: {} })
+    renderSettings()
+
+    await waitFor(() => { expect(screen.getByLabelText('Plain')).toBeDefined() })
+    // `plain` (no default key) and `token` (default: '') both render the bare type word —
+    // the empty string must not show up as a rank of its own.
+    expect(screen.getAllByText('text')).toHaveLength(2)
+    expect(screen.getByText('yes/no · default false')).toBeDefined()
+    expect(screen.getByText('text · default http://x')).toBeDefined()
   })
 
   // 2c-1: the artboard draws each field as a bordered row, label+meta left and the input

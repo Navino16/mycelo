@@ -6,6 +6,7 @@ import { Avatar } from '../components/Avatar.tsx'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { Chip } from '../components/Chip.tsx'
 import { Dot } from '../components/Dot.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { plural, useT } from '../i18n.tsx'
 import { allCommands, effectiveCommands, effectiveWildcards } from '../rights.ts'
@@ -120,33 +121,33 @@ export function PersonDetail(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
+      {/* Below md, PageHeader is the only source of the language switch, the theme toggle and
+          the pill — a loading or refused screen must still carry it. */}
+      {person === null && <PageHeader title={<span className="font-mono">{id}</span>} />}
       {error && <p role="alert" className={`text-body ${warn.text}`}>{t('error.generic')}</p>}
 
       {person !== null && (
         <>
-          <div className="space-y-1">
-            <Breadcrumb trail={[{ label: t('people.title'), to: '/people' }]} />
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
+          <Breadcrumb trail={[{ label: t('people.title'), to: '/people' }]} />
+          <PageHeader
+            title={(
+              <span className="flex min-w-0 items-center gap-3">
                 <Avatar person={person} />
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="truncate text-page font-semibold">{person.displayName ?? person.id}</h1>
-                    {/* Not beside the banner, which says the same thing at length. */}
-                    {!person.reviewed && !banner && <Chip label={t('person.neverReviewedTitle')} tone="warn" />}
-                  </div>
-                  <p className="text-meta-lg text-text/60">
-                    {plural(t, 'person.identityCount', identities.length, {
-                      count: identities.length,
-                    })}
-                  </p>
-                </div>
+                <span className="truncate">{person.displayName ?? person.id}</span>
+              </span>
+            )}
+            subtitle={plural(t, 'person.identityCount', identities.length, { count: identities.length })}
+            // Only where the banner is not: two identical primaries on one screen is what
+            // 2i-desktop and 2i-mobile each draw half of. The chip and the button share this one
+            // slot, gated identically — kept out of the h1 itself, whose accessible name the
+            // chip's text would otherwise join.
+            actions={!person.reviewed && !banner ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <Chip label={t('person.neverReviewedTitle')} tone="warn" />
+                {reviewButton}
               </div>
-              {/* Only where the banner is not: two identical primaries on one screen is what
-                  2i-desktop and 2i-mobile each draw half of. */}
-              {!person.reviewed && !banner && reviewButton}
-            </div>
-          </div>
+            ) : undefined}
+          />
 
           {banner && (
             <section

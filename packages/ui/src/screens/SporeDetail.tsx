@@ -5,6 +5,7 @@ import { readArray } from '../api/read.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { Chip } from '../components/Chip.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { ScopeTable } from '../components/ScopeTable.tsx'
 import { Sheet } from '../components/Sheet.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
@@ -211,10 +212,14 @@ export function SporeDetail(): React.JSX.Element {
     return (
       <div className="space-y-4">
         <Breadcrumb trail={trail} />
+        {/* Below md, PageHeader is the only source of the language switch, the theme toggle and
+            the pill — a refusal must still carry it, or there is no way to switch the page's
+            language to read the refusal itself. */}
+        <PageHeader title={<span className="font-mono">{name}</span>} />
         <section
           className={`space-y-2 rounded-xl border p-4 ${TONE_CLASSES.warn.border} ${TONE_CLASSES.warn.bg}`}
         >
-          <h1 className="text-title font-medium">{t('spore.refusedTitle')}</h1>
+          <h2 className="text-title font-medium">{t('spore.refusedTitle')}</h2>
           <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>
             {refusal ?? t('error.generic')}
           </p>
@@ -222,7 +227,13 @@ export function SporeDetail(): React.JSX.Element {
       </div>
     )
   }
-  if (spore === null || source === null) return <div />
+  if (spore === null || source === null) {
+    return (
+      <div className="space-y-4">
+        <PageHeader title={<span className="font-mono">{name}</span>} />
+      </div>
+    )
+  }
 
   const scopes = readArray<string>(spore.demands.scopes) ?? []
   const requires = readArray<RequirementDto>(spore.demands.requires) ?? []
@@ -234,16 +245,17 @@ export function SporeDetail(): React.JSX.Element {
 
   return (
     <div className="space-y-5">
+      <Breadcrumb
+        trail={[
+          { label: t('sources.title'), to: '/sources' },
+          { label: source.label, to: `/sources/${id}` },
+          { label: t(`kind.${spore.kind}` as StringKey) },
+        ]}
+      />
+      <PageHeader title={<span className="font-mono">{spore.name}</span>} />
+
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <header className="space-y-2">
-          <Breadcrumb
-            trail={[
-              { label: t('sources.title'), to: '/sources' },
-              { label: source.label, to: `/sources/${id}` },
-              { label: t(`kind.${spore.kind}` as StringKey) },
-            ]}
-          />
-          <h1 className="font-mono text-page">{spore.name}</h1>
           <p className="text-body text-text/70">{spore.description}</p>
           <div className="flex flex-wrap items-center gap-2">
             {here !== null && (

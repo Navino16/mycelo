@@ -79,14 +79,23 @@ export function Setup({ onDone }: { onDone: () => void }): React.JSX.Element {
 
       <div className="space-y-1">
         <label htmlFor="setup-repeat" className="block text-body font-medium">{t('setup.repeat')}</label>
-        <input
-          id="setup-repeat"
-          type={revealed ? 'text' : 'password'}
-          value={repeat}
-          onChange={(e) => { setRepeat(e.target.value) }}
-          className={`${FIELD} ${mismatch ? TONE_CLASSES.crit.border : ''}`}
-          autoComplete="new-password"
-        />
+        <div className="relative">
+          <input
+            id="setup-repeat"
+            type={revealed ? 'text' : 'password'}
+            value={repeat}
+            onChange={(e) => { setRepeat(e.target.value) }}
+            className={`${FIELD} pr-20 ${mismatch ? TONE_CLASSES.crit.border : ''}`}
+            autoComplete="new-password"
+          />
+          <button
+            type="button"
+            onClick={() => { setRevealed(!revealed) }}
+            className="absolute inset-y-0 right-3 text-meta-lg text-text/60"
+          >
+            {t(revealed ? 'setup.hide' : 'setup.show')}
+          </button>
+        </div>
         {/* R1's boundary, the designer's own: 2a-mobile draws this one in crit. */}
         {mismatch && <p className={`text-body ${TONE_CLASSES.crit.text}`}>{t('setup.mismatch')}</p>}
       </div>
@@ -100,7 +109,6 @@ export function Setup({ onDone }: { onDone: () => void }): React.JSX.Element {
       >
         {t('setup.submit')}
       </button>
-      <p className="text-meta-lg text-text/60">{t('setup.inertRule')}</p>
     </form>
   )
 }

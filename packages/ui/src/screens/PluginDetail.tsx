@@ -7,6 +7,7 @@ import { Chip } from '../components/Chip.tsx'
 import { DemandsList } from '../components/DemandsList.tsx'
 import { DormantDiagnosis } from '../components/DormantDiagnosis.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { StateBadge } from '../components/StateBadge.tsx'
 import { Tabs } from '../components/Tabs.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
@@ -71,6 +72,9 @@ export function PluginDetail(): React.JSX.Element {
   if (plugin === null) {
     return (
       <div className="space-y-6">
+        {/* Below md, PageHeader is the only source of the language switch, the theme toggle and
+            the pill — a loading or refused screen must still carry it. */}
+        <PageHeader title={<span className="font-mono">{name}</span>} />
         {error && <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.generic')}</p>}
       </div>
     )
@@ -93,66 +97,67 @@ export function PluginDetail(): React.JSX.Element {
     <div className="space-y-4">
       <Breadcrumb trail={trail} />
 
-      <header className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-mono text-page">{plugin.name}</h1>
-            <StateBadge state={fault?.state ?? plugin.state} />
-          </div>
-          {fault?.detail !== undefined && (
-            <p className={`font-mono text-body ${TONE_CLASSES.warn.text}`}>{fault.detail}</p>
-          )}
-          {plugin.description !== undefined && (
-            <p className="text-body text-text/70">{plugin.description}</p>
-          )}
-          <div data-testid="detail-chips" className="flex flex-wrap gap-2">
-            {/* kind, count and source are one tap away (breadcrumb, Commands tab, plugin's list
-                row) so a phone hides them, design §7.4's source included; `md:contents` rejoins
-                each wrapper at md, keeping the order kind/strain/enabled/count/source. */}
-            {plugin.kind !== undefined && (
-              <div data-testid="detail-chip-kind" className="hidden md:contents">
-                <Chip label={kindLabel(t, plugin.kind)} />
-              </div>
+      <PageHeader
+        title={<span className="font-mono">{plugin.name}</span>}
+        actions={health?.mode !== 'degraded' && !plugin.enabled ? undefined : (
+          <div className="flex flex-wrap gap-2">
+            {/* Only while degraded: api/routes/health.ts refuses the retry otherwise, so the
+                button would answer api.germinationNotDegraded and nothing else. */}
+            {health?.mode === 'degraded' && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => { run('/api/germination/retry') }}
+                className="rounded-md border border-line px-3 py-2 text-body disabled:opacity-60"
+              >
+                {t('detail.retry')}
+              </button>
             )}
-            {plugin.strain !== undefined && <Chip label={`strain ${plugin.strain}`} />}
-            {/* enabled reads the install row (plugins.ts) and can disagree with state until the
-                next germination, so it is not redundant with the badge — stays visible. */}
-            <Chip label={t(plugin.enabled ? 'detail.enabled' : 'detail.disabled')} />
-            <div data-testid="detail-chips-extra" className="hidden md:contents">
-              <Chip
-                label={plural(t, 'detail.commandCount', declared.length, {
-                  count: declared.length,
-                })}
-              />
-              <Chip label={plugin.source ?? t('plugins.source.local')} />
+            {plugin.enabled && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => { run(`/api/plugins/${plugin.name}/disable`) }}
+                className="rounded-md border border-line px-3 py-2 text-body disabled:opacity-60"
+              >
+                {t('detail.disableAction')}
+              </button>
+            )}
+          </div>
+        )}
+      />
+
+      <div className="space-y-2">
+        <StateBadge state={fault?.state ?? plugin.state} />
+        {fault?.detail !== undefined && (
+          <p className={`font-mono text-body ${TONE_CLASSES.warn.text}`}>{fault.detail}</p>
+        )}
+        {plugin.description !== undefined && (
+          <p className="text-body text-text/70">{plugin.description}</p>
+        )}
+        <div data-testid="detail-chips" className="flex flex-wrap gap-2">
+          {/* kind, count and source are one tap away (breadcrumb, Commands tab, plugin's list
+              row) so a phone hides them, design §7.4's source included; `md:contents` rejoins
+              each wrapper at md, keeping the order kind/strain/enabled/count/source. */}
+          {plugin.kind !== undefined && (
+            <div data-testid="detail-chip-kind" className="hidden md:contents">
+              <Chip label={kindLabel(t, plugin.kind)} />
             </div>
+          )}
+          {plugin.strain !== undefined && <Chip label={`strain ${plugin.strain}`} />}
+          {/* enabled reads the install row (plugins.ts) and can disagree with state until the
+              next germination, so it is not redundant with the badge — stays visible. */}
+          <Chip label={t(plugin.enabled ? 'detail.enabled' : 'detail.disabled')} />
+          <div data-testid="detail-chips-extra" className="hidden md:contents">
+            <Chip
+              label={plural(t, 'detail.commandCount', declared.length, {
+                count: declared.length,
+              })}
+            />
+            <Chip label={plugin.source ?? t('plugins.source.local')} />
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {/* Only while degraded: api/routes/health.ts refuses the retry otherwise, so the
-              button would answer api.germinationNotDegraded and nothing else. */}
-          {health?.mode === 'degraded' && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => { run('/api/germination/retry') }}
-              className="rounded-md border border-line px-3 py-2 text-body disabled:opacity-60"
-            >
-              {t('detail.retry')}
-            </button>
-          )}
-          {plugin.enabled && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => { run(`/api/plugins/${plugin.name}/disable`) }}
-              className="rounded-md border border-line px-3 py-2 text-body disabled:opacity-60"
-            >
-              {t('detail.disableAction')}
-            </button>
-          )}
-        </div>
-      </header>
+      </div>
 
       {actionError !== null && (
         <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{actionError}</p>

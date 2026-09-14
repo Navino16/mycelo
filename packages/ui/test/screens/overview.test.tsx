@@ -857,8 +857,6 @@ describe('what needs attention', () => {
 })
 
 describe('the page title block', () => {
-  // Task 15's ruling: the shell header carries the pill and the two controls, so 1a's title
-  // and its uptime line are this screen's own.
   it('carries both the mobile title and the desktop one, and the uptime line under them', async () => {
     await withHealth(GERMINATED)
 

@@ -1,10 +1,16 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
+import { ChromeContext } from '../../src/chrome.tsx'
 import { TONE_CLASSES } from '../../src/components/tone.ts'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider, useLocale } from '../../src/i18n.tsx'
 import { PluginGroup, RoleEditor } from '../../src/screens/RoleEditor.tsx'
-import type { CommandDto, CommandGroups, RoleDto } from '../../src/api/types.ts'
+import type { ChromeValue } from '../../src/chrome.tsx'
+import type { CommandDto, CommandGroups, ConfigDto, RoleDto } from '../../src/api/types.ts'
+
+const CHROME: ChromeValue = { substrate: null, counts: null, host: '' }
+const HEALTH = { health: null, error: false, refresh: () => Promise.resolve() }
 
 const COMMANDS: readonly CommandDto[] = [
   { plugin: 'radarr', command: 'add', declared: 'add', qualified: 'radarr.add', description: 'Add', capabilities: [] },
@@ -173,11 +179,14 @@ function mockApi(
     descriptions?: Record<string, string>
     commandsStatus?: number
     holders?: number
+    defaultRole?: string
+    deleteStatus?: number
+    deleteBody?: unknown
   } = {},
 ): { calls: Call[] } {
   const calls: Call[] = []
   const commands = options.commands ?? { radarr: COMMANDS }
-  let role = options.role ?? { ...ORDINARY, ...(options.holders === undefined ? {} : { holders: options.holders }) }
+  const role = options.role ?? { ...ORDINARY, ...(options.holders === undefined ? {} : { holders: options.holders }) }
 
   globalThis.fetch = mock((url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET'
@@ -189,6 +198,10 @@ function mockApi(
         return Promise.resolve(json({ error: { message: 'refused' } }, options.commandsStatus))
       }
       return Promise.resolve(json(commands))
+    }
+    if (method === 'GET' && url === '/api/config') {
+      const config: ConfigDto = { prefix: '/', defaultLocale: 'en', defaultRole: options.defaultRole }
+      return Promise.resolve(json(config))
     }
     if (method === 'GET' && url === '/api/plugins') {
       return Promise.resolve(json({
@@ -207,7 +220,13 @@ function mockApi(
       if (options.putStatus !== undefined) {
         return Promise.resolve(json(options.putBody ?? { error: { message: 'refused' } }, options.putStatus))
       }
-      role = { ...role, patterns: (body as { patterns: readonly string[] }).patterns }
+      role.patterns = (body as { patterns: readonly string[] }).patterns
+      return Promise.resolve(json({ ok: true }))
+    }
+    if (method === 'DELETE' && url === `/api/roles/${role.name}`) {
+      if (options.deleteStatus !== undefined) {
+        return Promise.resolve(json(options.deleteBody ?? { error: { message: 'refused' } }, options.deleteStatus))
+      }
       return Promise.resolve(json({ ok: true }))
     }
     return Promise.resolve(json({ error: { message: 'unhandled in test' } }, 404))
@@ -225,9 +244,16 @@ function LocaleSwitch(): React.JSX.Element {
 function renderEditor(name = 'family'): void {
   render(
     <I18nProvider>
-      <MemoryRouter initialEntries={[`/roles/${name}`]}>
-        <Routes><Route path="/roles/:name" element={<RoleEditor />} /></Routes>
-      </MemoryRouter>
+      <HealthContext value={HEALTH}>
+        <ChromeContext value={CHROME}>
+          <MemoryRouter initialEntries={[`/roles/${name}`]}>
+            <Routes>
+              <Route path="/roles/:name" element={<RoleEditor />} />
+              <Route path="/roles" element={<p>the roles list</p>} />
+            </Routes>
+          </MemoryRouter>
+        </ChromeContext>
+      </HealthContext>
     </I18nProvider>,
   )
 }
@@ -440,9 +466,13 @@ describe('the role editor at real scale', () => {
     render(
       <I18nProvider>
         <LocaleSwitch />
-        <MemoryRouter initialEntries={['/roles/family']}>
-          <Routes><Route path="/roles/:name" element={<RoleEditor />} /></Routes>
-        </MemoryRouter>
+        <HealthContext value={HEALTH}>
+          <ChromeContext value={CHROME}>
+            <MemoryRouter initialEntries={['/roles/family']}>
+              <Routes><Route path="/roles/:name" element={<RoleEditor />} /></Routes>
+            </MemoryRouter>
+          </ChromeContext>
+        </HealthContext>
       </I18nProvider>,
     )
     await waitFor(() => { expect(calls.filter((c) => c.url === '/api/commands')).toHaveLength(1) })
@@ -550,6 +580,57 @@ describe('a role holding the bare star', () => {
   })
 })
 
+// 2f-R1: delete moved off the list row into the editor, carrying remove(), deleteError and
+// the !isDefault && !role.builtin guard with it.
+describe('deleting a role from the editor', () => {
+  it('offers delete on an ordinary, non-default role', async () => {
+    mockApi({ role: { name: 'media', builtin: false, patterns: ['plex.*'], holders: 0 } })
+    renderEditor('media')
+
+    expect(await screen.findByRole('button', { name: 'Delete' })).toBeDefined()
+  })
+
+  it('offers no delete on a built-in role', async () => {
+    mockApi({ role: BUILTIN })
+    renderEditor('owner')
+
+    await waitFor(() => { expect(screen.getByText('Built-in roles cannot be edited.')).toBeDefined() })
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull()
+  })
+
+  it('offers no delete on the default role, even though it is not built-in', async () => {
+    mockApi({ role: { name: 'family', builtin: false, patterns: ['radarr.*'], holders: 0 }, defaultRole: 'family' })
+    renderEditor('family')
+
+    await waitFor(() => { expect(screen.getByRole('button', { name: 'Save this role' })).toBeDefined() })
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull()
+  })
+
+  it('deletes the role and returns to the list', async () => {
+    const { calls } = mockApi({ role: { name: 'media', builtin: false, patterns: ['plex.*'], holders: 0 } })
+    renderEditor('media')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => { expect(calls.some((c) => c.method === 'DELETE')).toBe(true) })
+    expect(await screen.findByText('the roles list')).toBeDefined()
+  })
+
+  it('renders the delete refusal in its own alert, and stays on the editor', async () => {
+    mockApi({
+      role: { name: 'media', builtin: false, patterns: ['plex.*'], holders: 0 },
+      deleteStatus: 400,
+      deleteBody: { error: { message: 'a role held by someone cannot be deleted' } },
+    })
+    renderEditor('media')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+
+    expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'a role held by someone cannot be deleted')
+    expect(screen.queryByText('the roles list')).toBeNull()
+  })
+})
+
 describe('the editor header', () => {
   // task 14's ?role= filter, rendered: a header count read off the unfiltered total would
   // show the whole substrate's population on every role's page.
@@ -573,7 +654,7 @@ describe('the editor header', () => {
     mockApi({ role: { name: 'family', builtin: false, patterns: ['*'], holders: 0 } })
     renderEditor()
 
-    const counter = await screen.findByText('all 2 commands')
+    const counter = await screen.findByText('2/2')
     expect(counter.className).toContain(TONE_CLASSES.warn.text)
     expect(counter.className).not.toContain(TONE_CLASSES.ok.text)
   })

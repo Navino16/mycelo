@@ -2,11 +2,18 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'bun:test'
 import { MemoryRouter } from 'react-router'
 import { ChromeContext } from '../../src/chrome.tsx'
+import { PageHeader } from '../../src/components/PageHeader.tsx'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { Nav } from '../../src/shell/Nav.tsx'
 import type { ChromeValue } from '../../src/chrome.tsx'
+import type { RuntimeHealth } from '../../src/api/types.ts'
 
 const COUNTS = { plugins: 32, issues: 5, sources: 2, roles: 7, people: 128 }
+
+const HEALTHY: RuntimeHealth = {
+  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], hyphae: [], blockedSinceBoot: 0,
+}
 
 /**
  * A ChromeContext value rather than ChromeProvider: Nav reads the counts and never fetches
@@ -34,6 +41,20 @@ describe('the primary nav', () => {
     expect(screen.getByText('Anastomosis')).toBeDefined()
   })
 
+  // 1a-R5: the rename applies at both widths, so the same key change covers the phone
+  // bar and the desktop sidebar with nothing left to discriminate between them.
+  it('reads Aperçu, not Vue d’ensemble, in French', () => {
+    globalThis.localStorage?.setItem('mycelo.locale', 'fr')
+    try {
+      renderNav()
+
+      expect(screen.getByText('Aperçu')).toBeDefined()
+      expect(screen.queryByText('Vue d’ensemble')).toBeNull()
+    } finally {
+      globalThis.localStorage?.removeItem('mycelo.locale')
+    }
+  })
+
   // Discriminates the `desktopOnly === true ? 'hidden md:flex' : ''` class: the graph link
   // must carry the hide-on-mobile class none of the other items carry.
   it('hides the graph link on mobile, unlike every other item', () => {
@@ -58,14 +79,14 @@ describe('the primary nav', () => {
   })
 
   // happy-dom performs no layout, so a phone-bar item's rect stays zero regardless of the
-  // fix. Pin the shrink mechanism instead: the item must shrink below its label's content
-  // width (row 33's five-item bar), and the label must be free to wrap onto a second line.
-  it('lets a phone-bar item shrink and its label wrap across five columns', () => {
+  // fix. Pin the shrink mechanism (min-w-0); 'Aperçu' also retires the break-words workaround
+  // row 33 needed for the longer 'Vue d’ensemble' (1a-R5).
+  it('lets a phone-bar item shrink across five columns', () => {
     renderNav()
 
     const link = screen.getByRole('link', { name: /^Overview/ })
-    expect(link.className).toContain('min-w-0')
-    expect(screen.getByText('Overview').className).toContain('break-words')
+    expect(link.className.split(/\s+/)).toContain('min-w-0')
+    expect(screen.getByText('Overview').className.split(/\s+/)).not.toContain('break-words')
   })
 })
 
@@ -114,16 +135,86 @@ describe('the sidebar foot', () => {
     expect(screen.getByText('mycelo 0.9.3 · up 14d 03h')).toBeDefined()
   })
 
-  it('renders no foot at all when the hook has nothing to show', () => {
+  // packages/core/package.json's real, released version: the value this task bumps it to.
+  it('names the released version beside the uptime', () => {
+    renderNav({ substrate: { ...SUBSTRATE, version: '0.1.0' } })
+
+    expect(screen.getByText('mycelo 0.1.0 · up 14d 03h')).toBeDefined()
+  })
+
+  it('suppresses the 0.0.0 placeholder without hiding the uptime', () => {
+    renderNav({ substrate: { ...SUBSTRATE, version: '0.0.0' } })
+
+    const line = screen.getByText(/up 14d 03h/)
+    expect(line.textContent).not.toContain('0.0.0')
+  })
+
+  // The foot itself (controls included) still renders here — only the line the hook
+  // withholds is absent, which is what distinguishes this from 'no foot at all'.
+  it('renders no uptime line when the hook has nothing to show', () => {
     renderNav({ substrate: { ...SUBSTRATE, uptimeSeconds: Number.NaN } })
 
     expect(screen.queryByText(/up /)).toBeNull()
+    expect(screen.getByTestId('nav-desktop-controls')).toBeDefined()
   })
 
-  it('renders no foot before /api/substrate answers', () => {
+  it('renders no uptime line before /api/substrate answers', () => {
     renderNav()
 
     expect(screen.queryByText(/^up /)).toBeNull()
+    expect(screen.getByTestId('nav-desktop-controls')).toBeDefined()
+  })
+
+  // 1a-R1: language and theme moved out of the deleted chrome bar and into the sidebar.
+  // They must not depend on /api/substrate: an operator switching language should not
+  // need the uptime line to have loaded first.
+  it('carries the language switch and theme toggle above the uptime line', () => {
+    renderNav()
+
+    const select = screen.getByRole('combobox')
+    const toggle = screen.getByRole('button')
+    const wrapper = select.closest('[data-testid="nav-desktop-controls"]')
+
+    expect(wrapper).not.toBeNull()
+    expect(wrapper?.contains(toggle)).toBe(true)
+  })
+
+  // happy-dom evaluates no media query, so rendering Nav and PageHeader together puts two
+  // language selects in the DOM. Correct, provided exactly one is gated for each width —
+  // tokenised, since toContain('md:hidden') is satisfied by 'max-md:hidden'.
+  it('is the only visible language control above md when rendered beside PageHeader', () => {
+    render(
+      <I18nProvider>
+        <MemoryRouter>
+          <HealthContext value={{ health: HEALTHY, error: false, refresh: () => Promise.resolve() }}>
+            <ChromeContext value={{ substrate: null, counts: null, host: 'substrate.home.lan' }}>
+              <Nav />
+              <PageHeader title="Overview" />
+            </ChromeContext>
+          </HealthContext>
+        </MemoryRouter>
+      </I18nProvider>,
+    )
+
+    const selects = screen.getAllByRole('combobox')
+    expect(selects).toHaveLength(2)
+
+    const desktopWrapper = selects
+      .map((s) => s.closest('[data-testid="nav-desktop-controls"]'))
+      .find((w) => w !== null)
+    const mobileWrapper = selects
+      .map((s) => s.closest('[data-testid="pageheader-mobile-controls"]'))
+      .find((w) => w !== null)
+
+    expect(desktopWrapper).not.toBeUndefined()
+    expect(mobileWrapper).not.toBeUndefined()
+
+    const desktopFoot = desktopWrapper?.closest('div.hidden')
+    expect(desktopFoot?.className.split(/\s+/)).toContain('md:block')
+    expect(desktopFoot?.className.split(/\s+/)).not.toContain('md:hidden')
+
+    expect(mobileWrapper?.className.split(/\s+/)).toContain('md:hidden')
+    expect(mobileWrapper?.className.split(/\s+/)).not.toContain('md:block')
   })
 })
 

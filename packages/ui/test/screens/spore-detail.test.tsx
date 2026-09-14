@@ -1,14 +1,20 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
+import { ChromeContext } from '../../src/chrome.tsx'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { SporeDetail } from '../../src/screens/SporeDetail.tsx'
+import type { ChromeValue } from '../../src/chrome.tsx'
 import type {
   CommandGroups, InoculateOutcome, PluginDto, PluginGroups, SourceDto, SporeStrainsDto,
 } from '../../src/api/types.ts'
 
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
+
+const CHROME: ChromeValue = { substrate: null, counts: null, host: '' }
+const HEALTH = { health: null, error: false, refresh: () => Promise.resolve() }
 
 /** The 2b spore, with the artboard's scope set corrected to real names (principals.read). */
 const WELCOME: SporeStrainsDto = {
@@ -185,9 +191,13 @@ function serve(opts: Options = {}): { calls: Call[] } {
 function renderDetail(spore = 'enzyme-welcome'): void {
   render(
     <I18nProvider>
-      <MemoryRouter initialEntries={[`/sources/2/spores/${spore}`]}>
-        <Routes><Route path="/sources/:id/spores/:name" element={<SporeDetail />} /></Routes>
-      </MemoryRouter>
+      <HealthContext value={HEALTH}>
+        <ChromeContext value={CHROME}>
+          <MemoryRouter initialEntries={[`/sources/2/spores/${spore}`]}>
+            <Routes><Route path="/sources/:id/spores/:name" element={<SporeDetail />} /></Routes>
+          </MemoryRouter>
+        </ChromeContext>
+      </HealthContext>
     </I18nProvider>,
   )
 }
@@ -332,6 +342,31 @@ describe('the consent moment', () => {
     // TONE_CLASSES moves with the table and cannot see the grade lose its amber.
     expect(assign?.querySelector('span[aria-hidden="true"]')?.className).toContain('bg-warn')
     expect(read?.querySelector('span[aria-hidden="true"]')?.className).toContain('bg-idle')
+  })
+
+  // ruling 2b-R1: the mono scope id and the risk word were named by nothing. Asserted in
+  // French, since an English-substring check would stay green with the fr key deleted.
+  it('labels the scope table columns, in French, aligned with the row grid', async () => {
+    globalThis.localStorage?.setItem('mycelo.locale', 'fr')
+    try {
+      serve()
+      renderDetail()
+
+      const table = await screen.findByTestId('scope-table')
+      const header = screen.getByTestId('scope-table-header')
+      expect(within(header).getByText('Portée')).toBeDefined()
+      expect(within(header).getByText('Autorise')).toBeDefined()
+      expect(within(header).getByText('Risque')).toBeDefined()
+
+      const row = table.querySelector('li')
+      const rowColumns = row?.className.split(/\s+/).find((c) => c.startsWith('md:grid-cols-['))
+      if (rowColumns === undefined) throw new Error('row has no md:grid-cols class')
+      expect(header.className.split(/\s+/)).toContain(rowColumns)
+      expect(header.className.split(/\s+/)).toContain('hidden')
+      expect(header.className.split(/\s+/)).toContain('md:grid')
+    } finally {
+      globalThis.localStorage?.removeItem('mycelo.locale')
+    }
   })
 
   it('says the scopes are granted as one block at install, and how many', async () => {

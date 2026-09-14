@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
+import { ChromeContext } from '../../src/chrome.tsx'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { BOX_H, GAP_Y } from '../../src/graphLayout.ts'
 import {
@@ -12,10 +14,14 @@ import {
   REASON_LINE_H,
   REASON_LINES,
 } from '../../src/screens/Graph.tsx'
+import type { ChromeValue } from '../../src/chrome.tsx'
 import type { GraphDto } from '../../src/api/types.ts'
 
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
+
+const CHROME: ChromeValue = { substrate: null, counts: null, host: '' }
+const HEALTH = { health: null, error: false, refresh: () => Promise.resolve() }
 
 const GRAPH: GraphDto = {
   nodes: [
@@ -63,7 +69,13 @@ function servePending(): void {
 }
 
 function renderGraph(): void {
-  render(<I18nProvider><MemoryRouter><Graph /></MemoryRouter></I18nProvider>)
+  render(
+    <I18nProvider>
+      <HealthContext value={HEALTH}>
+        <ChromeContext value={CHROME}><MemoryRouter><Graph /></MemoryRouter></ChromeContext>
+      </HealthContext>
+    </I18nProvider>,
+  )
 }
 
 function Path(): React.JSX.Element { return <p data-testid="path">{useLocation().pathname}</p> }
@@ -71,13 +83,17 @@ function Path(): React.JSX.Element { return <p data-testid="path">{useLocation()
 function renderRouted(): void {
   render(
     <I18nProvider>
-      <MemoryRouter initialEntries={['/']}>
-        <Path />
-        <Routes>
-          <Route path="/" element={<Graph />} />
-          <Route path="/plugins/:name" element={<p>plugin detail</p>} />
-        </Routes>
-      </MemoryRouter>
+      <HealthContext value={HEALTH}>
+        <ChromeContext value={CHROME}>
+          <MemoryRouter initialEntries={['/']}>
+            <Path />
+            <Routes>
+              <Route path="/" element={<Graph />} />
+              <Route path="/plugins/:name" element={<p>plugin detail</p>} />
+            </Routes>
+          </MemoryRouter>
+        </ChromeContext>
+      </HealthContext>
     </I18nProvider>,
   )
 }
