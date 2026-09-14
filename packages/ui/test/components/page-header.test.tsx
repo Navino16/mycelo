@@ -64,4 +64,13 @@ describe('PageHeader', () => {
     expect(screen.getByTestId('pageheader-actions')).toBeDefined()
     expect(screen.getAllByText('Search').some((el) => el.tagName === 'BUTTON')).toBe(true)
   })
+
+  // The desktop row is a closed three-part layout (h1, actions, pill); the sidebar foot already
+  // shows the uptime there (Nav.tsx), so a subtitle above md would duplicate it.
+  it('shows the subtitle only below md', () => {
+    renderHeader({ subtitle: 'up 14d 03h' })
+
+    const subtitle = screen.getByText('up 14d 03h')
+    expect(subtitle.className.split(/\s+/)).toContain('md:hidden')
+  })
 })

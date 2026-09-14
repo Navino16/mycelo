@@ -38,7 +38,7 @@ export function PageHeader(
       </div>
 
       {subtitle !== undefined && (
-        <p className="order-3 w-full text-body text-text/70 md:order-4">{subtitle}</p>
+        <p className="order-3 w-full text-body text-text/70 md:hidden">{subtitle}</p>
       )}
     </header>
   )
