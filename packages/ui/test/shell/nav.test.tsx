@@ -79,9 +79,8 @@ describe('the primary nav', () => {
   })
 
   // happy-dom performs no layout, so a phone-bar item's rect stays zero regardless of the
-  // fix. Pin the shrink mechanism: the item must shrink below its label's content width
-  // (row 33's five-item bar). 'Overview' no longer needs the wrap workaround the shorter
-  // 'Aperçu' made unnecessary (1a-R5), so the label carries no break-words class.
+  // fix. Pin the shrink mechanism (min-w-0); 'Aperçu' also retires the break-words workaround
+  // row 33 needed for the longer 'Vue d’ensemble' (1a-R5).
   it('lets a phone-bar item shrink across five columns', () => {
     renderNav()
 
@@ -150,16 +149,20 @@ describe('the sidebar foot', () => {
     expect(line.textContent).not.toContain('0.0.0')
   })
 
-  it('renders no foot at all when the hook has nothing to show', () => {
+  // The foot itself (controls included) still renders here — only the line the hook
+  // withholds is absent, which is what distinguishes this from 'no foot at all'.
+  it('renders no uptime line when the hook has nothing to show', () => {
     renderNav({ substrate: { ...SUBSTRATE, uptimeSeconds: Number.NaN } })
 
     expect(screen.queryByText(/up /)).toBeNull()
+    expect(screen.getByTestId('nav-desktop-controls')).toBeDefined()
   })
 
-  it('renders no foot before /api/substrate answers', () => {
+  it('renders no uptime line before /api/substrate answers', () => {
     renderNav()
 
     expect(screen.queryByText(/^up /)).toBeNull()
+    expect(screen.getByTestId('nav-desktop-controls')).toBeDefined()
   })
 
   // 1a-R1: language and theme move out of the chrome bar task 3 deletes and into the
