@@ -1,10 +1,16 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
+import { ChromeContext } from '../../src/chrome.tsx'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { BrowseSource } from '../../src/screens/BrowseSource.tsx'
 import { TrustNotice } from '../../src/screens/SporeDetail.tsx'
+import type { ChromeValue } from '../../src/chrome.tsx'
 import type { PluginDto, PluginGroups, SourceDto, SporeOffer } from '../../src/api/types.ts'
+
+const CHROME: ChromeValue = { substrate: null, counts: null, host: '' }
+const HEALTH = { health: null, error: false, refresh: () => Promise.resolve() }
 
 describe('the trust notice', () => {
   it('warns for a third-party source', () => {
@@ -71,9 +77,13 @@ function serve(opts: Options = {}): void {
 function renderBrowse(): void {
   render(
     <I18nProvider>
-      <MemoryRouter initialEntries={['/sources/1']}>
-        <Routes><Route path="/sources/:id" element={<BrowseSource />} /></Routes>
-      </MemoryRouter>
+      <HealthContext value={HEALTH}>
+        <ChromeContext value={CHROME}>
+          <MemoryRouter initialEntries={['/sources/1']}>
+            <Routes><Route path="/sources/:id" element={<BrowseSource />} /></Routes>
+          </MemoryRouter>
+        </ChromeContext>
+      </HealthContext>
     </I18nProvider>,
   )
 }
@@ -133,8 +143,8 @@ describe('browsing a source', () => {
 
     const heading = await screen.findByRole('heading', { level: 1 })
     expect(heading.textContent).toBe(path)
-    expect(heading.className).toContain('break-all')
-    expect(heading.closest('header')?.className).toContain('min-w-0')
+    expect(heading.firstElementChild?.className).toContain('break-all')
+    expect(heading.firstElementChild?.className).toContain('min-w-0')
   })
 
   it('says the source offers nothing rather than showing an empty list', async () => {

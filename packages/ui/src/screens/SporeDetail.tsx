@@ -5,6 +5,7 @@ import { readArray } from '../api/read.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { Chip } from '../components/Chip.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { ScopeTable } from '../components/ScopeTable.tsx'
 import { Sheet } from '../components/Sheet.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
@@ -234,16 +235,17 @@ export function SporeDetail(): React.JSX.Element {
 
   return (
     <div className="space-y-5">
+      <Breadcrumb
+        trail={[
+          { label: t('sources.title'), to: '/sources' },
+          { label: source.label, to: `/sources/${id}` },
+          { label: t(`kind.${spore.kind}` as StringKey) },
+        ]}
+      />
+      <PageHeader title={<span className="font-mono">{spore.name}</span>} />
+
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <header className="space-y-2">
-          <Breadcrumb
-            trail={[
-              { label: t('sources.title'), to: '/sources' },
-              { label: source.label, to: `/sources/${id}` },
-              { label: t(`kind.${spore.kind}` as StringKey) },
-            ]}
-          />
-          <h1 className="font-mono text-page">{spore.name}</h1>
           <p className="text-body text-text/70">{spore.description}</p>
           <div className="flex flex-wrap items-center gap-2">
             {here !== null && (

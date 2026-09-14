@@ -4,6 +4,7 @@ import { api, ApiError } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { Checkbox } from '../components/Checkbox.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { coversPlugin, grants, wildcardsIn } from '../patterns.ts'
 import { plural, useLocale, useT } from '../i18n.tsx'
@@ -244,19 +245,11 @@ export function RoleEditor(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <Breadcrumb trail={[{ label: t('roles.title'), to: '/roles' }]} />
-          <div className="flex flex-wrap items-baseline gap-3">
-            <h1 className="font-mono text-page font-semibold">{name}</h1>
-            {role !== null && (
-              <span className="text-meta-lg text-text/60">
-                {plural(t, 'role.holders', role.holders, { count: role.holders })}
-              </span>
-            )}
-          </div>
-        </div>
-        {role !== null && (
+      <Breadcrumb trail={[{ label: t('roles.title'), to: '/roles' }]} />
+      <PageHeader
+        title={<span className="font-mono">{name}</span>}
+        subtitle={role === null ? undefined : plural(t, 'role.holders', role.holders, { count: role.holders })}
+        actions={role === null ? undefined : (
           <div className="flex flex-wrap items-center gap-2">
             {/* Withheld while /api/commands is unknown: `0 / 0` is a count nobody confirmed. */}
             {commands !== null && (
@@ -288,7 +281,7 @@ export function RoleEditor(): React.JSX.Element {
             )}
           </div>
         )}
-      </div>
+      />
 
       {error && <p role="alert" className={`text-body ${warn.text}`}>{t('error.generic')}</p>}
       {acknowledged && !dirty && <p role="status" className="text-body">{t('role.saved')}</p>}

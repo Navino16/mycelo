@@ -1,9 +1,15 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter } from 'react-router'
+import { ChromeContext } from '../../src/chrome.tsx'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { DEBOUNCE_MS, People } from '../../src/screens/People.tsx'
+import type { ChromeValue } from '../../src/chrome.tsx'
 import type { PageDto, PersonDto, RoleDto } from '../../src/api/types.ts'
+
+const CHROME: ChromeValue = { substrate: null, counts: null, host: '' }
+const HEALTH = { health: null, error: false, refresh: () => Promise.resolve() }
 
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
@@ -100,7 +106,7 @@ function mockApi(options: {
 }
 
 function renderPeople(): void {
-  render(<I18nProvider><MemoryRouter><People /></MemoryRouter></I18nProvider>)
+  render(<I18nProvider><HealthContext value={HEALTH}><ChromeContext value={CHROME}><MemoryRouter><People /></MemoryRouter></ChromeContext></HealthContext></I18nProvider>)
 }
 
 /** The row's own checkbox, whose label is the person's display name. */
@@ -493,7 +499,7 @@ describe('the people list under the docked bulk bar', () => {
   // the bar's 143 px above its bottom-16 offset, minus <main>'s own pb-20 (review M4).
   it('reserves room under the bar while a selection is live, and none once it is not', async () => {
     mockApi()
-    const { container } = render(<I18nProvider><MemoryRouter><People /></MemoryRouter></I18nProvider>)
+    const { container } = render(<I18nProvider><HealthContext value={HEALTH}><ChromeContext value={CHROME}><MemoryRouter><People /></MemoryRouter></ChromeContext></HealthContext></I18nProvider>)
 
     await screen.findByText('Person 1')
     const page = container.firstElementChild

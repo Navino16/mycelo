@@ -10,6 +10,7 @@ import { Dot } from '../components/Dot.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
 import { GuidedStart } from '../components/GuidedStart.tsx'
 import { MuteTakeover } from '../components/MuteTakeover.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { ProportionBar } from '../components/ProportionBar.tsx'
 import { Tile } from '../components/Tile.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
@@ -177,21 +178,18 @@ export function Overview(): React.JSX.Element {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          {/* 1a-mobile titles the screen `Substrate`, 1a-desktop `Overview`; the shell header
-              carries neither (task 15), so the one <h1> reads as whichever is visible. */}
-          <h1 className="text-page font-semibold">
+      <PageHeader
+        title={(
+          <>
             <span className="md:hidden">{t('substrate.title')}</span>
             <span className="hidden md:inline">{t('overview.title')}</span>
-          </h1>
-          {/* md:hidden: 1a-desktop draws this line in the sidebar foot, which Nav owns. */}
-          {uptime !== null && <p className="font-mono text-meta-lg text-text/60 md:hidden">{uptime}</p>}
-        </div>
-        {state !== 'mute' && (
-          <Search plugins={stats?.all ?? []} commands={body?.commands ?? []} />
+          </>
         )}
-      </div>
+        subtitle={uptime ?? undefined}
+        actions={state !== 'mute'
+          ? <Search plugins={stats?.all ?? []} commands={body?.commands ?? []} />
+          : undefined}
+      />
 
       {state === 'offline' && (
         <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.offline')}</p>

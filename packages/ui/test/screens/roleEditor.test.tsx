@@ -1,10 +1,16 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
+import { ChromeContext } from '../../src/chrome.tsx'
 import { TONE_CLASSES } from '../../src/components/tone.ts'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider, useLocale } from '../../src/i18n.tsx'
 import { PluginGroup, RoleEditor } from '../../src/screens/RoleEditor.tsx'
+import type { ChromeValue } from '../../src/chrome.tsx'
 import type { CommandDto, CommandGroups, RoleDto } from '../../src/api/types.ts'
+
+const CHROME: ChromeValue = { substrate: null, counts: null, host: '' }
+const HEALTH = { health: null, error: false, refresh: () => Promise.resolve() }
 
 const COMMANDS: readonly CommandDto[] = [
   { plugin: 'radarr', command: 'add', declared: 'add', qualified: 'radarr.add', description: 'Add', capabilities: [] },
@@ -225,9 +231,13 @@ function LocaleSwitch(): React.JSX.Element {
 function renderEditor(name = 'family'): void {
   render(
     <I18nProvider>
-      <MemoryRouter initialEntries={[`/roles/${name}`]}>
-        <Routes><Route path="/roles/:name" element={<RoleEditor />} /></Routes>
-      </MemoryRouter>
+      <HealthContext value={HEALTH}>
+        <ChromeContext value={CHROME}>
+          <MemoryRouter initialEntries={[`/roles/${name}`]}>
+            <Routes><Route path="/roles/:name" element={<RoleEditor />} /></Routes>
+          </MemoryRouter>
+        </ChromeContext>
+      </HealthContext>
     </I18nProvider>,
   )
 }
@@ -440,9 +450,13 @@ describe('the role editor at real scale', () => {
     render(
       <I18nProvider>
         <LocaleSwitch />
-        <MemoryRouter initialEntries={['/roles/family']}>
-          <Routes><Route path="/roles/:name" element={<RoleEditor />} /></Routes>
-        </MemoryRouter>
+        <HealthContext value={HEALTH}>
+          <ChromeContext value={CHROME}>
+            <MemoryRouter initialEntries={['/roles/family']}>
+              <Routes><Route path="/roles/:name" element={<RoleEditor />} /></Routes>
+            </MemoryRouter>
+          </ChromeContext>
+        </HealthContext>
       </I18nProvider>,
     )
     await waitFor(() => { expect(calls.filter((c) => c.url === '/api/commands')).toHaveLength(1) })

@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import { api, ApiError } from '../api/client.ts'
 import { readArray } from '../api/read.ts'
 import { Chip } from '../components/Chip.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { Sheet } from '../components/Sheet.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { grants, wildcardsIn } from '../patterns.ts'
@@ -93,27 +94,23 @@ export function Roles(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-page font-semibold">{t('roles.title')}</h1>
-          {/* Gated on all three counts, not on the roles alone: a count nobody confirmed is
-              withheld, never rendered as 0. */}
-          {roles !== null && people !== null && commands !== null && (
-            <p className="text-meta-lg text-text/60">
-              {plural(t, 'roles.summary', list.length, {
-                roles: list.length, people, commands: total,
-              })}
-            </p>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={() => { setName(''); setAddError(null); setAdding(true) }}
-          className="rounded-md bg-accent px-3 py-2 font-medium text-accent-ink"
-        >
-          {t('roles.create')}
-        </button>
-      </div>
+      <PageHeader
+        title={t('roles.title')}
+        // Gated on all three counts, not on the roles alone: a count nobody confirmed is
+        // withheld, never rendered as 0.
+        subtitle={roles !== null && people !== null && commands !== null
+          ? plural(t, 'roles.summary', list.length, { roles: list.length, people, commands: total })
+          : undefined}
+        actions={(
+          <button
+            type="button"
+            onClick={() => { setName(''); setAddError(null); setAdding(true) }}
+            className="rounded-md bg-accent px-3 py-2 font-medium text-accent-ink"
+          >
+            {t('roles.create')}
+          </button>
+        )}
+      />
 
       {error && <p role="alert" className={`text-body ${warn.text}`}>{t('error.generic')}</p>}
 

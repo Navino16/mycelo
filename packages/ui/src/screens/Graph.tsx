@@ -6,6 +6,7 @@ import { ORDER } from '../api/types.ts'
 import { Chip } from '../components/Chip.tsx'
 import { Dot } from '../components/Dot.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { StateBadge } from '../components/StateBadge.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { BOX_H, BOX_W, isBroken, isFailing, layout } from '../graphLayout.ts'
@@ -173,12 +174,10 @@ export function Graph(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h1 className="text-page font-semibold">{t('graph.title')}</h1>
-          {placed.length > 0 && <p className="text-meta-lg text-text/60">{summary}</p>}
-        </div>
-        {placed.length > 0 && (
+      <PageHeader
+        title={t('graph.title')}
+        subtitle={placed.length > 0 ? summary : undefined}
+        actions={placed.length === 0 ? undefined : (
           <div className="hidden items-center gap-4 text-meta-lg text-text/70 md:flex">
             <span className="flex items-center gap-2"><Dot tone="ok" />{t('graph.legendGerminated')}</span>
             <span className="flex items-center gap-2"><Dot tone="warn" />{t('graph.legendDormant')}</span>
@@ -203,7 +202,7 @@ export function Graph(): React.JSX.Element {
             />
           </div>
         )}
-      </div>
+      />
 
       {error && <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.generic')}</p>}
 

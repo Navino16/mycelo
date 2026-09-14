@@ -6,6 +6,7 @@ import { Avatar } from '../components/Avatar.tsx'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { Chip } from '../components/Chip.tsx'
 import { Dot } from '../components/Dot.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { plural, useT } from '../i18n.tsx'
 import { allCommands, effectiveCommands, effectiveWildcards } from '../rights.ts'
@@ -124,29 +125,23 @@ export function PersonDetail(): React.JSX.Element {
 
       {person !== null && (
         <>
-          <div className="space-y-1">
-            <Breadcrumb trail={[{ label: t('people.title'), to: '/people' }]} />
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
+          <Breadcrumb trail={[{ label: t('people.title'), to: '/people' }]} />
+          <PageHeader
+            title={(
+              <span className="flex min-w-0 items-center gap-3">
                 <Avatar person={person} />
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="truncate text-page font-semibold">{person.displayName ?? person.id}</h1>
-                    {/* Not beside the banner, which says the same thing at length. */}
-                    {!person.reviewed && !banner && <Chip label={t('person.neverReviewedTitle')} tone="warn" />}
-                  </div>
-                  <p className="text-meta-lg text-text/60">
-                    {plural(t, 'person.identityCount', identities.length, {
-                      count: identities.length,
-                    })}
-                  </p>
-                </div>
-              </div>
-              {/* Only where the banner is not: two identical primaries on one screen is what
-                  2i-desktop and 2i-mobile each draw half of. */}
-              {!person.reviewed && !banner && reviewButton}
-            </div>
-          </div>
+                <span className="truncate">{person.displayName ?? person.id}</span>
+              </span>
+            )}
+            subtitle={plural(t, 'person.identityCount', identities.length, { count: identities.length })}
+            // Only where the banner is not: two identical primaries on one screen is what
+            // 2i-desktop and 2i-mobile each draw half of.
+            actions={!person.reviewed && !banner ? reviewButton : undefined}
+          />
+
+          {/* Not beside the banner, which says the same thing at length. Kept out of the h1
+              itself: its text would otherwise join the heading's accessible name. */}
+          {!person.reviewed && !banner && <Chip label={t('person.neverReviewedTitle')} tone="warn" />}
 
           {banner && (
             <section

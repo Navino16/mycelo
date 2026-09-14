@@ -6,6 +6,7 @@ import { ORDER } from '../api/types.ts'
 import { Chip } from '../components/Chip.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
 import { KindSection } from '../components/KindSection.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { plural, useT } from '../i18n.tsx'
 import { flatPlugins } from '../plugins.ts'
@@ -61,30 +62,28 @@ export function Plugins(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-        <div>
-          <h1 className="text-page font-semibold">{t('plugins.title')}</h1>
-          {groups !== null && (
-            <p className="font-mono text-meta-lg text-text/60">{`${installed} · ${declared}`}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="search"
-            value={term}
-            aria-label={searchLabel}
-            placeholder={searchLabel}
-            onChange={(e) => { setTerm(e.target.value) }}
-            className="min-w-0 flex-1 rounded-md border border-line bg-surface px-3 py-2 text-body md:w-65 md:flex-none"
-          />
-          <Link
-            to="/sources"
-            className="shrink-0 rounded-md bg-accent px-3 py-2 font-medium text-accent-ink"
-          >
-            {t('plugins.inoculate')}
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title={t('plugins.title')}
+        subtitle={groups !== null ? `${installed} · ${declared}` : undefined}
+        actions={(
+          <div className="flex items-center gap-2">
+            <input
+              type="search"
+              value={term}
+              aria-label={searchLabel}
+              placeholder={searchLabel}
+              onChange={(e) => { setTerm(e.target.value) }}
+              className="min-w-0 flex-1 rounded-md border border-line bg-surface px-3 py-2 text-body md:w-65 md:flex-none"
+            />
+            <Link
+              to="/sources"
+              className="shrink-0 rounded-md bg-accent px-3 py-2 font-medium text-accent-ink"
+            >
+              {t('plugins.inoculate')}
+            </Link>
+          </div>
+        )}
+      />
 
       {error && <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.generic')}</p>}
 

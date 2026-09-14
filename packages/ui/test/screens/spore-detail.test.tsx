@@ -1,14 +1,20 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
+import { ChromeContext } from '../../src/chrome.tsx'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { SporeDetail } from '../../src/screens/SporeDetail.tsx'
+import type { ChromeValue } from '../../src/chrome.tsx'
 import type {
   CommandGroups, InoculateOutcome, PluginDto, PluginGroups, SourceDto, SporeStrainsDto,
 } from '../../src/api/types.ts'
 
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
+
+const CHROME: ChromeValue = { substrate: null, counts: null, host: '' }
+const HEALTH = { health: null, error: false, refresh: () => Promise.resolve() }
 
 /** The 2b spore, with the artboard's scope set corrected to real names (principals.read). */
 const WELCOME: SporeStrainsDto = {
@@ -185,9 +191,13 @@ function serve(opts: Options = {}): { calls: Call[] } {
 function renderDetail(spore = 'enzyme-welcome'): void {
   render(
     <I18nProvider>
-      <MemoryRouter initialEntries={[`/sources/2/spores/${spore}`]}>
-        <Routes><Route path="/sources/:id/spores/:name" element={<SporeDetail />} /></Routes>
-      </MemoryRouter>
+      <HealthContext value={HEALTH}>
+        <ChromeContext value={CHROME}>
+          <MemoryRouter initialEntries={[`/sources/2/spores/${spore}`]}>
+            <Routes><Route path="/sources/:id/spores/:name" element={<SporeDetail />} /></Routes>
+          </MemoryRouter>
+        </ChromeContext>
+      </HealthContext>
     </I18nProvider>,
   )
 }

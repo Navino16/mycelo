@@ -1,10 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
+import { ChromeContext } from '../../src/chrome.tsx'
 import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { PluginDetail } from '../../src/screens/PluginDetail.tsx'
+import type { ChromeValue } from '../../src/chrome.tsx'
 import type { PluginDetailDto, RuntimeHealth } from '../../src/api/types.ts'
+
+const CHROME: ChromeValue = { substrate: null, counts: null, host: '' }
 
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
@@ -59,9 +63,11 @@ function renderDetail(health: RuntimeHealth | null = GERMINATED, at = '/plugins/
   render(
     <I18nProvider>
       <HealthContext value={{ health, error: false, refresh: () => Promise.resolve() }}>
-        <MemoryRouter initialEntries={[at]}>
-          <Routes><Route path="/plugins/:name" element={<PluginDetail />} /></Routes>
-        </MemoryRouter>
+        <ChromeContext value={CHROME}>
+          <MemoryRouter initialEntries={[at]}>
+            <Routes><Route path="/plugins/:name" element={<PluginDetail />} /></Routes>
+          </MemoryRouter>
+        </ChromeContext>
       </HealthContext>
     </I18nProvider>,
   )

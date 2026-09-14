@@ -14,6 +14,7 @@ import { readArray } from '../api/read.ts'
 import type { FormSchema, PluginDetailDto, SettingsWriteResult } from '../api/types.ts'
 import { Breadcrumb } from '../components/Breadcrumb.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { SecretField } from '../components/SecretField.tsx'
 import { StateBadge } from '../components/StateBadge.tsx'
 import { Tabs } from '../components/Tabs.tsx'
@@ -444,13 +445,12 @@ export function PluginSettings(): React.JSX.Element {
     <div className="space-y-4">
       <Breadcrumb trail={pluginTrail(t, name, detail?.kind)} />
 
-      <header className="space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="font-mono text-page">{name}</h1>
-          {/* The enable route answers { ok, restartRequired }: folded in, or the badge reads
-              `Disabled` beside the switch that just reported the restart. */}
-          {detail !== null && <StateBadge state={enabledNow ? 'pending' : detail.state} />}
-        </div>
+      <PageHeader title={<span className="font-mono">{name}</span>} />
+
+      <div className="space-y-3">
+        {/* The enable route answers { ok, restartRequired }: folded in, or the badge reads
+            `Disabled` beside the switch that just reported the restart. */}
+        {detail !== null && <StateBadge state={enabledNow ? 'pending' : detail.state} />}
         <Tabs tabs={tabs} active="configuration" onSelect={() => undefined} />
         {schema !== null && schema.available && (
           <p className="font-mono text-meta-lg text-text/60">
@@ -459,7 +459,7 @@ export function PluginSettings(): React.JSX.Element {
             })}
           </p>
         )}
-      </header>
+      </div>
 
       {error && <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.generic')}</p>}
 

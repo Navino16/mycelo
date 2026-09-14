@@ -1,9 +1,15 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
+import { ChromeContext } from '../../src/chrome.tsx'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { PersonDetail } from '../../src/screens/PersonDetail.tsx'
+import type { ChromeValue } from '../../src/chrome.tsx'
 import type { CommandGroups, ConfigDto, PersonDto, RoleDto } from '../../src/api/types.ts'
+
+const CHROME: ChromeValue = { substrate: null, counts: null, host: '' }
+const HEALTH = { health: null, error: false, refresh: () => Promise.resolve() }
 
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
@@ -119,9 +125,13 @@ function mockApi(
 function renderDetail(id = 'zelda-1'): void {
   render(
     <I18nProvider>
-      <MemoryRouter initialEntries={[`/people/${id}`]}>
-        <Routes><Route path="/people/:id" element={<PersonDetail />} /></Routes>
-      </MemoryRouter>
+      <HealthContext value={HEALTH}>
+        <ChromeContext value={CHROME}>
+          <MemoryRouter initialEntries={[`/people/${id}`]}>
+            <Routes><Route path="/people/:id" element={<PersonDetail />} /></Routes>
+          </MemoryRouter>
+        </ChromeContext>
+      </HealthContext>
     </I18nProvider>,
   )
 }

@@ -1,12 +1,18 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter } from 'react-router'
+import { ChromeContext } from '../../src/chrome.tsx'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { Sources } from '../../src/screens/Sources.tsx'
+import type { ChromeValue } from '../../src/chrome.tsx'
 import type { SourceDto, SporeOffer } from '../../src/api/types.ts'
 
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
+
+const CHROME: ChromeValue = { substrate: null, counts: null, host: '' }
+const HEALTH = { health: null, error: false, refresh: () => Promise.resolve() }
 
 const OFFICIAL: SourceDto = {
   id: 1,
@@ -93,7 +99,7 @@ function mockApi(initial: readonly SourceDto[], opts: Options = {}): { calls: Ca
 }
 
 function renderSources(): void {
-  render(<I18nProvider><MemoryRouter><Sources /></MemoryRouter></I18nProvider>)
+  render(<I18nProvider><HealthContext value={HEALTH}><ChromeContext value={CHROME}><MemoryRouter><Sources /></MemoryRouter></ChromeContext></HealthContext></I18nProvider>)
 }
 
 async function openEdit(id: number): Promise<HTMLElement> {
@@ -415,7 +421,7 @@ describe('a source there is nothing to browse', () => {
   // row linked to a route that can only fail — and it is the first row an operator meets.
   it('renders a local directory as text, never as a link into a route that must fail', async () => {
     mockApi([LOCAL])
-    render(<I18nProvider><MemoryRouter><Sources /></MemoryRouter></I18nProvider>)
+    render(<I18nProvider><HealthContext value={HEALTH}><ChromeContext value={CHROME}><MemoryRouter><Sources /></MemoryRouter></ChromeContext></HealthContext></I18nProvider>)
 
     const row = await screen.findByTestId('source-4')
     expect(within(row).getByText('local-spores')).toBeDefined()
@@ -424,7 +430,7 @@ describe('a source there is nothing to browse', () => {
 
   it('says why the row has no catalogue count instead of leaving the cell blank', async () => {
     mockApi([LOCAL])
-    render(<I18nProvider><MemoryRouter><Sources /></MemoryRouter></I18nProvider>)
+    render(<I18nProvider><HealthContext value={HEALTH}><ChromeContext value={CHROME}><MemoryRouter><Sources /></MemoryRouter></ChromeContext></HealthContext></I18nProvider>)
 
     const row = await screen.findByTestId('source-4')
     expect(within(row).getByText('its spores are already installed')).toBeDefined()
@@ -433,7 +439,7 @@ describe('a source there is nothing to browse', () => {
   // The control: a git registry is browsable and keeps its link.
   it('keeps the link on a git source', async () => {
     mockApi([OFFICIAL], { catalogues: { 1: 3 } })
-    render(<I18nProvider><MemoryRouter><Sources /></MemoryRouter></I18nProvider>)
+    render(<I18nProvider><HealthContext value={HEALTH}><ChromeContext value={CHROME}><MemoryRouter><Sources /></MemoryRouter></ChromeContext></HealthContext></I18nProvider>)
 
     const row = await screen.findByTestId('source-1')
     expect(within(row).getByRole('link').getAttribute('href')).toBe('/sources/1')
@@ -450,7 +456,7 @@ describe('a source there is nothing to browse', () => {
       { id: 5, label: labelA, driver: 'local', location: labelA, official: false, enabled: true },
       { id: 6, label: labelB, driver: 'local', location: labelB, official: false, enabled: true },
     ])
-    render(<I18nProvider><MemoryRouter><Sources /></MemoryRouter></I18nProvider>)
+    render(<I18nProvider><HealthContext value={HEALTH}><ChromeContext value={CHROME}><MemoryRouter><Sources /></MemoryRouter></ChromeContext></HealthContext></I18nProvider>)
 
     const rowA = await screen.findByTestId('source-5')
     const rowB = await screen.findByTestId('source-6')

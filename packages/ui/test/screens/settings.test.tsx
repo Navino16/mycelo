@@ -1,11 +1,17 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test'
 import { MemoryRouter, Route, Routes } from 'react-router'
+import { ChromeContext } from '../../src/chrome.tsx'
 import { TONE_CLASSES } from '../../src/components/tone.ts'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { SecretField } from '../../src/components/SecretField.tsx'
 import { PluginSettings } from '../../src/screens/PluginSettings.tsx'
+import type { ChromeValue } from '../../src/chrome.tsx'
 import type { FormSchema, PluginDetailDto, SettingsWriteResult } from '../../src/api/types.ts'
+
+const CHROME: ChromeValue = { substrate: null, counts: null, host: '' }
+const HEALTH = { health: null, error: false, refresh: () => Promise.resolve() }
 
 /**
  * The widget renders the bare input; the field template renders the label. The test stands in
@@ -194,9 +200,13 @@ function mockVault(options: Options): { calls: Call[] } {
 function renderSettings(): void {
   render(
     <I18nProvider>
-      <MemoryRouter initialEntries={['/plugins/vault/settings']}>
-        <Routes><Route path="/plugins/:name/settings" element={<PluginSettings />} /></Routes>
-      </MemoryRouter>
+      <HealthContext value={HEALTH}>
+        <ChromeContext value={CHROME}>
+          <MemoryRouter initialEntries={['/plugins/vault/settings']}>
+            <Routes><Route path="/plugins/:name/settings" element={<PluginSettings />} /></Routes>
+          </MemoryRouter>
+        </ChromeContext>
+      </HealthContext>
     </I18nProvider>,
   )
 }

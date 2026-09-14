@@ -165,9 +165,9 @@ describe('the sidebar foot', () => {
     expect(screen.getByTestId('nav-desktop-controls')).toBeDefined()
   })
 
-  // 1a-R1: language and theme move out of the chrome bar task 3 deletes and into the
-  // sidebar. They must not depend on /api/substrate: an operator switching language
-  // should not need the uptime line to have loaded first.
+  // 1a-R1: language and theme moved out of the deleted chrome bar and into the sidebar.
+  // They must not depend on /api/substrate: an operator switching language should not
+  // need the uptime line to have loaded first.
   it('carries the language switch and theme toggle above the uptime line', () => {
     renderNav()
 

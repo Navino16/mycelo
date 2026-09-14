@@ -7,6 +7,7 @@ import { BulkBar } from '../components/BulkBar.tsx'
 import { Checkbox } from '../components/Checkbox.tsx'
 import { Chip } from '../components/Chip.tsx'
 import { EmptyState } from '../components/EmptyState.tsx'
+import { PageHeader } from '../components/PageHeader.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { plural, useT } from '../i18n.tsx'
 import type { PageDto, PersonDto, RoleDto } from '../api/types.ts'
@@ -178,24 +179,20 @@ export function People(): React.JSX.Element {
     // (ruling F13). 8rem here, on top of the 5rem Layout's own <main> already reserves,
     // clears the bar's measured 143 px above that offset.
     <div className={`space-y-4${armed > 0 ? ' pb-32 md:pb-0' : ''}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-page font-semibold">{t('people.title')}</h1>
-          {data !== null && (
-            <p className="text-meta-lg text-text/60">
-              {plural(t, 'people.known', total, { total })}
-            </p>
-          )}
-        </div>
-        <label className="block space-y-1">
-          <span className="text-meta text-text/60">{t('people.search')}</span>
-          <input
-            value={qInput}
-            onChange={(e) => { setQInput(e.target.value) }}
-            className="w-full rounded-md border border-line bg-surface px-3 py-2 text-body md:w-80"
-          />
-        </label>
-      </div>
+      <PageHeader
+        title={t('people.title')}
+        subtitle={data !== null ? plural(t, 'people.known', total, { total }) : undefined}
+        actions={(
+          <label className="block space-y-1">
+            <span className="text-meta text-text/60">{t('people.search')}</span>
+            <input
+              value={qInput}
+              onChange={(e) => { setQInput(e.target.value) }}
+              className="w-full rounded-md border border-line bg-surface px-3 py-2 text-body md:w-80"
+            />
+          </label>
+        )}
+      />
 
       {error && <p role="alert" className={`text-body ${warn.text}`}>{t('error.generic')}</p>}
 

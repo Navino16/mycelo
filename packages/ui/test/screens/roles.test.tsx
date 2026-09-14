@@ -1,13 +1,19 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, mock } from 'bun:test'
 import { MemoryRouter } from 'react-router'
+import { ChromeContext } from '../../src/chrome.tsx'
 import { TONE_CLASSES } from '../../src/components/tone.ts'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { Roles } from '../../src/screens/Roles.tsx'
+import type { ChromeValue } from '../../src/chrome.tsx'
 import type { CommandDto, CommandGroups, ConfigDto, RoleDto } from '../../src/api/types.ts'
 
 const realFetch = globalThis.fetch
 afterEach(() => { globalThis.fetch = realFetch })
+
+const CHROME: ChromeValue = { substrate: null, counts: null, host: '' }
+const HEALTH = { health: null, error: false, refresh: () => Promise.resolve() }
 
 const CONFIG: ConfigDto = { prefix: '/', defaultLocale: 'en', defaultRole: 'guest' }
 
@@ -106,7 +112,13 @@ function withHolders(counts: Readonly<Record<string, number>>): readonly RoleDto
 }
 
 function renderRoles(): void {
-  render(<I18nProvider><MemoryRouter><Roles /></MemoryRouter></I18nProvider>)
+  render(
+    <I18nProvider>
+      <HealthContext value={HEALTH}>
+        <ChromeContext value={CHROME}><MemoryRouter><Roles /></MemoryRouter></ChromeContext>
+      </HealthContext>
+    </I18nProvider>,
+  )
 }
 
 /** The row for one role, so the default role's name in the accent card is never mistaken for it. */
