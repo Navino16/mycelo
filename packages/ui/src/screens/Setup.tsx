@@ -100,7 +100,6 @@ export function Setup({ onDone }: { onDone: () => void }): React.JSX.Element {
       >
         {t('setup.submit')}
       </button>
-      <p className="text-meta-lg text-text/60">{t('setup.inertRule')}</p>
     </form>
   )
 }

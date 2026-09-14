@@ -361,9 +361,6 @@ export function RoleEditor(): React.JSX.Element {
                         </button>
                       </>
                     )}
-                    <span className="text-meta-lg text-text/60 md:ml-auto">
-                      {plural(t, 'role.groups', groups.length, { count: groups.length })}
-                    </span>
                   </div>
                   <p className="text-meta-lg text-text/60">{t('role.wildcardLead')}</p>
                 </div>
