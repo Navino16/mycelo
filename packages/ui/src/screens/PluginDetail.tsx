@@ -72,6 +72,9 @@ export function PluginDetail(): React.JSX.Element {
   if (plugin === null) {
     return (
       <div className="space-y-6">
+        {/* Below md, PageHeader is the only source of the language switch, the theme toggle and
+            the pill — a loading or refused screen must still carry it. */}
+        <PageHeader title={<span className="font-mono">{name}</span>} />
         {error && <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>{t('error.generic')}</p>}
       </div>
     )

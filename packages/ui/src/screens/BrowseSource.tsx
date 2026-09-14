@@ -86,7 +86,7 @@ export function BrowseSource(): React.JSX.Element {
       <Breadcrumb trail={[{ label: t('sources.title'), to: '/sources' }]} />
       <PageHeader
         // break-all over truncate: a filesystem path's distinguishing part is often its end.
-        title={<span className="block min-w-0 break-all font-mono">{source?.label ?? ''}</span>}
+        title={<span className="break-all font-mono">{source?.label ?? ''}</span>}
         subtitle={offers !== null ? t('sources.catalogue', { count: all.length }) : undefined}
         actions={offers !== null && all.length > 0 ? (
           <input

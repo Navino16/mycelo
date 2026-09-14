@@ -185,7 +185,9 @@ export function Overview(): React.JSX.Element {
             <span className="hidden md:inline">{t('overview.title')}</span>
           </>
         )}
-        subtitle={uptime ?? undefined}
+        // md:hidden: 1a-desktop draws this line in the sidebar foot, which Nav owns — the one
+        // subtitle that duplicates something already on screen above md.
+        subtitle={uptime === null ? undefined : <span className="md:hidden">{uptime}</span>}
         actions={state !== 'mute'
           ? <Search plugins={stats?.all ?? []} commands={body?.commands ?? []} />
           : undefined}

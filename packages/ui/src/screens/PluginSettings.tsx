@@ -445,12 +445,14 @@ export function PluginSettings(): React.JSX.Element {
     <div className="space-y-4">
       <Breadcrumb trail={pluginTrail(t, name, detail?.kind)} />
 
-      <PageHeader title={<span className="font-mono">{name}</span>} />
+      <PageHeader
+        title={<span className="font-mono">{name}</span>}
+        // The enable route answers { ok, restartRequired }: folded in, or the badge reads
+        // `Disabled` beside the switch that just reported the restart.
+        actions={detail === null ? undefined : <StateBadge state={enabledNow ? 'pending' : detail.state} />}
+      />
 
       <div className="space-y-3">
-        {/* The enable route answers { ok, restartRequired }: folded in, or the badge reads
-            `Disabled` beside the switch that just reported the restart. */}
-        {detail !== null && <StateBadge state={enabledNow ? 'pending' : detail.state} />}
         <Tabs tabs={tabs} active="configuration" onSelect={() => undefined} />
         {schema !== null && schema.available && (
           <p className="font-mono text-meta-lg text-text/60">

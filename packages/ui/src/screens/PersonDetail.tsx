@@ -121,6 +121,9 @@ export function PersonDetail(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
+      {/* Below md, PageHeader is the only source of the language switch, the theme toggle and
+          the pill — a loading or refused screen must still carry it. */}
+      {person === null && <PageHeader title={<span className="font-mono">{id}</span>} />}
       {error && <p role="alert" className={`text-body ${warn.text}`}>{t('error.generic')}</p>}
 
       {person !== null && (
@@ -135,13 +138,16 @@ export function PersonDetail(): React.JSX.Element {
             )}
             subtitle={plural(t, 'person.identityCount', identities.length, { count: identities.length })}
             // Only where the banner is not: two identical primaries on one screen is what
-            // 2i-desktop and 2i-mobile each draw half of.
-            actions={!person.reviewed && !banner ? reviewButton : undefined}
+            // 2i-desktop and 2i-mobile each draw half of. The chip and the button share this one
+            // slot, gated identically — kept out of the h1 itself, whose accessible name the
+            // chip's text would otherwise join.
+            actions={!person.reviewed && !banner ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <Chip label={t('person.neverReviewedTitle')} tone="warn" />
+                {reviewButton}
+              </div>
+            ) : undefined}
           />
-
-          {/* Not beside the banner, which says the same thing at length. Kept out of the h1
-              itself: its text would otherwise join the heading's accessible name. */}
-          {!person.reviewed && !banner && <Chip label={t('person.neverReviewedTitle')} tone="warn" />}
 
           {banner && (
             <section

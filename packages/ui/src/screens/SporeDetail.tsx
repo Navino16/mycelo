@@ -212,10 +212,14 @@ export function SporeDetail(): React.JSX.Element {
     return (
       <div className="space-y-4">
         <Breadcrumb trail={trail} />
+        {/* Below md, PageHeader is the only source of the language switch, the theme toggle and
+            the pill — a refusal must still carry it, or there is no way to switch the page's
+            language to read the refusal itself. */}
+        <PageHeader title={<span className="font-mono">{name}</span>} />
         <section
           className={`space-y-2 rounded-xl border p-4 ${TONE_CLASSES.warn.border} ${TONE_CLASSES.warn.bg}`}
         >
-          <h1 className="text-title font-medium">{t('spore.refusedTitle')}</h1>
+          <h2 className="text-title font-medium">{t('spore.refusedTitle')}</h2>
           <p role="alert" className={`text-body ${TONE_CLASSES.warn.text}`}>
             {refusal ?? t('error.generic')}
           </p>
@@ -223,7 +227,13 @@ export function SporeDetail(): React.JSX.Element {
       </div>
     )
   }
-  if (spore === null || source === null) return <div />
+  if (spore === null || source === null) {
+    return (
+      <div className="space-y-4">
+        <PageHeader title={<span className="font-mono">{name}</span>} />
+      </div>
+    )
+  }
 
   const scopes = readArray<string>(spore.demands.scopes) ?? []
   const requires = readArray<RequirementDto>(spore.demands.requires) ?? []

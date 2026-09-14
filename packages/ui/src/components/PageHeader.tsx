@@ -18,7 +18,9 @@ export function PageHeader(
 
   return (
     <header className="flex flex-wrap items-center gap-3">
-      <h1 className="order-1 text-page font-semibold">{title}</h1>
+      {/* min-w-0: the h1 is the flex item a long unbroken title (BrowseSource's path) must be
+          able to shrink below its own content size to wrap rather than overflow (row 14). */}
+      <h1 className="order-1 min-w-0 text-page font-semibold">{title}</h1>
 
       {actions !== undefined && (
         <div
@@ -37,8 +39,10 @@ export function PageHeader(
         <HealthPill plugins={counts?.plugins} />
       </div>
 
+      {/* No width gate: a caller whose subtitle duplicates something the sidebar foot already
+          shows (Overview's uptime) gates it itself, rather than every caller losing the line. */}
       {subtitle !== undefined && (
-        <p className="order-3 w-full text-body text-text/70 md:hidden">{subtitle}</p>
+        <p className="order-3 w-full text-body text-text/70">{subtitle}</p>
       )}
     </header>
   )

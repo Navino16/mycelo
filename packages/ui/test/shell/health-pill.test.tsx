@@ -146,5 +146,5 @@ describe('the pill', () => {
   })
 })
 
-// The pill's presence on every screen, and the plugin-count suppression wired end to end, are
-// now PageHeader's job — see components/page-header.test.tsx. Layout renders no chrome (1a-R4).
+// The pill's presence on every screen is now PageHeader's job (Layout renders no chrome, 1a-R4),
+// and components/page-header.test.tsx pins both that and the counts.plugins wiring end to end.

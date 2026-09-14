@@ -143,8 +143,10 @@ describe('browsing a source', () => {
 
     const heading = await screen.findByRole('heading', { level: 1 })
     expect(heading.textContent).toBe(path)
-    expect(heading.firstElementChild?.className).toContain('break-all')
-    expect(heading.firstElementChild?.className).toContain('min-w-0')
+    // min-w-0 is the h1 itself: it is the flex item that must shrink below its content size.
+    // break-all is BrowseSource's own, on the span PageHeader renders as the h1's content.
+    expect(heading.className.split(/\s+/)).toContain('min-w-0')
+    expect(heading.firstElementChild?.className.split(/\s+/)).toContain('break-all')
   })
 
   it('says the source offers nothing rather than showing an empty list', async () => {

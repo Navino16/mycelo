@@ -16,11 +16,12 @@ const CHROME: ChromeValue = { substrate: null, counts: { plugins: 4 }, host: '' 
 
 function renderHeader(
   props: { title?: ReactNode, subtitle?: ReactNode, actions?: ReactNode } = {},
+  chrome: ChromeValue = CHROME,
 ): void {
   render(
     <I18nProvider>
       <HealthContext value={{ health: HEALTHY, error: false, refresh: () => Promise.resolve() }}>
-        <ChromeContext value={CHROME}>
+        <ChromeContext value={chrome}>
           <PageHeader title="Overview" {...props} />
         </ChromeContext>
       </HealthContext>
@@ -40,6 +41,15 @@ describe('PageHeader', () => {
     renderHeader()
 
     expect(screen.getByRole('status')).toBeDefined()
+  })
+
+  // Pins the wiring itself, not just the pill's own suppression rule: a healthy substrate with
+  // a confirmed-zero plugin count renders no pill (ruling F16) only if counts.plugins actually
+  // reaches HealthPill — <HealthPill /> with no prop would pass every other test here too.
+  it('hands the pill the chrome plugin count, so a confirmed-empty substrate shows none', () => {
+    renderHeader({}, { substrate: null, counts: { plugins: 0 }, host: '' })
+
+    expect(screen.queryByRole('status')).toBeNull()
   })
 
   // happy-dom evaluates no media query, so both variants are always in the DOM: assert on the
@@ -65,12 +75,12 @@ describe('PageHeader', () => {
     expect(screen.getAllByText('Search').some((el) => el.tagName === 'BUTTON')).toBe(true)
   })
 
-  // The desktop row is a closed three-part layout (h1, actions, pill); the sidebar foot already
-  // shows the uptime there (Nav.tsx), so a subtitle above md would duplicate it.
-  it('shows the subtitle only below md', () => {
+  // Ruling reversed after task 3: only Overview's uptime duplicates the sidebar foot, and only
+  // Overview knows that — so the caller gates, not the slot.
+  it('shows the subtitle at every width, with no gate of its own', () => {
     renderHeader({ subtitle: 'up 14d 03h' })
 
     const subtitle = screen.getByText('up 14d 03h')
-    expect(subtitle.className.split(/\s+/)).toContain('md:hidden')
+    expect(subtitle.className.split(/\s+/)).not.toContain('md:hidden')
   })
 })
