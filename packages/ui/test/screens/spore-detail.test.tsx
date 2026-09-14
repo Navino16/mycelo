@@ -344,6 +344,31 @@ describe('the consent moment', () => {
     expect(read?.querySelector('span[aria-hidden="true"]')?.className).toContain('bg-idle')
   })
 
+  // ruling 2b-R1: the mono scope id and the risk word were named by nothing. Asserted in
+  // French, since an English-substring check would stay green with the fr key deleted.
+  it('labels the scope table columns, in French, aligned with the row grid', async () => {
+    globalThis.localStorage?.setItem('mycelo.locale', 'fr')
+    try {
+      serve()
+      renderDetail()
+
+      const table = await screen.findByTestId('scope-table')
+      const header = screen.getByTestId('scope-table-header')
+      expect(within(header).getByText('Portée')).toBeDefined()
+      expect(within(header).getByText('Autorise')).toBeDefined()
+      expect(within(header).getByText('Risque')).toBeDefined()
+
+      const row = table.querySelector('li')
+      const rowColumns = row?.className.split(/\s+/).find((c) => c.startsWith('md:grid-cols-['))
+      if (rowColumns === undefined) throw new Error('row has no md:grid-cols class')
+      expect(header.className.split(/\s+/)).toContain(rowColumns)
+      expect(header.className.split(/\s+/)).toContain('hidden')
+      expect(header.className.split(/\s+/)).toContain('md:grid')
+    } finally {
+      globalThis.localStorage?.removeItem('mycelo.locale')
+    }
+  })
+
   it('says the scopes are granted as one block at install, and how many', async () => {
     serve()
     renderDetail()
