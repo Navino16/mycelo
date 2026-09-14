@@ -4,6 +4,8 @@ import { useChrome, useUptimeLine } from '../chrome.tsx'
 import { Dot } from '../components/Dot.tsx'
 import { TONE_CLASSES } from '../components/tone.ts'
 import { useT } from '../i18n.tsx'
+import { LanguageSwitch } from './LanguageSwitch.tsx'
+import { ThemeToggle } from './ThemeToggle.tsx'
 import type { ChromeCounts } from '../chrome.tsx'
 import type { Tone } from '../components/tone.ts'
 import type { StringKey } from '../../locales/en.ts'
@@ -29,12 +31,17 @@ const ITEMS: readonly Item[] = [
   { to: '/graph', key: 'nav.graph', Icon: Network, desktopOnly: true },
 ]
 
-function Foot(): React.JSX.Element | null {
+// The controls live above the line, not gated on it (1a-R1): a language switch must stay
+// reachable while /api/substrate is still loading, not only once the uptime line appears.
+function Foot(): React.JSX.Element {
   const line = useUptimeLine()
-  if (line === null) return null
   return (
-    <div className="hidden border-t border-line px-4 py-3 font-mono text-meta text-text/50 md:block">
-      {line}
+    <div className="hidden border-t border-line px-4 py-3 md:block">
+      <div data-testid="nav-desktop-controls" className="mb-2 flex items-center gap-2">
+        <LanguageSwitch />
+        <ThemeToggle />
+      </div>
+      {line !== null && <p className="font-mono text-meta text-text/50">{line}</p>}
     </div>
   )
 }
@@ -72,9 +79,7 @@ export function Nav(): React.JSX.Element {
                   1a draws one of the two per width, never both. */}
               <span className="hidden md:block"><Dot tone={tone} /></span>
               <Icon size={18} className="md:hidden" />
-              {/* row 33: 'Vue d’ensemble' outruns any of five phone columns at 390px; let it
-                  wrap onto a second line rather than clip. */}
-              <span className="break-words text-center md:flex-1 md:text-left">{t(key)}</span>
+              <span className="text-center md:flex-1 md:text-left">{t(key)}</span>
               {n !== undefined && (
                 <span className={`hidden font-mono text-meta md:inline ${tone === 'warn' ? TONE_CLASSES.warn.text : 'text-text/50'}`}>
                   {String(n)}

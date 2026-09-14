@@ -2,11 +2,18 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'bun:test'
 import { MemoryRouter } from 'react-router'
 import { ChromeContext } from '../../src/chrome.tsx'
+import { PageHeader } from '../../src/components/PageHeader.tsx'
+import { HealthContext } from '../../src/health.tsx'
 import { I18nProvider } from '../../src/i18n.tsx'
 import { Nav } from '../../src/shell/Nav.tsx'
 import type { ChromeValue } from '../../src/chrome.tsx'
+import type { RuntimeHealth } from '../../src/api/types.ts'
 
 const COUNTS = { plugins: 32, issues: 5, sources: 2, roles: 7, people: 128 }
+
+const HEALTHY: RuntimeHealth = {
+  mode: 'germinated', dormant: [], enforcingBlocked: [], rhizas: [], hyphae: [], blockedSinceBoot: 0,
+}
 
 /**
  * A ChromeContext value rather than ChromeProvider: Nav reads the counts and never fetches
@@ -34,6 +41,20 @@ describe('the primary nav', () => {
     expect(screen.getByText('Anastomosis')).toBeDefined()
   })
 
+  // 1a-R5: the rename applies at both widths, so the same key change covers the phone
+  // bar and the desktop sidebar with nothing left to discriminate between them.
+  it('reads Aperçu, not Vue d’ensemble, in French', () => {
+    globalThis.localStorage?.setItem('mycelo.locale', 'fr')
+    try {
+      renderNav()
+
+      expect(screen.getByText('Aperçu')).toBeDefined()
+      expect(screen.queryByText('Vue d’ensemble')).toBeNull()
+    } finally {
+      globalThis.localStorage?.removeItem('mycelo.locale')
+    }
+  })
+
   // Discriminates the `desktopOnly === true ? 'hidden md:flex' : ''` class: the graph link
   // must carry the hide-on-mobile class none of the other items carry.
   it('hides the graph link on mobile, unlike every other item', () => {
@@ -58,14 +79,15 @@ describe('the primary nav', () => {
   })
 
   // happy-dom performs no layout, so a phone-bar item's rect stays zero regardless of the
-  // fix. Pin the shrink mechanism instead: the item must shrink below its label's content
-  // width (row 33's five-item bar), and the label must be free to wrap onto a second line.
-  it('lets a phone-bar item shrink and its label wrap across five columns', () => {
+  // fix. Pin the shrink mechanism: the item must shrink below its label's content width
+  // (row 33's five-item bar). 'Overview' no longer needs the wrap workaround the shorter
+  // 'Aperçu' made unnecessary (1a-R5), so the label carries no break-words class.
+  it('lets a phone-bar item shrink across five columns', () => {
     renderNav()
 
     const link = screen.getByRole('link', { name: /^Overview/ })
-    expect(link.className).toContain('min-w-0')
-    expect(screen.getByText('Overview').className).toContain('break-words')
+    expect(link.className.split(/\s+/)).toContain('min-w-0')
+    expect(screen.getByText('Overview').className.split(/\s+/)).not.toContain('break-words')
   })
 })
 
@@ -138,6 +160,58 @@ describe('the sidebar foot', () => {
     renderNav()
 
     expect(screen.queryByText(/^up /)).toBeNull()
+  })
+
+  // 1a-R1: language and theme move out of the chrome bar task 3 deletes and into the
+  // sidebar. They must not depend on /api/substrate: an operator switching language
+  // should not need the uptime line to have loaded first.
+  it('carries the language switch and theme toggle above the uptime line', () => {
+    renderNav()
+
+    const select = screen.getByRole('combobox')
+    const toggle = screen.getByRole('button')
+    const wrapper = select.closest('[data-testid="nav-desktop-controls"]')
+
+    expect(wrapper).not.toBeNull()
+    expect(wrapper?.contains(toggle)).toBe(true)
+  })
+
+  // happy-dom evaluates no media query, so rendering Nav and PageHeader together puts two
+  // language selects in the DOM. Correct, provided exactly one is gated for each width —
+  // tokenised, since toContain('md:hidden') is satisfied by 'max-md:hidden'.
+  it('is the only visible language control above md when rendered beside PageHeader', () => {
+    render(
+      <I18nProvider>
+        <MemoryRouter>
+          <HealthContext value={{ health: HEALTHY, error: false, refresh: () => Promise.resolve() }}>
+            <ChromeContext value={{ substrate: null, counts: null, host: 'substrate.home.lan' }}>
+              <Nav />
+              <PageHeader title="Overview" />
+            </ChromeContext>
+          </HealthContext>
+        </MemoryRouter>
+      </I18nProvider>,
+    )
+
+    const selects = screen.getAllByRole('combobox')
+    expect(selects).toHaveLength(2)
+
+    const desktopWrapper = selects
+      .map((s) => s.closest('[data-testid="nav-desktop-controls"]'))
+      .find((w) => w !== null)
+    const mobileWrapper = selects
+      .map((s) => s.closest('[data-testid="pageheader-mobile-controls"]'))
+      .find((w) => w !== null)
+
+    expect(desktopWrapper).not.toBeUndefined()
+    expect(mobileWrapper).not.toBeUndefined()
+
+    const desktopFoot = desktopWrapper?.closest('div.hidden')
+    expect(desktopFoot?.className.split(/\s+/)).toContain('md:block')
+    expect(desktopFoot?.className.split(/\s+/)).not.toContain('md:hidden')
+
+    expect(mobileWrapper?.className.split(/\s+/)).toContain('md:hidden')
+    expect(mobileWrapper?.className.split(/\s+/)).not.toContain('md:block')
   })
 })
 

@@ -5,7 +5,7 @@ import type { StringKey } from './en.ts'
 // editor or a terminal.
 export const fr: Record<StringKey, string> = {
   'app.name': 'Mycelo',
-  'nav.overview': 'Vue d\u2019ensemble',
+  'nav.overview': 'Aper\u00e7u',
   'nav.plugins': 'Plugins',
   'nav.sources': 'Sources',
   'nav.roles': 'R\u00f4les',
@@ -86,7 +86,7 @@ export const fr: Record<StringKey, string> = {
   'health.pill.mute': 'Muet',
   'health.pill.unreadable': 'Illisible',
   'health.pill.offline': 'Ne r\u00e9pond pas',
-  'overview.title': 'Vue d\u2019ensemble',
+  'overview.title': 'Aper\u00e7u',
   'overview.allWell': 'Tout a germ\u00e9.',
   'overview.plugins': 'Plugins',
   'overview.unreadable': 'Le substrat a r\u00e9pondu dans une forme que cet \u00e9cran ne comprend pas (?)',

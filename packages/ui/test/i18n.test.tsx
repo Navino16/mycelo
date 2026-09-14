@@ -26,7 +26,7 @@ describe('the chrome speaks its own language', () => {
 
     fireEvent.click(screen.getByText('switch'))
 
-    expect(screen.getByTestId('nav').textContent).toBe('Vue d’ensemble')
+    expect(screen.getByTestId('nav').textContent).toBe('Aperçu')
   })
 
   // brief §6: the mycological term is used as-is and the subtitle is what prevents
@@ -45,7 +45,7 @@ describe('the chrome speaks its own language', () => {
 
     fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'fr' } })
 
-    expect(screen.getByTestId('nav').textContent).toBe('Vue d’ensemble')
+    expect(screen.getByTestId('nav').textContent).toBe('Aperçu')
   })
 
   // The select's own value-switching worked while its French <option> rendered the six
