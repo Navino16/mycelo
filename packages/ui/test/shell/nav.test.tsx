@@ -114,6 +114,20 @@ describe('the sidebar foot', () => {
     expect(screen.getByText('mycelo 0.9.3 · up 14d 03h')).toBeDefined()
   })
 
+  // packages/core/package.json's real, released version: the value this task bumps it to.
+  it('names the released version beside the uptime', () => {
+    renderNav({ substrate: { ...SUBSTRATE, version: '0.1.0' } })
+
+    expect(screen.getByText('mycelo 0.1.0 · up 14d 03h')).toBeDefined()
+  })
+
+  it('suppresses the 0.0.0 placeholder without hiding the uptime', () => {
+    renderNav({ substrate: { ...SUBSTRATE, version: '0.0.0' } })
+
+    const line = screen.getByText(/up 14d 03h/)
+    expect(line.textContent).not.toContain('0.0.0')
+  })
+
   it('renders no foot at all when the hook has nothing to show', () => {
     renderNav({ substrate: { ...SUBSTRATE, uptimeSeconds: Number.NaN } })
 
