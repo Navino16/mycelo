@@ -4,10 +4,8 @@ import { LanguageSwitch } from '../shell/LanguageSwitch.tsx'
 import { ThemeToggle } from '../shell/ThemeToggle.tsx'
 
 /**
- * The chrome bar's replacement (ruling 1a-R4): above md the sidebar foot carries language and
- * theme (task 4), so this row carries only title, actions and the pill. Below md there is no
- * sidebar, so the row carries language and theme too — order utilities move `actions` and
- * `subtitle` between the row and their own line per breakpoint without rendering either twice.
+ * `actions` may hold stateful content (Overview's `Search`), so it renders once and is
+ * repositioned per breakpoint with `order`/`w-full`, rather than duplicated into two blocks.
  */
 export function PageHeader(
   { title, subtitle, actions }: {
