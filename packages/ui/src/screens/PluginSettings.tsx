@@ -126,12 +126,17 @@ function typeWord(property: unknown, isSecret: boolean): StringKey {
   return 'pluginSettings.type.text'
 }
 
-/** Only a scalar default has a one-line rendering; an object or an array has none. */
+/**
+ * Only a scalar default has a one-line rendering; an object or an array has none. An empty
+ * string is not a default worth showing, but `0` and `false` are — the test is emptiness, not
+ * truthiness.
+ */
 function defaultWord(property: unknown): string | undefined {
   if (!isPlainObject(property)) return undefined
   const value = property.default
   const scalar = typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
-  return scalar ? String(value) : undefined
+  if (!scalar || value === '') return undefined
+  return String(value)
 }
 
 /** 2c's right column: the type word, then the rank — `required`, or the default it falls back to. */
