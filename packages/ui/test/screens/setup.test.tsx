@@ -73,14 +73,19 @@ describe('the setup wizard', () => {
     expect(screen.queryByText('The two passwords do not match.')).toBeNull()
   })
 
-  it('reveals both passwords when asked, and hides them again', () => {
+  // 2a-R3: one shared `revealed` state, a reveal control on both fields. Either button flips
+  // both inputs, and both read the same label once either is pressed.
+  it('reveals both passwords from either button, and hides them again', () => {
     renderSetup()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Show' }))
+    expect(screen.getAllByRole('button', { name: 'Show' })).toHaveLength(2)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Show' })[0]!)
     expect(screen.getByLabelText('Password').getAttribute('type')).toBe('text')
     expect(screen.getByLabelText('Repeat password').getAttribute('type')).toBe('text')
+    expect(screen.getAllByRole('button', { name: 'Hide' })).toHaveLength(2)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hide' }))
+    fireEvent.click(screen.getAllByRole('button', { name: 'Hide' })[1]!)
     expect(screen.getByLabelText('Password').getAttribute('type')).toBe('password')
     expect(screen.getByLabelText('Repeat password').getAttribute('type')).toBe('password')
   })
